@@ -89,10 +89,14 @@ fn normalize_inferred_contract_identity(
             ),
         })?;
     let (package, mut artifact_case) = proposal_identity(resolved)?;
+    // See [`GenerationScope`]: the archive under generation being one of the
+    // dialects' own primitive-defining packages is decided once, from the
+    // resolved package name, and applies to every export of the case.
+    let scope = GenerationScope::for_package(&resolved.package_name);
     for (name, summary) in &entrypoint.exports {
         artifact_case.exports.insert(
             name.clone(),
-            normalize_export(&artifact_case, name, summary)?,
+            normalize_export(&artifact_case, name, summary, scope)?,
         );
     }
     let normalized = ContractProposal::new(package, vec![artifact_case])
@@ -105,10 +109,59 @@ fn normalize_inferred_contract_identity(
     }
 }
 
+/// What this generation may claim about the archive it is describing.
+///
+/// The one distinction it carries is whether the archive is a dialect's own
+/// primitive-defining package. Inside such an archive the analyzer's primitive
+/// recognition is granted by declaration *path*
+/// (`solid-reactive-ir`'s `declaration_path_is_solid_package`), so the
+/// package's own local `createSignal`, `createTrackedEffect`, `onCleanup`, …
+/// are read as dialect primitive calls, and the owner census and the reactive
+/// read census then attribute *the runtime's own internals* to the export as
+/// consumer-visible operations. The audited bundled contracts for those exact
+/// bytes close both domains as absent
+/// (`pkg/contracts/bundled/solid-v1/solid-root-browser-production.json`,
+/// `pkg/contracts/bundled/solid-v2/solidjs-signals.json`), so publishing those
+/// operations asserts what the audit denies — see ADR 0005 and
+/// `docs/package-contract-v2/phase21/2026-09-03-solid-js-self-certification-diagnosis.md`.
+///
+/// This is a **generation-scope decision, not a proof**: the predicate is an
+/// exact package-name match with no version and no integrity behind it, which
+/// is not identity. That is admissible only because the decision can act in
+/// exactly one direction — it *withholds* claims, turning the two domains
+/// open, and can never establish one. The generator cannot answer the other
+/// way either: emitting `reads: []`/`creates: []` *closed*, as the audits do,
+/// would manufacture a negative claim from a derivation that produced nothing.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum GenerationScope {
+    /// An ordinary consuming package: every derived domain is published.
+    ConsumingPackage,
+    /// A dialect's own primitive-defining package.
+    DialectDefiningPackage,
+}
+
+impl GenerationScope {
+    pub(crate) fn for_package(package_name: &str) -> Self {
+        if solid_dialect::primitive_defining_package(package_name) {
+            Self::DialectDefiningPackage
+        } else {
+            Self::ConsumingPackage
+        }
+    }
+
+    /// Whether path-bootstrapped primitive recognition inside this archive may
+    /// reach the published document as owner-requirement creates and reactive
+    /// reads.
+    fn publishes_bootstrapped_reactive_domains(self) -> bool {
+        matches!(self, Self::ConsumingPackage)
+    }
+}
+
 fn normalize_export(
     artifact_case: &ArtifactCase,
     name: &str,
     summary: &ContractExport,
+    scope: GenerationScope,
 ) -> Result<ExportSemantics, ContractFailure> {
     let prefix = format!("{}:{name}:operation:", artifact_case.id);
     let mut operations = Vec::new();
@@ -143,6 +196,9 @@ fn normalize_export(
     };
 
     let reads = match &summary.reactive_reads {
+        // Withheld, not emptied: the domain is *open*, which says only that
+        // this generation does not describe it.
+        _ if !scope.publishes_bootstrapped_reactive_domains() => KnowledgeSet::Unknown,
         ContractClaim::Open => KnowledgeSet::Unknown,
         ContractClaim::Known(reads) => KnowledgeSet::Complete(
             reads
@@ -218,6 +274,10 @@ fn normalize_export(
     };
 
     let creates = match &summary.owner_requirements {
+        // Same withholding as `reads`, for the same reason: the requirement's
+        // only evidence inside this archive is the path heuristic naming the
+        // primitive's own guarded implementation as a consumer obligation.
+        _ if !scope.publishes_bootstrapped_reactive_domains() => KnowledgeSet::Unknown,
         ContractClaim::Open => KnowledgeSet::Unknown,
         ContractClaim::Known(requirements) => KnowledgeSet::Complete(
             requirements

@@ -1,0 +1,74 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "d71f75772b440eebc0866018e3aa14204be0970fbf40c4640ace929498855c7b",
+            "path": "./index.ts",
+            "sha256": "9752777f0a665ee7017e424974ee489f2ff990526947109211d8f22212ca9fa7"
+          },
+          "declarations": {
+            "path": "./index.ts",
+            "sha256": "9752777f0a665ee7017e424974ee489f2ff990526947109211d8f22212ca9fa7"
+          },
+          "exports": {
+            "onSettled": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:2cf4eadb468e975f4bcfd8db6aafad7f32ffc5cd0ba4d8b3ccdc7d512e8dfb21",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "2cf4eadb468e975f4bcfd8db6aafad7f32ffc5cd0ba4d8b3ccdc7d512e8dfb21"
+    },
+    "name": "@solidjs/signals",
+    "version": "0.0.0-fixture"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

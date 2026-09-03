@@ -1,5 +1,315 @@
 # Precision backlog
 
+## The generator invented owner and read operations inside the dialects' own archives; it no longer does (2026-09-03)
+
+`declaration_path_is_solid_package`
+(`rust/crates/solid-reactive-ir/src/symbols.rs:589-601`) grants dialect
+primitive identity to a declaration by its **filesystem path** — any path with
+a `solid-js` or `@solidjs` component. For a consumer that is exactly right:
+TypeScript resolved the symbol *into* the package, so the path is the import
+edge. Inside one of the dialects' own archives it is wrong, and its consequence
+was not local: the package's own `createSignal`, `createTrackedEffect`,
+`onCleanup`, … became "primitive calls", `find_missing_owners`
+(`owners.rs:844-861`) turned calls in the *primitive's own guarded
+implementation* into consumer obligations, and the read census attributed the
+reactive runtime's internals to the export.
+
+The audited bundled contracts for the same bytes say those operations do not
+exist. `pkg/contracts/bundled/solid-v1/solid-root-browser-production.json`
+(`solid-js@1.9.14`, digest-matched to the probe's own artifact case) closes
+`reads: []` and `creates: []` in all 12 summaries covering all 54 exports and
+carries no `owner` field at all;
+`pkg/contracts/bundled/solid-v2/solidjs-signals.json` closes `creates` for
+`onSettled` and models its leaf owner as a `resources` entry. The generated
+proposals invented 158 `read` and 22 `owner-requirement` operations for the 1.x
+bytes and one owner requirement for signals' `onSettled` — the disqualifying
+finding of `docs/adr/0005-dialect-axioms-about-the-dialects-own-package.md`,
+reproduced at scale.
+
+**The fix is at the demand owner, not at the recognition.** A new dialect row,
+`Dialect::primitive_defining_packages` (`solid-js` for 1.x; `solid-js`,
+`@solidjs/signals`, `@solidjs/web` for 2.0), is unioned by
+`solid_dialect::primitive_defining_package`, and
+`normalize_export`
+(`rust/crates/solid-facts-backend/src/inferred_contract.rs`) consults it once
+per artifact case through a `GenerationScope`. For a dialect-defining archive it
+publishes no owner-requirement create and no reactive-read operation, and both
+domains stay **open**.
+
+Three properties of that choice, stated because each is a limit:
+
+- **It withholds; it never asserts.** The predicate is an exact package
+  *name* — no version, no integrity — so it is not identity and cannot be a
+  proof. That is admissible only in this one direction. The other direction is
+  not available at all: emitting `reads: []`/`creates: []` *closed*, as the
+  audits do, would manufacture a negative claim out of a derivation that
+  produced nothing. Only a hand audit asserts that closure, and the ones that
+  do are already checked in.
+- **It is broader than the defect.** Without provenance on the
+  `OwnerRequirement` and read records, generation cannot tell a
+  path-bootstrapped recognition from an import-edge one, so a legitimate
+  import-edge read or create inside `solid-js` (whose bundles import
+  `@solidjs/signals`) is withheld too. That is a precision loss confined to
+  archives whose real authority is the audited bundled contract, and it can only
+  ever open a domain. Threading `path-bootstrap` vs `import-edge` provenance
+  through `solid-reactive-ir` remains the exact fix.
+- **The path heuristic is untouched.** No diagnostic changes, and the
+  repository-analysis path it exists for is unaffected. Coverage compared 94
+  fixture projects / 546 findings with no movement.
+
+The bootstrap's *other* over-reach is recorded and not fixed: the path test
+matches the `@solidjs` scope component, so a dialect-spelled local inside
+`@solidjs/router`, `@solidjs/meta`, `@solidjs/start` or `@solidjs/element` is
+still granted primitive identity. Those packages are deliberately absent from
+`primitive_defining_packages` — they are consumers — so this slice narrows
+nothing for them. And the reach is not limited to those published names:
+`symbols.rs:596-600` matches a literal path *component*, so any tree containing
+a `solid-js/` or `@solidjs/` component — a monorepo's own `packages/solid-js/`,
+a vendored copy sitting under some other manifest name — still gets the
+bootstrap, and being differently named is still outside the scope decision's
+withholding, so it still publishes the fabricated create.
+
+Fixture pair: `fixtures/package-contracts/dialect-defining-archive/@solidjs/`.
+Both fixtures sit under a `@solidjs` path component so the bootstrap fires for
+both, both declare `createTrackedEffect` locally, and the only difference is
+`package.json`'s `name`. `@solidjs/signals` publishes no `creates`;
+`@solidjs/router` publishes `["owner-requirement-0"]` with
+`requiresChildren: required`, exactly as before. Read that directory's README
+before moving either fixture: flatten the path and the pair silently proves
+nothing.
+
+### Measured, at a `make build-checker-debug` binary
+
+| row | before | after |
+| --- | --- | --- |
+| `@solidjs/signals@2.0.0-rc.3\|solid2\|only` | refused `operation-reachability` `sha256:78a16558…` (*owner requirement has no exact dialect primitive call*), 542 demands | refused `callable-path` `sha256:937e6357…` (*callback parameter has no exact direct-call or resolved-argument flow*), 534 demands |
+| `solid-js@1.9.14\|solid1\|only` | refused `recursive-value-shape` `sha256:5463f0ed…` (`ErrorBoundary:read-0`), 3598 demands | refused `operation-cardinality` `sha256:043561e0…` (`createReaction`, argument flow), **2980** demands |
+| `@solid-primitives/intersection-observer@3.0.0-next.3\|solid2\|floor` | refused `operation-cardinality` `sha256:c9843e7b…` | **certified** (published-graph lane, `rootCases: 1`, `canonicalNodes: 3`) |
+| `@solid-primitives/intersection-observer@3.0.0-next.3\|solid2\|head` | refused `operation-cardinality` `sha256:1d71c2da…` | **certified** (same shape) |
+| `solid-js@2.0.0-rc.3\|solid2\|only` | certified | certified — unchanged |
+
+`solid-js@1.9.14`'s **−618** demands are exactly the withdrawal: 158 reads ×
+(`recursive-value-shape` + `operation-reachability` + `operation-cardinality`) +
+22 owner creates × (`operation-reachability` + `operation-cardinality`) + 50
+each of `rest-spread-coverage` and `selected-signature` = 618. The
+2026-09-03 diagnosis measured 413 of its 614 *refused* demands as
+audit-contradicted; those are now non-demands rather than refusals, and the
+row's frontier is the argument-flow class the diagnosis identified as the
+honest residual — `untrack(onInvalidate)` inside `createComputation`, a
+module-local non-exported helper no dialect table can reach.
+
+The two `intersection-observer` rows are the corpus yield: their graph nodes are
+`@solidjs/signals` rc.0 and rc.5, non-audited prereleases whose invented owner
+demands were the wall. They now certify, and no other node in those graphs
+refuses.
+
+**Controls, all unchanged** (`@solid-primitives/marker` ×3, `i18n@2.2.1`,
+`scheduled@1.5.3`, `timer@1.4.5-next.1` floor, `jsx-parser@0.2.0`,
+`spring@0.1.2`, `@tanstack/solid-query-persist-client@5.102.5` certified;
+`@solid-primitives/until@0.1.1`, `@tanstack/solid-db@0.2.40`,
+`@solidjs/element@2.0.0-rc.3` refused on their same digests). Contract corpus:
+83 pre-existing fixtures byte-identical; the two new fixtures add 2 artifact
+cases and 3 possible operations.
+
+### Re-measured: 357 verified / 40 exact refusals / 21 not attempted
+
+The complete 418-probe corpus was re-run after the three slice-6 parts landed
+together (`make ecosystem-benchmark`; report SHA-256
+`03cbb634cd161ea6ae671d93e2e2075854806cab64f63a1a4e1586971dae359d`). Against
+the committed report, exactly two verdicts moved, both
+`@solid-primitives/intersection-observer@3.0.0-next.3` (floor and head) refused
+→ verified through the published-graph lane: their graph nodes are the
+non-audited `@solidjs/signals` prereleases, and with the dialect-defining-archive
+scope no node in those graphs refuses. Proposal states are unchanged (348
+complete / 33 partial / 37 fully refused). Three refused rows advanced their
+demand digest without changing verdict, each because the withdrawn owner or
+read demand was the frontier: `@solidjs/signals@2.0.0-rc.3` (`78a16558…` →
+`937e6357…`, the `onSettled` callback-flow class), `@solidjs/web@2.0.0-rc.3`
+(`0fde5acc…` → `e2e9bccd…`, still `recursive-value-shape`), and
+`solid-js@1.9.14` (`5463f0ed…` → `043561e0…`, `operation-cardinality` on
+`createReaction`'s argument flow). Every other refused row keeps its digest and
+reason.
+
+With `certificationAttempt.coverage` now recorded for every certified row, the
+split is 306 verified-complete / 51 verified-partial (31 of the partial rows
+with the root), 471 certified entrypoints; `solid-js@2.0.0-rc.3` reads as
+partial, 1 of 4 declared entrypoints, root refused, lane `reused-proposal`. The
+graph-lane routing stayed opt-in, so no row changed lane. Phase 20 and Phase 21
+ledgers, and the Phase 19 stable-main pin (174 → 176, the fixture pair), were
+re-pinned to this report.
+
+## "Verified" was one word for two outcomes; it is now a measured split (2026-09-03)
+
+A certified row whose four declared entrypoints all carry a receipt and a
+certified row where one of four does — not even the root — read identically in
+every report and ledger. So the corpus-wide verified rate could rise while the
+surface actually under receipt shrank, and nothing in the artifacts would say
+so. `solid-js@2.0.0-rc.3` is the case that makes it concrete: it is one of the
+corpus's verified rows, and what it certifies is `./refresh`, 1 of 4, root
+refused.
+
+Each row now carries
+`certificationAttempt.coverage: {declaredEntrypoints, declaredWildcard,
+certifiedEntrypoints, rootCertified}`, read from the **published catalog** —
+`scripts/ecosystem-benchmark/lib/certified-coverage.mjs` walks the single-case
+`accepted-contracts.json` or, for a case-set publication, follows the
+`accepted-contract-case-set.json` pointer to each case's own catalog, and reads
+the accepted contract documents whose `package.name` **and** `package.version`
+are the row's own. Three exclusions, each answering a way coverage could be
+inflated:
+
+- the pointer is followed rather than `cases/` globbed, because the pointer is
+  the published index and a leftover catalog from an earlier publication to the
+  same root is not part of this publication;
+- a parsed pointer also *supersedes* the root `accepted-contracts.json`, which
+  in that layout is exactly such a leftover — the two layouts are read
+  exclusively, never unioned;
+- the filter is package identity, not package name. Dependency contracts the
+  graph lane publishes into the same catalog are excluded, so a row does not
+  read as better covered the more dependencies it needed — and the *version*
+  half matters just as much, because a graph node can be another version of the
+  row's own package, whose `.` would otherwise set `rootCertified` for bytes
+  nobody issued a receipt for.
+
+A catalog that parses but holds no document for that exact identity is
+`null` — unmeasured — and not `certifiedEntrypoints: 0`: a certified row
+published a receipt by construction, so finding nothing for it means the reader
+missed what the receipt covered, which is not a measurement of zero coverage.
+
+`report.md` splits the headline and every family section into
+`verified-complete` / `verified-partial` (with how many of the partial half at
+least covered the root), and each family table gains a `Verified` column
+carrying that row's `k of n` and root state. The Phase 20 ledger's
+`summary.certificationStates` gains `verified-complete`, `verified-partial` and
+`verified-coverage-unmeasured`; `verified` stays their **sum**, and
+`assertPhase20Ledger` now asserts that decomposition whenever the keys are
+present. `row.certification` is deliberately *not* widened — the per-row
+coverage already travels in the ecosystem report and from there into the Phase
+21 ledger's verbatim `certificationAttempt` snapshot, and widening it would
+rewrite all 418 rows of both checked-in ledgers with fields that carry nothing
+on a report predating the measurement. Phase 21's semantics and bytes are
+unchanged.
+
+Three deliberate non-answers:
+
+- **A certified row whose catalog cannot be read is neither half.** It is
+  `verified-coverage-unmeasured`, and so is a row whose *denominator* could not
+  be read — an unreadable manifest leaves `declaredEntrypoints: null`, which is
+  the same absent measurement seen from the other side. Calling either partial
+  would be as much a fabrication as calling it complete. The bucket is neither
+  hypothetical nor universal: the corpus was re-run with the field in place, so
+  the checked-in report's verified rows carry real complete/partial counts, and
+  the split — together with whatever unmeasured remainder it leaves — is the one
+  recorded at the re-measure above.
+- **A wildcard subpath has no denominator.** `"./src/*": "./src/*"` is one
+  declared entry expanding to as many entrypoints as the package ships:
+  `@kobalte/utils@0.9.2` declares 2 and certifies 20. `k of n` is then not a
+  ratio, the report says `20 certified, 2 declared via wildcard`, and
+  `isCompleteCoverage` refuses completeness outright — `>= declared` would have
+  called a wildcard package with its root and one subpath fully verified. The
+  refusal is driven by `declaredWildcard`, set by `countDeclaredEntrypoints`
+  where the `exports` keys are actually read, not by `certified > declared`: an
+  expansion that happens to certify exactly as many entrypoints as the manifest
+  declares is the same non-ratio, and a coincidence of counts would otherwise
+  have read as complete. The count comparison is kept only as the evidence
+  available on a report recorded before the flag existed.
+- **`declaredEntrypoints === 0` is complete on a certified root.** That is the
+  legacy-`main` package: no `exports` map, so the root *is* the published
+  surface. It is a manifest shape, not a missing measurement —
+  `readDeclaredEntrypointCensus` returns `null`, never `0`, when it could not
+  read the manifest, and `null` is never complete.
+
+## The published-graph lane can reach a partial proposal's refused roots, and on this corpus that costs more receipts than it buys (2026-09-03)
+
+The published-dependency-graph lane existed only behind a *thrown* generation:
+`certify-contract.mjs` reached it in the `catch` of `generatePackageContract`,
+or through `validatedReusableDependencyRefusalAuditBytes` when the handed-over
+refusal census was a **complete** dependency-composition census of every
+applicable case. A `partial-success` is neither — generation returned, and its
+census covers only the refused cases — so the 17 partial rows that certify all
+did it by *reusing the emitted proposal*, and 16 of them have their root `.`
+among the cases that never generated, refused on
+`accepted dependency X has no exact runtime binding` or
+`unresolved-dependency-module`. Those are exactly the refusals the graph lane
+answers.
+
+`contract certify --dependency-graph-lane` now takes that lane when root
+generation *succeeds partially* and its own census names an exact
+dependency-composition case (`partialProposalHasDependencyFrontier`). The
+preparation is the same one the throw path uses — same acquisition, same
+per-node generation, same `prepareState` identity proofs, same native
+reconstruction of every root, closure, edge and receipt. Nothing is relaxed for
+having arrived from a success: the census is untrusted input either way, only
+case coordinates are read out of it, and every node is authenticated against its
+own Bun lock selection. The one difference is the failure mode: preparation that
+cannot complete returns to the ordinary proposal instead of throwing, because
+the caller has a valid alternative in hand that a throw would discard — but it
+records `graphPreparation.partialProposalFrontier: "unprepared"` with the
+failure's reason, so a lane that was asked for and did not happen is
+distinguishable in the audit from one never asked for. A missing issuer or trust
+configuration still propagates — those are request errors, not graph facts.
+
+The routing itself reads a **structured class**, not refusal prose.
+`generate-package-contract.mjs` records `class` on every census row at the
+moment it builds it (`artifactRefusalClass`), decided from the error's own
+`ArtifactResolutionError` code or from the machine-readable marker line the
+native emitter writes ahead of its sentence for exactly this purpose;
+`isExactDependencyCompositionRefusal` answers from that class whenever a row
+carries one, and keeps its regex only as a fallback for an audit written before
+the field existed. A `published-artifact` row whose sentence happens to quote a
+dependency phrase therefore no longer routes, and a classified
+`dependency-composition` row routes without its wording being read at all. The
+16 `expected-refusals.json` corpus snapshots carry the new field; three rows
+across `class-expression-kind`, `external-reexport` and `solid-reexport` are
+`dependency-composition` and the remaining 20 are `published-artifact`.
+
+**It is off by default in both the CLI and the runner, and the measurement is
+why.** The two lanes cover *different* artifact-case sets — the graph lane
+exactly the cases the plain lane refused, the reused proposal exactly the ones
+it generated — so switching trades one population of receipts for another.
+Measured on all 21 partial rows:
+
+| row | reused proposal | published-graph lane |
+| --- | --- | --- |
+| `@solid-primitives/sse@1.0.0-next.2\|solid2\|floor` | certified 1/3, **root refused** | certified 1/3, **root certified** |
+| `@solid-primitives/sse@1.0.0-next.2\|solid2\|head` | certified 1/3, root refused | certified 1/3, **root certified** |
+| `@tanstack/solid-router@1.170.30\|solid1\|only` | certified 1/4, root refused | **refused** `recursive-value-shape` |
+| `@tanstack/solid-router@2.0.0-rc.2\|solid2\|floor` | certified 1/4, root refused | **refused** `recursive-value-shape` |
+| `@tanstack/solid-router@2.0.0-rc.2\|solid2\|head` | certified 1/4, root refused | **refused** `recursive-value-shape` |
+| `@tanstack/solid-table@9.1.2\|solid1\|only` | certified 1/5, root refused | **refused** `recursive-value-shape` |
+| `motion-solidjs@0.7.0-beta.4\|solid2\|floor` | certified 1/3, root refused | **refused** `recursive-value-shape` |
+| `motion-solidjs@0.7.0-beta.4\|solid2\|head` | certified 1/3, root refused | **refused** `recursive-value-shape` |
+
+Six rows go certified → refused; two gain a certified root. A refusal covers
+nothing, so the default keeps the receipts. The remaining 13 rows request the
+lane and do not get it: their graph preparation cannot complete, the ordinary
+proposal is certified exactly as without the flag, and the row records
+`lane: "generated-proposal"` beside `laneRequested: "published-graph"` — which
+is the whole reason the two fields are separate. Reuse coverage for those:
+`@kobalte/utils@0.9.2` 20 of 2 via wildcard (root refused),
+`@solidjs/start@2.0.3` 10 of 13 (**root certified**),
+`@tanstack/solid-start` ×3 3 of 13, `@tanstack/solid-pacer@0.22.0` 1 of 15,
+`@solid-primitives/sse@0.0.103` 1 of 3, `@solid-primitives/utils@6.4.1` 1 of 2,
+`solid-js@2.0.0-rc.3` 1 of 4 — every one of those with the root refused. The
+four rows that refuse either way (`@kobalte/core@2.0.0-alpha.0`,
+`@solidjs/web@2.0.0-rc.3`, `solid-devtools@0.34.5`, `solid-js@1.9.14`) refuse on
+the same family both ways.
+
+**What is actually wanted, and is not in this slice**: certifying *both* case
+sets into one catalog — the plain proposal's cases and the graph lane's roots.
+Neither lane is a superset of the other, and there is no reason a receipt has to
+choose. That is a two-transaction change to case-set publication (or one
+transaction over a merged case set) and it is the open item here. Until it
+exists, `--dependency-graph-lane` is a measurement instrument, not a default.
+
+The reuse branch of the runner's routing rule is unreachable end-to-end today,
+and the runner tests pin *why* rather than leaving it untested: a partial row
+reaches the certification queue only with a complete dependency plan, and a
+dependency plan is only built from dependency-composition refusals — so a
+partial row whose refusals are all publisher defects is never certified at all.
+The branch itself is pinned at `certificationLaneRequest`, and the end-to-end
+test fails if that queue condition ever widens.
+
 ## The dialect axiom was not blocked on engineering; the demand it would have discharged is one the audit closes as absent (2026-09-03)
 
 This slice **shipped no code**. It was the follow-up round on

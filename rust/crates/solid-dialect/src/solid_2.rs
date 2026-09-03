@@ -128,6 +128,16 @@ impl Dialect for Solid2 {
         ]
     }
 
+    /// 2.0 splits the definitions across three archives: the reactive core
+    /// lives in `@solidjs/signals`, the DOM primitives in `@solidjs/web`, and
+    /// `solid-js` re-exports the core under the dialect's public spellings
+    /// while declaring some of its own. The other `@solidjs/*` packages
+    /// (`router`, `meta`, `start`, `element`) are consumers of these three and
+    /// are deliberately absent.
+    fn primitive_defining_packages(&self) -> &'static [&'static str] {
+        &["solid-js", "@solidjs/signals", "@solidjs/web"]
+    }
+
     /// `pkg/contracts/bundled/solid-v2/solid-js.json`, the artifact
     /// `solid-facts-backend` compiles in for this dialect.
     fn bundled_contract_label(&self) -> &'static str {

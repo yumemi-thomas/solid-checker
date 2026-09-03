@@ -65,6 +65,70 @@ test("artifact applicability refuses to reinterpret missing or unsupported bytes
   );
 });
 
+test("the verified split decomposes verified without changing it", () => {
+  const row = (probeId, attempt) => ({
+    probeId,
+    package: probeId.split("@")[0] || probeId,
+    version: "1.0.0",
+    family: "solid-primitives",
+    status: "official",
+    solidTarget: "solid1",
+    probeKind: "only",
+    outcome: "success",
+    class: "success",
+    signature: "",
+    detail: null,
+    stdout: "",
+    stderr: "",
+    externalEdges: [],
+    dependencyPlan: null,
+    contractContent: { artifactCasesTotal: 1 },
+    certificationAttempt: attempt
+  });
+  const verified = coverage => ({
+    attempted: true,
+    status: "certified",
+    ordinaryAnalysis: { receiptAuthenticated: true, exactCaseSelected: true },
+    coverage
+  });
+  const ledger = buildPhase20Ledger(
+    {
+      finishedAt: "2026-09-03T00:00:00.000Z",
+      results: [
+        row("complete@1.0.0|solid1|only", verified({
+          declaredEntrypoints: 2,
+          certifiedEntrypoints: 2,
+          rootCertified: true
+        })),
+        row("partial-with-root@1.0.0|solid1|only", verified({
+          declaredEntrypoints: 4,
+          certifiedEntrypoints: 1,
+          rootCertified: true
+        })),
+        row("partial-no-root@1.0.0|solid1|only", verified({
+          declaredEntrypoints: 4,
+          certifiedEntrypoints: 1,
+          rootCertified: false
+        })),
+        // A report predating the field: neither half, and not silently folded
+        // into "partial".
+        row("unmeasured@1.0.0|solid1|only", verified(undefined)),
+        row("refused@1.0.0|solid1|only", { attempted: true, status: "refused" }),
+        row("not-attempted@1.0.0|solid1|only", null)
+      ]
+    },
+    { reportSha256: "f".repeat(64) }
+  );
+  assert.deepEqual(ledger.summary.certificationStates, {
+    verified: 4,
+    "exact-refusal": 1,
+    "not-attempted": 1,
+    "verified-complete": 1,
+    "verified-partial": 2,
+    "verified-coverage-unmeasured": 1
+  });
+});
+
 test("the checked-in 418-row report produces orthogonal live ledgers", () => {
   const bytes = readFileSync(new URL("../benchmarks/ecosystem/report.json", import.meta.url));
   const report = JSON.parse(bytes.toString("utf8"));
@@ -94,18 +158,35 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
     "fully-refused": 37,
     partial: 33
   });
+  // The verified split (2026-09-03) is additive: `verified` is the sum of the
+  // complete, partial, and coverage-unmeasured halves. The dialect-defining-
+  // archive generator scope (2026-09-03) adds exactly the two
+  // @solid-primitives/intersection-observer 3.0.0-next.3 Solid 2 rows (355 -> 357);
+  // the corpus was re-run with `certificationAttempt.coverage` recorded, so no
+  // row is unmeasured. A partial row certified fewer entrypoints than the
+  // catalog declares, or certified without its root.
   assert.deepEqual(ledger.summary.certificationStates, {
-    "exact-refusal": 42,
+    "exact-refusal": 40,
     "not-attempted": 21,
-    verified: 355
+    verified: 357,
+    "verified-complete": 306,
+    "verified-partial": 51,
+    "verified-coverage-unmeasured": 0
   });
+  assert.equal(
+    ledger.summary.certificationStates["verified-complete"] +
+      ledger.summary.certificationStates["verified-partial"] +
+      ledger.summary.certificationStates["verified-coverage-unmeasured"],
+    ledger.summary.certificationStates.verified,
+    "the split must reconstruct the unchanged verified count"
+  );
   assert.deepEqual(ledger.summary.failureLedgers, {
     dependencyContractObligation: 29,
     exportKindUnresolved: 0,
     geolocationExportKindConflict: 0
   });
   assert.equal(ledger.summary.classifierCorrections, 0);
-  assert.equal(ledger.summary.verifiedRows, 355);
+  assert.equal(ledger.summary.verifiedRows, 357);
   assert.deepEqual(
     ledger.rows.filter(row => row.certification.state === "verified").map(row => row.probeId),
     [
@@ -239,6 +320,8 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/interaction@1.0.0-next.4|solid2|floor",
       "@solid-primitives/interaction@1.0.0-next.4|solid2|head",
       "@solid-primitives/intersection-observer@2.2.5|solid1|only",
+      "@solid-primitives/intersection-observer@3.0.0-next.3|solid2|floor",
+      "@solid-primitives/intersection-observer@3.0.0-next.3|solid2|head",
       "@solid-primitives/jsx-parser@0.2.0|solid1|only",
       "@solid-primitives/jsx-tokenizer@1.1.4|solid1|only",
       "@solid-primitives/jsx-tokenizer@3.0.0-next.2|solid2|floor",

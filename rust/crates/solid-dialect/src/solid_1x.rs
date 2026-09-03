@@ -112,6 +112,13 @@ impl Dialect for Solid1x {
         ]
     }
 
+    /// 1.x defines every primitive inside the one `solid-js` package; the
+    /// store, web and universal vocabularies are its subpaths, not separate
+    /// archives.
+    fn primitive_defining_packages(&self) -> &'static [&'static str] {
+        &["solid-js"]
+    }
+
     /// `pkg/contracts/bundled/solid-v1/solid-js.json`, the artifact
     /// `solid-facts-backend` compiles in for this dialect — not the reviewed
     /// semantics source (`contracts/solid-v1/solid-js.json` in this crate), which

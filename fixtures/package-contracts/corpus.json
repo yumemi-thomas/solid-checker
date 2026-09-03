@@ -30,6 +30,8 @@
     "deferred-returned-callback",
     "destructured-parameter-callback",
     "destructured-return-slot",
+    "dialect-defining-archive/@solidjs/router-shaped",
+    "dialect-defining-archive/@solidjs/signals",
     "dialect-detection",
     "entry-reexport-identity",
     "entrypoint-condition-isolation",

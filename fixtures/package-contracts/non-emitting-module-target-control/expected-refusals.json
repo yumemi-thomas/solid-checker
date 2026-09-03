@@ -10,6 +10,7 @@
       "entrypoint": "./cjs",
       "conditions": [],
       "stage": "artifact-case",
+      "class": "published-artifact",
       "applicability": "runtime-module",
       "reason": "solid-checker-rust: emit package contract: entry file <package-root>/bundle.cjs has no runtime ESM exports"
     },
@@ -17,6 +18,7 @@
       "entrypoint": "./default-export",
       "conditions": [],
       "stage": "artifact-case",
+      "class": "published-artifact",
       "applicability": "runtime-module",
       "reason": "solid-checker-rust: emit package contract: entry file <package-root>/default-export.js exports \"default\", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind \"value\" would certify it invokes no caller-supplied callback"
     },
@@ -24,6 +26,7 @@
       "entrypoint": "./effects",
       "conditions": [],
       "stage": "artifact-case",
+      "class": "published-artifact",
       "applicability": "runtime-module",
       "reason": "solid-checker-rust: emit package contract: entry file <package-root>/effects.js has no runtime ESM exports"
     },
@@ -31,6 +34,7 @@
       "entrypoint": "./evaluated-default",
       "conditions": [],
       "stage": "artifact-case",
+      "class": "published-artifact",
       "applicability": "runtime-module",
       "reason": "solid-checker-rust: contract emission batch target 7 names entry file <package-root>/evaluated-default.d.ts as its own fact source; its suffix makes it a TypeScript declaration file, for which the Type Facts producer reports no source facts"
     },
@@ -38,6 +42,7 @@
       "entrypoint": "./implemented",
       "conditions": [],
       "stage": "artifact-case",
+      "class": "published-artifact",
       "applicability": "runtime-module",
       "reason": "solid-checker-rust: contract emission batch target 8 names entry file <package-root>/implemented.d.ts as its own fact source; its suffix makes it a TypeScript declaration file, for which the Type Facts producer reports no source facts"
     },
@@ -45,6 +50,7 @@
       "entrypoint": "./vitest",
       "conditions": [],
       "stage": "artifact-case",
+      "class": "published-artifact",
       "applicability": "runtime-module",
       "reason": "solid-checker-rust: emit package contract: entry file <package-root>/vitest.js has no runtime ESM exports"
     }

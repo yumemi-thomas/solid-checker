@@ -10,6 +10,7 @@
       "entrypoint": ".",
       "conditions": [],
       "stage": "artifact-case",
+      "class": "dependency-composition",
       "applicability": "runtime-module",
       "reason": "accepted dependency dependency-package has no exact runtime binding for export dependencyValue"
     }

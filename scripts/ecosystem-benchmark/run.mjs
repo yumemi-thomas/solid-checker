@@ -45,6 +45,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { classifyResult, normalizeSignature } from "./lib/classify.mjs";
+import { readCertifiedCoverage } from "./lib/certified-coverage.mjs";
 import { readContractContent, readProposalRefusalAudit } from "./lib/contract-content.mjs";
 import { planRecursiveDependencies } from "./lib/dependency-plan.mjs";
 import {
@@ -60,7 +61,10 @@ import {
 } from "./lib/install.mjs";
 import { sortRows, validateManifest } from "./lib/manifest.mjs";
 import { buildReport, evaluateThresholds, renderMarkdown } from "./lib/report.mjs";
-import { certificationImporterPathFor } from "../../packages/cli/scripts/certify-contract.mjs";
+import {
+  certificationImporterPathFor,
+  partialProposalHasDependencyFrontier
+} from "../../packages/cli/scripts/certify-contract.mjs";
 import { createCliWorkerPool } from "./lib/cli-worker-pool.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -253,19 +257,26 @@ export function decideExitCode({ thresholdsRequested, evaluation }) {
 // entrypoint; a map of subpaths (each possibly a wildcard pattern) declares
 // one per key. Counting a wildcard as one declared pattern (not attempting
 // to expand it) matches "Entrypoint counting" in INTERFACES.md.
+//
+// `wildcard` travels with the count because it is the only place it can be
+// seen. A wildcard key makes `count` a *pattern* count that expands to as many
+// real entrypoints as the package ships, so it is not a denominator -- and no
+// comparison of the two numbers downstream can recover that, since a wildcard
+// expansion may coincidentally certify exactly as many entrypoints as the
+// manifest declares. See `hasUsableDenominator` in lib/certified-coverage.mjs.
 export function countDeclaredEntrypoints(exportsField) {
-  if (exportsField == null) return 0;
-  if (typeof exportsField === "string") return 1;
-  if (typeof exportsField !== "object") return 0;
+  if (exportsField == null) return { count: 0, wildcard: false };
+  if (typeof exportsField === "string") return { count: 1, wildcard: false };
+  if (typeof exportsField !== "object") return { count: 0, wildcard: false };
   const keys = Object.keys(exportsField);
-  if (keys.length === 0) return 0;
+  if (keys.length === 0) return { count: 0, wildcard: false };
   // No key starting with "." means this object is itself the conditions map
   // for the "." entrypoint (e.g. { "import": "...", "require": "..." }).
-  if (!keys.some(key => key.startsWith("."))) return 1;
-  return keys.length;
+  if (!keys.some(key => key.startsWith("."))) return { count: 1, wildcard: false };
+  return { count: keys.length, wildcard: keys.some(key => key.includes("*")) };
 }
 
-export function readDeclaredEntrypointCount(packageJsonPath) {
+export function readDeclaredEntrypointCensus(packageJsonPath) {
   try {
     const parsed = JSON.parse(readFileSync(packageJsonPath, "utf8"));
     return countDeclaredEntrypoints(parsed.exports);
@@ -476,6 +487,10 @@ function buildResult({
   installedVersions,
   integrityVerified,
   declaredEntrypoints,
+  // Whether `declaredEntrypoints` is a pattern count rather than an entrypoint
+  // count. Recorded per row because certification can happen in a later queue
+  // pass, which then has only this result to read the manifest fact from.
+  declaredWildcard = false,
   generatedEntrypoints,
   refusedEntrypoints = null,
   refusedArtifactCases = null,
@@ -514,6 +529,7 @@ function buildResult({
     installedVersions,
     integrityVerified,
     declaredEntrypoints,
+    declaredWildcard,
     generatedEntrypoints,
     refusedEntrypoints,
     refusedArtifactCases,
@@ -540,7 +556,67 @@ function buildResult({
   return result;
 }
 
-function readCertificationAttempt(result, auditPath, durationMs) {
+// Which proposal lane this probe asks certification to use, from the
+// generation result alone.
+//
+// A `success` generation describes every applicable artifact case, so reusing
+// the emitted proposal is both cheaper and exactly equivalent -- there is no
+// second lane to want.
+//
+// A `partial-success` splits by *why* the missing cases are missing. When at
+// least one refused on dependency composition, those cases refused for want of
+// an accepted contract for a dependency, which is precisely what the
+// published-dependency-graph lane supplies: it acquires, generates and
+// certifies the dependency, then certifies the refused roots against it. So the
+// probe stops handing over its proposal (a reused proposal short-circuits the
+// lane decision inside `contract certify`) and asks for the graph lane instead.
+//
+// Every other partial row keeps the reuse. Its refusals are facts about the
+// publisher's own bytes -- a `.cjs` entrypoint with no declaration target, a
+// `.d.ts` named as its own fact source, an entry file whose runtime and
+// declaration export sets do not intersect -- and no dependency catalog moves
+// them, so re-deciding the lane could only drop the cases that did generate.
+//
+// The two lanes are not ordered by coverage: the graph lane certifies exactly
+// the cases the plain lane refused, and the reused proposal exactly the ones it
+// generated. `certificationAttempt.coverage` is what makes that trade visible
+// per row rather than hidden inside one word.
+export function certificationLaneRequest(result) {
+  if (result?.class !== "partial-success") return { lane: "reused-proposal" };
+  return partialProposalHasDependencyFrontier(result.artifactCaseRefusals)
+    ? { lane: "published-graph" }
+    : { lane: "reused-proposal" };
+}
+
+/// The lane that actually produced the proposal, read from the audit the
+/// certification itself wrote -- never from what the runner asked for. The
+/// request is a preference; `contract certify` decides, and a graph preparation
+/// it could not complete falls back to the ordinary proposal.
+export function certificationLaneOf(audit) {
+  const preparation = audit?.graphPreparation;
+  if (preparation?.reusedProposal === true) return "reused-proposal";
+  if (preparation && typeof preparation === "object" && "rootCases" in preparation) {
+    return "published-graph";
+  }
+  // No graph preparation and no reuse marker: certification generated the
+  // proposal itself, in its own scratch. That is a third real lane, and
+  // reporting it as either of the other two would be a fabrication.
+  return audit ? "generated-proposal" : null;
+}
+
+function readCertificationAttempt(
+  result,
+  auditPath,
+  durationMs,
+  {
+    catalogPath = "",
+    packageName = "",
+    packageVersion = "",
+    declaredEntrypoints = null,
+    declaredWildcard = false,
+    laneRequested = null
+  } = {}
+) {
   let audit = null;
   if (existsSync(auditPath)) {
     try {
@@ -549,6 +625,14 @@ function readCertificationAttempt(result, auditPath, durationMs) {
       audit = null;
     }
   }
+  const lane = certificationLaneOf(audit);
+  const coverage = readCertifiedCoverage({
+    catalogPath,
+    packageName,
+    packageVersion,
+    declaredEntrypoints,
+    declaredWildcard
+  });
   if (result.status === 0) {
     return {
       attempted: true,
@@ -558,6 +642,9 @@ function readCertificationAttempt(result, auditPath, durationMs) {
       demandId: null,
       family: null,
       reason: null,
+      lane,
+      laneRequested,
+      coverage,
       // Whether the memory watchdog killed this probe's tree is a resource
       // fact, not a package fact, and it previously reached the report only as
       // a marker appended to `reason`. Carry the flag itself so "this row is a
@@ -587,6 +674,12 @@ function readCertificationAttempt(result, auditPath, durationMs) {
   return {
     attempted: true,
     status: audit?.status === "refused" ? "refused" : "infrastructure-failure",
+    lane,
+    laneRequested,
+    // A refused attempt publishes no catalog, so this is normally `null`. It is
+    // still read rather than assumed: a refusal after publication would be a
+    // fact worth seeing, and asserting `null` would hide it.
+    coverage,
     stage: audit?.stage ?? (result.timedOut ? "timeout" : "orchestration"),
     owner: audit?.refusal?.owner ?? "orchestration",
     demandId: audit?.refusal?.demandId ?? null,
@@ -666,7 +759,9 @@ async function runProbe(
 
     const installedVersions = installResult.installedVersions ?? {};
     const packageJsonPath = packageInstallPath(projectDir, row.package) + "/package.json";
-    const declaredEntrypoints = readDeclaredEntrypointCount(packageJsonPath);
+    const declaredCensus = readDeclaredEntrypointCensus(packageJsonPath);
+    const declaredEntrypoints = declaredCensus?.count ?? null;
+    const declaredWildcard = declaredCensus?.wildcard ?? false;
 
     const installClass = classifyResult({
       status: installResult.status,
@@ -701,6 +796,7 @@ async function runProbe(
         installedVersions,
         integrityVerified: verify.ok,
         declaredEntrypoints,
+        declaredWildcard,
         generatedEntrypoints: null,
         checklistItems: null,
         outcome: "failure",
@@ -801,6 +897,9 @@ async function runProbe(
       const certificationStart = now();
       const auditPath = `${outputPath}.certification-audit.json`;
       const catalogPath = `${outputPath}.accepted-catalog`;
+      // A `success` generation is never routed to the graph lane, so this arm
+      // always reuses. `certifyCompleteProbe` is where the split happens.
+      const { lane } = certificationLaneRequest({ class: genClass.class });
       let certificationResult;
       try {
         const proposalRefusalAudit = `${outputPath}.refusals.json`;
@@ -831,7 +930,20 @@ async function runProbe(
       certificationAttempt = readCertificationAttempt(
         certificationResult,
         auditPath,
-        now() - certificationStart
+        now() - certificationStart,
+        {
+          catalogPath,
+          packageName: row.package,
+          // The row's pinned version, which `verifyInstall` has already bound
+          // to the archive this probe generated from -- this arm only runs
+          // after integrity verification. It is the identity half of the
+          // catalog filter, not a label: the graph lane can publish *another
+          // version of this same package* into the same catalog.
+          packageVersion: row.version,
+          declaredEntrypoints,
+          declaredWildcard,
+          laneRequested: lane
+        }
       );
     }
 
@@ -841,6 +953,7 @@ async function runProbe(
       installedVersions,
       integrityVerified: true,
       declaredEntrypoints,
+      declaredWildcard,
       generatedEntrypoints,
       refusedEntrypoints:
         genClass.detail?.refusalUnit === "entrypoint"
@@ -884,10 +997,16 @@ async function runProbe(
   }
 }
 
-async function certifyCompleteProbe(item, { timeoutMs, keepTemp }, hooks) {
+async function certifyCompleteProbe(
+  item,
+  { timeoutMs, keepTemp, dependencyGraphLane = false },
+  hooks
+) {
   const certificationStart = hooks.now?.() ?? Date.now();
   let project = item.project ?? null;
   let auditPath = "";
+  let catalogPath = "";
+  let laneRequested = null;
   let certificationResult;
   try {
     let installationVerified = project !== null;
@@ -947,12 +1066,15 @@ async function certifyCompleteProbe(item, { timeoutMs, keepTemp }, hooks) {
         `${sanitizeProbeId(item.result.probeId)}.json`
       );
       auditPath = `${outputPath}.certification-audit.json`;
-      const catalogPath = `${outputPath}.accepted-catalog`;
+      catalogPath = `${outputPath}.accepted-catalog`;
       const packageRoot = packageInstallPath(
         project.projectDir,
         item.task.row.package
       );
       const proposalRefusalAudit = `${outputPath}.refusals.json`;
+      laneRequested = dependencyGraphLane
+        ? certificationLaneRequest(item.result).lane
+        : "reused-proposal";
       try {
         certificationResult = await hooks.attemptCertification({
           packageRoot,
@@ -968,7 +1090,16 @@ async function certifyCompleteProbe(item, { timeoutMs, keepTemp }, hooks) {
           // certification importer; hand it over with its sidecars so
           // certification verifies it instead of regenerating it. Certify
           // itself decides whether the hand-over is admissible.
-          proposal: existsSync(`${outputPath}.certification-inputs.json`) ? outputPath : ""
+          //
+          // Withheld for a `published-graph` request: a reused proposal
+          // short-circuits the lane decision inside `contract certify`, so
+          // handing it over would answer the request by ignoring it.
+          proposal:
+            laneRequested !== "published-graph" &&
+            existsSync(`${outputPath}.certification-inputs.json`)
+              ? outputPath
+              : "",
+          dependencyGraphLane: laneRequested === "published-graph"
         });
       } catch (error) {
         certificationResult = {
@@ -992,7 +1123,15 @@ async function certifyCompleteProbe(item, { timeoutMs, keepTemp }, hooks) {
     item.result.certificationAttempt = readCertificationAttempt(
       certificationResult,
       auditPath,
-      durationMs
+      durationMs,
+      {
+        catalogPath,
+        packageName: item.task.row.package,
+        packageVersion: item.task.row.version,
+        declaredEntrypoints: item.result.declaredEntrypoints ?? null,
+        declaredWildcard: item.result.declaredWildcard === true,
+        laneRequested
+      }
     );
     item.result.durationMs += durationMs;
   } finally {
@@ -1017,6 +1156,11 @@ export async function runBenchmark({ manifest, probeIds = null, options = {}, ho
   const concurrency = options.concurrency ?? DEFAULT_CONCURRENCY;
   const keepTemp = options.keepTemp ?? false;
   const attemptCertification = options.attemptCertification ?? false;
+  // Off by default, and deliberately so: measured on the 21 partial rows of
+  // the 2026-09-03 corpus the routing loses more receipts than it gains (six
+  // rows go certified -> refused, two gain a certified root), so the canonical
+  // report must not take it silently. See docs/ecosystem-benchmark.md.
+  const dependencyGraphLane = options.dependencyGraphLane ?? false;
   const certificationConcurrency =
     options.certificationConcurrency ?? DEFAULT_CERTIFICATION_CONCURRENCY;
 
@@ -1127,7 +1271,11 @@ export async function runBenchmark({ manifest, probeIds = null, options = {}, ho
         }
         if (work.kind === "certification") {
           try {
-            await certifyCompleteProbe(work.item, { timeoutMs, keepTemp }, hooks);
+            await certifyCompleteProbe(
+              work.item,
+              { timeoutMs, keepTemp, dependencyGraphLane },
+              hooks
+            );
           } finally {
             activeCertifications -= 1;
             wakeWorkers();
@@ -1245,6 +1393,15 @@ function usage() {
   --attempt-certification
                          attempt policy-2 certification for every structurally
                          complete proposal and retain its exact first refusal
+  --dependency-graph-lane
+                         route a partial proposal whose refusal census names a
+                         dependency-composition case through the
+                         published-dependency-graph lane instead of reusing the
+                         emitted proposal. The two lanes cover different
+                         artifact-case sets, so this is a choice, not an
+                         improvement: measured on the 2026-09-03 corpus it
+                         turns six certified rows into refusals and gives two
+                         rows a certified root. Off by default
   --keep-temp            keep the temporary install directories
   --include-supplemental run the unofficial fork rows too (off by default:
                          forks are listed for review, not part of the corpus)
@@ -1280,6 +1437,7 @@ function parseArgs(argv) {
     installLockfileCache: true,
     materializedStore: true,
     attemptCertification: false,
+    dependencyGraphLane: false,
     keepTemp: false,
     includeSupplemental: false,
     help: false
@@ -1352,6 +1510,9 @@ function parseArgs(argv) {
         break;
       case "--attempt-certification":
         options.attemptCertification = true;
+        break;
+      case "--dependency-graph-lane":
+        options.dependencyGraphLane = true;
         break;
       case "--keep-temp":
         options.keepTemp = true;
@@ -1590,7 +1751,8 @@ function buildRealHooks({
       integrity,
       entrypoints = [],
       proposalRefusalAudit = "",
-      proposal = ""
+      proposal = "",
+      dependencyGraphLane = false
     }) => {
       const authorityDir = `${catalogPath}.authority`;
       mkdirSync(authorityDir, { recursive: true });
@@ -1623,6 +1785,7 @@ function buildRealHooks({
             ? ["--proposal-refusal-audit", proposalRefusalAudit]
             : []),
           ...(proposal ? ["--proposal", proposal] : []),
+          ...(dependencyGraphLane ? ["--dependency-graph-lane"] : []),
           ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])
         ],
         env: certificationEnvironment,
@@ -1801,6 +1964,7 @@ async function main(argv = process.argv.slice(2)) {
         concurrency: options.concurrency,
         certificationConcurrency: options.certificationConcurrency,
         attemptCertification: options.attemptCertification,
+        dependencyGraphLane: options.dependencyGraphLane,
         keepTemp: options.keepTemp,
         includeSupplemental: options.includeSupplemental,
         scheduleCosts

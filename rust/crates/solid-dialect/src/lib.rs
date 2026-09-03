@@ -378,6 +378,32 @@ pub fn exports_value_from(origin_module: &str, name: &str) -> bool {
     })
 }
 
+/// Whether `package` is a package whose own published bytes define some
+/// dialect's primitives — an exact name match against
+/// [`Dialect::primitive_defining_packages`] for either dialect.
+///
+/// Unioned across dialects deliberately: the question is about the *archive*
+/// under analysis, not about which vocabulary a consuming project selected. A
+/// 1.x project analyzing `@solidjs/signals` is analyzing bytes that define
+/// 2.0's primitives, and the path heuristic that misreads them does not
+/// consult the selected dialect either.
+///
+/// This is a **generation-scope** predicate, not a proof of identity: it
+/// compares a name, with no version and no integrity behind it. It may only
+/// ever *withhold* a claim (open a domain), never establish one — see ADR 0005.
+#[must_use]
+pub fn primitive_defining_package(package: &str) -> bool {
+    if package.is_empty() {
+        return false;
+    }
+    [Version::V1, Version::V2].into_iter().any(|version| {
+        version
+            .dialect()
+            .primitive_defining_packages()
+            .contains(&package)
+    })
+}
+
 /// The role a JSX tag plays as a boundary.
 ///
 /// Callers ask for the role, never the name: 1.x spells the async boundary
@@ -632,6 +658,21 @@ pub trait Dialect: Sync {
     /// 1.x splits across subpaths (`solid-js/store`, `solid-js/web`); 2.0 moves
     /// store APIs into core and the DOM package to `@solidjs/web`.
     fn modules(&self) -> &'static [&'static str];
+
+    /// The packages whose own published bytes *define* this dialect's
+    /// primitives, by exact package name.
+    ///
+    /// Not specifiers and not a superset of [`Dialect::modules`]: this names
+    /// the archives in which a dialect-spelled declaration is the primitive's
+    /// own implementation rather than a consumer's import of it. Primitive
+    /// identity is granted by declaration *path*
+    /// (`solid-reactive-ir`'s `declaration_path_is_solid_package`), which is
+    /// correct for a consumer — TypeScript resolved the symbol into the
+    /// package — and wrong inside these archives, where every local
+    /// `createSignal`/`createTrackedEffect` becomes a "primitive call". Only
+    /// contract *generation* consults this, to withhold the domains that
+    /// recognition would otherwise fabricate; no diagnostic reads it.
+    fn primitive_defining_packages(&self) -> &'static [&'static str];
 
     /// The basename diagnostics cite when a fact came from this dialect's
     /// bundled `solid-js` contract (`bundled://<basename>#<primitive>`).
@@ -2714,5 +2755,25 @@ mod tests {
         assert!(!exports_value_from("solid-js", "createUnknown"));
         // A type-position-only export is not a value export.
         assert!(!exports_value_from("solid-js", "Accessor"));
+    }
+
+    // Exact names, unioned across dialects, and no subpath or prefix reach:
+    // the predicate names *archives*, and a package that merely lives under
+    // the `@solidjs` scope is a consumer of these three, not one of them.
+    #[test]
+    fn primitive_defining_packages_are_exact_archive_names() {
+        assert!(primitive_defining_package("solid-js"));
+        assert!(primitive_defining_package("@solidjs/signals"));
+        assert!(primitive_defining_package("@solidjs/web"));
+        assert!(!primitive_defining_package(""));
+        assert!(!primitive_defining_package("solid-js/store"));
+        assert!(!primitive_defining_package("solid-js/web"));
+        assert!(!primitive_defining_package("@solidjs"));
+        assert!(!primitive_defining_package("@solidjs/router"));
+        assert!(!primitive_defining_package("@solidjs/meta"));
+        assert!(!primitive_defining_package("@solidjs/start"));
+        assert!(!primitive_defining_package("@solidjs/element"));
+        assert!(!primitive_defining_package("solid-js-signals"));
+        assert!(!primitive_defining_package("my-solid-js"));
     }
 }

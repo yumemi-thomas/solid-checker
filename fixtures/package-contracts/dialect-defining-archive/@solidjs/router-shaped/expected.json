@@ -1,0 +1,99 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "5b14591c61760d567f4c86ad3f3cfe64da7f0628bae56c51e933bf3eebe115d4",
+            "path": "./index.ts",
+            "sha256": "05b3d1ab22b4e2d50d652e11f6c2dc35253ab37e19ddb680666e1386c1935901"
+          },
+          "declarations": {
+            "path": "./index.ts",
+            "sha256": "05b3d1ab22b4e2d50d652e11f6c2dc35253ab37e19ddb680666e1386c1935901"
+          },
+          "exports": {
+            "onSettled": "summary-01c93bde66365531cd4e5d5211ba04ac1bb5de5a7b0d3583422a120b737175b8"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:87fed2f83c87241e7cc07c508ef10f856cdeed956810a4d8fff27158d382a253",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "87fed2f83c87241e7cc07c508ef10f856cdeed956810a4d8fff27158d382a253"
+    },
+    "name": "@solidjs/router",
+    "version": "0.0.0-fixture"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-01c93bde66365531cd4e5d5211ba04ac1bb5de5a7b0d3583422a120b737175b8": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "creates": [
+          "owner-requirement-0"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "create",
+            "owner": {
+              "requires": "required",
+              "requiresChildren": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

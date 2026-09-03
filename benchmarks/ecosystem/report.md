@@ -1,8 +1,8 @@
 # Ecosystem Benchmark Report
 
-- Started: 2026-09-02T23:18:50.009Z
-- Finished: 2026-09-02T23:20:00.604Z
-- Duration: 70595 ms
+- Started: 2026-09-03T01:54:31.259Z
+- Finished: 2026-09-03T01:55:43.552Z
+- Duration: 72293 ms
 - Checker native binary: /Users/thomas/Documents/Github/solid-checker/rust/target/release/solid-checker-rust
 - Type Facts binary: /Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts
 - Registry cache for certification: /Users/thomas/Documents/Github/solid-checker/rust/target/registry-cache
@@ -11,6 +11,7 @@
 - Materialized source store: /Users/thomas/Documents/Github/solid-checker/rust/target/materialized-store
 - Manifest generated at: 2026-08-26T14:21:49.573Z (rows: 307, probes: 418)
 - Scope: full corpus (418 probes run)
+- Verified: 357/397 attempted -- 306 complete, 51 partial (31 with the root); 471 certified entrypoints
 
 ## Solid 1.x
 
@@ -26,15 +27,20 @@
 - Success (complete contracts): 3/6 (50%)
 - Partial contracts: 2
 - Failures: 1
+- Certification attempted: 6
+- Verified (receipt issued): 4 -- 2 complete, 2 partial (2 of those with the root)
+- Certified entrypoints (measured): 14
+- Exact certification refusals: 2
+- Proposal lanes: 1 generated-proposal, 5 reused-proposal
 
-| Package | Version | Probe | Outcome | Class |
-| --- | --- | --- | --- | --- |
-| @solidjs/image | 0.1.0 | only | success | success |
-| @solidjs/meta | 0.29.4 | only | success | success |
-| @solidjs/router | 1.0.0 | only | success | success |
-| @solidjs/start | 2.0.3 | only | partial-success | partial-success |
-| @solidjs/testing-library | 0.8.10 | only | failure | dependency-contract-obligation |
-| solid-js | 1.9.14 | only | partial-success | partial-success |
+| Package | Version | Probe | Outcome | Class | Verified |
+| --- | --- | --- | --- | --- | --- |
+| @solidjs/image | 0.1.0 | only | success | success | partial 2 of 5 (root) |
+| @solidjs/meta | 0.29.4 | only | success | success | complete 1 of 1 (root) |
+| @solidjs/router | 1.0.0 | only | success | success | complete 1 of 1 (root) |
+| @solidjs/start | 2.0.3 | only | partial-success | partial-success | partial 10 of 13 (root) |
+| @solidjs/testing-library | 0.8.10 | only | failure | dependency-contract-obligation | refused |
+| solid-js | 1.9.14 | only | partial-success | partial-success | refused |
 
 Failure groups:
 - 1x dependency-contract-obligation: no certifiable artifact case; 1 case(s) refused; first refusal: .: solid-checker:unresolved-dependency-module=@testing-library/dom solid-checker-rust: emit package contract: cannot statically expand external export-all "<value>" from <package-root>/dist/index.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts (packages: @solidjs/testing-library)
@@ -54,13 +60,18 @@ Failure details:
 - Success (complete contracts): 0/4 (0%)
 - Partial contracts: 3
 - Failures: 1
+- Certification attempted: 1
+- Verified (receipt issued): 1 -- 0 complete, 1 partial (0 of those with the root)
+- Certified entrypoints (measured): 20
+- Exact certification refusals: 0
+- Proposal lanes: 1 reused-proposal
 
-| Package | Version | Probe | Outcome | Class |
-| --- | --- | --- | --- | --- |
-| @kobalte/core | 0.13.13 | only | partial-success | partial-success |
-| @kobalte/solidbase | 0.6.13 | only | partial-success | partial-success |
-| @kobalte/themes | 0.0.1-next.0 | only | failure | unavailable-published-target |
-| @kobalte/utils | 0.9.2 | only | partial-success | partial-success |
+| Package | Version | Probe | Outcome | Class | Verified |
+| --- | --- | --- | --- | --- | --- |
+| @kobalte/core | 0.13.13 | only | partial-success | partial-success | - |
+| @kobalte/solidbase | 0.6.13 | only | partial-success | partial-success | - |
+| @kobalte/themes | 0.0.1-next.0 | only | failure | unavailable-published-target | - |
+| @kobalte/utils | 0.9.2 | only | partial-success | partial-success | partial 20 certified, 2 declared via wildcard (no root) |
 
 Failure groups:
 - 1x unavailable-published-target: no certifiable artifact case; 2 case(s) refused; first refusal: .: resolved <callee> <package-root>/dist/index.jsx is not a file (packages: @kobalte/themes)
@@ -80,106 +91,111 @@ Failure details:
 - Success (complete contracts): 92/97 (94.85%)
 - Partial contracts: 2
 - Failures: 3
+- Certification attempted: 94
+- Verified (receipt issued): 90 -- 88 complete, 2 partial (0 of those with the root)
+- Certified entrypoints (measured): 91
+- Exact certification refusals: 4
+- Proposal lanes: 94 reused-proposal
 
-| Package | Version | Probe | Outcome | Class |
-| --- | --- | --- | --- | --- |
-| @solid-primitives/active-element | 2.1.6 | only | success | success |
-| @solid-primitives/analytics | 0.2.1 | only | success | success |
-| @solid-primitives/audio | 1.4.5 | only | success | success |
-| @solid-primitives/autofocus | 0.1.5 | only | success | success |
-| @solid-primitives/bounds | 0.1.7 | only | success | success |
-| @solid-primitives/broadcast-channel | 0.1.1 | only | success | success |
-| @solid-primitives/clipboard | 1.6.6 | only | success | success |
-| @solid-primitives/composites | 1.1.1 | only | failure | unavailable-published-target |
-| @solid-primitives/connectivity | 0.4.6 | only | success | success |
-| @solid-primitives/context | 0.3.2 | only | failure | missing-closure-module |
-| @solid-primitives/controlled-props | 0.1.4 | only | success | success |
-| @solid-primitives/cookies | 0.0.3 | only | success | success |
-| @solid-primitives/cookies-store | 1.1.11 | only | success | success |
-| @solid-primitives/countdown | 1.0.9 | only | success | success |
-| @solid-primitives/cursor | 0.1.4 | only | success | success |
-| @solid-primitives/date | 2.1.8 | only | success | success |
-| @solid-primitives/date-difference | 1.0.2 | only | success | success |
-| @solid-primitives/db-store | 1.1.4 | only | success | success |
-| @solid-primitives/debounce | 1.3.0 | only | success | success |
-| @solid-primitives/deep | 0.3.7 | only | success | success |
-| @solid-primitives/destructure | 0.2.4 | only | success | success |
-| @solid-primitives/devices | 1.3.1 | only | success | success |
-| @solid-primitives/event-bus | 1.1.4 | only | success | success |
-| @solid-primitives/event-dispatcher | 0.1.1 | only | success | success |
-| @solid-primitives/event-listener | 2.4.6 | only | success | success |
-| @solid-primitives/event-props | 0.3.1 | only | success | success |
-| @solid-primitives/fetch | 2.5.2 | only | success | success |
-| @solid-primitives/filesystem | 1.3.4 | only | success | success |
-| @solid-primitives/flux-store | 0.1.1 | only | success | success |
-| @solid-primitives/fullscreen | 1.3.5 | only | success | success |
-| @solid-primitives/geolocation | 1.5.5 | only | success | success |
-| @solid-primitives/gestures | 1.2.1 | only | success | success |
-| @solid-primitives/graphql | 3.0.0-next.0 | only | success | success |
-| @solid-primitives/history | 0.2.5 | only | success | success |
-| @solid-primitives/i18n | 2.2.1 | only | success | success |
-| @solid-primitives/idle | 0.2.3 | only | success | success |
-| @solid-primitives/immutable | 2.0.0-next.0 | only | success | success |
-| @solid-primitives/input-mask | 0.3.1 | only | success | success |
-| @solid-primitives/intersection-observer | 2.2.5 | only | success | success |
-| @solid-primitives/jsx-parser | 0.2.0 | only | success | success |
-| @solid-primitives/jsx-tokenizer | 1.1.4 | only | success | success |
-| @solid-primitives/keyboard | 1.3.7 | only | success | success |
-| @solid-primitives/keyed | 1.5.3 | only | success | success |
-| @solid-primitives/lifecycle | 0.1.2 | only | success | success |
-| @solid-primitives/list | 0.1.2 | only | success | success |
-| @solid-primitives/local-store | 1.1.4 | only | success | success |
-| @solid-primitives/map | 0.7.4 | only | success | success |
-| @solid-primitives/marker | 0.2.2 | only | success | success |
-| @solid-primitives/masonry | 0.1.4 | only | success | success |
-| @solid-primitives/match | 0.0.100 | only | success | success |
-| @solid-primitives/media | 2.3.6 | only | success | success |
-| @solid-primitives/memo | 1.5.1 | only | success | success |
-| @solid-primitives/mouse | 2.1.7 | only | success | success |
-| @solid-primitives/mutable | 1.1.1 | only | success | success |
-| @solid-primitives/mutation-observer | 1.2.4 | only | success | success |
-| @solid-primitives/page-visibility | 2.1.6 | only | success | success |
-| @solid-primitives/pagination | 0.5.2 | only | success | success |
-| @solid-primitives/permission | 1.3.2 | only | success | success |
-| @solid-primitives/platform | 0.2.1 | only | success | success |
-| @solid-primitives/pointer | 0.3.6 | only | success | success |
-| @solid-primitives/presence | 0.1.4 | only | success | success |
-| @solid-primitives/promise | 1.1.4 | only | success | success |
-| @solid-primitives/props | 3.2.4 | only | success | success |
-| @solid-primitives/raf | 2.3.5 | only | success | success |
-| @solid-primitives/range | 0.2.5 | only | success | success |
-| @solid-primitives/reducer | 0.0.101 | only | success | success |
-| @solid-primitives/refs | 1.1.4 | only | success | success |
-| @solid-primitives/resize-observer | 2.2.0 | only | success | success |
-| @solid-primitives/resource | 0.4.3 | only | success | success |
-| @solid-primitives/rootless | 1.5.4 | only | success | success |
-| @solid-primitives/scheduled | 1.5.3 | only | success | success |
-| @solid-primitives/script-loader | 2.3.2 | only | success | success |
-| @solid-primitives/scroll | 2.1.6 | only | success | success |
-| @solid-primitives/selection | 0.1.3 | only | success | success |
-| @solid-primitives/set | 0.7.4 | only | success | success |
-| @solid-primitives/share | 2.2.5 | only | success | success |
-| @solid-primitives/signal-builders | 0.2.4 | only | success | success |
-| @solid-primitives/spring | 0.1.2 | only | success | success |
-| @solid-primitives/sse | 0.0.103 | only | partial-success | partial-success |
-| @solid-primitives/start | 0.0.4 | only | success | success |
-| @solid-primitives/state-machine | 0.1.1 | only | success | success |
-| @solid-primitives/static-store | 0.1.4 | only | success | success |
-| @solid-primitives/storage | 4.4.0 | only | success | success |
-| @solid-primitives/stream | 0.7.4 | only | success | success |
-| @solid-primitives/styles | 0.1.4 | only | success | success |
-| @solid-primitives/throttle | 1.2.0 | only | success | success |
-| @solid-primitives/timer | 1.4.4 | only | success | success |
-| @solid-primitives/transition-group | 1.1.2 | only | success | success |
-| @solid-primitives/trigger | 1.2.4 | only | success | success |
-| @solid-primitives/tween | 1.4.1 | only | success | success |
-| @solid-primitives/until | 0.1.1 | only | success | success |
-| @solid-primitives/upload | 0.1.5 | only | success | success |
-| @solid-primitives/utils | 6.4.1 | only | partial-success | partial-success |
-| @solid-primitives/virtual | 0.2.5 | only | success | success |
-| @solid-primitives/visibility-observer | 2.0.1 | only | success | success |
-| @solid-primitives/websocket | 1.4.0 | only | success | success |
-| @solid-primitives/workers | 0.4.3 | only | failure | missing-closure-module |
+| Package | Version | Probe | Outcome | Class | Verified |
+| --- | --- | --- | --- | --- | --- |
+| @solid-primitives/active-element | 2.1.6 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/analytics | 0.2.1 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/audio | 1.4.5 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/autofocus | 0.1.5 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/bounds | 0.1.7 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/broadcast-channel | 0.1.1 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/clipboard | 1.6.6 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/composites | 1.1.1 | only | failure | unavailable-published-target | - |
+| @solid-primitives/connectivity | 0.4.6 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/context | 0.3.2 | only | failure | missing-closure-module | - |
+| @solid-primitives/controlled-props | 0.1.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/cookies | 0.0.3 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/cookies-store | 1.1.11 | only | success | success | complete 1 of 0 (root) |
+| @solid-primitives/countdown | 1.0.9 | only | success | success | complete 1 of 0 (root) |
+| @solid-primitives/cursor | 0.1.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/date | 2.1.8 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/date-difference | 1.0.2 | only | success | success | complete 1 of 0 (root) |
+| @solid-primitives/db-store | 1.1.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/debounce | 1.3.0 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/deep | 0.3.7 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/destructure | 0.2.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/devices | 1.3.1 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/event-bus | 1.1.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/event-dispatcher | 0.1.1 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/event-listener | 2.4.6 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/event-props | 0.3.1 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/fetch | 2.5.2 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/filesystem | 1.3.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/flux-store | 0.1.1 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/fullscreen | 1.3.5 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/geolocation | 1.5.5 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/gestures | 1.2.1 | only | success | success | refused |
+| @solid-primitives/graphql | 3.0.0-next.0 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/history | 0.2.5 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/i18n | 2.2.1 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/idle | 0.2.3 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/immutable | 2.0.0-next.0 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/input-mask | 0.3.1 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/intersection-observer | 2.2.5 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/jsx-parser | 0.2.0 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/jsx-tokenizer | 1.1.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/keyboard | 1.3.7 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/keyed | 1.5.3 | only | success | success | refused |
+| @solid-primitives/lifecycle | 0.1.2 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/list | 0.1.2 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/local-store | 1.1.4 | only | success | success | refused |
+| @solid-primitives/map | 0.7.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/marker | 0.2.2 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/masonry | 0.1.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/match | 0.0.100 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/media | 2.3.6 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/memo | 1.5.1 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/mouse | 2.1.7 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/mutable | 1.1.1 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/mutation-observer | 1.2.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/page-visibility | 2.1.6 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/pagination | 0.5.2 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/permission | 1.3.2 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/platform | 0.2.1 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/pointer | 0.3.6 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/presence | 0.1.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/promise | 1.1.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/props | 3.2.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/raf | 2.3.5 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/range | 0.2.5 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/reducer | 0.0.101 | only | success | success | complete 1 of 0 (root) |
+| @solid-primitives/refs | 1.1.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/resize-observer | 2.2.0 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/resource | 0.4.3 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/rootless | 1.5.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/scheduled | 1.5.3 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/script-loader | 2.3.2 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/scroll | 2.1.6 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/selection | 0.1.3 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/set | 0.7.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/share | 2.2.5 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/signal-builders | 0.2.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/spring | 0.1.2 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/sse | 0.0.103 | only | partial-success | partial-success | partial 1 of 3 (no root) |
+| @solid-primitives/start | 0.0.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/state-machine | 0.1.1 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/static-store | 0.1.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/storage | 4.4.0 | only | success | success | complete 2 of 2 (root) |
+| @solid-primitives/stream | 0.7.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/styles | 0.1.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/throttle | 1.2.0 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/timer | 1.4.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/transition-group | 1.1.2 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/trigger | 1.2.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/tween | 1.4.1 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/until | 0.1.1 | only | success | success | refused |
+| @solid-primitives/upload | 0.1.5 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/utils | 6.4.1 | only | partial-success | partial-success | partial 1 of 2 (no root) |
+| @solid-primitives/virtual | 0.2.5 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/visibility-observer | 2.0.1 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/websocket | 1.4.0 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/workers | 0.4.3 | only | failure | missing-closure-module | - |
 
 Failure groups:
 - 1x unavailable-published-target: no certifiable artifact case; 1 case(s) refused; first refusal: .: resolved <callee> <package-root>/dist/index.cjs is not a file (packages: @solid-primitives/composites)
@@ -203,20 +219,25 @@ Failure details:
 - Success (complete contracts): 7/11 (63.64%)
 - Partial contracts: 0
 - Failures: 4
+- Certification attempted: 11
+- Verified (receipt issued): 11 -- 9 complete, 2 partial (1 of those with the root)
+- Certified entrypoints (measured): 35
+- Exact certification refusals: 0
+- Proposal lanes: 4 published-graph, 7 reused-proposal
 
-| Package | Version | Probe | Outcome | Class |
-| --- | --- | --- | --- | --- |
-| @corvu/accordion | 0.2.5 | only | failure | dependency-contract-obligation |
-| @corvu/calendar | 0.1.2 | only | success | success |
-| @corvu/dialog | 0.2.4 | only | success | success |
-| @corvu/disclosure | 0.2.2 | only | success | success |
-| @corvu/drawer | 0.2.4 | only | failure | dependency-contract-obligation |
-| @corvu/otp-field | 0.1.4 | only | success | success |
-| @corvu/popover | 0.2.0 | only | failure | dependency-contract-obligation |
-| @corvu/resizable | 0.2.5 | only | success | success |
-| @corvu/tooltip | 0.2.2 | only | success | success |
-| @corvu/utils | 0.4.2 | only | success | success |
-| corvu | 0.7.2 | only | failure | dependency-contract-obligation |
+| Package | Version | Probe | Outcome | Class | Verified |
+| --- | --- | --- | --- | --- | --- |
+| @corvu/accordion | 0.2.5 | only | failure | dependency-contract-obligation | complete 1 of 1 (root) |
+| @corvu/calendar | 0.1.2 | only | success | success | complete 1 of 1 (root) |
+| @corvu/dialog | 0.2.4 | only | success | success | complete 1 of 1 (root) |
+| @corvu/disclosure | 0.2.2 | only | success | success | complete 1 of 1 (root) |
+| @corvu/drawer | 0.2.4 | only | failure | dependency-contract-obligation | complete 1 of 1 (root) |
+| @corvu/otp-field | 0.1.4 | only | success | success | complete 1 of 1 (root) |
+| @corvu/popover | 0.2.0 | only | failure | dependency-contract-obligation | complete 1 of 1 (root) |
+| @corvu/resizable | 0.2.5 | only | success | success | complete 1 of 1 (root) |
+| @corvu/tooltip | 0.2.2 | only | success | success | complete 1 of 1 (root) |
+| @corvu/utils | 0.4.2 | only | success | success | partial 17 certified, 4 declared via wildcard (root) |
+| corvu | 0.7.2 | only | failure | dependency-contract-obligation | partial 9 certified, 1 declared via wildcard (no root) |
 
 Failure groups:
 - 2x dependency-contract-obligation: no certifiable artifact case; 2 case(s) refused; first refusal: .: accepted dependency @corvu/dialog has no exact runtime binding for export Portal (packages: @corvu/drawer, @corvu/popover)
@@ -241,45 +262,50 @@ Failure details:
 - Success (complete contracts): 22/36 (61.11%)
 - Partial contracts: 4
 - Failures: 10
+- Certification attempted: 35
+- Verified (receipt issued): 29 -- 5 complete, 24 partial (17 of those with the root)
+- Certified entrypoints (measured): 47
+- Exact certification refusals: 6
+- Proposal lanes: 1 generated-proposal, 8 published-graph, 26 reused-proposal
 
-| Package | Version | Probe | Outcome | Class |
-| --- | --- | --- | --- | --- |
-| @tanstack/ai-devtools-core | 0.5.8 | only | success | success |
-| @tanstack/ai-solid | 0.19.1 | only | failure | dependency-contract-obligation |
-| @tanstack/ai-solid-ui | 0.7.20 | only | failure | dependency-contract-obligation |
-| @tanstack/charts | 0.15.0 | only | success | success |
-| @tanstack/devtools | 0.14.2 | only | success | success |
-| @tanstack/devtools-a11y | 0.2.2 | only | success | success |
-| @tanstack/devtools-ui | 0.7.1 | only | success | success |
-| @tanstack/devtools-utils | 0.7.0 | only | success | success |
-| @tanstack/form-devtools | 1.0.0-alpha.2 | only | success | success |
-| @tanstack/hotkeys-devtools | 0.9.0 | only | success | success |
-| @tanstack/pacer-devtools | 1.4.0 | only | success | success |
-| @tanstack/solid-ai-devtools | 0.2.71 | only | success | success |
-| @tanstack/solid-charts | 0.15.0 | only | success | success |
-| @tanstack/solid-db | 0.2.40 | only | failure | dependency-contract-obligation |
-| @tanstack/solid-devtools | 0.8.12 | only | success | success |
-| @tanstack/solid-form | 2.0.0-alpha.2 | only | failure | dependency-contract-obligation |
-| @tanstack/solid-form-devtools | 1.0.0-alpha.2 | only | success | success |
-| @tanstack/solid-hotkeys | 0.10.0 | only | failure | dependency-contract-obligation |
-| @tanstack/solid-hotkeys-devtools | 0.7.0 | only | success | success |
-| @tanstack/solid-pacer | 0.22.0 | only | partial-success | partial-success |
-| @tanstack/solid-pacer-devtools | 0.14.0 | only | success | success |
-| @tanstack/solid-query | 5.102.5 | only | failure | dependency-contract-obligation |
-| @tanstack/solid-query-devtools | 5.102.5 | only | success | success |
-| @tanstack/solid-query-persist-client | 5.102.5 | only | failure | dependency-contract-obligation |
-| @tanstack/solid-router | 1.170.30 | only | partial-success | partial-success |
-| @tanstack/solid-router-devtools | 1.167.1 | only | success | success |
-| @tanstack/solid-router-ssr-query | 1.167.2-pre.0 | only | success | success |
-| @tanstack/solid-start | 1.168.47 | only | partial-success | partial-success |
-| @tanstack/solid-start-client | 1.168.29 | only | success | success |
-| @tanstack/solid-start-config | 1.120.20 | only | success | success |
-| @tanstack/solid-start-server | 1.167.36 | only | failure | dependency-contract-obligation |
-| @tanstack/solid-store | 0.11.1 | only | failure | dependency-contract-obligation |
-| @tanstack/solid-table | 9.1.2 | only | partial-success | partial-success |
-| @tanstack/solid-table-devtools | 9.2.0 | only | success | success |
-| @tanstack/solid-virtual | 3.13.37 | only | failure | dependency-contract-obligation |
-| @tanstack/table-devtools | 9.2.0 | only | success | success |
+| Package | Version | Probe | Outcome | Class | Verified |
+| --- | --- | --- | --- | --- | --- |
+| @tanstack/ai-devtools-core | 0.5.8 | only | success | success | partial 2 of 3 (root) |
+| @tanstack/ai-solid | 0.19.1 | only | failure | dependency-contract-obligation | refused |
+| @tanstack/ai-solid-ui | 0.7.20 | only | failure | dependency-contract-obligation | - |
+| @tanstack/charts | 0.15.0 | only | success | success | partial 1 of 113 (no root) |
+| @tanstack/devtools | 0.14.2 | only | success | success | complete 1 of 1 (root) |
+| @tanstack/devtools-a11y | 0.2.2 | only | success | success | partial 4 of 9 (no root) |
+| @tanstack/devtools-ui | 0.7.1 | only | success | success | partial 3 of 4 (root) |
+| @tanstack/devtools-utils | 0.7.0 | only | success | success | partial 2 of 8 (no root) |
+| @tanstack/form-devtools | 1.0.0-alpha.2 | only | success | success | partial 2 of 4 (root) |
+| @tanstack/hotkeys-devtools | 0.9.0 | only | success | success | partial 2 of 3 (root) |
+| @tanstack/pacer-devtools | 1.4.0 | only | success | success | partial 2 of 3 (root) |
+| @tanstack/solid-ai-devtools | 0.2.71 | only | success | success | complete 2 of 2 (root) |
+| @tanstack/solid-charts | 0.15.0 | only | success | success | complete 1 of 1 (root) |
+| @tanstack/solid-db | 0.2.40 | only | failure | dependency-contract-obligation | refused |
+| @tanstack/solid-devtools | 0.8.12 | only | success | success | partial 1 of 2 (root) |
+| @tanstack/solid-form | 2.0.0-alpha.2 | only | failure | dependency-contract-obligation | refused |
+| @tanstack/solid-form-devtools | 1.0.0-alpha.2 | only | success | success | partial 1 of 2 (root) |
+| @tanstack/solid-hotkeys | 0.10.0 | only | failure | dependency-contract-obligation | partial 1 of 2 (root) |
+| @tanstack/solid-hotkeys-devtools | 0.7.0 | only | success | success | partial 1 of 2 (root) |
+| @tanstack/solid-pacer | 0.22.0 | only | partial-success | partial-success | partial 1 of 15 (no root) |
+| @tanstack/solid-pacer-devtools | 0.14.0 | only | success | success | partial 2 of 3 (root) |
+| @tanstack/solid-query | 5.102.5 | only | failure | dependency-contract-obligation | refused |
+| @tanstack/solid-query-devtools | 5.102.5 | only | success | success | complete 1 of 1 (root) |
+| @tanstack/solid-query-persist-client | 5.102.5 | only | failure | dependency-contract-obligation | complete 1 of 1 (root) |
+| @tanstack/solid-router | 1.170.30 | only | partial-success | partial-success | partial 1 of 4 (no root) |
+| @tanstack/solid-router-devtools | 1.167.1 | only | success | success | partial 1 of 2 (root) |
+| @tanstack/solid-router-ssr-query | 1.167.2-pre.0 | only | success | success | partial 1 of 2 (root) |
+| @tanstack/solid-start | 1.168.47 | only | partial-success | partial-success | partial 3 of 13 (no root) |
+| @tanstack/solid-start-client | 1.168.29 | only | success | success | partial 3 of 4 (root) |
+| @tanstack/solid-start-config | 1.120.20 | only | success | success | partial 1 of 2 (root) |
+| @tanstack/solid-start-server | 1.167.36 | only | failure | dependency-contract-obligation | refused |
+| @tanstack/solid-store | 0.11.1 | only | failure | dependency-contract-obligation | refused |
+| @tanstack/solid-table | 9.1.2 | only | partial-success | partial-success | partial 1 of 5 (no root) |
+| @tanstack/solid-table-devtools | 9.2.0 | only | success | success | partial 2 of 3 (root) |
+| @tanstack/solid-virtual | 3.13.37 | only | failure | dependency-contract-obligation | partial 1 of 2 (root) |
+| @tanstack/table-devtools | 9.2.0 | only | success | success | partial 2 of 3 (root) |
 
 Failure groups:
 - 1x dependency-contract-obligation: no certifiable artifact case; 1 case(s) refused and 1 case(s) recorded inapplicable; first refusal: .: accepted dependency @tanstack/db has no exact runtime binding for export createTransaction (packages: @tanstack/solid-db)
@@ -317,21 +343,26 @@ Failure details:
 - Success (complete contracts): 6/12 (50%)
 - Partial contracts: 4
 - Failures: 2
+- Certification attempted: 7
+- Verified (receipt issued): 5 -- 4 complete, 1 partial (1 of those with the root)
+- Certified entrypoints (measured): 5
+- Exact certification refusals: 2
+- Proposal lanes: 7 reused-proposal
 
-| Package | Version | Probe | Outcome | Class |
-| --- | --- | --- | --- | --- |
-| @solid-devtools/babel-plugin | 0.3.1 | only | failure | no-exported-surface |
-| @solid-devtools/debugger | 0.28.1 | only | partial-success | partial-success |
-| @solid-devtools/ext-adapter | 0.17.0 | only | failure | no-exported-surface |
-| @solid-devtools/extension-adapter | 0.12.1 | only | success | success |
-| @solid-devtools/frontend | 0.15.4 | only | success | success |
-| @solid-devtools/locator | 0.16.7 | only | partial-success | partial-success |
-| @solid-devtools/logger | 0.9.11 | only | success | success |
-| @solid-devtools/overlay | 0.33.5 | only | success | success |
-| @solid-devtools/shared | 0.20.0 | only | partial-success | partial-success |
-| @solid-devtools/transform | 0.10.4 | only | success | success |
-| @solid-devtools/ui | 0.10.3 | only | success | success |
-| solid-devtools | 0.34.5 | only | partial-success | partial-success |
+| Package | Version | Probe | Outcome | Class | Verified |
+| --- | --- | --- | --- | --- | --- |
+| @solid-devtools/babel-plugin | 0.3.1 | only | failure | no-exported-surface | - |
+| @solid-devtools/debugger | 0.28.1 | only | partial-success | partial-success | - |
+| @solid-devtools/ext-adapter | 0.17.0 | only | failure | no-exported-surface | - |
+| @solid-devtools/extension-adapter | 0.12.1 | only | success | success | complete 1 of 0 (root) |
+| @solid-devtools/frontend | 0.15.4 | only | success | success | partial 1 of 2 (root) |
+| @solid-devtools/locator | 0.16.7 | only | partial-success | partial-success | - |
+| @solid-devtools/logger | 0.9.11 | only | success | success | complete 1 of 1 (root) |
+| @solid-devtools/overlay | 0.33.5 | only | success | success | complete 1 of 1 (root) |
+| @solid-devtools/shared | 0.20.0 | only | partial-success | partial-success | - |
+| @solid-devtools/transform | 0.10.4 | only | success | success | complete 1 of 1 (root) |
+| @solid-devtools/ui | 0.10.3 | only | success | success | refused |
+| solid-devtools | 0.34.5 | only | partial-success | partial-success | refused |
 
 Failure groups:
 - 2x no-exported-surface: no certifiable artifact case; 1 case(s) refused; first refusal: .: solid-checker-rust: emit package contract: entry file <package-root>/dist/index.js has no runtime ESM exports (packages: @solid-devtools/babel-plugin, @solid-devtools/ext-adapter)
@@ -352,10 +383,15 @@ Failure details:
 - Success (complete contracts): 1/1 (100%)
 - Partial contracts: 0
 - Failures: 0
+- Certification attempted: 1
+- Verified (receipt issued): 1 -- 1 complete, 0 partial (0 of those with the root)
+- Certified entrypoints (measured): 1
+- Exact certification refusals: 0
+- Proposal lanes: 1 reused-proposal
 
-| Package | Version | Probe | Outcome | Class |
-| --- | --- | --- | --- | --- |
-| solid-recharts | 1.0.1 | only | success | success |
+| Package | Version | Probe | Outcome | Class | Verified |
+| --- | --- | --- | --- | --- | --- |
+| solid-recharts | 1.0.1 | only | success | success | complete 1 of 1 (root) |
 
 ### Motion for Solid
 
@@ -369,10 +405,15 @@ Failure details:
 - Success (complete contracts): 0/1 (0%)
 - Partial contracts: 0
 - Failures: 1
+- Certification attempted: 1
+- Verified (receipt issued): 0 -- 0 complete, 0 partial (0 of those with the root)
+- Certified entrypoints (measured): 0
+- Exact certification refusals: 1
+- Proposal lanes: 1 published-graph
 
-| Package | Version | Probe | Outcome | Class |
-| --- | --- | --- | --- | --- |
-| motion-solidjs | 0.6.0 | only | failure | dependency-contract-obligation |
+| Package | Version | Probe | Outcome | Class | Verified |
+| --- | --- | --- | --- | --- | --- |
+| motion-solidjs | 0.6.0 | only | failure | dependency-contract-obligation | refused |
 
 Failure groups:
 - 1x dependency-contract-obligation: no certifiable artifact case; 2 case(s) refused; first refusal: .: accepted dependency motion-utils has no exact runtime binding for export MotionGlobalConfig (packages: motion-solidjs)
@@ -396,24 +437,29 @@ Failure details:
 - Success (complete contracts): 9/15 (60%)
 - Partial contracts: 5
 - Failures: 1
+- Certification attempted: 12
+- Verified (receipt issued): 8 -- 5 complete, 3 partial (2 of those with the root)
+- Certified entrypoints (measured): 10
+- Exact certification refusals: 4
+- Proposal lanes: 1 published-graph, 11 reused-proposal
 
-| Package | Version | Probe | Outcome | Class |
-| --- | --- | --- | --- | --- |
-| @solidjs/diagnostics | 2.0.0-rc.3 | only | partial-success | partial-success |
-| @solidjs/element | 2.0.0-rc.3 | only | failure | dependency-contract-obligation |
-| @solidjs/h | 2.0.0-rc.3 | only | success | success |
-| @solidjs/html | 2.0.0-rc.3 | only | success | success |
-| @solidjs/meta | 1.0.0-next.2 | floor | success | success |
-| @solidjs/meta | 1.0.0-next.2 | head | success | success |
-| @solidjs/router | 2.0.0-next.18 | only | success | success |
-| @solidjs/signals | 2.0.0-rc.3 | only | success | success |
-| @solidjs/start-devtools | 1.0.0-next.4 | floor | success | success |
-| @solidjs/start-devtools | 1.0.0-next.4 | head | success | success |
-| @solidjs/universal | 2.0.0-rc.3 | only | success | success |
-| @solidjs/vite-plugin | 3.0.0-next.34 | floor | partial-success | partial-success |
-| @solidjs/vite-plugin | 3.0.0-next.34 | head | partial-success | partial-success |
-| @solidjs/web | 2.0.0-rc.3 | only | partial-success | partial-success |
-| solid-js | 2.0.0-rc.3 | only | partial-success | partial-success |
+| Package | Version | Probe | Outcome | Class | Verified |
+| --- | --- | --- | --- | --- | --- |
+| @solidjs/diagnostics | 2.0.0-rc.3 | only | partial-success | partial-success | - |
+| @solidjs/element | 2.0.0-rc.3 | only | failure | dependency-contract-obligation | refused |
+| @solidjs/h | 2.0.0-rc.3 | only | success | success | partial 3 certified, 4 declared via wildcard (root) |
+| @solidjs/html | 2.0.0-rc.3 | only | success | success | complete 1 of 1 (root) |
+| @solidjs/meta | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solidjs/meta | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solidjs/router | 2.0.0-next.18 | only | success | success | refused |
+| @solidjs/signals | 2.0.0-rc.3 | only | success | success | refused |
+| @solidjs/start-devtools | 1.0.0-next.4 | floor | success | success | complete 1 of 1 (root) |
+| @solidjs/start-devtools | 1.0.0-next.4 | head | success | success | complete 1 of 1 (root) |
+| @solidjs/universal | 2.0.0-rc.3 | only | success | success | partial 1 certified, 2 declared via wildcard (root) |
+| @solidjs/vite-plugin | 3.0.0-next.34 | floor | partial-success | partial-success | - |
+| @solidjs/vite-plugin | 3.0.0-next.34 | head | partial-success | partial-success | - |
+| @solidjs/web | 2.0.0-rc.3 | only | partial-success | partial-success | refused |
+| solid-js | 2.0.0-rc.3 | only | partial-success | partial-success | partial 1 certified, 4 declared via wildcard (no root) |
 
 Failure groups:
 - 1x dependency-contract-obligation: no certifiable artifact case; 1 case(s) refused; first refusal: .: accepted dependency component-register has no exact runtime binding for export getCurrentElement (packages: @solidjs/element)
@@ -433,11 +479,16 @@ Failure details:
 - Success (complete contracts): 1/2 (50%)
 - Partial contracts: 1
 - Failures: 0
+- Certification attempted: 2
+- Verified (receipt issued): 1 -- 0 complete, 1 partial (1 of those with the root)
+- Certified entrypoints (measured): 7
+- Exact certification refusals: 1
+- Proposal lanes: 2 reused-proposal
 
-| Package | Version | Probe | Outcome | Class |
-| --- | --- | --- | --- | --- |
-| @kobalte/core | 2.0.0-alpha.0 | only | partial-success | partial-success |
-| @kobalte/utils | 2.0.0-alpha.0 | only | success | success |
+| Package | Version | Probe | Outcome | Class | Verified |
+| --- | --- | --- | --- | --- | --- |
+| @kobalte/core | 2.0.0-alpha.0 | only | partial-success | partial-success | refused |
+| @kobalte/utils | 2.0.0-alpha.0 | only | success | success | partial 7 certified, 2 declared via wildcard (root) |
 
 ### Solid Primitives
 
@@ -451,203 +502,208 @@ Failure details:
 - Success (complete contracts): 182/194 (93.81%)
 - Partial contracts: 6
 - Failures: 6
+- Certification attempted: 188
+- Verified (receipt issued): 174 -- 172 complete, 2 partial (0 of those with the root)
+- Certified entrypoints (measured): 184
+- Exact certification refusals: 14
+- Proposal lanes: 4 published-graph, 184 reused-proposal
 
-| Package | Version | Probe | Outcome | Class |
-| --- | --- | --- | --- | --- |
-| @solid-primitives/a11y | 1.0.0-next.3 | floor | success | success |
-| @solid-primitives/a11y | 1.0.0-next.3 | head | success | success |
-| @solid-primitives/active-element | 3.0.0-next.2 | floor | success | success |
-| @solid-primitives/active-element | 3.0.0-next.2 | head | success | success |
-| @solid-primitives/analytics | 2.0.0-next.2 | floor | success | success |
-| @solid-primitives/analytics | 2.0.0-next.2 | head | success | success |
-| @solid-primitives/animation | 1.0.0-next.1 | floor | failure | unavailable-published-target |
-| @solid-primitives/animation | 1.0.0-next.1 | head | failure | unavailable-published-target |
-| @solid-primitives/async | 0.0.101-next.3 | floor | success | success |
-| @solid-primitives/async | 0.0.101-next.3 | head | success | success |
-| @solid-primitives/audio | 3.0.0-next.2 | floor | success | success |
-| @solid-primitives/audio | 3.0.0-next.2 | head | success | success |
-| @solid-primitives/bounds | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/bounds | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/broadcast-channel | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/broadcast-channel | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/clipboard | 2.0.0-next.17 | floor | success | success |
-| @solid-primitives/clipboard | 2.0.0-next.17 | head | success | success |
-| @solid-primitives/connectivity | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/connectivity | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/context | 2.0.0-next.2 | floor | success | success |
-| @solid-primitives/context | 2.0.0-next.2 | head | success | success |
-| @solid-primitives/controlled-props | 1.0.0-next.3 | floor | partial-success | partial-success |
-| @solid-primitives/controlled-props | 1.0.0-next.3 | head | partial-success | partial-success |
-| @solid-primitives/controlled-signal | 1.0.0-next.3 | floor | success | success |
-| @solid-primitives/controlled-signal | 1.0.0-next.3 | head | success | success |
-| @solid-primitives/cookies | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/cookies | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/cursor | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/cursor | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/date | 3.0.0-next.3 | floor | success | success |
-| @solid-primitives/date | 3.0.0-next.3 | head | success | success |
-| @solid-primitives/deep | 1.0.0-next.3 | floor | success | success |
-| @solid-primitives/deep | 1.0.0-next.3 | head | success | success |
-| @solid-primitives/destructure | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/destructure | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/devices | 3.0.0-next.2 | floor | success | success |
-| @solid-primitives/devices | 3.0.0-next.2 | head | success | success |
-| @solid-primitives/drag-drop | 0.1.0-next.0 | floor | success | success |
-| @solid-primitives/drag-drop | 0.1.0-next.0 | head | success | success |
-| @solid-primitives/event-bus | 3.0.0-next.3 | floor | success | success |
-| @solid-primitives/event-bus | 3.0.0-next.3 | head | success | success |
-| @solid-primitives/event-dispatcher | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/event-dispatcher | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/event-listener | 3.0.0-next.3 | floor | success | success |
-| @solid-primitives/event-listener | 3.0.0-next.3 | head | success | success |
-| @solid-primitives/event-props | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/event-props | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/favicon | 1.0.0-next.1 | floor | success | success |
-| @solid-primitives/favicon | 1.0.0-next.1 | head | success | success |
-| @solid-primitives/filesystem | 3.0.0-next.3 | floor | success | success |
-| @solid-primitives/filesystem | 3.0.0-next.3 | head | success | success |
-| @solid-primitives/flux-store | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/flux-store | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/focus | 1.0.0-next.4 | floor | success | success |
-| @solid-primitives/focus | 1.0.0-next.4 | head | success | success |
-| @solid-primitives/form | 1.0.0-next.2 | floor | failure | dependency-contract-obligation |
-| @solid-primitives/form | 1.0.0-next.2 | head | failure | dependency-contract-obligation |
-| @solid-primitives/fullscreen | 2.0.0-next.3 | floor | success | success |
-| @solid-primitives/fullscreen | 2.0.0-next.3 | head | success | success |
-| @solid-primitives/geolocation | 3.0.0-next.2 | floor | success | success |
-| @solid-primitives/geolocation | 3.0.0-next.2 | head | success | success |
-| @solid-primitives/gestures | 3.0.0-next.3 | floor | success | success |
-| @solid-primitives/gestures | 3.0.0-next.3 | head | success | success |
-| @solid-primitives/history | 1.0.0-next.3 | floor | success | success |
-| @solid-primitives/history | 1.0.0-next.3 | head | success | success |
-| @solid-primitives/i18n | 3.0.0-next.4 | floor | success | success |
-| @solid-primitives/i18n | 3.0.0-next.4 | head | success | success |
-| @solid-primitives/idle | 1.0.0-next.3 | floor | success | success |
-| @solid-primitives/idle | 1.0.0-next.3 | head | success | success |
-| @solid-primitives/input-mask | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/input-mask | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/interaction | 1.0.0-next.4 | floor | success | success |
-| @solid-primitives/interaction | 1.0.0-next.4 | head | success | success |
-| @solid-primitives/intersection-observer | 3.0.0-next.3 | floor | failure | dependency-contract-obligation |
-| @solid-primitives/intersection-observer | 3.0.0-next.3 | head | failure | dependency-contract-obligation |
-| @solid-primitives/jsx-tokenizer | 3.0.0-next.2 | floor | success | success |
-| @solid-primitives/jsx-tokenizer | 3.0.0-next.2 | head | success | success |
-| @solid-primitives/keyboard | 2.0.0-next.5 | floor | success | success |
-| @solid-primitives/keyboard | 2.0.0-next.5 | head | success | success |
-| @solid-primitives/keyed | 3.0.0-next.2 | floor | success | success |
-| @solid-primitives/keyed | 3.0.0-next.2 | head | success | success |
-| @solid-primitives/lifecycle | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/lifecycle | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/list | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/list | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/list-state | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/list-state | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/map | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/map | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/marker | 2.0.0-next.2 | floor | success | success |
-| @solid-primitives/marker | 2.0.0-next.2 | head | success | success |
-| @solid-primitives/masonry | 2.0.0-next.2 | floor | success | success |
-| @solid-primitives/masonry | 2.0.0-next.2 | head | success | success |
-| @solid-primitives/match | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/match | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/media | 4.0.0-next.2 | floor | success | success |
-| @solid-primitives/media | 4.0.0-next.2 | head | success | success |
-| @solid-primitives/mediastream | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/mediastream | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/memo | 2.0.0-next.2 | floor | success | success |
-| @solid-primitives/memo | 2.0.0-next.2 | head | success | success |
-| @solid-primitives/mouse | 4.0.0-next.3 | floor | success | success |
-| @solid-primitives/mouse | 4.0.0-next.3 | head | success | success |
-| @solid-primitives/mutable | 3.0.0-next.2 | floor | success | success |
-| @solid-primitives/mutable | 3.0.0-next.2 | head | success | success |
-| @solid-primitives/mutation-observer | 3.0.0-next.2 | floor | success | success |
-| @solid-primitives/mutation-observer | 3.0.0-next.2 | head | success | success |
-| @solid-primitives/notification | 1.0.0-next.3 | floor | success | success |
-| @solid-primitives/notification | 1.0.0-next.3 | head | success | success |
-| @solid-primitives/orientation | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/orientation | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/page-utilities | 3.0.0-next.2 | floor | success | success |
-| @solid-primitives/page-utilities | 3.0.0-next.2 | head | success | success |
-| @solid-primitives/pagination | 1.0.0-next.6 | floor | success | success |
-| @solid-primitives/pagination | 1.0.0-next.6 | head | success | success |
-| @solid-primitives/permission | 2.0.0-next.2 | floor | success | success |
-| @solid-primitives/permission | 2.0.0-next.2 | head | success | success |
-| @solid-primitives/platform | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/platform | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/pointer | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/pointer | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/presence | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/presence | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/promise | 2.0.0-next.2 | floor | success | success |
-| @solid-primitives/promise | 2.0.0-next.2 | head | success | success |
-| @solid-primitives/props | 4.0.0-next.3 | floor | success | success |
-| @solid-primitives/props | 4.0.0-next.3 | head | success | success |
-| @solid-primitives/queue | 1.0.0-next.3 | floor | success | success |
-| @solid-primitives/queue | 1.0.0-next.3 | head | success | success |
-| @solid-primitives/raf | 4.0.0-next.2 | floor | success | success |
-| @solid-primitives/raf | 4.0.0-next.2 | head | success | success |
-| @solid-primitives/range | 1.0.0-next.3 | floor | success | success |
-| @solid-primitives/range | 1.0.0-next.3 | head | success | success |
-| @solid-primitives/refs | 3.0.0-next.2 | floor | success | success |
-| @solid-primitives/refs | 3.0.0-next.2 | head | success | success |
-| @solid-primitives/resize-observer | 4.0.0-next.3 | floor | success | success |
-| @solid-primitives/resize-observer | 4.0.0-next.3 | head | success | success |
-| @solid-primitives/rootless | 2.0.0-next.2 | floor | success | success |
-| @solid-primitives/rootless | 2.0.0-next.2 | head | success | success |
-| @solid-primitives/scheduled | 2.0.0-next.2 | floor | success | success |
-| @solid-primitives/scheduled | 2.0.0-next.2 | head | success | success |
-| @solid-primitives/script-loader | 3.0.0-next.2 | floor | success | success |
-| @solid-primitives/script-loader | 3.0.0-next.2 | head | success | success |
-| @solid-primitives/scroll | 3.0.0-next.4 | floor | success | success |
-| @solid-primitives/scroll | 3.0.0-next.4 | head | success | success |
-| @solid-primitives/selection | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/selection | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/sensors | 1.0.0-next.3 | floor | success | success |
-| @solid-primitives/sensors | 1.0.0-next.3 | head | success | success |
-| @solid-primitives/set | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/set | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/share | 4.0.0-next.4 | floor | success | success |
-| @solid-primitives/share | 4.0.0-next.4 | head | success | success |
-| @solid-primitives/signal-builders | 1.0.0-next.4 | floor | success | success |
-| @solid-primitives/signal-builders | 1.0.0-next.4 | head | success | success |
-| @solid-primitives/sortable | 1.0.0-next.0 | floor | success | success |
-| @solid-primitives/sortable | 1.0.0-next.0 | head | success | success |
-| @solid-primitives/spring | 1.0.0-next.3 | floor | success | success |
-| @solid-primitives/spring | 1.0.0-next.3 | head | success | success |
-| @solid-primitives/sse | 1.0.0-next.2 | floor | partial-success | partial-success |
-| @solid-primitives/sse | 1.0.0-next.2 | head | partial-success | partial-success |
-| @solid-primitives/state-machine | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/state-machine | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/static-store | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/static-store | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/storage | 5.0.0-next.4 | floor | success | success |
-| @solid-primitives/storage | 5.0.0-next.4 | head | success | success |
-| @solid-primitives/styles | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/styles | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/timer | 1.4.5-next.1 | floor | success | success |
-| @solid-primitives/timer | 1.4.5-next.1 | head | success | success |
-| @solid-primitives/transition-group | 2.0.0-next.2 | floor | success | success |
-| @solid-primitives/transition-group | 2.0.0-next.2 | head | success | success |
-| @solid-primitives/trigger | 3.0.0-next.2 | floor | success | success |
-| @solid-primitives/trigger | 3.0.0-next.2 | head | success | success |
-| @solid-primitives/tween | 2.0.0-next.2 | floor | success | success |
-| @solid-primitives/tween | 2.0.0-next.2 | head | success | success |
-| @solid-primitives/upload | 1.0.0-next.4 | floor | success | success |
-| @solid-primitives/upload | 1.0.0-next.4 | head | success | success |
-| @solid-primitives/url | 0.2.0-next.2 | floor | success | success |
-| @solid-primitives/url | 0.2.0-next.2 | head | success | success |
-| @solid-primitives/utils | 7.0.0-next.4 | floor | success | success |
-| @solid-primitives/utils | 7.0.0-next.4 | head | success | success |
-| @solid-primitives/vibrate | 1.0.0-next.2 | floor | success | success |
-| @solid-primitives/vibrate | 1.0.0-next.2 | head | success | success |
-| @solid-primitives/video | 1.0.0-next.3 | floor | success | success |
-| @solid-primitives/video | 1.0.0-next.3 | head | success | success |
-| @solid-primitives/virtual | 1.0.0-next.4 | floor | partial-success | partial-success |
-| @solid-primitives/virtual | 1.0.0-next.4 | head | partial-success | partial-success |
-| @solid-primitives/websocket | 2.0.0-next.3 | floor | success | success |
-| @solid-primitives/websocket | 2.0.0-next.3 | head | success | success |
-| @solid-primitives/workers | 2.0.1-next.1 | floor | success | success |
-| @solid-primitives/workers | 2.0.1-next.1 | head | success | success |
+| Package | Version | Probe | Outcome | Class | Verified |
+| --- | --- | --- | --- | --- | --- |
+| @solid-primitives/a11y | 1.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/a11y | 1.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/active-element | 3.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/active-element | 3.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/analytics | 2.0.0-next.2 | floor | success | success | complete 4 of 4 (root) |
+| @solid-primitives/analytics | 2.0.0-next.2 | head | success | success | complete 4 of 4 (root) |
+| @solid-primitives/animation | 1.0.0-next.1 | floor | failure | unavailable-published-target | - |
+| @solid-primitives/animation | 1.0.0-next.1 | head | failure | unavailable-published-target | - |
+| @solid-primitives/async | 0.0.101-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/async | 0.0.101-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/audio | 3.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/audio | 3.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/bounds | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/bounds | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/broadcast-channel | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/broadcast-channel | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/clipboard | 2.0.0-next.17 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/clipboard | 2.0.0-next.17 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/connectivity | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/connectivity | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/context | 2.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/context | 2.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/controlled-props | 1.0.0-next.3 | floor | partial-success | partial-success | - |
+| @solid-primitives/controlled-props | 1.0.0-next.3 | head | partial-success | partial-success | - |
+| @solid-primitives/controlled-signal | 1.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/controlled-signal | 1.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/cookies | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/cookies | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/cursor | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/cursor | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/date | 3.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/date | 3.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/deep | 1.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/deep | 1.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/destructure | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/destructure | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/devices | 3.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/devices | 3.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/drag-drop | 0.1.0-next.0 | floor | success | success | refused |
+| @solid-primitives/drag-drop | 0.1.0-next.0 | head | success | success | refused |
+| @solid-primitives/event-bus | 3.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/event-bus | 3.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/event-dispatcher | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/event-dispatcher | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/event-listener | 3.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/event-listener | 3.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/event-props | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/event-props | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/favicon | 1.0.0-next.1 | floor | success | success | refused |
+| @solid-primitives/favicon | 1.0.0-next.1 | head | success | success | refused |
+| @solid-primitives/filesystem | 3.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/filesystem | 3.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/flux-store | 1.0.0-next.2 | floor | success | success | refused |
+| @solid-primitives/flux-store | 1.0.0-next.2 | head | success | success | refused |
+| @solid-primitives/focus | 1.0.0-next.4 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/focus | 1.0.0-next.4 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/form | 1.0.0-next.2 | floor | failure | dependency-contract-obligation | complete 1 of 1 (root) |
+| @solid-primitives/form | 1.0.0-next.2 | head | failure | dependency-contract-obligation | complete 1 of 1 (root) |
+| @solid-primitives/fullscreen | 2.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/fullscreen | 2.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/geolocation | 3.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/geolocation | 3.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/gestures | 3.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/gestures | 3.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/history | 1.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/history | 1.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/i18n | 3.0.0-next.4 | floor | success | success | refused |
+| @solid-primitives/i18n | 3.0.0-next.4 | head | success | success | refused |
+| @solid-primitives/idle | 1.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/idle | 1.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/input-mask | 1.0.0-next.2 | floor | success | success | refused |
+| @solid-primitives/input-mask | 1.0.0-next.2 | head | success | success | refused |
+| @solid-primitives/interaction | 1.0.0-next.4 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/interaction | 1.0.0-next.4 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/intersection-observer | 3.0.0-next.3 | floor | failure | dependency-contract-obligation | complete 1 of 1 (root) |
+| @solid-primitives/intersection-observer | 3.0.0-next.3 | head | failure | dependency-contract-obligation | complete 1 of 1 (root) |
+| @solid-primitives/jsx-tokenizer | 3.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/jsx-tokenizer | 3.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/keyboard | 2.0.0-next.5 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/keyboard | 2.0.0-next.5 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/keyed | 3.0.0-next.2 | floor | success | success | refused |
+| @solid-primitives/keyed | 3.0.0-next.2 | head | success | success | refused |
+| @solid-primitives/lifecycle | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/lifecycle | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/list | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/list | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/list-state | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/list-state | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/map | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/map | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/marker | 2.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/marker | 2.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/masonry | 2.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/masonry | 2.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/match | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/match | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/media | 4.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/media | 4.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/mediastream | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/mediastream | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/memo | 2.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/memo | 2.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/mouse | 4.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/mouse | 4.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/mutable | 3.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/mutable | 3.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/mutation-observer | 3.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/mutation-observer | 3.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/notification | 1.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/notification | 1.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/orientation | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/orientation | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/page-utilities | 3.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/page-utilities | 3.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/pagination | 1.0.0-next.6 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/pagination | 1.0.0-next.6 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/permission | 2.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/permission | 2.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/platform | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/platform | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/pointer | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/pointer | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/presence | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/presence | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/promise | 2.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/promise | 2.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/props | 4.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/props | 4.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/queue | 1.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/queue | 1.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/raf | 4.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/raf | 4.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/range | 1.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/range | 1.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/refs | 3.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/refs | 3.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/resize-observer | 4.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/resize-observer | 4.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/rootless | 2.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/rootless | 2.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/scheduled | 2.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/scheduled | 2.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/script-loader | 3.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/script-loader | 3.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/scroll | 3.0.0-next.4 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/scroll | 3.0.0-next.4 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/selection | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/selection | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/sensors | 1.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/sensors | 1.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/set | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/set | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/share | 4.0.0-next.4 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/share | 4.0.0-next.4 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/signal-builders | 1.0.0-next.4 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/signal-builders | 1.0.0-next.4 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/sortable | 1.0.0-next.0 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/sortable | 1.0.0-next.0 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/spring | 1.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/spring | 1.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/sse | 1.0.0-next.2 | floor | partial-success | partial-success | partial 1 of 3 (no root) |
+| @solid-primitives/sse | 1.0.0-next.2 | head | partial-success | partial-success | partial 1 of 3 (no root) |
+| @solid-primitives/state-machine | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/state-machine | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/static-store | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/static-store | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/storage | 5.0.0-next.4 | floor | success | success | complete 2 of 2 (root) |
+| @solid-primitives/storage | 5.0.0-next.4 | head | success | success | complete 2 of 2 (root) |
+| @solid-primitives/styles | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/styles | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/timer | 1.4.5-next.1 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/timer | 1.4.5-next.1 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/transition-group | 2.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/transition-group | 2.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/trigger | 3.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/trigger | 3.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/tween | 2.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/tween | 2.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/upload | 1.0.0-next.4 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/upload | 1.0.0-next.4 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/url | 0.2.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/url | 0.2.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/utils | 7.0.0-next.4 | floor | success | success | refused |
+| @solid-primitives/utils | 7.0.0-next.4 | head | success | success | refused |
+| @solid-primitives/vibrate | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/vibrate | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/video | 1.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/video | 1.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/virtual | 1.0.0-next.4 | floor | partial-success | partial-success | - |
+| @solid-primitives/virtual | 1.0.0-next.4 | head | partial-success | partial-success | - |
+| @solid-primitives/websocket | 2.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/websocket | 2.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
+| @solid-primitives/workers | 2.0.1-next.1 | floor | success | success | complete 2 of 2 (root) |
+| @solid-primitives/workers | 2.0.1-next.1 | head | success | success | complete 2 of 2 (root) |
 
 Failure groups:
 - 2x unavailable-published-target: no certifiable artifact case; 1 case(s) refused and 1 case(s) recorded inapplicable; first refusal: .: resolved <callee> <package-root>/dist/index.js is not a file (packages: @solid-primitives/animation)
@@ -674,26 +730,31 @@ Failure details:
 - Success (complete contracts): 15/17 (88.24%)
 - Partial contracts: 0
 - Failures: 2
+- Certification attempted: 17
+- Verified (receipt issued): 17 -- 16 complete, 1 partial (1 of those with the root)
+- Certified entrypoints (measured): 33
+- Exact certification refusals: 0
+- Proposal lanes: 2 published-graph, 15 reused-proposal
 
-| Package | Version | Probe | Outcome | Class |
-| --- | --- | --- | --- | --- |
-| @corvu-next/accordion | 0.1.5 | only | failure | dependency-contract-obligation |
-| @corvu-next/calendar | 0.1.5 | only | success | success |
-| @corvu-next/dialog | 0.1.5 | only | success | success |
-| @corvu-next/disclosure | 0.1.5 | only | success | success |
-| @corvu-next/dismissible | 0.1.5 | only | success | success |
-| @corvu-next/drawer | 0.1.5 | only | success | success |
-| @corvu-next/focus-trap | 0.1.5 | only | success | success |
-| @corvu-next/list | 0.1.5 | only | success | success |
-| @corvu-next/otp-field | 0.1.5 | only | success | success |
-| @corvu-next/persistent | 0.1.5 | only | success | success |
-| @corvu-next/popover | 0.1.5 | only | failure | dependency-contract-obligation |
-| @corvu-next/presence | 0.1.5 | only | success | success |
-| @corvu-next/prevent-scroll | 0.1.5 | only | success | success |
-| @corvu-next/resizable | 0.1.5 | only | success | success |
-| @corvu-next/tooltip | 0.1.5 | only | success | success |
-| @corvu-next/transition-size | 0.1.5 | only | success | success |
-| @corvu-next/utils | 0.1.5 | only | success | success |
+| Package | Version | Probe | Outcome | Class | Verified |
+| --- | --- | --- | --- | --- | --- |
+| @corvu-next/accordion | 0.1.5 | only | failure | dependency-contract-obligation | complete 1 of 1 (root) |
+| @corvu-next/calendar | 0.1.5 | only | success | success | complete 1 of 1 (root) |
+| @corvu-next/dialog | 0.1.5 | only | success | success | complete 1 of 1 (root) |
+| @corvu-next/disclosure | 0.1.5 | only | success | success | complete 1 of 1 (root) |
+| @corvu-next/dismissible | 0.1.5 | only | success | success | complete 1 of 1 (root) |
+| @corvu-next/drawer | 0.1.5 | only | success | success | complete 1 of 1 (root) |
+| @corvu-next/focus-trap | 0.1.5 | only | success | success | complete 1 of 1 (root) |
+| @corvu-next/list | 0.1.5 | only | success | success | complete 1 of 1 (root) |
+| @corvu-next/otp-field | 0.1.5 | only | success | success | complete 1 of 1 (root) |
+| @corvu-next/persistent | 0.1.5 | only | success | success | complete 1 of 1 (root) |
+| @corvu-next/popover | 0.1.5 | only | failure | dependency-contract-obligation | complete 1 of 1 (root) |
+| @corvu-next/presence | 0.1.5 | only | success | success | complete 1 of 1 (root) |
+| @corvu-next/prevent-scroll | 0.1.5 | only | success | success | complete 1 of 1 (root) |
+| @corvu-next/resizable | 0.1.5 | only | success | success | complete 1 of 1 (root) |
+| @corvu-next/tooltip | 0.1.5 | only | success | success | complete 1 of 1 (root) |
+| @corvu-next/transition-size | 0.1.5 | only | success | success | complete 1 of 1 (root) |
+| @corvu-next/utils | 0.1.5 | only | success | success | partial 17 certified, 4 declared via wildcard (root) |
 
 Failure groups:
 - 1x dependency-contract-obligation: no certifiable artifact case; 2 case(s) refused; first refusal: .: accepted dependency @corvu-next/dialog has no exact runtime binding for export Portal (packages: @corvu-next/popover)
@@ -715,27 +776,32 @@ Failure details:
 - Success (complete contracts): 8/18 (44.44%)
 - Partial contracts: 4
 - Failures: 6
+- Certification attempted: 18
+- Verified (receipt issued): 12 -- 2 complete, 10 partial (6 of those with the root)
+- Certified entrypoints (measured): 20
+- Exact certification refusals: 6
+- Proposal lanes: 6 generated-proposal, 12 reused-proposal
 
-| Package | Version | Probe | Outcome | Class |
-| --- | --- | --- | --- | --- |
-| @tanstack/solid-query | 6.0.0-rc.0 | floor | failure | dependency-contract-obligation |
-| @tanstack/solid-query | 6.0.0-rc.0 | head | failure | dependency-contract-obligation |
-| @tanstack/solid-query-devtools | 6.0.0-rc.0 | floor | success | success |
-| @tanstack/solid-query-devtools | 6.0.0-rc.0 | head | success | success |
-| @tanstack/solid-query-persist-client | 6.0.0-rc.0 | floor | failure | dependency-contract-obligation |
-| @tanstack/solid-query-persist-client | 6.0.0-rc.0 | head | failure | dependency-contract-obligation |
-| @tanstack/solid-router | 2.0.0-rc.2 | floor | partial-success | partial-success |
-| @tanstack/solid-router | 2.0.0-rc.2 | head | partial-success | partial-success |
-| @tanstack/solid-router-devtools | 2.0.0-rc.2 | floor | success | success |
-| @tanstack/solid-router-devtools | 2.0.0-rc.2 | head | success | success |
-| @tanstack/solid-router-ssr-query | 2.0.0-rc.2 | floor | success | success |
-| @tanstack/solid-router-ssr-query | 2.0.0-rc.2 | head | success | success |
-| @tanstack/solid-start | 2.0.0-rc.2 | floor | partial-success | partial-success |
-| @tanstack/solid-start | 2.0.0-rc.2 | head | partial-success | partial-success |
-| @tanstack/solid-start-client | 2.0.0-rc.2 | floor | success | success |
-| @tanstack/solid-start-client | 2.0.0-rc.2 | head | success | success |
-| @tanstack/solid-start-server | 2.0.0-rc.2 | floor | failure | dependency-contract-obligation |
-| @tanstack/solid-start-server | 2.0.0-rc.2 | head | failure | dependency-contract-obligation |
+| Package | Version | Probe | Outcome | Class | Verified |
+| --- | --- | --- | --- | --- | --- |
+| @tanstack/solid-query | 6.0.0-rc.0 | floor | failure | dependency-contract-obligation | refused |
+| @tanstack/solid-query | 6.0.0-rc.0 | head | failure | dependency-contract-obligation | refused |
+| @tanstack/solid-query-devtools | 6.0.0-rc.0 | floor | success | success | complete 1 of 1 (root) |
+| @tanstack/solid-query-devtools | 6.0.0-rc.0 | head | success | success | complete 1 of 1 (root) |
+| @tanstack/solid-query-persist-client | 6.0.0-rc.0 | floor | failure | dependency-contract-obligation | refused |
+| @tanstack/solid-query-persist-client | 6.0.0-rc.0 | head | failure | dependency-contract-obligation | refused |
+| @tanstack/solid-router | 2.0.0-rc.2 | floor | partial-success | partial-success | partial 1 of 4 (no root) |
+| @tanstack/solid-router | 2.0.0-rc.2 | head | partial-success | partial-success | partial 1 of 4 (no root) |
+| @tanstack/solid-router-devtools | 2.0.0-rc.2 | floor | success | success | partial 1 of 2 (root) |
+| @tanstack/solid-router-devtools | 2.0.0-rc.2 | head | success | success | partial 1 of 2 (root) |
+| @tanstack/solid-router-ssr-query | 2.0.0-rc.2 | floor | success | success | partial 1 of 2 (root) |
+| @tanstack/solid-router-ssr-query | 2.0.0-rc.2 | head | success | success | partial 1 of 2 (root) |
+| @tanstack/solid-start | 2.0.0-rc.2 | floor | partial-success | partial-success | partial 3 of 13 (no root) |
+| @tanstack/solid-start | 2.0.0-rc.2 | head | partial-success | partial-success | partial 3 of 13 (no root) |
+| @tanstack/solid-start-client | 2.0.0-rc.2 | floor | success | success | partial 3 of 4 (root) |
+| @tanstack/solid-start-client | 2.0.0-rc.2 | head | success | success | partial 3 of 4 (root) |
+| @tanstack/solid-start-server | 2.0.0-rc.2 | floor | failure | dependency-contract-obligation | refused |
+| @tanstack/solid-start-server | 2.0.0-rc.2 | head | failure | dependency-contract-obligation | refused |
 
 Failure groups:
 - 2x dependency-contract-obligation: no certifiable artifact case; 1 case(s) refused and 1 case(s) recorded inapplicable; first refusal: .: solid-checker:unresolved-dependency-module=@tanstack/start-server-core solid-checker-rust: emit package contract: cannot statically expand external export-all "<value>" from <package-root>/dist/esm/index.js; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts (packages: @tanstack/solid-start-server)
@@ -775,11 +841,16 @@ Failure details:
 - Success (complete contracts): 2/2 (100%)
 - Partial contracts: 0
 - Failures: 0
+- Certification attempted: 2
+- Verified (receipt issued): 2 -- 2 complete, 0 partial (0 of those with the root)
+- Certified entrypoints (measured): 2
+- Exact certification refusals: 0
+- Proposal lanes: 2 reused-proposal
 
-| Package | Version | Probe | Outcome | Class |
-| --- | --- | --- | --- | --- |
-| solid-recharts | 2.0.0-beta.1 | floor | success | success |
-| solid-recharts | 2.0.0-beta.1 | head | success | success |
+| Package | Version | Probe | Outcome | Class | Verified |
+| --- | --- | --- | --- | --- | --- |
+| solid-recharts | 2.0.0-beta.1 | floor | success | success | complete 1 of 1 (root) |
+| solid-recharts | 2.0.0-beta.1 | head | success | success | complete 1 of 1 (root) |
 
 ### Motion for Solid
 
@@ -793,11 +864,16 @@ Failure details:
 - Success (complete contracts): 0/2 (0%)
 - Partial contracts: 2
 - Failures: 0
+- Certification attempted: 2
+- Verified (receipt issued): 2 -- 0 complete, 2 partial (0 of those with the root)
+- Certified entrypoints (measured): 2
+- Exact certification refusals: 0
+- Proposal lanes: 2 reused-proposal
 
-| Package | Version | Probe | Outcome | Class |
-| --- | --- | --- | --- | --- |
-| motion-solidjs | 0.7.0-beta.4 | floor | partial-success | partial-success |
-| motion-solidjs | 0.7.0-beta.4 | head | partial-success | partial-success |
+| Package | Version | Probe | Outcome | Class | Verified |
+| --- | --- | --- | --- | --- | --- |
+| motion-solidjs | 0.7.0-beta.4 | floor | partial-success | partial-success | partial 1 of 3 (no root) |
+| motion-solidjs | 0.7.0-beta.4 | head | partial-success | partial-success | partial 1 of 3 (no root) |
 
 **Solid 2.x totals:** 217/250 (86.8%) complete, 18 partial, 15 failed
 
@@ -866,7 +942,7 @@ None.
 | Canonical minified main | 381 | 1632 | 9629 | 506494 |
 | Proposal plan (not evidence) | 381 | 49252 | 540062 | 20370858 |
 | Canonical bytes per export | 381 | 356 | 1085 | 1696 |
-| Canonical bytes per operation | 91 | 844.5 | 2521 | 13328.79 |
+| Canonical bytes per operation | 91 | 848 | 2633 | 13328.79 |
 
 Proposal-plan bytes are construction obligations, not proof evidence and not acceptance authority. Proof-transcript and receipt bytes are measured separately by the Phase 16 accepted-corpus gate.
 
@@ -894,10 +970,10 @@ Read the domain columns together, not separately: 37 of the 8847 unknown exports
 | --- | --- |
 | invoke | 413 |
 | return | 290 |
-| read | 397 |
+| read | 168 |
 | write | 0 |
 | invalidate | 0 |
-| create | 85 |
+| create | 60 |
 | cleanup | 0 |
 | dispose | 0 |
 
@@ -940,8 +1016,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Worker timings
 
-- Worker time: 1008184 ms
-- Phases: install 78386 ms, generation 375713 ms, harness 554085 ms
+- Worker time: 1010021 ms
+- Phases: install 55357 ms, generation 398059 ms, harness 556605 ms
 
 ### Top failure signatures
 

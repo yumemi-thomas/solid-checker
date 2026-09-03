@@ -10,6 +10,7 @@
       "entrypoint": ".",
       "conditions": [],
       "stage": "artifact-case",
+      "class": "published-artifact",
       "applicability": "runtime-module",
       "reason": "solid-checker-rust: contract identity does not match the resolved import: resolved artifact has no exact runtime/declaration binding for export \"Config\""
     }

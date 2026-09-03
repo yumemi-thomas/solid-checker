@@ -131,6 +131,81 @@ run; an entrypoint is what generation reports on inside one probe; an
 invocation is the one process execution that produces a result. Conflating
 any two of these misdescribes what a benchmark number is counting.
 
+Three more, about what a *certified* row covered and how it got there
+(2026-09-03):
+
+- **verified-complete** — a certified row whose published catalog carries an
+  accepted contract for every entrypoint its manifest declares, the root (`.`)
+  among them. `scripts/ecosystem-benchmark/lib/certified-coverage.mjs` is the
+  reader: it walks the published catalog for the documents whose package name
+  *and version* are the row's own, and every judgement below
+  (`isCompleteCoverage`, `hasUsableDenominator`, `isMeasuredCoverage`) lives
+  there.
+- **verified-partial** — a certified row covering fewer than that, reported as
+  `k of n` with the root's presence stated. `k of n` alone is not enough
+  information: `1 of 4` covering `./refresh` and `1 of 4` covering `.` are very
+  different answers to a consumer, so the root is always named.
+- **proposal lane** — which proposal a certification verified.
+  `reused-proposal` is the one `contract generate` already emitted for these
+  exact bytes and handed over; `generated-proposal` is one certification
+  produced itself, in its own scratch; `published-graph` is the
+  published-dependency-graph lane, which acquires, generates and certifies each
+  dependency and then certifies the artifact cases the plain lane refused for
+  want of them. Each row records the lane the certification audit reports
+  (`certificationAttempt.lane`) beside the lane the runner asked for
+  (`laneRequested`) — a graph preparation that cannot complete falls back to the
+  ordinary proposal, and the pair is what makes that visible.
+
+`verified` remains the sum of the two halves everywhere it appears, so a figure
+compared against an older report still means what it meant. What it stops
+meaning is "this package is described": a corpus-wide verified rate can rise
+while the surface actually under receipt shrinks, which is exactly what the
+split exists to expose. A certified row whose catalog could not be read is
+counted in neither half and reported as `coverage unmeasured` — an absent
+measurement is not a partial one — and so is a row whose manifest could not be
+read, which leaves `declaredEntrypoints: null` and therefore no denominator to
+be complete or short against. The checked-in report was measured with
+`certificationAttempt.coverage` in place, so its verified rows carry real
+complete/partial counts; the recorded split, and whatever remainder stayed
+unmeasured, is in `docs/precision-backlog.md`.
+
+One denominator caveat, because it is visible in the report: a wildcard subpath
+(`"./src/*": "./src/*"`) is *one* declared entry that expands to as many real
+entrypoints as the package ships, so a row can certify more entrypoints than it
+declares — `@kobalte/utils@0.9.2` declares 2 and certifies 20. There is then no
+ratio to state, the report says `20 certified, 2 declared via wildcard` instead
+of a nonsense `20 of 2`, and the row is never counted `verified-complete`: with
+no usable denominator, refusing completeness is the conservative direction. The
+wildcard is recorded where it can be seen — `countDeclaredEntrypoints` sets
+`declaredWildcard` when any `exports` key contains `*` — rather than inferred
+from `certified > declared`, because an expansion that happens to certify
+exactly as many entrypoints as the manifest declares is the same non-ratio and
+would otherwise have read as complete.
+
+### Choosing the lane, and why the runner does not route by default
+
+`--dependency-graph-lane` (on both `contract certify` and the runner) routes a
+*partial* proposal whose refusal census names an exact dependency-composition
+case through the published-graph lane instead of reusing the emitted proposal.
+It is off by default, and the reason is measured rather than assumed.
+
+The two lanes cover **different** artifact-case sets. The graph lane certifies
+exactly the cases the plain lane refused; the reused proposal certifies exactly
+the ones it generated. Neither is a superset, so switching lanes trades one
+population of receipts for another. Measured on the 21 partial rows of the
+2026-09-03 corpus, that trade is a net loss: six rows that certify with a
+reused proposal (`@tanstack/solid-router` ×3, `@tanstack/solid-table`,
+`motion-solidjs` ×2) refuse outright through the graph lane, because their root
+cases — the ones the graph lane exists to reach — then refuse on
+`recursive-value-shape`; two rows (`@solid-primitives/sse@1.0.0-next.2` floor
+and head) gain a certified root they did not have. A refusal covers nothing, so
+the default keeps the receipts.
+
+What would actually be better than either lane is certifying both case sets into
+one catalog — the plain proposal's cases *and* the graph lane's roots. That is a
+two-transaction change to case-set publication and is recorded in
+`docs/precision-backlog.md` rather than approximated here.
+
 ## Discovery and execution
 
 Discovery is the only network-enabled step. It reads the live npm registry,

@@ -102,6 +102,7 @@ function makeResult(overrides) {
           ? 1
           : null,
     refusedArtifactCases: overrides.refusedArtifactCases ?? null,
+    certificationAttempt: overrides.certificationAttempt ?? null,
     checklistItems: overrides.checklistItems !== undefined ? overrides.checklistItems : producedContract ? 10 : null,
     outcome,
     class: overrides.class,
@@ -1186,4 +1187,84 @@ test("an exact-probe report retains its complete row identity set", () => {
 
   assert.deepEqual(report.scope.probeIds, probeIds);
   assert.match(renderMarkdown(report), /1 exact probe id\(s\)/);
+});
+
+test("the verified split counts a row with no denominator in neither half", () => {
+  const certified = (overrides, coverage) =>
+    makeResult({
+      ...overrides,
+      class: "success",
+      certificationAttempt: {
+        attempted: true,
+        status: "certified",
+        lane: "reused-proposal",
+        laneRequested: "reused-proposal",
+        coverage
+      }
+    });
+  const results = [
+    // Every declared entrypoint under receipt, root included.
+    certified({ family: "kobalte", package: "complete-row", version: "1.0.0" }, {
+      declaredEntrypoints: 3,
+      declaredWildcard: false,
+      certifiedEntrypoints: 3,
+      rootCertified: true
+    }),
+    // One of four, and not the root: the outcome the split exists to expose.
+    certified({ family: "kobalte", package: "partial-row", version: "1.0.0" }, {
+      declaredEntrypoints: 4,
+      declaredWildcard: false,
+      certifiedEntrypoints: 1,
+      rootCertified: false
+    }),
+    // A wildcard manifest whose counts coincide. No denominator, so not
+    // complete -- but the coverage *was* measured, so it is the partial half.
+    certified({ family: "kobalte", package: "wildcard-row", version: "1.0.0" }, {
+      declaredEntrypoints: 2,
+      declaredWildcard: true,
+      certifiedEntrypoints: 2,
+      rootCertified: true
+    }),
+    // An unreadable manifest: an exact numerator and no denominator at all.
+    // Counting it partial would assert a shortfall against a number nobody
+    // read, so it belongs with the unreadable catalogs.
+    certified({ family: "kobalte", package: "no-manifest-row", version: "1.0.0" }, {
+      declaredEntrypoints: null,
+      declaredWildcard: false,
+      certifiedEntrypoints: 2,
+      rootCertified: true
+    }),
+    // An unreadable catalog: the same absent measurement from the other side.
+    certified({ family: "kobalte", package: "no-catalog-row", version: "1.0.0" }, null)
+  ];
+  const report = buildReport({
+    manifest: makeManifest({ results }),
+    results,
+    startedAt: "2026-09-03T09:00:00.000Z",
+    finishedAt: "2026-09-03T09:01:00.000Z"
+  });
+
+  const certification = report.combined.certification;
+  assert.equal(certification.attempted, 5);
+  assert.equal(certification.verified, 5);
+  assert.equal(certification.verifiedComplete, 1);
+  assert.equal(certification.verifiedPartial, 2);
+  assert.equal(certification.verifiedUnmeasured, 2);
+  assert.equal(certification.verifiedPartialWithRoot, 1);
+  // Only the measured rows contribute a numerator.
+  assert.equal(certification.certifiedEntrypoints, 6);
+  assert.equal(
+    certification.verifiedComplete + certification.verifiedPartial + certification.verifiedUnmeasured,
+    certification.verified
+  );
+
+  const markdown = renderMarkdown(report);
+  assert.match(markdown, /1 complete, 2 partial \(1 with the root\), 2 coverage unmeasured/);
+  assert.match(markdown, /complete 3 of 3 \(root\)/);
+  assert.match(markdown, /partial 1 of 4 \(no root\)/);
+  assert.match(markdown, /partial 2 certified, 2 declared via wildcard \(root\)/);
+  assert.match(markdown, /unmeasured 2 of \? \(root\)/);
+  assert.match(markdown, /certified \(coverage not measured\)/);
+  // Never a fabricated denominator.
+  assert.doesNotMatch(markdown, /null declared/);
 });

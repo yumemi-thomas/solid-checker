@@ -12,6 +12,7 @@
         "solid"
       ],
       "stage": "artifact-case",
+      "class": "published-artifact",
       "applicability": "unavailable-published-target",
       "reason": "resolved target <package-root>/unbuilt-solid.jsx is not a file"
     }

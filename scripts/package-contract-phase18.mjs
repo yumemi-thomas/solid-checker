@@ -377,6 +377,7 @@ function auditSourceInventory(root) {
   const allowedReaders = [
     "scripts/check-bundled-contracts.mjs",
     "scripts/contract-corpus.mjs",
+    "scripts/ecosystem-benchmark/lib/certified-coverage.mjs",
     "scripts/ecosystem-benchmark/lib/contract-content.mjs",
     "scripts/package-contract-phase18.mjs",
     "scripts/solid-recharts-performance.mjs"

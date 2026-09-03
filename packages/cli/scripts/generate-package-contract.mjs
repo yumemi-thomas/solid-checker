@@ -190,6 +190,52 @@ export function declaredApplicabilityClaims(inapplicable) {
     }));
 }
 
+/// The one line the native emitter writes ahead of its prose when an
+/// entrypoint re-exports a package with no exact accepted contract
+/// (`UNRESOLVED_DEPENDENCY_MODULE_MARKER` in
+/// rust/crates/solid-facts-backend/src/main.rs). It exists precisely so
+/// automation does not have to parse the sentence, which is why it, and not the
+/// sentence, is what the class below is decided from.
+const UNRESOLVED_DEPENDENCY_MODULE_MARKER = "solid-checker:unresolved-dependency-module=";
+
+/// The refusal classes a census row can carry, named after what would change
+/// the answer.
+export const REFUSAL_CLASSES = Object.freeze({
+  /// This case needs an accepted contract for a dependency that was not in
+  /// scope. The published-dependency-graph lane is the answer for it: it
+  /// acquires, generates and certifies the dependency, then certifies this
+  /// case against it.
+  DependencyComposition: "dependency-composition",
+  /// A fact about the publisher's own bytes -- a `.cjs` entrypoint with no
+  /// declaration target, a `.d.ts` named as its own fact source, an entry file
+  /// whose runtime and declaration export sets do not intersect. No dependency
+  /// catalog moves it.
+  PublishedArtifact: "published-artifact",
+  /// The requested census cannot enumerate this export: a wildcard subpath is
+  /// a pattern, and only an explicit finite `--entrypoint` list names the
+  /// artifact cases it stands for.
+  RequestedCensus: "requested-census",
+  /// A proof-policy resource limit, not a semantic answer at all.
+  ResourceLimit: "resource-limit"
+});
+
+/// Which class an artifact-case refusal belongs to, decided from the error's
+/// own structure and never from its prose: an `ArtifactResolutionError` code
+/// raised by this package's own resolver, or the machine marker the native
+/// emitter writes on its own line. A consumer routing on the class therefore
+/// depends on the emitter's contract rather than on its wording.
+export function artifactRefusalClass(error) {
+  if (error instanceof ArtifactResolutionError) {
+    return error.code === "accepted-dependency-binding"
+      ? REFUSAL_CLASSES.DependencyComposition
+      : REFUSAL_CLASSES.PublishedArtifact;
+  }
+  return typeof error?.message === "string" &&
+    error.message.includes(UNRESOLVED_DEPENDENCY_MODULE_MARKER)
+    ? REFUSAL_CLASSES.DependencyComposition
+    : REFUSAL_CLASSES.PublishedArtifact;
+}
+
 export function artifactApplicabilityForRefusal(error) {
   if (!(error instanceof ArtifactResolutionError)) {
     return ARTIFACT_APPLICABILITY.RuntimeModule;
@@ -1142,6 +1188,7 @@ export async function generatePackageContract(
     entrypoint,
     conditions: null,
     stage: "entrypoint-census",
+    class: REFUSAL_CLASSES.RequestedCensus,
     applicability: ARTIFACT_APPLICABILITY.RuntimeModule,
     reason: "wildcard export requires an explicit finite --entrypoint census"
   }));
@@ -1149,6 +1196,7 @@ export async function generatePackageContract(
     entrypoint,
     conditions: null,
     stage: "entrypoint-census",
+    class: REFUSAL_CLASSES.PublishedArtifact,
     applicability: ARTIFACT_APPLICABILITY.MissingPublishedTarget,
     reason: `wildcard export branch ${JSON.stringify(target)} has no published target`
   })));
@@ -1156,6 +1204,7 @@ export async function generatePackageContract(
     entrypoint,
     conditions: null,
     stage: "entrypoint-census",
+    class: REFUSAL_CLASSES.ResourceLimit,
     applicability: ARTIFACT_APPLICABILITY.RuntimeModule,
     reason: `finite wildcard expansion would require ${candidates} artifact-case candidates, exceeding the proof-policy resource limit of ${limit}`
   })));
@@ -1309,6 +1358,10 @@ export async function generatePackageContract(
           entrypoint,
           conditions,
           stage: "artifact-case",
+          // Decided from the error itself, here, where the error object is
+          // still in hand. A consumer choosing a certification lane reads this
+          // rather than re-parsing `reason`.
+          class: artifactRefusalClass(outcome.error),
           applicability: artifactApplicabilityForRefusal(outcome.error),
           reason: stableRefusalReason(outcome.error, { packageRoot, scratch })
         });
@@ -1390,6 +1443,7 @@ export async function generatePackageContract(
             entrypoint: candidate.entrypoint,
             conditions: candidate.conditions,
             stage: "proposal-merge",
+            class: artifactRefusalClass(error),
             applicability: ARTIFACT_APPLICABILITY.RuntimeModule,
             reason: stableRefusalReason(error, { packageRoot, scratch })
           });

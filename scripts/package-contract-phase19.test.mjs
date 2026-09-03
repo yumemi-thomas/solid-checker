@@ -92,8 +92,13 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // `composedFrom` is published and where it is withheld, and
       // composed-operation-shadowed-target, which pins that the target is
       // named by the discovering node's identity rather than by the name two
-      // declarations share.
-      stableMainDocuments: 174,
+      // declarations share. 176 adds the dialect-defining-archive fixture
+      // pair's main documents: @solidjs/signals, which pins that the generator
+      // withholds owner-requirement creates inside a primitive-defining
+      // package, and @solidjs/router-shaped, the same bytes under a name the
+      // dialect does not own, which pins that the decision is by package name
+      // and not by path.
+      stableMainDocuments: 176,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

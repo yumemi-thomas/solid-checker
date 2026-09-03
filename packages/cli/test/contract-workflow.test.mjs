@@ -33,6 +33,8 @@ import {
   reexportImporterCensus,
   certificationImporterPathFor,
   parseCertifyArguments,
+  partialProposalHasDependencyFrontier,
+  preparedGraphForPartialProposal,
   publishedGraphPreparationConcurrency,
   registryAcquisitionConcurrency,
   registryCacheRoot,
@@ -47,8 +49,10 @@ import {
   ARTIFACT_CASE_CANDIDATE_LIMIT,
   ARTIFACT_APPLICABILITY,
   ARTIFACT_DISPOSITION,
+  REFUSAL_CLASSES,
   artifactAnalysisBatchConcurrencyLimit,
   artifactApplicabilityForRefusal,
+  artifactRefusalClass,
   artifactCaseDisposition,
   declaredApplicabilityClaims,
   finiteArtifactCandidates,
@@ -163,6 +167,48 @@ test("artifact refusals carry verifier-owned applicability classes", () => {
   assert.equal(
     artifactApplicabilityForRefusal(new Error("semantic refusal")),
     ARTIFACT_APPLICABILITY.RuntimeModule
+  );
+});
+
+test("a refusal's class comes from the error's structure, never from its prose", () => {
+  // The CLI resolver's own code for "this case needs an accepted contract for
+  // a dependency".
+  assert.equal(
+    artifactRefusalClass(
+      new ArtifactResolutionError(
+        "accepted-dependency-binding",
+        "accepted dependency dependency has no exact runtime binding for export default"
+      )
+    ),
+    REFUSAL_CLASSES.DependencyComposition
+  );
+  // The native emitter's own marker line, which exists precisely so this
+  // decision need not read the sentence after it.
+  assert.equal(
+    artifactRefusalClass(
+      new Error(
+        "solid-checker:unresolved-dependency-module=@tanstack/pacer\n" +
+          'emit package contract: cannot statically expand external export-all "@tanstack/pacer"'
+      )
+    ),
+    REFUSAL_CLASSES.DependencyComposition
+  );
+  // Prose alone is not evidence: the same sentence without the marker line is
+  // not a structured claim, and every other resolver code is a fact about the
+  // publisher's own bytes.
+  assert.equal(
+    artifactRefusalClass(
+      new Error('cannot statically expand external export-all "@tanstack/pacer"')
+    ),
+    REFUSAL_CLASSES.PublishedArtifact
+  );
+  assert.equal(
+    artifactRefusalClass(new ArtifactResolutionError("declarations-not-found", "no .d.ts")),
+    REFUSAL_CLASSES.PublishedArtifact
+  );
+  assert.equal(
+    artifactRefusalClass(new Error("entry file has no runtime ESM exports")),
+    REFUSAL_CLASSES.PublishedArtifact
   );
 });
 
@@ -303,6 +349,185 @@ test("policy-2 certification accepts no caller-authored proof or receipt input",
     () => parseCertifyArguments(["--integrity", "sha512-cGlubmVk", "--receipt", "receipt.json"]),
     /unknown contract certification argument --receipt/
   );
+});
+
+test("the dependency-graph lane is an explicit, valueless, default-off request", () => {
+  const base = ["--integrity", "sha512-cGlubmVk"];
+  // Off unless asked for: today's behavior is that a partial proposal is
+  // certified as it stands, and the two lanes describe different case sets, so
+  // switching by default would silently change which cases carry a receipt.
+  assert.equal(parseCertifyArguments(base).dependencyGraphLane, false);
+  assert.equal(
+    parseCertifyArguments([...base, "--dependency-graph-lane"]).dependencyGraphLane,
+    true
+  );
+  // Valueless, and it must not swallow the option that follows it.
+  const options = parseCertifyArguments([
+    ...base,
+    "--dependency-graph-lane",
+    "--entrypoint",
+    "./web"
+  ]);
+  assert.equal(options.dependencyGraphLane, true);
+  assert.deepEqual(options.entrypoints, ["./web"]);
+});
+
+test("a partial proposal has a dependency frontier only when a refusal is a dependency composition", () => {
+  const binding = {
+    reason: "accepted dependency @solidjs/signals has no exact runtime binding for export $PROXY"
+  };
+  const unresolvedModule = {
+    reason:
+      "solid-checker:unresolved-dependency-module=@tanstack/pacer\n" +
+      'emit package contract: cannot statically expand external export-all "@tanstack/pacer"'
+  };
+  // Facts about the publisher's own bytes. No dependency catalog moves them, so
+  // the graph lane has nothing to prepare for them and the emitted proposal
+  // stays the best available answer.
+  const publisherDefects = [
+    { reason: "emit package contract: entry file <root>/dist/solid.js has no runtime ESM exports" },
+    { reason: "no declaration target exists for <root>/dist/solid.cjs" },
+    {
+      reason:
+        "contract emission batch target 45 names entry file <root>/types/jsx.d.ts as its own " +
+        "fact source; its suffix makes it a TypeScript declaration file"
+    }
+  ];
+  assert.equal(partialProposalHasDependencyFrontier([binding]), true);
+  assert.equal(partialProposalHasDependencyFrontier([unresolvedModule]), true);
+  assert.equal(
+    partialProposalHasDependencyFrontier([...publisherDefects, binding]),
+    true
+  );
+  assert.equal(partialProposalHasDependencyFrontier(publisherDefects), false);
+  // The structured class decides whenever a row carries one; the prose above is
+  // the legacy fallback for a census written before the field existed. A row
+  // the generator classified as a fact about the publisher's own bytes is not
+  // reclassified by a reason that happens to quote a dependency phrase, and a
+  // classified dependency row routes without its reason being read at all.
+  assert.equal(
+    partialProposalHasDependencyFrontier([
+      { class: "published-artifact", reason: "accepted dependency x has no exact runtime binding" }
+    ]),
+    false
+  );
+  assert.equal(
+    partialProposalHasDependencyFrontier([
+      { class: "dependency-composition", reason: "unresolved-dependency-module" }
+    ]),
+    true
+  );
+  assert.equal(
+    partialProposalHasDependencyFrontier([{ class: "resource-limit", reason: "" }]),
+    false
+  );
+  // Nothing to route on is not a frontier.
+  assert.equal(partialProposalHasDependencyFrontier([]), false);
+  assert.equal(partialProposalHasDependencyFrontier(null), false);
+  assert.equal(partialProposalHasDependencyFrontier(undefined), false);
+  assert.equal(partialProposalHasDependencyFrontier("accepted dependency"), false);
+});
+
+test("the partial-proposal graph lane falls back, and says so, without ever swallowing a refusal", async () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-partial-lane-"));
+  const output = join(root, "solid-reactivity.json");
+  const census = refusals => JSON.stringify({
+    format: "solid-checker-contract-proposal-refusals",
+    refusalVersion: 1,
+    package: { name: "fixture", version: "1.0.0" },
+    refusals,
+    inapplicable: []
+  });
+  const frontier = {
+    entrypoint: ".",
+    conditions: [],
+    stage: "artifact-case",
+    class: "dependency-composition",
+    applicability: "runtime-module",
+    reason: "accepted dependency dependency has no exact runtime binding for export default"
+  };
+  const never = () => {
+    throw new Error("preparation must not be attempted");
+  };
+  try {
+    // (a) No census at all, and a census that is not JSON: nothing is known
+    // about a frontier, so there is nothing to prepare and nothing to trace.
+    // The caller certifies the partial proposal exactly as without the flag.
+    assert.deepEqual(
+      await preparedGraphForPartialProposal({ output }, { prepare: never }),
+      { graph: null, trace: null }
+    );
+    writeFileSync(`${output}.refusals.json`, "{ not json");
+    assert.deepEqual(
+      await preparedGraphForPartialProposal({ output }, { prepare: never }),
+      { graph: null, trace: null }
+    );
+    // A census whose refusals are all publisher defects is the same
+    // non-request: this lane answers dependency composition only.
+    writeFileSync(
+      `${output}.refusals.json`,
+      census([{ ...frontier, class: "published-artifact", reason: "no runtime ESM exports" }])
+    );
+    assert.deepEqual(
+      await preparedGraphForPartialProposal({ output }, { prepare: never }),
+      { graph: null, trace: null }
+    );
+
+    // A real frontier: preparation is attempted, and its result is the lane.
+    writeFileSync(`${output}.refusals.json`, census([frontier]));
+    const prepared = { timing: { rootCases: 1, canonicalNodes: 3 } };
+    assert.deepEqual(
+      await preparedGraphForPartialProposal({ output }, { prepare: async () => prepared }),
+      { graph: prepared, trace: null }
+    );
+
+    // (b) Preparation failing is still a fallback to the partial proposal --
+    // the caller has a valid answer a throw would discard -- but the attempt
+    // must leave a trace, or a requested lane that never happened reads
+    // exactly like a row that never asked for one.
+    assert.deepEqual(
+      await preparedGraphForPartialProposal(
+        { output },
+        {
+          prepare: async () => {
+            throw new Error("registry acquisition failed for dependency@1.0.0");
+          }
+        }
+      ),
+      {
+        graph: null,
+        trace: {
+          partialProposalFrontier: "unprepared",
+          reason: "registry acquisition failed for dependency@1.0.0"
+        }
+      }
+    );
+
+    // (c) A refusal is not a graph fact. A missing issuer or trust
+    // configuration is a request error, and certifying the partial proposal
+    // instead would answer a broken request with a receipt.
+    await assert.rejects(
+      preparedGraphForPartialProposal(
+        { output },
+        {
+          prepare: async () => {
+            throw new CertificationRefusal({
+              stage: "receiptIssuance",
+              owner: "configured-issuer",
+              reason: "no issuer configuration"
+            });
+          }
+        }
+      ),
+      error => {
+        assert.equal(error.name, "CertificationRefusal");
+        assert.equal(error.reason, "no issuer configuration");
+        return true;
+      }
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("ordinary dependency-aware generation still requires authenticated analyzer input", async () => {

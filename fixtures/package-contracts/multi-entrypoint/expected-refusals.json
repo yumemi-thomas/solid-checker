@@ -10,6 +10,7 @@
       "entrypoint": "./empty",
       "conditions": [],
       "stage": "artifact-case",
+      "class": "published-artifact",
       "applicability": "runtime-module",
       "reason": "solid-checker-rust: emit package contract: entry file <package-root>/empty.ts has no runtime ESM exports"
     }

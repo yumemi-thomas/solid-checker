@@ -17,6 +17,11 @@
 // `Date.parse` (a pure string→number function, not a clock read).
 
 import { FAMILIES } from "./families.mjs";
+import {
+  hasUsableDenominator,
+  isCompleteCoverage,
+  isMeasuredCoverage
+} from "./certified-coverage.mjs";
 import { FAILURE_CLASSES } from "./classify.mjs";
 import {
   BEHAVIORAL_ROW_KINDS,
@@ -145,6 +150,82 @@ function contractProducing(results) {
   );
 }
 
+// What a certified row actually covered, aggregated.
+//
+// "Verified" was one word for two outcomes: a row whose every declared
+// entrypoint carries a receipt, and a row where one of four does -- possibly
+// not even the root, the entrypoint nearly every consumer imports. Both read
+// as verified, so the corpus rate could rise while the surface under receipt
+// shrank. The split is computed from each row's own
+// `certificationAttempt.coverage`, which `lib/certified-coverage.mjs` reads
+// from the published catalog.
+//
+// `verifiedUnmeasured` is not folded into either half. A certified row whose
+// catalog could not be read is a gap in the measurement, and calling it partial
+// would be as wrong as calling it complete. A row whose *denominator* could not
+// be read (an unreadable manifest, `declaredEntrypoints: null`) is the same gap
+// seen from the other side, so `isMeasuredCoverage` -- not merely "coverage is
+// not null" -- is what separates the measured rows.
+function buildCertificationSummary(results) {
+  const attempts = results.filter(result => result.certificationAttempt?.attempted === true);
+  const verified = attempts.filter(result => result.certificationAttempt.status === "certified");
+  const coverageOf = result => result.certificationAttempt.coverage ?? null;
+  const complete = verified.filter(result => isCompleteCoverage(coverageOf(result)));
+  const measured = verified.filter(result => isMeasuredCoverage(coverageOf(result)));
+  const partial = measured.filter(result => !isCompleteCoverage(coverageOf(result)));
+  const lanes = {};
+  for (const result of attempts) {
+    const lane = result.certificationAttempt.lane;
+    if (typeof lane === "string" && lane) lanes[lane] = (lanes[lane] ?? 0) + 1;
+  }
+  return {
+    attempted: attempts.length,
+    verified: verified.length,
+    verifiedComplete: complete.length,
+    verifiedPartial: partial.length,
+    verifiedUnmeasured: verified.length - measured.length,
+    // Of the partial half: how many at least put the root under receipt. A
+    // partial row without its root describes only subpaths, which is a
+    // materially weaker answer than the same count including `.`.
+    verifiedPartialWithRoot: partial.filter(
+      result => coverageOf(result).rootCertified === true
+    ).length,
+    certifiedEntrypoints: measured.reduce(
+      (total, result) => total + coverageOf(result).certifiedEntrypoints,
+      0
+    ),
+    refused: attempts.filter(result => result.certificationAttempt.status !== "certified").length,
+    lanes: Object.fromEntries(
+      Object.entries(lanes).sort(([left], [right]) => left.localeCompare(right))
+    )
+  };
+}
+
+/// `k of n` for one row, with the root's presence spelled out rather than
+/// implied by the numbers -- `1 of 4` says nothing about *which* one.
+export function formatCoverage(attempt) {
+  if (attempt?.attempted !== true) return "";
+  if (attempt.status !== "certified") return "refused";
+  const coverage = attempt.coverage;
+  if (!coverage) return "certified (coverage not measured)";
+  const root = coverage.rootCertified ? "root" : "no root";
+  // An unreadable manifest leaves an exact numerator and no denominator at
+  // all. That is the same gap as an unreadable catalog and is printed as one,
+  // ahead of the wildcard branch: a `null` denominator has no wildcard status
+  // to report, and rendering it there printed "null declared via wildcard".
+  if (!isMeasuredCoverage(coverage)) {
+    return `unmeasured ${coverage.certifiedEntrypoints} of ? (${root})`;
+  }
+  const complete = isCompleteCoverage(coverage) ? "complete" : "partial";
+  // No `k of n` when `n` is a wildcard pattern count -- see
+  // `hasUsableDenominator`. The certified count is still exact.
+  if (!hasUsableDenominator(coverage)) {
+    return `${complete} ${coverage.certifiedEntrypoints} certified, ` +
+      `${coverage.declaredEntrypoints} declared via wildcard (${root})`;
+  }
+  return `${complete} ${coverage.certifiedEntrypoints} of ${coverage.declaredEntrypoints} (${root})`;
+}
+
 function buildFamilySection(family, results) {
   const familyResults = results.filter(result => result?.family === family.id);
   const successes = familyResults.filter(result => result.outcome === "success");
@@ -182,6 +263,7 @@ function buildFamilySection(family, results) {
     partialCount: partials.length,
     failureCount: failures.length,
     successRate: computeSuccessRate(successes.length, familyResults.length),
+    certification: buildCertificationSummary(familyResults),
     failureGroups: buildFailureGroups(familyResults),
     results: [...familyResults].sort(comparePackageThenProbe)
   };
@@ -204,6 +286,7 @@ function buildTotals(results) {
     partialCount: partials.length,
     failureCount: failures.length,
     successRate: computeSuccessRate(successes.length, results.length),
+    certification: buildCertificationSummary(results),
     failureGroups: buildFailureGroups(results)
   };
 }
@@ -876,6 +959,10 @@ export function buildReport({
     },
     combined: {
       topFailureSignatures: buildFailureGroups(allResults),
+      // The corpus-wide certification figure, split. Additive: `verified` is
+      // still the sum of the two halves, so a consumer reading only that
+      // number reads what it always did.
+      certification: buildCertificationSummary(allResults),
       partialContracts: buildPartialContracts(allResults),
       // Additive: every field above and below describes generation
       // reachability, and this one alone describes the content of what was
@@ -909,6 +996,36 @@ function formatRate(rate) {
   return `${rate.successes}/${rate.total} (${rate.percentage}%)`;
 }
 
+// The certification half of a section, and the reason it is not one number.
+//
+// A row is `verified-complete` only when every entrypoint its manifest declares
+// carries a receipt and the root is among them; anything else certified is
+// `verified-partial`, reported with how many of those at least covered the
+// root. `verified` stays printed as the sum so a reader comparing against an
+// older report has the same figure to compare.
+function renderCertificationLines(certification) {
+  if (!certification || certification.attempted === 0) return [];
+  const lines = [
+    `- Certification attempted: ${certification.attempted}`,
+    `- Verified (receipt issued): ${certification.verified}` +
+      ` -- ${certification.verifiedComplete} complete` +
+      `, ${certification.verifiedPartial} partial` +
+      ` (${certification.verifiedPartialWithRoot} of those with the root)` +
+      (certification.verifiedUnmeasured > 0
+        ? `, ${certification.verifiedUnmeasured} with unreadable coverage`
+        : ""),
+    `- Certified entrypoints (measured): ${certification.certifiedEntrypoints}`,
+    `- Exact certification refusals: ${certification.refused}`
+  ];
+  const lanes = Object.entries(certification.lanes);
+  if (lanes.length > 0) {
+    lines.push(
+      `- Proposal lanes: ${lanes.map(([lane, count]) => `${count} ${lane}`).join(", ")}`
+    );
+  }
+  return lines;
+}
+
 function renderFamilySection(section) {
   const lines = [];
   lines.push(`### ${section.label}`);
@@ -923,13 +1040,17 @@ function renderFamilySection(section) {
   lines.push(`- Success (complete contracts): ${formatRate(section.successRate)}`);
   lines.push(`- Partial contracts: ${section.partialCount ?? 0}`);
   lines.push(`- Failures: ${section.failureCount}`);
+  lines.push(...renderCertificationLines(section.certification));
   lines.push("");
 
   if (section.results.length > 0) {
-    lines.push("| Package | Version | Probe | Outcome | Class |");
-    lines.push("| --- | --- | --- | --- | --- |");
+    lines.push("| Package | Version | Probe | Outcome | Class | Verified |");
+    lines.push("| --- | --- | --- | --- | --- | --- |");
     for (const result of section.results) {
-      lines.push(`| ${result.package} | ${result.version} | ${result.probeKind} | ${result.outcome} | ${result.class} |`);
+      lines.push(
+        `| ${result.package} | ${result.version} | ${result.probeKind} | ${result.outcome} | ` +
+          `${result.class} | ${formatCoverage(result.certificationAttempt) || "-"} |`
+      );
     }
     lines.push("");
   }
@@ -1167,6 +1288,24 @@ function renderContractContentSection(content) {
   return lines.join("\n");
 }
 
+// The corpus-wide certification headline. One line, and it never says
+// "verified: N" on its own -- the split is the point.
+function renderHeadlineCertification(certification) {
+  if (!certification || certification.attempted === 0) return [];
+  const parts = [
+    `${certification.verifiedComplete} complete`,
+    `${certification.verifiedPartial} partial ` +
+      `(${certification.verifiedPartialWithRoot} with the root)`
+  ];
+  if (certification.verifiedUnmeasured > 0) {
+    parts.push(`${certification.verifiedUnmeasured} coverage unmeasured`);
+  }
+  return [
+    `- Verified: ${certification.verified}/${certification.attempted} attempted -- ` +
+      `${parts.join(", ")}; ${certification.certifiedEntrypoints} certified entrypoints`
+  ];
+}
+
 function renderCombinedSection(combined) {
   const lines = [];
 
@@ -1295,6 +1434,7 @@ export function renderMarkdown(report) {
       `(rows: ${report.manifest?.rowCount ?? 0}, probes: ${report.manifest?.probeCount ?? 0})`
   );
   lines.push(`- Scope: ${describeScope(report.scope)}`);
+  lines.push(...renderHeadlineCertification(report.combined?.certification));
   lines.push("");
 
   lines.push("## Solid 1.x");

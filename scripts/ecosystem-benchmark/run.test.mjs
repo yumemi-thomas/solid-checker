@@ -6,6 +6,15 @@ import { test } from "vitest";
 
 import { buildInstallArguments } from "./lib/install.mjs";
 import {
+  hasUsableDenominator,
+  isCompleteCoverage,
+  isMeasuredCoverage,
+  readCertifiedCoverage
+} from "./lib/certified-coverage.mjs";
+import { formatCoverage } from "./lib/report.mjs";
+import {
+  certificationLaneOf,
+  certificationLaneRequest,
   checkRequiredBinaries,
   countDeclaredEntrypoints,
   decideExitCode,
@@ -257,6 +266,13 @@ test("complete proposals retain an exact policy-2 certification refusal when att
     assert.deepEqual(result.certificationAttempt, {
       attempted: true,
       status: "refused",
+      // The audit carries a `rootCases` graph preparation and no reuse marker,
+      // so the lane it records is the published graph. This row's generation
+      // was a `success`, which is never routed, hence the reuse *request*.
+      lane: "published-graph",
+      laneRequested: "reused-proposal",
+      // A refused attempt published no catalog.
+      coverage: null,
       stage: "witness-acquisition",
       owner: "type-facts",
       demandId: "sha256:missing",
@@ -1103,12 +1119,19 @@ test("checkRequiredBinaries reports ok when both paths exist", () => {
 // ---------------------------------------------------------------------------
 
 test("countDeclaredEntrypoints counts subpaths, treats a single string/conditions object as one, and wildcards as one", () => {
-  assert.equal(countDeclaredEntrypoints("./index.js"), 1);
-  assert.equal(countDeclaredEntrypoints({ import: "./index.mjs", require: "./index.cjs" }), 1);
-  assert.equal(countDeclaredEntrypoints({ ".": "./index.js", "./util": "./util.js" }), 2);
-  assert.equal(countDeclaredEntrypoints({ ".": "./index.js", "./*": "./dist/*.js" }), 2);
-  assert.equal(countDeclaredEntrypoints(null), 0);
-  assert.equal(countDeclaredEntrypoints(undefined), 0);
+  // The count is one *pattern* per key, and `wildcard` records that the count
+  // is a pattern count -- the only place that is visible.
+  const count = exportsField => countDeclaredEntrypoints(exportsField).count;
+  assert.equal(count("./index.js"), 1);
+  assert.equal(count({ import: "./index.mjs", require: "./index.cjs" }), 1);
+  assert.equal(count({ ".": "./index.js", "./util": "./util.js" }), 2);
+  assert.equal(count({ ".": "./index.js", "./*": "./dist/*.js" }), 2);
+  assert.equal(count(null), 0);
+  assert.equal(count(undefined), 0);
+  assert.equal(countDeclaredEntrypoints({ ".": "./index.js", "./*": "./dist/*.js" }).wildcard, true);
+  assert.equal(countDeclaredEntrypoints({ ".": "./index.js" }).wildcard, false);
+  assert.equal(countDeclaredEntrypoints("./index.js").wildcard, false);
+  assert.equal(countDeclaredEntrypoints(null).wildcard, false);
 });
 
 test("only an unfiltered run defaults to the canonical report path", () => {
@@ -1146,4 +1169,633 @@ test("runScope records which filters produced a run", () => {
   assert.equal(scope.sentinel, true);
   assert.deepEqual(scope.families, ["kobalte"]);
   assert.equal(runScope({}).kind, "full");
+});
+
+// ---------------------------------------------------------------------------
+// Lane routing: which proposal lane a probe asks certification for, and which
+// one the audit says produced the proposal.
+// ---------------------------------------------------------------------------
+
+const DEPENDENCY_BINDING_REFUSAL = {
+  entrypoint: ".",
+  conditions: [],
+  stage: "artifact-case",
+  applicability: "runtime-module",
+  reason:
+    "accepted dependency @solidjs/signals has no exact runtime binding for export $PROXY"
+};
+
+const UNRESOLVED_DEPENDENCY_MODULE_REFUSAL = {
+  entrypoint: ".",
+  conditions: [],
+  stage: "artifact-case",
+  applicability: "runtime-module",
+  reason:
+    "solid-checker:unresolved-dependency-module=@tanstack/pacer\n" +
+    "solid-checker-rust: emit package contract: cannot statically expand external " +
+    'export-all "@tanstack/pacer" from <package-root>/dist/index.js'
+};
+
+// A refusal about the publisher's own bytes. No dependency catalog moves it, so
+// routing it to the graph lane could only lose the cases that did generate.
+const PUBLISHER_DEFECT_REFUSAL = {
+  entrypoint: "./jsx-runtime",
+  conditions: [],
+  stage: "artifact-case",
+  applicability: "runtime-module",
+  reason:
+    "solid-checker-rust: emit package contract: entry file <package-root>/dist/solid.js " +
+    "has no runtime ESM exports"
+};
+
+test("a complete proposal is never routed away from reuse", () => {
+  assert.deepEqual(certificationLaneRequest({ class: "success" }), {
+    lane: "reused-proposal"
+  });
+  // Even carrying a dependency-binding refusal row, which a `success` cannot,
+  // the class alone decides: a complete proposal describes every applicable
+  // case and there is no frontier to want.
+  assert.deepEqual(
+    certificationLaneRequest({
+      class: "success",
+      artifactCaseRefusals: [DEPENDENCY_BINDING_REFUSAL]
+    }),
+    { lane: "reused-proposal" }
+  );
+});
+
+test("a partial proposal with a dependency-binding refusal is routed to the published graph", () => {
+  for (const refusal of [
+    DEPENDENCY_BINDING_REFUSAL,
+    UNRESOLVED_DEPENDENCY_MODULE_REFUSAL
+  ]) {
+    assert.deepEqual(
+      certificationLaneRequest({
+        class: "partial-success",
+        artifactCaseRefusals: [PUBLISHER_DEFECT_REFUSAL, refusal]
+      }),
+      { lane: "published-graph" },
+      refusal.reason
+    );
+  }
+});
+
+test("a partial proposal whose refusals are publisher defects keeps its reuse", () => {
+  assert.deepEqual(
+    certificationLaneRequest({
+      class: "partial-success",
+      artifactCaseRefusals: [PUBLISHER_DEFECT_REFUSAL, PUBLISHER_DEFECT_REFUSAL]
+    }),
+    { lane: "reused-proposal" }
+  );
+  // An absent or empty census is not a dependency frontier either: routing on
+  // "not known to be a publisher defect" would send rows to a lane with nothing
+  // to prepare.
+  for (const refusals of [null, undefined, []]) {
+    assert.deepEqual(
+      certificationLaneRequest({ class: "partial-success", artifactCaseRefusals: refusals }),
+      { lane: "reused-proposal" }
+    );
+  }
+});
+
+test("the lane a row reports is the one the audit recorded, not the one requested", () => {
+  assert.equal(certificationLaneOf({ graphPreparation: { reusedProposal: true } }), "reused-proposal");
+  assert.equal(
+    certificationLaneOf({ graphPreparation: { rootCases: 3, canonicalNodes: 6 } }),
+    "published-graph"
+  );
+  // A graph preparation that also carries the partial-frontier marker is still
+  // the graph lane: the marker says how it was reached, not what it is.
+  assert.equal(
+    certificationLaneOf({
+      graphPreparation: { rootCases: 7, partialProposalFrontier: true }
+    }),
+    "published-graph"
+  );
+  // Neither marker: certification generated the proposal in its own scratch.
+  assert.equal(certificationLaneOf({ graphPreparation: null }), "generated-proposal");
+  assert.equal(certificationLaneOf({}), "generated-proposal");
+  // A requested graph lane that could not be prepared is exactly that case: no
+  // graph produced the proposal. The trace says the lane was attempted, and
+  // the lane still reports what actually happened rather than the request.
+  assert.equal(
+    certificationLaneOf({
+      graphPreparation: {
+        partialProposalFrontier: "unprepared",
+        reason: "registry acquisition failed"
+      }
+    }),
+    "generated-proposal"
+  );
+  // No audit at all -- an infrastructure failure before certify wrote one.
+  assert.equal(certificationLaneOf(null), null);
+});
+
+test("routing is off unless the run asks for it", async () => {
+  const manifest = { ...fourProbeManifest(), rows: [fourProbeManifest().rows[0]] };
+  const temporary = mkdtempSync(join(tmpdir(), "solid-checker-lane-default-"));
+  const hooks = successHooks();
+  hooks.mkProject = async () => {
+    const projectDir = join(temporary, "project");
+    const outputDir = join(temporary, "output");
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(outputDir, { recursive: true });
+    return { projectDir, outputDir };
+  };
+  let emittedProposal = "";
+  hooks.generateContract = async ({ outputPath }) => {
+    emittedProposal = outputPath;
+    writeFileSync(`${outputPath}.refusals.json`, JSON.stringify({
+      format: "solid-checker-contract-proposal-refusals",
+      refusalVersion: 1,
+      package: { name: "@solid-primitives/alpha", version: "1.0.0" },
+      refusals: [DEPENDENCY_BINDING_REFUSAL],
+      inapplicable: []
+    }));
+    writeFileSync(`${outputPath}.certification-inputs.json`, "{}");
+    return {
+      status: 0,
+      stdout:
+        `generated unaccepted stable contract proposal for @solid-primitives/alpha@1.0.0 at ${outputPath}` +
+        "; 1 artifact case(s) refused and omitted; proof verification must issue its receipt",
+      stderr: "",
+      timedOut: false
+    };
+  };
+  hooks.planDependencies = () => ({
+    schemaVersion: 1,
+    rootIdentity: { package: "@solid-primitives/alpha", version: "1.0.0", integrity: "sha512-x" },
+    status: "complete",
+    complete: true,
+    roots: [{ entrypoint: ".", conditions: [] }],
+    nodes: [],
+    edges: [],
+    cycles: [],
+    leaves: [],
+    graphDigest: "sha256:x"
+  });
+  const certifications = [];
+  hooks.attemptCertification = async args => {
+    certifications.push(args);
+    return { status: 1, stdout: "", stderr: "refused", timedOut: false };
+  };
+  try {
+    // Same row that routes above, with the option absent: the emitted proposal
+    // is handed over and no lane is requested. The default matters because the
+    // routing loses receipts on the measured corpus.
+    const [result] = await runBenchmark({
+      manifest,
+      hooks,
+      options: { concurrency: 1, certificationConcurrency: 1, attemptCertification: true }
+    });
+    assert.equal(result.class, "partial-success");
+    assert.equal(certifications.length, 1);
+    assert.equal(certifications[0].dependencyGraphLane, false);
+    assert.equal(certifications[0].proposal, emittedProposal);
+    assert.equal(result.certificationAttempt.laneRequested, "reused-proposal");
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test("a routed partial row withholds its proposal and asks for the graph lane", async () => {
+  const manifest = { ...fourProbeManifest(), rows: [fourProbeManifest().rows[0]] };
+  const temporary = mkdtempSync(join(tmpdir(), "solid-checker-lane-routing-"));
+  const hooks = successHooks();
+  hooks.mkProject = async () => {
+    const projectDir = join(temporary, "project");
+    const outputDir = join(temporary, "output");
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(outputDir, { recursive: true });
+    return { projectDir, outputDir };
+  };
+  // A partial generation whose only refusal is a dependency binding, with the
+  // proposal sidecars the reuse path would otherwise pick up.
+  hooks.generateContract = async ({ outputPath }) => {
+    writeFileSync(`${outputPath}.refusals.json`, JSON.stringify({
+      format: "solid-checker-contract-proposal-refusals",
+      refusalVersion: 1,
+      package: { name: "@solid-primitives/alpha", version: "1.0.0" },
+      refusals: [DEPENDENCY_BINDING_REFUSAL],
+      inapplicable: []
+    }));
+    writeFileSync(`${outputPath}.certification-inputs.json`, "{}");
+    return {
+      status: 0,
+      stdout:
+        `generated unaccepted stable contract proposal for @solid-primitives/alpha@1.0.0 at ${outputPath}` +
+        "; 1 artifact case(s) refused and omitted; proof verification must issue its receipt",
+      stderr: "",
+      timedOut: false
+    };
+  };
+  hooks.planDependencies = () => ({
+    schemaVersion: 1,
+    rootIdentity: { package: "@solid-primitives/alpha", version: "1.0.0", integrity: "sha512-x" },
+    status: "complete",
+    complete: true,
+    roots: [{ entrypoint: ".", conditions: [] }],
+    nodes: [],
+    edges: [],
+    cycles: [],
+    leaves: [],
+    graphDigest: "sha256:x"
+  });
+  const certifications = [];
+  hooks.attemptCertification = async args => {
+    certifications.push(args);
+    return { status: 1, stdout: "", stderr: "refused", timedOut: false };
+  };
+  try {
+    const [result] = await runBenchmark({
+      manifest,
+      hooks,
+      options: {
+        concurrency: 1,
+        certificationConcurrency: 1,
+        attemptCertification: true,
+        dependencyGraphLane: true
+      }
+    });
+    assert.equal(result.class, "partial-success");
+    assert.equal(certifications.length, 1);
+    assert.equal(certifications[0].dependencyGraphLane, true);
+    assert.equal(certifications[0].proposal, "");
+    assert.equal(result.certificationAttempt.laneRequested, "published-graph");
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+// The reuse branch of the routing rule is unreachable end-to-end today, and
+// this pins *why* rather than leaving it untested: a partial row is queued for
+// certification only when it has a complete dependency plan, and a dependency
+// plan is only built from refusals `isDependencyCompositionRefusalText`
+// matches. So a partial row whose refusals are all publisher defects is never
+// certified in the first place. If that queue condition ever widens, this test
+// fails and the reuse branch becomes reachable -- which is the moment to give
+// it an end-to-end case of its own. The branch itself is pinned above, at
+// `certificationLaneRequest`.
+test("a partial row refused only on publisher defects is not queued for certification", async () => {
+  const manifest = { ...fourProbeManifest(), rows: [fourProbeManifest().rows[0]] };
+  const temporary = mkdtempSync(join(tmpdir(), "solid-checker-lane-reuse-"));
+  const hooks = successHooks();
+  hooks.mkProject = async () => {
+    const projectDir = join(temporary, "project");
+    const outputDir = join(temporary, "output");
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(outputDir, { recursive: true });
+    return { projectDir, outputDir };
+  };
+  let emittedProposal = "";
+  hooks.generateContract = async ({ outputPath }) => {
+    emittedProposal = outputPath;
+    writeFileSync(`${outputPath}.refusals.json`, JSON.stringify({
+      format: "solid-checker-contract-proposal-refusals",
+      refusalVersion: 1,
+      package: { name: "@solid-primitives/alpha", version: "1.0.0" },
+      // Both classes present in the census: a dependency-composition *reason*
+      // is what routes, and this row has none.
+      refusals: [PUBLISHER_DEFECT_REFUSAL],
+      inapplicable: []
+    }));
+    writeFileSync(`${outputPath}.certification-inputs.json`, "{}");
+    return {
+      status: 0,
+      stdout:
+        `generated unaccepted stable contract proposal for @solid-primitives/alpha@1.0.0 at ${outputPath}` +
+        "; 1 artifact case(s) refused and omitted; proof verification must issue its receipt",
+      stderr: "",
+      timedOut: false
+    };
+  };
+  hooks.planDependencies = () => ({
+    schemaVersion: 1,
+    rootIdentity: { package: "@solid-primitives/alpha", version: "1.0.0", integrity: "sha512-x" },
+    status: "complete",
+    complete: true,
+    roots: [{ entrypoint: ".", conditions: [] }],
+    nodes: [],
+    edges: [],
+    cycles: [],
+    leaves: [],
+    graphDigest: "sha256:x"
+  });
+  const certifications = [];
+  hooks.attemptCertification = async args => {
+    certifications.push(args);
+    return { status: 1, stdout: "", stderr: "refused", timedOut: false };
+  };
+  try {
+    const [result] = await runBenchmark({
+      manifest,
+      hooks,
+      options: { concurrency: 1, certificationConcurrency: 1, attemptCertification: true }
+    });
+    assert.equal(result.class, "partial-success");
+    assert.equal(certifications.length, 0);
+    assert.equal(result.dependencyPlan, null);
+    assert.equal(result.certificationAttempt, undefined);
+    // The proposal was emitted and its sidecars exist; nothing consumed them.
+    assert.equal(existsSync(`${emittedProposal}.certification-inputs.json`), true);
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Certified coverage: `k of n` entrypoints, read from the published catalog.
+// ---------------------------------------------------------------------------
+
+function writeCatalog(root, { relative = ".", contracts }) {
+  const directory = join(root, relative);
+  mkdirSync(join(directory, "objects"), { recursive: true });
+  writeFileSync(join(directory, "accepted-contracts.json"), JSON.stringify({
+    format: "solid-checker-accepted-contract-catalog",
+    catalogVersion: 2,
+    contracts: contracts.map((contract, index) => {
+      const name = `objects/${index}.main.json`;
+      writeFileSync(join(directory, name), JSON.stringify({
+        format: "solid-reactivity-contract",
+        schemaVersion: 1,
+        package: { name: contract.package, version: contract.version ?? "1.0.0" },
+        entrypoints: Object.fromEntries(
+          contract.entrypoints.map(entrypoint => [entrypoint, { cases: [] }])
+        )
+      }));
+      return { document: name, documentDigest: `sha256:${index}` };
+    })
+  }));
+}
+
+test("certified coverage counts only the row's own package, in both catalog layouts", () => {
+  const temporary = mkdtempSync(join(tmpdir(), "solid-checker-coverage-"));
+  const coverage = options =>
+    readCertifiedCoverage({ packageVersion: "1.0.0", declaredEntrypoints: 4, ...options });
+  try {
+    const flat = join(temporary, "flat");
+    writeCatalog(flat, {
+      contracts: [
+        { package: "solid-js", entrypoints: [".", "./refresh"] },
+        // The graph lane publishes the dependencies into the same catalog.
+        // Counting them would make a row read as more covered the more
+        // dependencies it needed.
+        { package: "@solidjs/signals", entrypoints: [".", "./map", "./store"] }
+      ]
+    });
+    assert.deepEqual(coverage({ catalogPath: flat, packageName: "solid-js" }), {
+      declaredEntrypoints: 4,
+      declaredWildcard: false,
+      certifiedEntrypoints: 2,
+      rootCertified: true
+    });
+
+    // The policy-2 case-set lane publishes a pointer at the root, a case-set
+    // document under `case-sets/<digest>/`, and one catalog per case named
+    // relative to that document.
+    const nested = join(temporary, "nested");
+    const caseSet = "case-sets/deadbeef";
+    mkdirSync(join(nested, caseSet), { recursive: true });
+    writeFileSync(join(nested, "accepted-contract-case-set.json"), JSON.stringify({
+      format: "solid-checker-accepted-contract-case-set-pointer",
+      caseSetVersion: 1,
+      document: `${caseSet}/accepted-contract-case-set.json`,
+      documentDigest: "sha256:deadbeef"
+    }));
+    writeFileSync(join(nested, caseSet, "accepted-contract-case-set.json"), JSON.stringify({
+      format: "solid-checker-accepted-contract-case-set",
+      caseSetVersion: 1,
+      cases: [
+        { catalog: "cases/aa/accepted-contracts.json" },
+        { catalog: "cases/bb/accepted-contracts.json" }
+      ]
+    }));
+    writeCatalog(nested, {
+      relative: `${caseSet}/cases/aa`,
+      contracts: [{ package: "solid-js", entrypoints: ["./web"] }]
+    });
+    writeCatalog(nested, {
+      relative: `${caseSet}/cases/bb`,
+      contracts: [{ package: "solid-js", entrypoints: ["./store"] }]
+    });
+    // A leftover catalog the case set does not name must not count: the
+    // pointer is the published index, not the directory listing.
+    writeCatalog(nested, {
+      relative: `${caseSet}/cases/stale`,
+      contracts: [{ package: "solid-js", entrypoints: [".", "./legacy"] }]
+    });
+    // Nor may a leftover *root* catalog from an earlier single-case
+    // publication to the same root. It carries the root entrypoint, so reading
+    // it would both inflate the count and turn `rootCertified` true for a
+    // receipt that does not cover the root.
+    writeCatalog(nested, {
+      contracts: [{ package: "solid-js", entrypoints: [".", "./legacy"] }]
+    });
+    assert.deepEqual(coverage({ catalogPath: nested, packageName: "solid-js" }), {
+      declaredEntrypoints: 4,
+      declaredWildcard: false,
+      certifiedEntrypoints: 2,
+      rootCertified: false
+    });
+
+    // No catalog: not measured. Never "covered nothing".
+    assert.equal(coverage({ catalogPath: join(temporary, "absent"), packageName: "solid-js" }), null);
+    assert.equal(coverage({ catalogPath: "", packageName: "solid-js" }), null);
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test("certified coverage is identity-filtered, and an unfound identity is unmeasured", () => {
+  const temporary = mkdtempSync(join(tmpdir(), "solid-checker-coverage-identity-"));
+  const coverage = options => readCertifiedCoverage({ declaredEntrypoints: 4, ...options });
+  try {
+    // The graph lane can publish *another version of the row's own package*
+    // into the same catalog -- a `@solidjs/signals` row whose graph pulls a
+    // different prerelease is exactly the corpus shape. Name alone would
+    // credit that node's entrypoints, and its `.`, to this row.
+    const root = join(temporary, "two-versions");
+    writeCatalog(root, {
+      contracts: [
+        { package: "@solidjs/signals", version: "2.0.0-rc.3", entrypoints: ["./map"] },
+        { package: "@solidjs/signals", version: "2.0.0-rc.0", entrypoints: [".", "./store"] }
+      ]
+    });
+    assert.deepEqual(
+      coverage({
+        catalogPath: root,
+        packageName: "@solidjs/signals",
+        packageVersion: "2.0.0-rc.3"
+      }),
+      {
+        declaredEntrypoints: 4,
+        declaredWildcard: false,
+        certifiedEntrypoints: 1,
+        rootCertified: false
+      }
+    );
+
+    // A catalog that parses but holds no document for this exact identity is
+    // not a measurement of zero coverage: a certified row published a receipt
+    // by construction, so this reader failed to find what it covered.
+    // `{certifiedEntrypoints: 0}` would have been counted as a partial row.
+    assert.equal(
+      coverage({
+        catalogPath: root,
+        packageName: "@solidjs/signals",
+        packageVersion: "9.9.9"
+      }),
+      null
+    );
+    assert.equal(
+      coverage({ catalogPath: root, packageName: "absent-package", packageVersion: "1.0.0" }),
+      null
+    );
+    // A caller that cannot name the version cannot be told which documents are
+    // the row's, so the answer is "not measured" rather than a name match.
+    assert.equal(coverage({ catalogPath: root, packageName: "@solidjs/signals" }), null);
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test("a wildcard manifest has no denominator even when the counts coincide", () => {
+  const temporary = mkdtempSync(join(tmpdir(), "solid-checker-coverage-wildcard-"));
+  try {
+    const root = join(temporary, "wildcard");
+    writeCatalog(root, {
+      contracts: [{ package: "wildcard-package", entrypoints: [".", "./dist/a"] }]
+    });
+    // Two declared entries, one of them a pattern, and two certified. The
+    // numbers coincide and the ratio is still meaningless: `./*` stands for as
+    // many real entrypoints as the package ships.
+    const coincident = readCertifiedCoverage({
+      catalogPath: root,
+      packageName: "wildcard-package",
+      packageVersion: "1.0.0",
+      declaredEntrypoints: 2,
+      declaredWildcard: true
+    });
+    assert.deepEqual(coincident, {
+      declaredEntrypoints: 2,
+      declaredWildcard: true,
+      certifiedEntrypoints: 2,
+      rootCertified: true
+    });
+    assert.equal(hasUsableDenominator(coincident), false);
+    assert.equal(isCompleteCoverage(coincident), false);
+    // The same counts without a wildcard are a real, complete ratio -- so it
+    // is the flag doing the work here, not the arithmetic.
+    assert.equal(
+      isCompleteCoverage({ ...coincident, declaredWildcard: false }),
+      true
+    );
+    // `countDeclaredEntrypoints` is the only place the wildcard can be seen.
+    assert.deepEqual(countDeclaredEntrypoints({ ".": "./index.js", "./*": "./dist/*.js" }), {
+      count: 2,
+      wildcard: true
+    });
+    assert.deepEqual(countDeclaredEntrypoints({ ".": "./index.js", "./util": "./util.js" }), {
+      count: 2,
+      wildcard: false
+    });
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test("an unreadable manifest leaves no denominator, which is unmeasured and never partial", () => {
+  const temporary = mkdtempSync(join(tmpdir(), "solid-checker-coverage-null-"));
+  try {
+    const root = join(temporary, "no-manifest");
+    writeCatalog(root, { contracts: [{ package: "opaque", entrypoints: [".", "./sub"] }] });
+    const unmeasured = readCertifiedCoverage({
+      catalogPath: root,
+      packageName: "opaque",
+      packageVersion: "1.0.0",
+      declaredEntrypoints: null
+    });
+    assert.deepEqual(unmeasured, {
+      declaredEntrypoints: null,
+      declaredWildcard: false,
+      certifiedEntrypoints: 2,
+      rootCertified: true
+    });
+    // Neither half of the split, and no fabricated denominator in the report.
+    assert.equal(isMeasuredCoverage(unmeasured), false);
+    assert.equal(isCompleteCoverage(unmeasured), false);
+    assert.equal(hasUsableDenominator(unmeasured), false);
+    assert.equal(
+      formatCoverage({ attempted: true, status: "certified", coverage: unmeasured }),
+      "unmeasured 2 of ? (root)"
+    );
+    // The wildcard rendering must not claim a wildcard it never measured:
+    // "null declared via wildcard" was the bug.
+    assert.equal(
+      formatCoverage({
+        attempted: true,
+        status: "certified",
+        coverage: {
+          declaredEntrypoints: 2,
+          declaredWildcard: true,
+          certifiedEntrypoints: 20,
+          rootCertified: true
+        }
+      }),
+      "partial 20 certified, 2 declared via wildcard (root)"
+    );
+    // The corpus-wide classification of the same row -- neither half of the
+    // split -- is pinned in report.test.mjs, where the summary lives.
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test("complete coverage needs a known denominator, a covered root, and every declared entrypoint", () => {
+  assert.equal(
+    isCompleteCoverage({ declaredEntrypoints: 4, certifiedEntrypoints: 4, rootCertified: true }),
+    true
+  );
+  // A legacy-`main` package declares no exports map, so its whole surface is
+  // the root. That is a manifest shape, not a missing measurement.
+  assert.equal(
+    isCompleteCoverage({ declaredEntrypoints: 0, certifiedEntrypoints: 1, rootCertified: true }),
+    true
+  );
+  assert.equal(
+    isCompleteCoverage({ declaredEntrypoints: 4, certifiedEntrypoints: 1, rootCertified: true }),
+    false
+  );
+  // A wildcard subpath declares one entry and expands to many, so the declared
+  // count is not a denominator and the row is not complete against it.
+  // `@kobalte/utils@0.9.2` declares 2 and certifies 20.
+  assert.equal(
+    isCompleteCoverage({ declaredEntrypoints: 2, certifiedEntrypoints: 20, rootCertified: true }),
+    false
+  );
+  assert.equal(
+    hasUsableDenominator({ declaredEntrypoints: 2, certifiedEntrypoints: 20, rootCertified: true }),
+    false
+  );
+  assert.equal(
+    hasUsableDenominator({ declaredEntrypoints: 4, certifiedEntrypoints: 4, rootCertified: true }),
+    true
+  );
+  // The legacy-`main` shape: one certified root against a declared 0 is not a
+  // wildcard expansion.
+  assert.equal(
+    hasUsableDenominator({ declaredEntrypoints: 0, certifiedEntrypoints: 1, rootCertified: true }),
+    true
+  );
+  assert.equal(
+    isCompleteCoverage({ declaredEntrypoints: 4, certifiedEntrypoints: 4, rootCertified: false }),
+    false
+  );
+  // An unknown denominator is not zero, and not complete.
+  assert.equal(
+    isCompleteCoverage({ declaredEntrypoints: null, certifiedEntrypoints: 4, rootCertified: true }),
+    false
+  );
+  assert.equal(isCompleteCoverage(null), false);
 });

@@ -10,6 +10,7 @@
       "entrypoint": "./phantom-consumer",
       "conditions": [],
       "stage": "artifact-case",
+      "class": "published-artifact",
       "applicability": "unavailable-published-target",
       "reason": "local runtime module ./phantom.js from ./src/phantom-consumer.ts resolves only to declaration file ./src/phantom.d.ts; the package ships no runtime module under that specifier"
     }

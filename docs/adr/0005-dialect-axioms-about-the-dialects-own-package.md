@@ -350,3 +350,41 @@ one the audited contract for those exact bytes closes as absent. The refusal on
 `sha256:78a16558…` is the honest answer, and the generated-versus-audited
 disagreement about `onSettled`'s `creates` is the defect worth carrying forward —
 against the generator, not against the verifier.
+
+## 2026-09-03, later: the generator side of P5 is fixed; the axiom stays deferred
+
+The defect this section named — "suppress the create for the dialect's own
+primitive-defining exports" — **shipped**. Contract generation now decides,
+per artifact case, whether the archive under generation is one of the dialects'
+own primitive-defining packages (`solid_dialect::primitive_defining_package`,
+answered from a new `Dialect::primitive_defining_packages` row: `solid-js` for
+1.x, plus `@solidjs/signals` and `@solidjs/web` for 2.0). For such an archive
+`normalize_export`
+(`rust/crates/solid-facts-backend/src/inferred_contract.rs`) publishes **no**
+owner-requirement create and **no** reactive-read operation, leaving both
+domains *open*. `@solidjs/signals@2.0.0-rc.3` no longer demands
+`sha256:78a165588bd85e84dd94c2598e9271279c741475da2089d5d6e93f3164cbbbca` at
+all — the demand is withdrawn rather than discharged, which is what this section
+concluded it had to be. The row's next wall is
+`callable-path`
+`sha256:937e6357ebc73db9077a9f3aa558283a71f46db632d7234c84cdc74a6aad6552`,
+still `onSettled`, still *callback parameter has no exact direct-call or
+resolved-argument flow* — objection 5's "no row moved" observation, unchanged.
+
+Two things that fix is **not**:
+
+- It is not the axiom. The predicate is an exact package **name**, with no
+  version and no integrity behind it, so it is not an identity claim. It is
+  admissible only because it acts in one direction — it *withholds* claims and
+  can never establish one. Precondition 1 (an integrity-bound tuple) therefore
+  remains the requirement for anything that would *grant* a discharge.
+- It is not the local half of the path bootstrap. `declaration_path_is_solid_package`
+  (`solid-reactive-ir/src/symbols.rs:589-601`) is untouched, and every
+  diagnostic that depends on it — the whole reason it exists, analyzing Solid's
+  own repository — behaves exactly as before. The fix sits at the *demand
+  owner*, in contract generation, not at the recognition.
+
+This ADR therefore stays `deferred`: the axiom itself is still refused on
+objections 1-3, and objection 5's disagreement between the generated proposal
+and the audited bundled contract is now resolved on the generator's side, in
+the audit's favour.
