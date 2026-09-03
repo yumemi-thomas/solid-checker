@@ -196,8 +196,8 @@ loop, and it is only ever as good as its mapping.
 
 **Fails closed for paths git reports — and git does not report everything.**
 The selection basis is a merge-base diff plus the working tree, so anything
-`.gitignore` hides is invisible to it. Two ignored classes are real inputs, and
-the plan prints both as caveats on every run:
+`.gitignore` hides is invisible to it. Three ignored classes are real inputs,
+and the plan prints all three as caveats on every run:
 
 - **The build products under `/bin/` and `rust/target/`.** Above all
   `bin/solid-typefacts`, the producer of every fact here: rebuilding it changes
@@ -207,6 +207,17 @@ the plan prints both as caveats on every run:
   identity differs from the producer, Rust client, shims, schemas, dependency
   pins, toolchain identity, or build id (or is absent) escalates the whole plan.
   A hand-replaced binary with a matching stamp is still not detected.
+- **`/packages/cli/probe-harness.buildinfo`**, the same idea for the
+  runtime-probe harness image — and deliberately weaker, because it is not a
+  root of trust. The probe adapter recomputes the harness source manifest from
+  the bytes on disk every gate schedule and compares this stamp *to* the digest
+  compiled into the verifier, so a stamp written by another build refuses at
+  gate time instead of escalating a plan. A harness-script edit is itself
+  mapped: `packages/cli/scripts/contract-probe-*`, `probe-contract.mjs`, and the
+  CLI manifest/lockfiles select `probe-harness`, which rebuilds through the
+  Makefile so the pins are recomputed. A bare `cargo test` there compiles a
+  binary with no pins and every probe assertion returns early — which is why
+  that row's check is a `make` target rather than a `cargo` command.
 - **Ignored fixture inputs.** A `node_modules/solid-js` stub added to an
   *already-tracked* fixture without its `.gitignore` exception lines is invisible
   to `git status`, so no row selects coverage — and `checkDialectStubs`, which
@@ -286,6 +297,22 @@ proportionality rules and the report format.
   build with `SOLID_CHECKER_NATIVE_BIN="$PWD/rust/target/debug/solid-checker-rust"`;
   `make contract-corpus` is unaffected because it depends on `build-rust`,
   which rebuilds bin/ first.
+
+  **A build without the certification pins is a different, weaker binary, and
+  it looks identical.** `SOLID_TYPEFACTS_*` and `SOLID_CHECKER_PROBE_*` are read
+  by `option_env!`, so they are compile-time inputs and part of the crate
+  fingerprint: a `cargo build`/`cargo run`/`cargo test` without them silently
+  replaces `rust/target/debug/solid-checker-rust` with one that refuses Type
+  Facts certification and probe authority, and every probe-gate assertion in the
+  test suite quietly returns early. Always build through `make
+  build-checker-debug` / `make test-rust`, which carry `CERTIFICATION_ENV`. Two
+  scripts reach cargo themselves and therefore had this footgun:
+  `scripts/check-bundled-contracts.mjs` (its `cargo run` builds the same debug
+  tree — it now supplies the environment itself) and `scripts/verify.sh` (it now
+  computes the pins after `build-typefacts` and sets
+  `SOLID_CHECKER_EXPECT_PROBE_PINS=1`, which makes their absence a loud test
+  failure rather than a green run that proved nothing). A new script that shells
+  out to cargo has to do the same.
 - **Dialect selection follows the installed solid-js.** A project runs the v1
   catalog only when the nearest node_modules/solid-js/package.json above it
   resolves to a 1.x version (rust/crates/solid-facts-backend/src/dialect.rs).

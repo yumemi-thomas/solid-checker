@@ -1402,6 +1402,14 @@ function usage() {
                          improvement: measured on the 2026-09-03 corpus it
                          turns six certified rows into refusals and gives two
                          rows a certified root. Off by default
+  --probe-recipe-corpus <DIR>
+                         hand-authored, claim-addressed runtime-probe recipes
+                         to certify closed claim domains against. A proposal
+                         that closes a domain schedules a mandatory
+                         contradiction veto, and without a corpus that gate
+                         refuses rather than certifying an unvetoed closure --
+                         which is what every row in the current corpus does,
+                         since none of them has a recipe yet
   --keep-temp            keep the temporary install directories
   --include-supplemental run the unofficial fork rows too (off by default:
                          forks are listed for review, not part of the corpus)
@@ -1438,6 +1446,7 @@ function parseArgs(argv) {
     materializedStore: true,
     attemptCertification: false,
     dependencyGraphLane: false,
+    probeRecipeCorpus: null,
     keepTemp: false,
     includeSupplemental: false,
     help: false
@@ -1513,6 +1522,9 @@ function parseArgs(argv) {
         break;
       case "--dependency-graph-lane":
         options.dependencyGraphLane = true;
+        break;
+      case "--probe-recipe-corpus":
+        options.probeRecipeCorpus = takeValue(argv, index++, arg);
         break;
       case "--keep-temp":
         options.keepTemp = true;
@@ -1656,7 +1668,8 @@ function buildRealHooks({
   maxWorkers = 1,
   durableWrites = false,
   installLockfileCache = null,
-  materializedStore = null
+  materializedStore = null,
+  probeRecipeCorpus = null
 }) {
   // Generation and certification run inside a pool of long-lived CLI workers
   // (lib/cli-worker.mjs) instead of one CLI process per probe and phase. The
@@ -1786,6 +1799,10 @@ function buildRealHooks({
             : []),
           ...(proposal ? ["--proposal", proposal] : []),
           ...(dependencyGraphLane ? ["--dependency-graph-lane"] : []),
+          // Only supplied when the run configured one. Absent, a plan that
+          // proposes a closed claim domain refuses its mandatory veto instead
+          // of certifying it unvetoed.
+          ...(probeRecipeCorpus ? ["--probe-recipe-corpus", probeRecipeCorpus] : []),
           ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])
         ],
         env: certificationEnvironment,
@@ -1948,7 +1965,10 @@ async function main(argv = process.argv.slice(2)) {
     maxWorkers: Math.max(1, options.concurrency || 1, options.certificationConcurrency || 1),
     durableWrites: options.durableWrites,
     installLockfileCache: options.installLockfileCache ? DEFAULT_INSTALL_LOCKFILE_CACHE : null,
-    materializedStore: options.materializedStore ? DEFAULT_MATERIALIZED_STORE : null
+    materializedStore: options.materializedStore ? DEFAULT_MATERIALIZED_STORE : null,
+    probeRecipeCorpus: options.probeRecipeCorpus
+      ? resolve(options.probeRecipeCorpus)
+      : null
   });
   const scheduleCosts = historicalScheduleCosts();
 

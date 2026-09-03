@@ -149,6 +149,44 @@ bun scripts/check-compiler-facts-identity.mjs
 step build-typefacts
 scripts/build-typefacts.sh
 
+# ---------------------------------------------------------------------------
+# The Makefile's CERTIFICATION_ENV, for every step below that builds.
+#
+# These four digests are read by `option_env!`, so they are part of the crate
+# fingerprint and can only be supplied at compile time. Without them a build
+# refuses Type Facts certification and probe authority *by design* — and a
+# test binary built that way turns every probe-gate assertion into a silent
+# early return, which is exactly what `make verify` used to do while reporting
+# a green run. `SOLID_CHECKER_EXPECT_PROBE_PINS=1` turns that silence into a
+# loud failure (see
+# `probe_harness::tests::a_build_that_must_carry_probe_pins_carries_them`).
+#
+# They are computed here rather than at the top of the script because
+# `SOLID_TYPEFACTS_CERTIFICATION_SHA256` is a digest of the producer binary
+# `build-typefacts` above may have just rewritten.
+step certification-pins
+if ! command -v node >/dev/null 2>&1; then
+  echo "make verify: node is required (the certification pins compiled into the verifier are" >&2
+  echo "  computed from the harness source manifest and the Node executable it launches)." >&2
+  exit 127
+fi
+probe_node="${PROBE_NODE:-$(node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')}"
+SOLID_TYPEFACTS_CERTIFICATION_SHA256="sha256:$(shasum -a 256 bin/solid-typefacts | awk '{print $1}')"
+SOLID_TYPEFACTS_SOURCE_MANIFEST_SHA256="sha256:$(node scripts/typefacts-source-identity.mjs --build-id "${SOLID_CHECKER_BUILD_ID:-dev}" --digest)"
+SOLID_CHECKER_PROBE_HARNESS_SHA256="sha256:$(node scripts/probe-harness-source-identity.mjs --build-id "${SOLID_CHECKER_BUILD_ID:-dev}" --write-stamp --digest)"
+SOLID_CHECKER_PROBE_NODE_SHA256="sha256:$(shasum -a 256 "$probe_node" | awk '{print $1}')"
+SOLID_CHECKER_EXPECT_PROBE_PINS=1
+export SOLID_TYPEFACTS_CERTIFICATION_SHA256 SOLID_TYPEFACTS_SOURCE_MANIFEST_SHA256
+export SOLID_CHECKER_PROBE_HARNESS_SHA256 SOLID_CHECKER_PROBE_NODE_SHA256
+export SOLID_CHECKER_EXPECT_PROBE_PINS
+# The resolved real path, not only its digest: every step below that resolves a
+# Node executable of its own — the probe-gate tracers, and
+# `scripts/check-bundled-contracts.mjs`, which recomputes these same pins for
+# its `cargo run` — must use the executable whose bytes were just hashed
+# rather than re-resolving `node` from `PATH`.
+PROBE_NODE="$probe_node"
+export PROBE_NODE
+
 step test-workspace
 TYPEFACTS_TEST_BIN="$PWD/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
   run_rust_tests --manifest-path "$rust_manifest" --workspace

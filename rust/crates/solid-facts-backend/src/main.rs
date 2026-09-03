@@ -285,6 +285,21 @@ struct ContractCertificationExecutionRequest {
     issuer_configuration: String,
     catalog_root: String,
     trust_configuration_output: String,
+    /// Where the runtime-probe harness image, the Node runtime it is launched
+    /// with, and the hand-authored recipe corpus live. All three or none:
+    /// without them a plan that proposes a closed claim domain refuses its
+    /// mandatory veto instead of certifying an unvetoed closure.
+    ///
+    /// The request deliberately cannot declare a sandbox kind or policy. The
+    /// verifier computes both from the scheme it actually runs
+    /// (`probe_harness::sandbox_policy_digest`), so no caller can assert an
+    /// isolation property the transaction does not have.
+    #[serde(default)]
+    probe_harness_root: String,
+    #[serde(default)]
+    probe_node_executable: String,
+    #[serde(default)]
+    probe_recipe_corpus: String,
 }
 
 #[derive(Clone, Deserialize)]
@@ -987,6 +1002,8 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
     })?;
     let pin = solid_facts_backend::TypeFactsProducerPin::configured(typefacts_path)
         .map_err(|error| format!("Type Facts producer pinning failed: {error}"))?;
+    let probes = probe_harness_configuration(&request)?;
+    let probes = probes.as_ref();
 
     if is_graph {
         return execute_contract_graph_certification(
@@ -995,6 +1012,7 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
             &pin,
             &issuer,
             issuer_document.revocation_epoch,
+            probes,
         );
     }
 
@@ -1005,6 +1023,7 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
             &pin,
             &issuer,
             issuer_document.revocation_epoch,
+            probes,
         );
     }
 
@@ -1015,6 +1034,7 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
             &pin,
             &issuer,
             issuer_document.revocation_epoch,
+            probes,
         );
     }
 
@@ -1026,7 +1046,13 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
     let (plan, proposal) = certification_plan_from_request(planning)
         .map_err(|error| format!("certification planning failed: {error}"))?;
     let finalized = plan
-        .certify_value_only(&proposal, &pin, &issuer, issuer_document.revocation_epoch)
+        .certify_value_only(
+            &proposal,
+            &pin,
+            &issuer,
+            issuer_document.revocation_epoch,
+            probes,
+        )
         .map_err(|error| format!("policy-2 proof finalization failed: {error}"))?;
     let trust_bytes =
         solid_facts_backend::encode_policy2_trust_configuration(finalized.trust_configuration())
@@ -1069,12 +1095,45 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
     Ok(())
 }
 
+/// The probe harness configuration this request supplies, or `None`.
+///
+/// All three paths or none: a partially configured harness is a refusal rather
+/// than a silently narrower binding. A plan that proposes no closed claim
+/// domain never needs one, so `None` is the ordinary case for every row in the
+/// corpus today.
+fn probe_harness_configuration(
+    request: &ContractCertificationExecutionRequest,
+) -> Result<Option<solid_facts_backend::ProbeHarnessConfiguration>, Box<dyn std::error::Error>> {
+    let supplied = [
+        &request.probe_harness_root,
+        &request.probe_node_executable,
+        &request.probe_recipe_corpus,
+    ];
+    if supplied.iter().all(|value| value.is_empty()) {
+        return Ok(None);
+    }
+    if supplied.iter().any(|value| value.is_empty()) {
+        return Err(
+            "probe harness configuration needs probeHarnessRoot, probeNodeExecutable, and probeRecipeCorpus together"
+                .into(),
+        );
+    }
+    let configuration = solid_facts_backend::ProbeHarnessConfiguration::new(
+        Path::new(&request.probe_harness_root),
+        Path::new(&request.probe_node_executable),
+        Path::new(&request.probe_recipe_corpus),
+    )
+    .map_err(|error| format!("probe harness configuration is invalid: {error}"))?;
+    Ok(Some(configuration))
+}
+
 fn execute_contract_case_set_certification(
     request_path: &Path,
     request: ContractCertificationExecutionRequest,
     pin: &solid_facts_backend::TypeFactsProducerPin,
     issuer: &solid_facts_backend::ConfiguredReceiptIssuer,
     revocation_epoch: u64,
+    probes: Option<&solid_facts_backend::ProbeHarnessConfiguration>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut plans = Vec::with_capacity(request.plannings.len());
     let mut proposal = None::<Vec<u8>>;
@@ -1169,6 +1228,7 @@ fn execute_contract_case_set_certification(
         pin,
         issuer,
         revocation_epoch,
+        probes,
     )
     .map_err(|error| format!("policy-2 case-set finalization failed: {error}"))?;
     solid_facts_backend::report_certification_timing(
@@ -1302,6 +1362,7 @@ fn execute_contract_graph_certification(
     pin: &solid_facts_backend::TypeFactsProducerPin,
     issuer: &solid_facts_backend::ConfiguredReceiptIssuer,
     revocation_epoch: u64,
+    probes: Option<&solid_facts_backend::ProbeHarnessConfiguration>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let graph_request = request
         .graph
@@ -1309,7 +1370,7 @@ fn execute_contract_graph_certification(
         .ok_or("graph certification request disappeared")?;
     let graph = certification_graph_from_request(graph_request)?;
     let finalized = graph
-        .certify_value_only(pin, issuer, revocation_epoch)
+        .certify_value_only(pin, issuer, revocation_epoch, probes)
         .map_err(|error| format!("published graph finalization failed: {error}"))?;
     if finalized.graph_root() != graph.graph_root() {
         return Err("published graph finalization changed the graph root".into());
@@ -1483,6 +1544,7 @@ fn execute_contract_graph_case_set_certification(
     pin: &solid_facts_backend::TypeFactsProducerPin,
     issuer: &solid_facts_backend::ConfiguredReceiptIssuer,
     revocation_epoch: u64,
+    probes: Option<&solid_facts_backend::ProbeHarnessConfiguration>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let graph_requests = match request.graph_case_set {
         Some(case_set) => expand_deduplicated_graph_case_set(case_set)?,
@@ -1509,6 +1571,7 @@ fn execute_contract_graph_case_set_certification(
         pin,
         issuer,
         revocation_epoch,
+        probes,
     )
     .map_err(|error| format!("published graph case-set finalization failed: {error}"))?;
 

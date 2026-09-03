@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "ES2022",
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "closed-domain-probe-gate-package": ["../index.d.ts"],
+      "closed-domain-probe-gate-tampering-package": ["../tampering-package/index.d.ts"]
+    }
+  },
+  "files": ["consumer.ts"]
+}

@@ -16,11 +16,18 @@ import {
   realpathSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
+
+/// The repository/package root the runtime-probe harness source manifest is
+/// recomputed against. This file lives at `<root>/packages/cli/scripts/`, and
+/// the manifest names its members relative to `<root>`.
+const harnessRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 import { runNativeAsync } from "../bin/launcher.mjs";
 import {
@@ -85,10 +92,29 @@ Options:
                           covers exactly the refused cases, the partial proposal
                           exactly the others -- so this is a choice, not a
                           strict improvement, and it is off by default
+  --probe-recipe-corpus <DIR>
+                          Hand-authored, claim-addressed runtime-probe recipes
+                          (a directory holding recipes.json plus its modules).
+                          Required only when a proposal closes a claim domain:
+                          such a claim schedules a mandatory contradiction veto
+                          that has to be executed, and without a corpus that
+                          gate refuses instead of certifying an unvetoed
+                          closure. Claim ids are content digests, so the way to
+                          learn one is to certify once and read the refusal,
+                          which names the exact claim that has no recipe. The
+                          corpus may not live inside the analyzed package
   --audit-output <FILE>   Write a non-replayable diagnostic transcript
   -h, --help              Show this help
 
 Environment:
+  SOLID_CHECKER_PROBE_NODE <FILE>
+                          Real path of the Node executable the probe harness is
+                          launched with. It must be the path this verifier
+                          build pinned (make PROBE_NODE=...), and it must be
+                          a real path: the adapter refuses a symlink, because a
+                          symlink is a name that can be repointed at other
+                          bytes after the pin was taken. Defaults to the
+                          "node" on PATH
   SOLID_CHECKER_REGISTRY_CACHE <DIR>
                           Content-addressed store for registry bytes already
                           acquired for an exact (origin, package, version,
@@ -347,6 +373,7 @@ export function parseCertifyArguments(arguments_) {
     proposalRefusalAudit: "",
     proposal: "",
     dependencyGraphLane: false,
+    probeRecipeCorpus: "",
     auditOutput: "",
     issuerConfiguration: process.env.SOLID_CHECKER_POLICY2_ISSUER_CONFIG ?? "",
     trustConfigurationOutput: process.env.SOLID_CHECKER_POLICY2_TRUST_CONFIG ?? "",
@@ -377,6 +404,7 @@ export function parseCertifyArguments(arguments_) {
     } else if (key === "--audit-output") options.auditOutput = value;
     else if (key === "--proposal-refusal-audit") options.proposalRefusalAudit = value;
     else if (key === "--proposal") options.proposal = value;
+    else if (key === "--probe-recipe-corpus") options.probeRecipeCorpus = value;
     else if (key === "--issuer-configuration") options.issuerConfiguration = value;
     else if (key === "--trust-configuration-output") options.trustConfigurationOutput = value;
     else throw new Error(`unknown contract certification argument ${key}`);
@@ -2080,6 +2108,52 @@ export async function acquireRootCompilerSources({ options, generated, scratch, 
   );
 }
 
+/// The probe-harness paths the native transaction needs, or nothing.
+///
+/// All three or none: a partially configured harness is a refusal in Rust
+/// rather than a silently narrower binding. Note what is *not* here — the
+/// request cannot declare a sandbox kind or an isolation policy. The verifier
+/// computes both from the scheme it actually runs, so no caller can assert an
+/// isolation property the transaction does not have.
+///
+/// The harness root is this repository/package root, because the harness
+/// source manifest the verifier recomputes covers `packages/cli/...` paths
+/// relative to it.
+function probeHarnessRequest(options) {
+  if (!options.probeRecipeCorpus) return {};
+  const node = options.probeNodeExecutable || process.env.SOLID_CHECKER_PROBE_NODE || "";
+  const resolvedNode = node ? realpathSync(resolve(node)) : probeNodeOnPath();
+  if (!resolvedNode) {
+    throw new CertificationRefusal({
+      stage: "witness-acquisition",
+      owner: "probe-gate",
+      reason:
+        "a probe recipe corpus was configured but no Node executable could be resolved; set SOLID_CHECKER_PROBE_NODE to the real path this build pinned"
+    });
+  }
+  return {
+    probeHarnessRoot: harnessRoot,
+    probeNodeExecutable: resolvedNode,
+    probeRecipeCorpus: resolve(options.probeRecipeCorpus)
+  };
+}
+
+/// The `node` on PATH, by real path, or "" when there is none. The adapter
+/// refuses a symlink, so the resolution has to end at real bytes.
+function probeNodeOnPath() {
+  for (const directory of (process.env.PATH ?? "").split(":")) {
+    if (!directory) continue;
+    const candidate = join(directory, "node");
+    try {
+      const real = realpathSync(candidate);
+      if (statSync(real).isFile()) return real;
+    } catch {
+      continue;
+    }
+  }
+  return "";
+}
+
 async function executeNativeCertification({
   options,
   generated,
@@ -2143,7 +2217,8 @@ async function executeNativeCertification({
     typefactsExecutable: resolve(typefactsExecutable),
     issuerConfiguration: resolve(options.issuerConfiguration),
     catalogRoot,
-    trustConfigurationOutput: resolve(options.trustConfigurationOutput)
+    trustConfigurationOutput: resolve(options.trustConfigurationOutput),
+    ...probeHarnessRequest(options)
   };
   writeFileSync(requestPath, `${JSON.stringify(execution, null, 2)}\n`);
   const child = await runNativeAsync(
@@ -2191,37 +2266,6 @@ async function executeNativeOrGraphCertification({
     scratch,
     catalogRoot,
     trustConfigurationOutput: options.trustConfigurationOutput
-  });
-}
-
-function unavailableWitnessRefusal(plans) {
-  const demands = plans.flatMap(plan => plan.demands ?? []);
-  const missing = demands
-    .filter(demand => !demand.satisfiedByArtifactSnapshot)
-    .map(demand => ({
-      demandId: demand.id,
-      family: demand.family,
-      owner: demand.owner,
-      reason:
-        demand.owner === "probe-gate"
-          ? "the mandatory policy-2 probe harness and runtime-image binding are unavailable"
-          : `the automatic ${demand.owner} witness adapter is unavailable`
-    }));
-  if (missing.length === 0) {
-    throw new CertificationRefusal({
-      stage: "receipt-issuance",
-      owner: "trust",
-      reason: "no configured policy-2 receipt issuer is available"
-    });
-  }
-  const first = missing[0];
-  throw new CertificationRefusal({
-    stage: "witness-acquisition",
-    owner: first.owner,
-    demandId: first.demandId,
-    family: first.family,
-    reason: first.reason,
-    refusals: missing
   });
 }
 

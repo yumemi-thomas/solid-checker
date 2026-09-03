@@ -42,6 +42,7 @@ mod finalization;
 mod module_closure;
 mod policy2_receipt;
 mod probe_gates;
+mod probe_harness;
 mod type_facts;
 pub use type_facts::report_certification_timing;
 mod witness_wire;
@@ -74,10 +75,8 @@ pub use policy2_receipt::{
     policy2_main_semantic_digest, policy2_policy_digest, policy2_resolved_import_root,
     policy2_trust_configuration_for_issuer, publish_policy2_catalog,
 };
-pub use probe_gates::{
-    InspectedProbeGateBatch, ProbeGate, ProbeGateError, ProbeGateOutcome, ProbeGateOutcomeKind,
-    ProbeGateSchedule, VerifiedProbeGateBatch,
-};
+pub use probe_gates::{ProbeGate, ProbeGateError, ProbeGateSchedule, VerifiedProbeGateBatch};
+pub use probe_harness::{ProbeHarnessConfiguration, ProbeHarnessError};
 pub use type_facts::{
     TypeFactsCertificationError, TypeFactsCertificationSchedule, TypeFactsProducerPin,
     VerifiedTypeFactsEvidence,
@@ -431,11 +430,29 @@ impl CertificationPlan {
         dependencies::DependencyCompositionSchedule::from_plan(self)
     }
 
-    /// Mandatory probe vetoes derived from every proposed closure. A complete
-    /// successful audit batch still cannot authenticate until the harness and
-    /// Node runtime image are directly bound.
+    /// Mandatory probe vetoes derived from every proposed closure. An empty
+    /// schedule authenticates on its own; a nonempty one authenticates only
+    /// against the harness image and Node runtime that actually ran it.
     pub fn probe_gate_schedule(&self) -> Result<ProbeGateSchedule, ProbeGateError> {
         probe_gates::ProbeGateSchedule::from_plan(self)
+    }
+
+    /// The runtime-probe plan for this plan's mandatory gates.
+    ///
+    /// Parallel to [`Self::dependency_composition_schedule`] and
+    /// `CompilerCertificationSchedule::new`: the artifact-mode matrix, the
+    /// probe subjects, and every recipe's authority are derived here from the
+    /// retained opaque plan and the gate ids. A caller-returned probe plan
+    /// document is never accepted — the audit-path
+    /// `runtime_probe_wire::plan_runtime_probes` builds a separate,
+    /// non-authoritative plan and cannot reach a receipt.
+    pub(crate) fn runtime_probe_plan(
+        &self,
+        schedule: &ProbeGateSchedule,
+        corpus: &probe_harness::RecipeCorpus,
+        environment: crate::EnvironmentIdentity,
+    ) -> Result<crate::RuntimeProbePlan, ProbeHarnessError> {
+        probe_harness::runtime_probe_plan(self, schedule, corpus, environment)
     }
 
     /// Acquires Type Facts evidence through the policy-2 live-session adapter.
@@ -494,18 +511,27 @@ impl CertificationPlan {
     }
 
     /// Certifies the supported value-only cohort in one native transaction.
+    ///
+    /// `probes` is required exactly when this plan proposes a closed claim
+    /// domain: the mandatory veto for such a claim has to be executed, and a
+    /// transaction without a harness configuration refuses with
+    /// [`Policy2FinalizationError::ProbeAuthorityRequired`] rather than
+    /// certifying an unvetoed closure.
     pub fn certify_value_only(
         &self,
         canonical_proposal: &[u8],
         pin: &TypeFactsProducerPin,
         issuer: &ConfiguredReceiptIssuer,
         revocation_epoch: u64,
+        probes: Option<&ProbeHarnessConfiguration>,
     ) -> Result<FinalizedPolicy2Contract, Policy2FinalizationError> {
         let evidence = type_facts::acquire_and_verify_export_values(self, pin)?;
+        let probe_gates = finalization::authenticate_probe_gates(self, probes, pin)?;
         finalization::finalize_value_only(
             self,
             canonical_proposal,
             &evidence,
+            &probe_gates,
             pin,
             issuer,
             revocation_epoch,
@@ -561,16 +587,22 @@ pub fn certify_value_only_case_set(
     pin: &TypeFactsProducerPin,
     issuer: &ConfiguredReceiptIssuer,
     revocation_epoch: u64,
+    probes: Option<&ProbeHarnessConfiguration>,
 ) -> Result<Vec<FinalizedPolicy2Contract>, Policy2FinalizationError> {
     let evidence = type_facts::acquire_and_verify_export_values_batch(plans, pin)?;
     plans
         .iter()
         .zip(evidence)
         .map(|(plan, evidence)| {
+            // Each alternative artifact case derives, runs, and authenticates
+            // its own veto set; a batch never shares one plan's probe
+            // authority with another.
+            let probe_gates = finalization::authenticate_probe_gates(plan, probes, pin)?;
             finalization::finalize_value_only(
                 plan,
                 canonical_proposal,
                 &evidence,
+                &probe_gates,
                 pin,
                 issuer,
                 revocation_epoch,
@@ -1472,6 +1504,14 @@ impl ArtifactSnapshot {
     #[must_use]
     pub fn provenance_root(&self) -> &str {
         &self.provenance_root
+    }
+
+    /// Every authenticated member of this immutable snapshot, in path order.
+    /// Used to materialize the private copy a runtime probe reads.
+    pub(crate) fn files(&self) -> impl Iterator<Item = (&str, &[u8])> {
+        self.files
+            .iter()
+            .map(|(path, bytes)| (path.as_str(), &bytes[..]))
     }
 
     #[must_use]
@@ -5036,6 +5076,132 @@ mod tests {
         );
     }
 
+    /// The reachability the whole probe-harness binding exists for.
+    ///
+    /// Before this slice a proposed closed claim domain died two steps earlier
+    /// — `DomainExhaustiveness` was missing from finalization's allowed demand
+    /// families, so a closure candidate refused as `UnsupportedDemand` and the
+    /// probe gate was never reached at all. `ProbeAuthorityRequired` was
+    /// therefore unreachable and unpinned. These two cases pin both halves:
+    /// the demand family is now supported, and the mandatory veto for it
+    /// refuses without a bound harness rather than certifying silently.
+    #[test]
+    fn a_proposed_closed_domain_schedules_a_veto_that_refuses_without_a_harness() {
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3","exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.js","default":"./dist/index.js"}}}"#;
+        let runtime = b"export function run() {}\n";
+        let declarations = b"export declare function run(): void;\n";
+        let archive = published_archive_for(
+            "fixture-package",
+            "1.2.3",
+            &[
+                ("package/package.json", manifest),
+                ("package/dist/index.js", runtime),
+                ("package/dist/index.d.ts", declarations),
+            ],
+        );
+        let exports: &[TestExportBinding<'_>] = &[(
+            "run",
+            ("dist/index.js", runtime),
+            ("dist/index.d.ts", declarations),
+            "/project/node_modules/fixture-package",
+        )];
+
+        let open = plan_for_test_package(
+            &archive,
+            "fixture-package",
+            "1.2.3",
+            "/project/node_modules/fixture-package",
+            manifest,
+            &["import"],
+            exports,
+            &[],
+        );
+        assert!(
+            open.probe_gate_schedule().unwrap().gates().is_empty(),
+            "an export proposing no closure needs no veto"
+        );
+
+        let closing = plan_for_test_package_closing(
+            &archive,
+            "fixture-package",
+            "1.2.3",
+            "/project/node_modules/fixture-package",
+            manifest,
+            &["import"],
+            exports,
+            &[("run", ClaimDomain::Creates)],
+            &|_| ValueShape::Plain,
+        );
+        let schedule = closing.probe_gate_schedule().unwrap();
+        assert_eq!(
+            schedule.gates().len(),
+            1,
+            "one proposed closed domain must schedule exactly one mandatory veto"
+        );
+        assert!(matches!(
+            schedule.gates()[0].subject().path,
+            solid_reactive_ir::contract_semantics::SemanticClaimPath::Domain(ClaimPath::Call(
+                ClaimDomain::Creates
+            ))
+        ));
+        assert!(
+            closing
+                .demand_graph()
+                .demands()
+                .iter()
+                .any(|demand| demand.family() == super::ProofFamily::DomainExhaustiveness),
+            "a closure candidate must demand the Type Facts domain census"
+        );
+
+        // The demand family reaches finalization now, so the refusal is the
+        // *probe* one rather than an unsupported-demand one, and it is the
+        // absence of a harness configuration that produces it.
+        let pin = super::TypeFactsProducerPin::new(
+            "/nonexistent/solid-typefacts",
+            format!("sha256:{:064x}", 0),
+            format!("sha256:{:064x}", 0),
+        )
+        .unwrap();
+        let error = super::finalization::authenticate_probe_gates(&closing, None, &pin)
+            .expect_err("a nonempty veto set without a harness must refuse");
+        assert!(
+            matches!(
+                error,
+                super::Policy2FinalizationError::ProbeAuthorityRequired
+            ),
+            "unexpected refusal: {error}"
+        );
+    }
+
+    /// A claim set for `export` proposing exactly the domains `closed` pairs
+    /// with it as complete-and-empty. `KnowledgeSet::Complete(vec![])` is the
+    /// "this export does none of these, ever" proposal; the certifier
+    /// withdraws it into a closure candidate and schedules its mandatory veto.
+    ///
+    /// Pairs, not a flat list, because a package's other exports must be able
+    /// to stay open: an export census is total, so a tracer that probes one
+    /// claim still has to declare every sibling export.
+    fn closed_call_claims(export: &str, closed: &[(&str, ClaimDomain)]) -> CallClaims {
+        let mut claims = CallClaims::default();
+        for (_, domain) in closed.iter().filter(|(named, _)| *named == export) {
+            let complete = KnowledgeSet::Complete(Vec::new());
+            match domain {
+                ClaimDomain::Reads => claims.reads = complete,
+                ClaimDomain::Writes => claims.writes = complete,
+                ClaimDomain::Creates => claims.creates = complete,
+                ClaimDomain::Invalidates => claims.invalidates = complete,
+                ClaimDomain::Throws => claims.throws = complete,
+                ClaimDomain::Returns => claims.returns = complete,
+                ClaimDomain::Cleanups => claims.cleanups = complete,
+                ClaimDomain::Disposals => claims.disposals = complete,
+                ClaimDomain::Callbacks => {
+                    claims.callbacks = KnowledgeSet::Complete(Vec::new());
+                }
+            }
+        }
+        claims
+    }
+
     /// One export's name, its runtime and declaration module (package-relative
     /// path plus bytes), and the installed root of the package that owns them —
     /// a dependency's root when the export is re-exported across packages.
@@ -5103,6 +5269,38 @@ mod tests {
         .unwrap()
     }
 
+    /// As `plan_for_test_package`, but every export additionally proposes the
+    /// named call domains *closed and empty* — the shape that makes the
+    /// certifier withdraw a closure candidate and schedule a mandatory probe
+    /// veto for it.
+    #[expect(clippy::too_many_arguments, reason = "exact resolution inputs")]
+    fn plan_for_test_package_closing(
+        archive: &PublishedArchive,
+        name: &str,
+        version: &str,
+        root: &str,
+        manifest: &[u8],
+        conditions: &[&str],
+        exports: &[TestExportBinding<'_>],
+        closed_domains: &[(&str, ClaimDomain)],
+        shape: &dyn Fn(&str) -> ValueShape,
+    ) -> CertificationPlan {
+        try_plan_closing_for_test_package_from_importer(
+            archive,
+            name,
+            version,
+            root,
+            manifest,
+            conditions,
+            exports,
+            &[],
+            "/project/src/app.ts",
+            closed_domains,
+            shape,
+        )
+        .unwrap()
+    }
+
     #[expect(clippy::too_many_arguments, reason = "exact resolution inputs")]
     fn try_plan_for_test_package_from_importer(
         archive: &PublishedArchive,
@@ -5114,6 +5312,35 @@ mod tests {
         exports: &[TestExportBinding<'_>],
         dependencies: &[&CertificationPlan],
         importer: &str,
+    ) -> Result<CertificationPlan, super::CertificationPlanningError> {
+        try_plan_closing_for_test_package_from_importer(
+            archive,
+            name,
+            version,
+            root,
+            manifest,
+            conditions,
+            exports,
+            dependencies,
+            importer,
+            &[],
+            &|_| ValueShape::Plain,
+        )
+    }
+
+    #[expect(clippy::too_many_arguments, reason = "exact resolution inputs")]
+    fn try_plan_closing_for_test_package_from_importer(
+        archive: &PublishedArchive,
+        name: &str,
+        version: &str,
+        root: &str,
+        manifest: &[u8],
+        conditions: &[&str],
+        exports: &[TestExportBinding<'_>],
+        dependencies: &[&CertificationPlan],
+        importer: &str,
+        closed_domains: &[(&str, ClaimDomain)],
+        shape: &dyn Fn(&str) -> ValueShape,
     ) -> Result<CertificationPlan, super::CertificationPlanningError> {
         let snapshot =
             ArtifactSnapshot::from_published(archive, SnapshotLimits::policy_2()).unwrap();
@@ -5219,8 +5446,11 @@ mod tests {
         };
         let (package, mut artifact_case) =
             crate::artifact_resolution::proposal_identity(&resolved).unwrap();
-        // Every export claims a plain value shape, which is what inventories
-        // the `recursive-value-shape` demand the witness harness answers.
+        // Each export's proposed value shape is chosen per export name: the
+        // plain default is what inventories the `recursive-value-shape` demand
+        // the witness harness answers, and a tracer that closes a value domain
+        // has to be able to give one export a closed shape while its siblings
+        // stay open.
         artifact_case.exports = exports
             .iter()
             .map(|(export, _, _, _)| {
@@ -5239,10 +5469,10 @@ mod tests {
                                 export_name: (*export).to_owned(),
                             },
                         },
-                        shape: ValueShape::Plain,
+                        shape: shape(export),
                         stability: StabilityKnowledge::Unknown,
                         call: CallSemantics::new(
-                            CallClaims::default(),
+                            closed_call_claims(export, closed_domains),
                             Vec::new(),
                             Vec::new(),
                             Vec::new(),
@@ -7537,6 +7767,909 @@ export const value = phantom;
             panic!("the authenticated declaration must prove the callable root: {error}");
         }
     }
+    // ---------------------------------------------------------------------
+    // Probe-gate tracer: fixtures/package-contracts/closed-domain-probe-gate
+    // ---------------------------------------------------------------------
+
+    fn repository_root() -> std::path::PathBuf {
+        std::fs::canonicalize(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.."))
+            .expect("the crate manifest sits inside the repository")
+    }
+
+    fn tracer_fixture() -> std::path::PathBuf {
+        repository_root().join("fixtures/package-contracts/closed-domain-probe-gate")
+    }
+
+    struct TracerScratch(std::path::PathBuf);
+
+    impl TracerScratch {
+        fn new(label: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "solid-checker-probe-tracer-{label}-{}-{:?}",
+                std::process::id(),
+                std::thread::current().id()
+            ));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(&path).expect("tracer scratch directory");
+            Self(path)
+        }
+
+        fn path(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TracerScratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// A harness root holding the repository's real harness bytes plus the
+    /// build-provenance stamp, assembled in a scratch directory.
+    ///
+    /// The bytes are the real ones, so the manifest digest is the real one.
+    /// Copying rather than pointing at the worktree keeps the test from
+    /// depending on — or writing — the generated stamp that
+    /// `make build-checker-debug` produces in the repository itself.
+    fn tracer_harness_root(scratch: &std::path::Path) -> (std::path::PathBuf, String) {
+        let source = repository_root();
+        let root = scratch.join("harness-root");
+        for name in super::probe_harness::HARNESS_MANIFEST_FILES {
+            let target = root.join(name);
+            std::fs::create_dir_all(target.parent().expect("manifest members are nested"))
+                .expect("harness root parent");
+            std::fs::copy(source.join(name), &target)
+                .unwrap_or_else(|error| panic!("copy harness member {name}: {error}"));
+        }
+        let manifest = super::probe_harness::harness_source_manifest(&root)
+            .expect("the copied harness image has a manifest");
+        let stamp = serde_json::json!({
+            "format": 1,
+            "sourceDigest": manifest
+                .strip_prefix("sha256:")
+                .expect("canonical manifest digest"),
+            "toolchain": "tracer",
+            "buildId": "tracer",
+        });
+        std::fs::write(
+            root.join(super::probe_harness::HARNESS_STAMP),
+            format!("{stamp}\n"),
+        )
+        .expect("write the harness stamp");
+        (root, manifest)
+    }
+
+    /// The Node executable the harness is pinned to, by real path. `None` when
+    /// no Node runtime is installed, which is the only reason this tracer does
+    /// not run.
+    ///
+    /// Under `SOLID_CHECKER_EXPECT_PROBE_PINS=1` — which `scripts/verify.sh`
+    /// sets — that absence is a loud failure instead. Silence here has the same
+    /// consequence as a binary compiled without the pins: every probe-gate
+    /// tracer returns early and the whole binding leaves the gate while the run
+    /// stays green. `probe_harness::tests::a_build_that_must_carry_probe_pins_carries_them`
+    /// closes the compile-time half; this closes the runtime half.
+    fn tracer_node() -> Option<(std::path::PathBuf, String)> {
+        let resolved = resolve_tracer_node();
+        assert!(
+            resolved.is_some()
+                || std::env::var("SOLID_CHECKER_EXPECT_PROBE_PINS").as_deref() != Ok("1"),
+            "SOLID_CHECKER_EXPECT_PROBE_PINS=1, but no Node executable could be resolved for the \
+             probe-gate tracer (SOLID_CHECKER_PROBE_NODE, PROBE_NODE, else `node` on PATH): \
+             every tracer \
+             below would skip and the harness binding would leave the gate silently"
+        );
+        resolved
+    }
+
+    fn resolve_tracer_node() -> Option<(std::path::PathBuf, String)> {
+        // `PROBE_NODE` is the name the Makefile and `scripts/verify.sh` use for
+        // the executable whose bytes they pinned, and both export it. Honouring
+        // it here keeps the tracer from pinning a *different* `node` than the
+        // build did, which would silently skip the production-path assertion.
+        let configured =
+            std::env::var_os("SOLID_CHECKER_PROBE_NODE").or_else(|| std::env::var_os("PROBE_NODE"));
+        let candidate = match configured {
+            Some(value) => std::path::PathBuf::from(value),
+            None => {
+                let output = std::process::Command::new("/bin/sh")
+                    .arg("-c")
+                    .arg("command -v node")
+                    .output()
+                    .ok()?;
+                if !output.status.success() {
+                    eprintln!("probe-gate tracer skipped: no node runtime on PATH");
+                    return None;
+                }
+                std::path::PathBuf::from(String::from_utf8_lossy(&output.stdout).trim())
+            }
+        };
+        let real = std::fs::canonicalize(candidate).ok()?;
+        let bytes = std::fs::read(&real).ok()?;
+        Some((real, format!("sha256:{:x}", Sha256::digest(bytes))))
+    }
+
+    /// A recipe corpus addressed by the gate's own semantic claim id.
+    ///
+    /// Claim ids are content digests, so an operator learns them from the
+    /// `MissingRecipe` refusal rather than writing them down; deriving them
+    /// from the schedule here is the same move.
+    fn tracer_corpus(
+        scratch: &std::path::Path,
+        label: &str,
+        entries: &[(&str, &str)],
+    ) -> std::path::PathBuf {
+        let fixture = tracer_fixture();
+        let corpus = scratch.join(format!("corpus-{label}"));
+        std::fs::create_dir_all(&corpus).expect("corpus directory");
+        let recipes = entries
+            .iter()
+            .map(|(claim_id, module)| {
+                std::fs::copy(
+                    fixture.join("probe-recipes").join(module),
+                    corpus.join(module),
+                )
+                .unwrap_or_else(|error| panic!("copy recipe {module}: {error}"));
+                serde_json::json!({
+                    "claimId": claim_id,
+                    "module": module,
+                    // Every recipe in this corpus reaches its package with a
+                    // static ESM import, and says so: the condition set Node
+                    // applies to an `import` is not the one it applies to a
+                    // `require`, so the kind is what the resolution check is
+                    // taken against.
+                    "importKind": "esm",
+                    "scenario": "operation",
+                    // The marker a recipe emits when it observes the package
+                    // contradicting its own declaration. Not seeing it in a
+                    // complete run is a clean pass of the veto and nothing
+                    // more.
+                    "expectedEvent": { "marker": "undeclared-alternative", "class": "callback" },
+                    "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+                    "coverageLimitations": [
+                        "one Node build, one artifact case, no OS-level write denial",
+                        // The gate ran against exactly one file: the runtime
+                        // target the artifact case names, which the harness
+                        // requires the interpreter to have selected. It says
+                        // nothing about any *other* conditional target of the
+                        // same export — a `module-sync`, `require`, `browser`,
+                        // or `development` branch is a different artifact case
+                        // and needs its own gate.
+                        "one export-condition selection: sibling conditional targets are unprobed",
+                        // A limitation, and a refusal direction rather than a
+                        // pass: the worker freezes Object/Array/Function
+                        // prototypes before importing the recipe, so a
+                        // *benign* package whose top level assigns to one in
+                        // strict mode (`obj.toString = fn`) throws, the run
+                        // fails, and the gate is refused. A closure that could
+                        // have certified does not; nothing certifies that
+                        // otherwise would not.
+                        "frozen intrinsic prototypes can refuse a benign package that writes to one",
+                    ],
+                })
+            })
+            .collect::<Vec<_>>();
+        let manifest = serde_json::json!({
+            "format": "solid-checker-probe-recipe-corpus",
+            "schemaVersion": 1,
+            "policy": {
+                "repeatRuns": 2,
+                "timeoutMillis": 60000,
+                "maxMicrotaskTurns": 4,
+                "maxMacrotaskTurns": 1,
+                "maxEvents": 64,
+            },
+            "recipes": recipes,
+        });
+        std::fs::write(
+            corpus.join("recipes.json"),
+            format!(
+                "{}\n",
+                serde_json::to_string_pretty(&manifest).expect("corpus manifest")
+            ),
+        )
+        .expect("write the corpus manifest");
+        corpus
+    }
+
+    /// The proposed shape of the fixture's exports.
+    ///
+    /// `entry` and `driftedEntry` are declared `(() => void) | undefined`, so
+    /// the export whose closure is under test carries a *complete*
+    /// two-alternative choice: that is the shape the certifier withdraws into a
+    /// `Value{root: Export, path: [], domain: ChoiceAlternatives}` closure
+    /// candidate.
+    ///
+    /// Two details of the union are load-bearing, both learned from the
+    /// producer's own census rather than guessed. The alternatives have to be
+    /// distinguishable, because the model refuses a choice that repeats one
+    /// alternative and two string literals are the same shape to it. And
+    /// neither may be a string: the producer reports a string alternative as
+    /// locally open (`openIndex`, from `String`'s numeric index signature), so
+    /// a union containing one can never satisfy the closure premise. The order
+    /// is the producer's — `undefined` is alternative 0, the callable is 1 —
+    /// because the per-alternative `recursive-value-shape` demands this shape
+    /// inventories are looked up by alternative index.
+    ///
+    /// The kinds are load-bearing too: the closure witness compares each
+    /// alternative index against the callability the census observed there, so
+    /// `Plain` (non-callable) and `Callable` are the two kinds it can decide
+    /// and any other refuses. `tracer_misdescribed_union` is that case.
+    ///
+    /// Its sibling stays open, and the two functions are callable, because a
+    /// proposal has to say what the declarations say.
+    fn tracer_declared_union() -> ValueShape {
+        ValueShape::Choice(KnowledgeSet::Complete(vec![
+            ValueShape::Plain,
+            ValueShape::Callable,
+        ]))
+    }
+
+    /// The same two-alternative union with alternative 0's *kind* misdescribed:
+    /// an object of unknown properties where the census observed a
+    /// non-callable value.
+    ///
+    /// Three properties make it the isolating case. Its property set is open,
+    /// so it proposes no closed domain of its own and the schedule still holds
+    /// exactly the one veto under test. It inventories no child path, so no
+    /// demand refuses for an unaddressable path first;
+    /// and it sorts before `Callable` under the model's canonical ordering, so
+    /// it really occupies alternative 0 — `normalize_knowledge` sorts every
+    /// knowledge set, which is why the declared union is written
+    /// `[Plain, Callable]` and not the other way round. Its
+    /// `DemandedCallability` is `Unknown`, which is the whole point. The
+    /// cardinality comparison accepts it (two alternatives, two observed) and
+    /// the sibling per-index `recursive-value-shape` demand asserts nothing
+    /// about it, so only the per-index kind comparison refuses it.
+    fn tracer_misdescribed_union() -> ValueShape {
+        ValueShape::Choice(KnowledgeSet::Complete(vec![
+            ValueShape::Object(KnowledgeSet::Unknown),
+            ValueShape::Callable,
+        ]))
+    }
+
+    fn tracer_fixture_shape(closed: &str, name: &str, closed_shape: &ValueShape) -> ValueShape {
+        if name == closed {
+            return closed_shape.clone();
+        }
+        match name {
+            "run" | "runCreatingOwner" => ValueShape::Callable,
+            _ => ValueShape::Unknown,
+        }
+    }
+
+    /// The fixture's faithful package as one published artifact, plus a plan
+    /// over its total export census.
+    ///
+    /// The census is total: every name the runtime and declarations agree on
+    /// has to be declared, even though only one of them proposes a closed
+    /// domain. That is the point of the fixture — each probed export has a
+    /// sibling TypeScript cannot tell it apart from, so both must be present
+    /// for the claim under test to be the interesting one.
+    fn tracer_plan(
+        closed_export: &str,
+        closed_domains: &[(&str, ClaimDomain)],
+    ) -> CertificationPlan {
+        tracer_plan_with_closed_shape(closed_export, closed_domains, tracer_declared_union())
+    }
+
+    fn tracer_plan_with_closed_shape(
+        closed_export: &str,
+        closed_domains: &[(&str, ClaimDomain)],
+        closed_shape: ValueShape,
+    ) -> CertificationPlan {
+        let fixture = tracer_fixture();
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let archive = published_archive_for(
+            "closed-domain-probe-gate-package",
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let root = "/project/node_modules/closed-domain-probe-gate-package";
+        let bindings = ["driftedEntry", "entry", "run", "runCreatingOwner"].map(|name| {
+            (
+                name,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        let closed = closed_export.to_owned();
+        plan_for_test_package_closing(
+            &archive,
+            "closed-domain-probe-gate-package",
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            closed_domains,
+            &move |name| tracer_fixture_shape(&closed, name, &closed_shape),
+        )
+    }
+
+    /// The plan whose only export proposes the closed value domain this tracer
+    /// certifies: the root choice alternatives of `export`.
+    fn tracer_value_closure_plan(export: &str) -> CertificationPlan {
+        tracer_plan(export, &[])
+    }
+
+    /// The plan proposing `creates: []` for `export` — a behavioral call domain
+    /// no declaration census decides.
+    fn tracer_creates_closure_plan(export: &str) -> CertificationPlan {
+        tracer_plan("", &[(export, ClaimDomain::Creates)])
+    }
+
+    /// The fixture's declarations and runtime, republished under an `exports`
+    /// map that answers **`module-sync` before `import`**, with a different
+    /// file behind each.
+    ///
+    /// This is the shape that made the recorded condition set a false pass.
+    /// The artifact case is selected under the requested conditions plus
+    /// `default`, so `module-sync` is not active and `./index.js` is what the
+    /// Type Facts witness reads — while the pinned interpreter *does* apply
+    /// `module-sync` and would hand the recipe `./sync.js`, whose `entry` is a
+    /// number the declaration excludes. Nothing about the proposal, the
+    /// witness, or the recipe differs from the certifying row; only which file
+    /// runs does.
+    fn tracer_condition_drift_plan() -> CertificationPlan {
+        let fixture = tracer_fixture();
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        // A genuinely different runtime behind the `module-sync` target, so the
+        // refusal protects a real difference rather than two spellings of one
+        // file: this one contradicts the declaration `entry` is closed against.
+        let drifted = b"export const entry = 42;\nexport const driftedEntry = 42;\n\
+                        export function run() {}\nexport function runCreatingOwner() {}\n"
+            .to_vec();
+        let name = "closed-domain-probe-gate-condition-drift";
+        let manifest = format!(
+            "{{\n  \"name\": \"{name}\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \
+             \"exports\": {{\n    \".\": {{\n      \"types\": \"./index.d.ts\",\n      \
+             \"module-sync\": \"./sync.js\",\n      \"import\": \"./index.js\",\n      \
+             \"default\": \"./index.js\"\n    }}\n  }}\n}}\n"
+        )
+        .into_bytes();
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/sync.js", drifted.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let root = "/project/node_modules/closed-domain-probe-gate-condition-drift";
+        let bindings = ["driftedEntry", "entry", "run", "runCreatingOwner"].map(|export| {
+            (
+                export,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        plan_for_test_package_closing(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[],
+            &move |export| tracer_fixture_shape("entry", export, &tracer_declared_union()),
+        )
+    }
+
+    /// The tampering package as its own artifact, proposing the same closed
+    /// root choice-alternatives domain for `entry`.
+    fn tracer_tampering_plan() -> CertificationPlan {
+        let fixture = tracer_fixture().join("tampering-package");
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let archive = published_archive_for(
+            "closed-domain-probe-gate-tampering-package",
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let root = "/project/node_modules/closed-domain-probe-gate-tampering-package";
+        plan_for_test_package_closing(
+            &archive,
+            "closed-domain-probe-gate-tampering-package",
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &[(
+                "entry",
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )],
+            &[],
+            &move |name| tracer_fixture_shape("entry", name, &tracer_declared_union()),
+        )
+    }
+
+    /// A producer pin whose image the harness watches across the run. The
+    /// negative cases never launch it, so the running test binary is an
+    /// honest stand-in when no producer is configured.
+    fn tracer_producer_pin() -> super::TypeFactsProducerPin {
+        pinned_producer_for_test().unwrap_or_else(|| {
+            let executable = std::env::current_exe().expect("the test binary has a path");
+            let bytes = std::fs::read(&executable).expect("read the test binary");
+            super::TypeFactsProducerPin::new(
+                executable,
+                format!("sha256:{:x}", Sha256::digest(bytes)),
+                format!("sha256:{:064x}", 0),
+            )
+            .expect("a stand-in producer pin")
+        })
+    }
+
+    fn tracer_configuration(
+        scratch: &std::path::Path,
+        label: &str,
+        entries: &[(&str, &str)],
+    ) -> Option<super::ProbeHarnessConfiguration> {
+        let (node, node_digest) = tracer_node()?;
+        let (harness_root, harness_digest) = tracer_harness_root(scratch);
+        let corpus = tracer_corpus(scratch, label, entries);
+        Some(
+            super::ProbeHarnessConfiguration::with_test_pin(
+                harness_root,
+                node,
+                corpus,
+                &harness_digest,
+                &node_digest,
+            )
+            .expect("the tracer harness configuration is absolute"),
+        )
+    }
+
+    /// One whole certification transaction: Type Facts witnesses first, then
+    /// the mandatory vetoes, then finalization and receipt issuance.
+    fn tracer_certify(
+        plan: &CertificationPlan,
+        pin: &super::TypeFactsProducerPin,
+        probes: &super::ProbeHarnessConfiguration,
+    ) -> Result<super::FinalizedPolicy2Contract, super::Policy2FinalizationError> {
+        let issuer = ConfiguredReceiptIssuer::persistent_local("probe-gate-tracer", [23; 32])
+            .expect("a local issuer");
+        let proposal = crate::contract_document::encode(
+            &plan.selected_candidate,
+            &crate::contract_document::SidecarDigests::default(),
+            false,
+        )
+        .expect("encode the candidate");
+        plan.certify_value_only(&proposal, pin, &issuer, 1, Some(probes))
+    }
+
+    /// A recipe that observes no contradiction lets the veto pass, and the
+    /// receipt then binds a *nonempty* probe-gate root: the gate ids plus the
+    /// harness image, Node runtime, sandbox policy, runtime-probe plan, and
+    /// recipe corpus that produced the verdict.
+    ///
+    /// Passing is not proof. The `DomainExhaustiveness` witness acquired from
+    /// the pinned producer is what closes the domain — the producer enumerated
+    /// the exported value's two alternatives and observed both exhaustively,
+    /// and the verifier required the proposal's enumeration to be that one.
+    /// This only proves nothing contradicted it.
+    #[test]
+    fn the_probe_gate_tracer_certifies_a_closed_domain_with_a_nonempty_gate_root() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("clean");
+        let plan = tracer_value_closure_plan("entry");
+        let schedule = plan.probe_gate_schedule().unwrap();
+        assert_eq!(schedule.gates().len(), 1);
+        assert!(
+            matches!(
+                &schedule.gates()[0].subject().path,
+                solid_reactive_ir::contract_semantics::SemanticClaimPath::Domain(
+                    ClaimPath::Value {
+                        root: solid_reactive_ir::contract_semantics::ValueRoot::Export,
+                        domain:
+                            solid_reactive_ir::contract_semantics::ValueClaimDomain::ChoiceAlternatives,
+                        ..
+                    }
+                )
+            ),
+            "the closed domain under test is the exported value's root alternatives"
+        );
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        let Some(configuration) = tracer_configuration(
+            scratch.path(),
+            "clean",
+            &[(claim_id.as_str(), "declared-alternatives.mjs")],
+        ) else {
+            return;
+        };
+
+        let finalized = tracer_certify(&plan, &pin, &configuration)
+            .expect("a clean veto and a complete alternative census must certify");
+
+        let bindings = finalized.bindings();
+        assert_ne!(
+            bindings.probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan),
+            "a launched veto must not reuse the canonical empty authority root"
+        );
+        assert!(bindings.probe_gate_root.starts_with("sha256:"));
+        // The receipt authenticated inside finalization; re-authenticating the
+        // same bytes field-for-field is what ordinary discovery does.
+        super::authenticate_policy2_receipt(
+            finalized.canonical_main(),
+            finalized.receipt(),
+            bindings,
+            super::Policy2ReceiptProvenance::PersistentLocal {
+                trust_store: finalized.trust_configuration().trust_store(),
+                scope: "probe-gate-tracer",
+            },
+        )
+        .expect("the issued receipt must authenticate against its own bindings");
+    }
+
+    /// The worker's realm really is frozen when a recipe — and therefore the
+    /// package — is imported.
+    ///
+    /// The `toJSON` laundering attack has two independent answers, and each
+    /// hides the other from any test that attacks it: with the freeze in place
+    /// the package's `defineProperty` throws, so the laundering arm never runs;
+    /// without it the serializer ignores `toJSON` anyway. A frame has no
+    /// prototype chain, so no attack can launder one while the freeze holds,
+    /// which means the two halves cannot both be exercised by one attack. So
+    /// each is pinned separately: the serializer by `a frame is serialized
+    /// without consulting toJSON or any prototype`
+    /// (`packages/cli/test/contract-workflow.test.mjs`), and the freeze here.
+    ///
+    /// `frozen-intrinsics.mjs` reports `Object.isFrozen` for all three
+    /// intrinsic prototypes at recipe-import time, emitting the gate's
+    /// contradiction marker when any of them is thawed. Removing a `freeze`
+    /// line from `contract-probe-worker.mjs` therefore turns this certification
+    /// into a veto refusal.
+    #[test]
+    fn the_probe_gate_tracer_observes_frozen_intrinsics_in_the_workers_realm() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("frozen-intrinsics");
+        let plan = tracer_value_closure_plan("entry");
+        let schedule = plan.probe_gate_schedule().unwrap();
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        let Some(configuration) = tracer_configuration(
+            scratch.path(),
+            "frozen-intrinsics",
+            &[(claim_id.as_str(), "frozen-intrinsics.mjs")],
+        ) else {
+            return;
+        };
+        tracer_certify(&plan, &pin, &configuration).expect(
+            "the worker must freeze Object.prototype, Array.prototype and Function.prototype \
+             before importing the recipe; a thawed prototype is emitted as the gate's \
+             contradiction marker and refuses this row",
+        );
+    }
+
+    /// The negative half: the same fixture's sibling export has a
+    /// byte-identical declaration, so its closure witness is identical, and its
+    /// runtime ships a value the declaration excludes. The recipe observes the
+    /// package contradicting itself and the veto refuses the row.
+    ///
+    /// This runs the whole transaction rather than the veto alone, which is
+    /// what makes it a statement about certification: the witness was acquired
+    /// and would have discharged the demand, and the row is still refused.
+    #[test]
+    fn the_probe_gate_tracer_refuses_a_contradicted_closure() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("contradiction");
+        let plan = tracer_value_closure_plan("driftedEntry");
+        let schedule = plan.probe_gate_schedule().unwrap();
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        let Some(configuration) = tracer_configuration(
+            scratch.path(),
+            "contradiction",
+            &[(claim_id.as_str(), "drifted-alternative.mjs")],
+        ) else {
+            return;
+        };
+        let Err(error) = tracer_certify(&plan, &pin, &configuration) else {
+            panic!("an observed publisher defect must veto the proposed closure");
+        };
+        assert!(
+            matches!(
+                &error,
+                super::Policy2FinalizationError::Probe(super::ProbeGateError::Contradiction {
+                    semantic_claim_id,
+                    ..
+                }) if *semantic_claim_id == claim_id
+            ),
+            "unexpected refusal: {error}"
+        );
+    }
+
+    /// A package that patches the worker's realm cannot launder the transcript.
+    ///
+    /// Its top level replaces `structuredClone`, `JSON.stringify`,
+    /// `process.stdout.write`, and `Object.keys` before a single event is
+    /// recorded, and its runtime contradicts its own declaration. The
+    /// contradiction is still reported, so the veto still fires.
+    #[test]
+    fn the_probe_gate_tracer_refuses_a_package_that_patches_the_worker_realm() {
+        let scratch = TracerScratch::new("patched-primordials");
+        let plan = tracer_tampering_plan();
+        let schedule = plan.probe_gate_schedule().unwrap();
+        assert_eq!(schedule.gates().len(), 1);
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        let Some(configuration) = tracer_configuration(
+            scratch.path(),
+            "patched-primordials",
+            &[(claim_id.as_str(), "patched-primordials.mjs")],
+        ) else {
+            return;
+        };
+        let error = super::finalization::authenticate_probe_gates(
+            &plan,
+            Some(&configuration),
+            &tracer_producer_pin(),
+        )
+        .expect_err("a realm-patching package must never pass its own veto");
+        assert!(
+            matches!(
+                &error,
+                super::Policy2FinalizationError::Probe(super::ProbeGateError::Contradiction {
+                    semantic_claim_id,
+                    ..
+                }) if *semantic_claim_id == claim_id
+            ),
+            "the tampering must be vetoed on the observed contradiction, not merely fail: {error}"
+        );
+    }
+
+    /// A behavioral call domain refuses at *witness acquisition*, before any
+    /// probe runs, and no recipe can change that.
+    ///
+    /// `runCreatingOwner` really does create a reactive owner, so `creates: []`
+    /// is false of it — and the recipe supplied here observes nothing to the
+    /// contrary, which is exactly the trap. The declaration census that
+    /// discharges `DomainExhaustiveness` says nothing about ownership, so the
+    /// demand is unsupported and the row never reaches the gate whose finite
+    /// silence would otherwise have been the only discriminator.
+    #[test]
+    fn the_probe_gate_tracer_refuses_a_behavioral_call_domain_at_witness_acquisition() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("creates");
+        let plan = tracer_creates_closure_plan("runCreatingOwner");
+        let schedule = plan.probe_gate_schedule().unwrap();
+        assert_eq!(
+            schedule.gates().len(),
+            1,
+            "a proposed closed call domain still schedules its mandatory veto"
+        );
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        let Some(configuration) = tracer_configuration(
+            scratch.path(),
+            "creates",
+            &[(claim_id.as_str(), "calls-only.mjs")],
+        ) else {
+            return;
+        };
+        let Err(error) = tracer_certify(&plan, &pin, &configuration) else {
+            panic!("a behavioral call domain has no declaration-census premise");
+        };
+        let rendered = error.to_string();
+        assert!(
+            matches!(&error, super::Policy2FinalizationError::TypeFacts(_))
+                && rendered.contains("is unsupported")
+                && rendered.contains("implementation-census premise required")
+                && rendered.contains("creates call domain"),
+            "the refusal must be an unsupported Type Facts demand naming the missing \
+             implementation-census premise: {rendered}"
+        );
+    }
+
+    /// A closed enumeration whose *kinds* the census cannot classify refuses,
+    /// even though its cardinality matches exactly.
+    ///
+    /// This is the half a count comparison does not cover. The proposal names
+    /// two alternatives and the producer observed two, so the counts agree;
+    /// alternative 0 is proposed as a `RefApplication` where the census
+    /// observed a non-callable value, and the sibling per-index
+    /// `recursive-value-shape` demand carries `DemandedCallability::Unknown`
+    /// for that kind, so nothing else in the transaction contradicts it. The
+    /// refusal comes from the closure witness itself, at witness acquisition,
+    /// before any probe runs.
+    #[test]
+    fn the_probe_gate_tracer_refuses_an_alternative_kind_the_census_cannot_classify() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("misdescribed");
+        let plan = tracer_plan_with_closed_shape("entry", &[], tracer_misdescribed_union());
+        let schedule = plan.probe_gate_schedule().unwrap();
+        assert_eq!(
+            schedule.gates().len(),
+            1,
+            "a misdescribed closed domain still schedules its mandatory veto"
+        );
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        let Some(configuration) = tracer_configuration(
+            scratch.path(),
+            "misdescribed",
+            &[(claim_id.as_str(), "declared-alternatives.mjs")],
+        ) else {
+            return;
+        };
+        let Err(error) = tracer_certify(&plan, &pin, &configuration) else {
+            panic!("an alternative the census cannot classify has no closure premise");
+        };
+        let rendered = error.to_string();
+        assert!(
+            matches!(&error, super::Policy2FinalizationError::TypeFacts(_))
+                && rendered.contains("alternative-kind premise required")
+                && rendered.contains("object"),
+            "the refusal must name the missing per-index kind premise: {rendered}"
+        );
+    }
+
+    /// A corpus that does not address a scheduled gate refuses it by name.
+    /// This is also how an operator discovers the claim id to author against.
+    #[test]
+    fn the_probe_gate_tracer_refuses_a_gate_with_no_recipe() {
+        let scratch = TracerScratch::new("missing");
+        let plan = tracer_value_closure_plan("entry");
+        let claim_id = plan.probe_gate_schedule().unwrap().gates()[0]
+            .semantic_claim_id()
+            .to_owned();
+        let Some(configuration) = tracer_configuration(scratch.path(), "missing", &[]) else {
+            return;
+        };
+        let error = super::finalization::authenticate_probe_gates(
+            &plan,
+            Some(&configuration),
+            &tracer_producer_pin(),
+        )
+        .expect_err("a gate with no recipe must refuse");
+        let rendered = error.to_string();
+        assert!(
+            rendered.contains("has no recipe for semantic claim") && rendered.contains(&claim_id),
+            "the refusal must name the claim an operator has to author: {rendered}"
+        );
+    }
+
+    /// A gate whose interpreter would not select the certified artifact case
+    /// refuses **before a launch happens**.
+    ///
+    /// The row is otherwise the certifying one: the same declarations, the same
+    /// closed proposal, the same recipe. Its `exports` merely answers
+    /// `module-sync` before `import`, and the pinned interpreter applies
+    /// `module-sync` while the artifact case was selected without it — so the
+    /// probe would have run against `./sync.js` while the witness read
+    /// `./index.js`. Before this check that was a false *pass*: `sync.js`
+    /// contradicts the declaration, but the gate never saw it, because the
+    /// recipe imported whatever the interpreter chose and reported no
+    /// contradiction about the file that was certified.
+    ///
+    /// Rust replays its own resolution under the condition set the interpreter
+    /// reported, so the refusal comes at planning. The run-frame echo
+    /// (`probe_harness::verify_reported_resolution`) is the independent half,
+    /// and `probe_harness::tests::the_pinned_interpreter_can_select_a_target_the_artifact_case_did_not`
+    /// measures the interpreter's own answers directly.
+    #[test]
+    fn the_probe_gate_tracer_refuses_when_the_interpreter_would_select_another_target() {
+        let scratch = TracerScratch::new("condition-drift");
+        let plan = tracer_condition_drift_plan();
+        let schedule = plan.probe_gate_schedule().unwrap();
+        assert_eq!(schedule.gates().len(), 1);
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        let Some(configuration) = tracer_configuration(
+            scratch.path(),
+            "condition-drift",
+            &[(claim_id.as_str(), "declared-alternatives.mjs")],
+        ) else {
+            return;
+        };
+        let error = super::finalization::authenticate_probe_gates(
+            &plan,
+            Some(&configuration),
+            &tracer_producer_pin(),
+        )
+        .expect_err("a gate that cannot observe the certified artifact case must refuse");
+        let rendered = error.to_string();
+        assert!(
+            matches!(
+                &error,
+                super::Policy2FinalizationError::ProbeHarness(
+                    super::ProbeHarnessError::ConditionMismatch(_)
+                )
+            ) && rendered.contains("module-sync")
+                && rendered.contains("sync.js")
+                && rendered.contains("index.js"),
+            "the refusal must name the conditions it applies and both targets: {rendered}"
+        );
+    }
+
+    /// The same clean pass, driven through the **production** path: this
+    /// build's own compiled-in pins, `ProbeHarnessConfiguration::new`, the
+    /// repository's real harness root, and the stamp the build wrote beside
+    /// the CLI. Nothing here is a test-supplied digest.
+    ///
+    /// It runs only on a build that carries the pins — `make test-rust`,
+    /// `make build-checker-debug`, and `scripts/verify.sh` produce one; a bare
+    /// `cargo test` does not, and a bare `cargo build` between them silently
+    /// drops them, because `option_env!` is part of the crate's fingerprint.
+    /// That silence used to make this assertion vacuous under `make verify`;
+    /// `probe_harness::tests::a_build_that_must_carry_probe_pins_carries_them`
+    /// is the loud canary that closes it. It also runs only when the Node
+    /// executable actually present is the one this build pinned, which is what
+    /// makes the assertion "the production path works against the image this
+    /// build describes" rather than a machine-configuration test.
+    #[test]
+    fn the_probe_gate_tracer_runs_through_the_builds_own_pins() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let Some((harness_pin, node_pin)) = super::probe_harness::configured_pin_digests() else {
+            eprintln!(
+                "probe-gate tracer skipped: this build carries no compiled-in probe pins, so it \
+                 refuses probe authority by design"
+            );
+            return;
+        };
+        let Some((node, node_digest)) = tracer_node() else {
+            return;
+        };
+        if node_digest != node_pin {
+            eprintln!(
+                "probe-gate tracer skipped: the Node executable present is not the one this \
+                 build pinned (pinned {node_pin}, present {node_digest})"
+            );
+            return;
+        }
+        let repository = repository_root();
+        let observed = super::probe_harness::harness_source_manifest(&repository)
+            .expect("the repository is a complete harness image");
+        assert_eq!(
+            observed, harness_pin,
+            "the worktree's harness bytes must be the ones this build pinned; rebuild with \
+             make build-checker-debug after touching the harness"
+        );
+
+        let scratch = TracerScratch::new("configured");
+        let plan = tracer_value_closure_plan("entry");
+        let claim_id = plan.probe_gate_schedule().unwrap().gates()[0]
+            .semantic_claim_id()
+            .to_owned();
+        let corpus = tracer_corpus(
+            scratch.path(),
+            "configured",
+            &[(claim_id.as_str(), "declared-alternatives.mjs")],
+        );
+        let configuration =
+            super::ProbeHarnessConfiguration::new(&repository, node, corpus).unwrap();
+        let batch =
+            super::finalization::authenticate_probe_gates(&plan, Some(&configuration), &pin)
+                .expect("the build's own pins must authenticate a clean veto");
+        assert_eq!(batch.gate_ids().len(), 1);
+    }
 
     #[test]
     fn published_graph_certifies_bottom_up_with_the_pinned_producer() {
@@ -7546,7 +8679,7 @@ export const value = phantom;
         let (root, leaf) = two_node_published_graph(false, false, false);
         let graph = plan_published_contract_graph(root, [leaf]).unwrap();
         let issuer = ConfiguredReceiptIssuer::persistent_local("phase21-graph", [19; 32]).unwrap();
-        let finalized = graph.certify_value_only(&pin, &issuer, 9).unwrap();
+        let finalized = graph.certify_value_only(&pin, &issuer, 9, None).unwrap();
         assert_eq!(finalized.nodes().len(), 2);
         assert_eq!(finalized.graph_root(), graph.graph_root());
         assert_ne!(

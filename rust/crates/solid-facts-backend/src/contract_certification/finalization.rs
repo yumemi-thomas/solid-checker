@@ -10,10 +10,11 @@ use thiserror::Error;
 use super::{
     AuthenticatedPolicy2Receipt, CertificationPlan, ConfiguredReceiptIssuer,
     DependencyReceiptCompositionError, Policy2ReceiptBindings, Policy2ReceiptError,
-    Policy2ReceiptProvenance, Policy2TrustConfiguration, TypeFactsCertificationError,
-    TypeFactsProducerPin, VerifiedDependencyComposition, VerifiedTypeFactsEvidence,
+    Policy2ReceiptProvenance, Policy2TrustConfiguration, ProbeHarnessConfiguration,
+    ProbeHarnessError, TypeFactsCertificationError, TypeFactsProducerPin,
+    VerifiedDependencyComposition, VerifiedProbeGateBatch, VerifiedTypeFactsEvidence,
     authenticate_policy2_receipt, issue_policy2_receipt, policy2_main_semantic_digest,
-    policy2_trust_configuration_for_issuer,
+    policy2_trust_configuration_for_issuer, probe_harness,
 };
 
 pub struct FinalizedPolicy2Contract {
@@ -51,10 +52,36 @@ impl FinalizedPolicy2Contract {
     }
 }
 
+/// Runs and authenticates every mandatory probe veto this plan derived.
+///
+/// An empty schedule authenticates on its own: the certifier walked the
+/// normalized artifact case and found no proposed closure to veto, and it is
+/// not going to launch a fake harness to say so. A nonempty schedule is
+/// executed here, inside the certification transaction and nowhere else, and
+/// authenticates only against the harness identity that actually ran it.
+pub(super) fn authenticate_probe_gates(
+    plan: &CertificationPlan,
+    probes: Option<&ProbeHarnessConfiguration>,
+    pin: &TypeFactsProducerPin,
+) -> Result<VerifiedProbeGateBatch, Policy2FinalizationError> {
+    let schedule = plan.probe_gate_schedule()?;
+    if schedule.gates().is_empty() {
+        let inspected = schedule.inspect_outcomes([])?;
+        return Ok(schedule.authenticate(inspected)?);
+    }
+    let configuration = probes.ok_or(Policy2FinalizationError::ProbeAuthorityRequired)?;
+    let (evaluation, identity) =
+        probe_harness::run_probe_gates(plan, &schedule, configuration, pin)?;
+    let outcomes = schedule.outcomes_from_evaluation(&evaluation)?;
+    let inspected = schedule.inspect_outcomes(outcomes)?;
+    Ok(schedule.authenticate_with_harness(inspected, &identity)?)
+}
+
 pub(super) fn finalize_value_only(
     plan: &CertificationPlan,
     proposal_document: &[u8],
     type_facts: &VerifiedTypeFactsEvidence,
+    probe_gates: &VerifiedProbeGateBatch,
     pin: &TypeFactsProducerPin,
     issuer: &ConfiguredReceiptIssuer,
     revocation_epoch: u64,
@@ -64,17 +91,23 @@ pub(super) fn finalize_value_only(
         proposal_document,
         Some(type_facts),
         None,
+        probe_gates,
         pin,
         issuer,
         revocation_epoch,
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one authority token per fact domain, each with no public constructor"
+)]
 pub(super) fn finalize_value_only_with_dependencies(
     plan: &CertificationPlan,
     proposal_document: &[u8],
     type_facts: Option<&VerifiedTypeFactsEvidence>,
     dependencies: Option<&VerifiedDependencyComposition>,
+    probe_gates: &VerifiedProbeGateBatch,
     pin: &TypeFactsProducerPin,
     issuer: &ConfiguredReceiptIssuer,
     revocation_epoch: u64,
@@ -93,6 +126,13 @@ pub(super) fn finalize_value_only_with_dependencies(
         ProofFamily::OperationReachability,
         ProofFamily::OperationCardinality,
         ProofFamily::RecursiveValueShape,
+        // A closed claim domain. Its witness is the Type Facts
+        // `DomainExhaustiveness` census (`type_facts::require_domain_closure`,
+        // `require_closed_value`), which is what actually proves the domain
+        // enumerates every behavior possible for this exact export. The probe
+        // gate below is only a veto over the same claim and never a substitute
+        // for that witness.
+        ProofFamily::DomainExhaustiveness,
         ProofFamily::AcceptedDependencyComposition,
     ];
     if let Some(demand) = plan
@@ -125,15 +165,13 @@ pub(super) fn finalize_value_only_with_dependencies(
                 | ProofFamily::OperationReachability
                 | ProofFamily::OperationCardinality
                 | ProofFamily::RecursiveValueShape
+                | ProofFamily::DomainExhaustiveness
         )
     });
     if requires_type_facts && type_facts.is_none() {
         return Err(Policy2FinalizationError::TypeFactsRequired);
     }
-    let probe_schedule = plan.probe_gate_schedule()?;
-    if !probe_schedule.gates().is_empty() {
-        return Err(Policy2FinalizationError::ProbeAuthorityRequired);
-    }
+    probe_gates.verify_plan(plan)?;
 
     let mut witnesses = plan.artifact_witnesses.clone();
     if let Some(type_facts) = type_facts {
@@ -223,16 +261,25 @@ pub(super) fn finalize_value_only_with_dependencies(
             )
         },
     );
-    let empty = |domain: &str| {
-        root(
-            domain,
-            [
-                proof_policy_2().digest().as_str(),
-                plan.demand_graph.root().as_str(),
-                "schedule-version:1",
-                "item-count:0",
-            ],
-        )
+    let empty = |domain: &str| empty_authority_root(plan, domain);
+    // Zero gates keeps the canonical empty authority root byte-identical, so
+    // every receipt already issued against an empty schedule stays valid. A
+    // nonempty batch binds the exact gate ids *and* the harness/runtime image
+    // that ran them: the same claim vetoed by a different Node binary or a
+    // different harness image is a different root.
+    let probe_gate_root = if probe_gates.gate_ids().is_empty() {
+        empty_probe_gate_root(plan)
+    } else {
+        let policy_digest = proof_policy_2().digest().as_str().to_owned();
+        let demand_graph_root = plan.demand_graph.root().as_str().to_owned();
+        let mut values = vec![
+            policy_digest.as_str(),
+            demand_graph_root.as_str(),
+            "schedule-version:1",
+        ];
+        values.extend(probe_gates.gate_ids().iter().map(String::as_str));
+        values.extend(probe_gates.harness_identity_fields());
+        root("probe-gate-schedule", values)
     };
     let bindings = Policy2ReceiptBindings {
         importer: plan.import_request.importer.clone(),
@@ -260,7 +307,7 @@ pub(super) fn finalize_value_only_with_dependencies(
             || empty("empty-dependency-trust-schedule"),
             |dependencies| dependencies.trust_root().into(),
         ),
-        probe_gate_root: empty("empty-probe-gate-schedule"),
+        probe_gate_root,
         closed_claims_root,
         verifier_source_digest: pin.source_manifest_sha256().to_owned(),
         verifier_build_digest: verifier_build_digest.clone(),
@@ -291,6 +338,28 @@ pub(super) fn finalize_value_only_with_dependencies(
     })
 }
 
+/// The canonical empty authority root for one adapter's schedule: domain-
+/// separated by policy digest, demand-graph root, schedule version, and a zero
+/// item count. Never a shared zero hash and never caller-supplied.
+fn empty_authority_root(plan: &CertificationPlan, domain: &str) -> String {
+    root(
+        domain,
+        [
+            proof_policy_2().digest().as_str(),
+            plan.demand_graph.root().as_str(),
+            "schedule-version:1",
+            "item-count:0",
+        ],
+    )
+}
+
+/// The root a receipt binds when the verifier itself derived an *empty* probe
+/// schedule. Shared with the tracer tests so "a launched veto does not reuse
+/// the empty root" is checkable rather than asserted by eye.
+pub(super) fn empty_probe_gate_root(plan: &CertificationPlan) -> String {
+    empty_authority_root(plan, "empty-probe-gate-schedule")
+}
+
 fn root<'a>(domain: &str, values: impl IntoIterator<Item = &'a str>) -> String {
     let mut hash = Sha256::new();
     hash.update(b"solid-checker:policy2-finalization-root:v1");
@@ -318,7 +387,9 @@ pub enum Policy2FinalizationError {
     UnexpectedDependencies,
     #[error("dependency receipts were produced by a different verifier build")]
     DependencyVerifierBuildMismatch,
-    #[error("policy-2 value-only finalization requires a bound nonempty probe schedule")]
+    #[error(
+        "policy-2 value-only finalization requires a bound harness for its nonempty probe schedule"
+    )]
     ProbeAuthorityRequired,
     #[error(
         "policy-2 finalization changed semantic identity from {planned} to {finalized}; discard evidence and replan"
@@ -332,6 +403,8 @@ pub enum Policy2FinalizationError {
     TypeFacts(#[from] TypeFactsCertificationError),
     #[error(transparent)]
     Probe(#[from] super::ProbeGateError),
+    #[error(transparent)]
+    ProbeHarness(#[from] ProbeHarnessError),
     #[error(transparent)]
     DependencyComposition(#[from] DependencyReceiptCompositionError),
     #[error(transparent)]

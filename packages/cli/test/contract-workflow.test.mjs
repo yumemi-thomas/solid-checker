@@ -15,7 +15,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
-import { createRuntimeProbeHarness } from "../scripts/contract-probe-harness.mjs";
+import {
+  adoptFrameValue,
+  createFrameRecord,
+  createRuntimeProbeHarness,
+  serializeFrame
+} from "../scripts/contract-probe-harness.mjs";
 import {
   ArtifactResolutionError,
   resolvePackageArtifactClosure
@@ -1239,10 +1244,56 @@ test("worker harness transports sequenced events and bounded drain counts", asyn
   harness.emit({ marker: "first", kind: "call", phase: "enter" });
   harness.emit({ marker: "second", kind: "callback", ordinal: 0 });
   await harness.drain({ flush: () => (flushed += 1) });
-  assert.deepEqual(harness.events().map(event => event.sequence), [0, 1]);
+  const events = harness.events();
+  assert.equal(events.length, 2);
+  assert.deepEqual([events[0].sequence, events[1].sequence], [0, 1]);
   assert.equal(harness.drainedMicrotasks(), 2);
   assert.equal(harness.drainedMacrotasks(), 1);
   assert.equal(flushed, 1);
+  // The events container is a frame list rather than an `Array`, because an
+  // array's prototype is one more place an inherited `toJSON` can sit and the
+  // report path must reach no prototype at all.
+  assert.equal(Array.isArray(events), false);
+  assert.equal(Object.getPrototypeOf(events), null);
+});
+
+test("a frame is serialized without consulting toJSON or any prototype", () => {
+  const harness = createRuntimeProbeHarness({ drain: [] });
+  harness.emit({ marker: "undeclared-alternative", kind: "callback", ordinal: 0 });
+  const frame = createFrameRecord();
+  frame.session = "session-1";
+  frame.environment = adoptFrameValue({ os: "macos", conditions: ["import", "node"] });
+  frame.outcome = createFrameRecord();
+  frame.outcome.kind = "completed";
+  frame.outcome.events = harness.events();
+  const expected =
+    '{"session":"session-1","environment":{"os":"macos","conditions":["import","node"]},' +
+    '"outcome":{"kind":"completed","events":[{"marker":"undeclared-alternative",' +
+    '"kind":"callback","ordinal":0,"sequence":0}]}}';
+  assert.equal(serializeFrame(frame), expected);
+
+  // The attack a captured `JSON.stringify` cannot answer: the algorithm
+  // performs `Get(value, "toJSON")` on every object it visits, so a package
+  // installing one on `Object.prototype` was handed the worker's own run frame
+  // and could return a laundered copy. The frame serializer consults neither
+  // `toJSON` nor a prototype chain, so the same patch — visibly diverting the
+  // ordinary path in the same breath — does not reach it.
+  const inherited = Object.getOwnPropertyDescriptor(Object.prototype, "toJSON");
+  try {
+    Object.defineProperty(Object.prototype, "toJSON", {
+      configurable: true,
+      value: () => ({ laundered: true })
+    });
+    assert.equal(JSON.stringify({ session: "session-1" }), '{"laundered":true}');
+    assert.equal(serializeFrame(frame), expected);
+  } finally {
+    delete Object.prototype.toJSON;
+    if (inherited) Object.defineProperty(Object.prototype, "toJSON", inherited);
+  }
+
+  // An ordinary object never reaches the wire: it is refused rather than
+  // described, so one reaching a frame by accident fails the launch.
+  assert.throws(() => serializeFrame({ session: "session-1" }), /null-prototype/);
 });
 
 test("finite entrypoint discovery keeps exact rows while refusing wildcard coverage", () => {

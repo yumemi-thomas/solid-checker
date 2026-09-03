@@ -1,5 +1,399 @@
 # Precision backlog
 
+## A closed claim domain can certify: the probe harness is bound (2026-09-03)
+
+Every one of the 357 certified corpus rows was a receipt over open claims only
+— `exportsProven` 0 of 3410 — and a closed claim domain could not certify for
+four independent reasons, each of which had to go:
+
+1. Finalization's allowed demand-family list omitted
+   `ProofFamily::DomainExhaustiveness`
+   (`rust/crates/solid-facts-backend/src/contract_certification/finalization.rs`),
+   so a closure candidate died as `UnsupportedDemand` before any veto ran.
+2. `ProbeGateSchedule::authenticate` returned `HarnessBindingRequired`
+   unconditionally.
+3. Nothing connected certification to probe execution: `RuntimeProbePlan` was
+   built from a proposal-plan document, never from a `CertificationPlan`, and
+   gate ids bind `snapshot_root` + `demand_graph_root`, which the probe side
+   never saw.
+4. `probe_gate_root` was hardcoded to the canonical empty root and
+   `VerifiedProbeGateBatch` had no constructor.
+
+A fifth reason emerged from adversarial review and is the one that changed the
+design most: admitting the demand family for *any* closure subject let the
+probe decide closure. That is the section below.
+
+The harness is now pinned and launched by Rust, mirroring the Type Facts
+producer discipline: a compiled-in harness source manifest and Node executable
+digest, and a private 0700 directory populated with **the bytes the
+verification hashed** rather than a second read of the same paths — re-reading
+after verifying is a window in which the file can be swapped, and the copy is
+what the worker executes. Each launch gets its own process group, killed on
+every exit path, an allowlisted environment, and a startup frame that must echo
+the protocol, this launch's nonce, and the Node version, platform, and
+architecture the verifier established. The scheme, its trust roots, and its
+limits are `docs/adr/0006-probe-harness-binding.md`.
+
+### What closure the family may reach, and what it may not
+
+Admitting `DomainExhaustiveness` is not admitting every closure, and the
+distinction is a soundness one rather than a matter of coverage. The censuses
+that discharge the family are censuses of the **declaration**, so two exports
+with byte-identical declarations get an identical witness. Allowing the family
+for a `creates: []` claim would therefore have left the probe gate's finite
+non-observation as the only discriminator between a certified row and a refused
+one — closure decided by non-observation, which CONTEXT.md forbids.
+
+`type_facts::require_census_decides_closure` now admits exactly two claim
+paths, and both carry a real premise:
+
+- `Value{root: Export, path: [], domain: ChoiceAlternatives}` — the producer
+  enumerates the exported value's alternatives itself and observes each
+  exhaustively, and the proposal's enumeration is required to **equal** that
+  one: the same count, and at every index the kind the census observed there.
+  Without the count comparison the claim would rest on "the declared type is
+  finite", which is equally true of a proposal naming two alternatives and one
+  naming five. Without the per-index comparison it would rest on cardinality
+  alone, which is not identity: the sibling per-index `recursive-value-shape`
+  demands carry a `DemandedCallability` that is `Unknown` for every structural
+  kind (`Object`, `Tuple`, `Promise`, `Reactive`, `Store`, `Action`,
+  `Cleanup`), so a proposal could have named two alternatives of the wrong
+  kinds and still "equalled" a census of two.
+  `require_export_alternative_kind_matches_census` compares each index against
+  the only classification this census carries — the callability of that
+  alternative's root in the callable-path census — so a proposed `Callable`
+  must be observed callable and a `Plain` must be observed non-callable, and
+  **every other proposed kind refuses** with
+  `alternative-kind premise required`. *Remaining gap:* the census carries no
+  structural *kind* fact per alternative
+  (`typefacts::ValueAlternative` is an index, discriminants, and open reasons),
+  so a closed union of object, tuple, promise, or reactive alternatives is
+  unreachable rather than merely unimplemented — it needs a producer-side kind
+  observation, which is the same proof-mode shape as the wider value-closure
+  premise below.
+- **`ValueShape::Component` now refuses too** (2026-09-03), where it previously
+  certified from bare callability alongside `Callable`. It was the only kind
+  admitted on evidence weaker than the name the receipt then binds: the
+  artifact says `component`, which asserts a props parameter, a JSX or element
+  result, and a render-time owner, while the census observed only that the
+  value is callable — true of every function. `recursive_value_callability`
+  still groups it with `Callable`, correctly, because the question *that*
+  function asks is whether the value is callable; this comparison asks whether
+  a closed claim may certify, which is a different bar.
+  *Consequence:* a publisher proposing a closed union containing a `Component`
+  alternative gets `alternative-kind premise required` and must propose
+  `Callable` instead, which is the claim the evidence makes. Closing the gap
+  properly needs a producer-side component observation — the same missing kind
+  fact as above. Pinned by
+  `the_alternative_kind_premise_admits_only_what_callability_decides`.
+- **The per-index comparison can refuse a true claim** (recorded 2026-09-03,
+  attribution corrected 2026-09-03). The proposal's alternative order is
+  `normalize_knowledge`'s canonical sort and the producer's is its own, so an
+  export whose producer enumeration is ordered differently from the canonical
+  proposal refuses even when the claim holds. That refusal is **not** this
+  comparison's alone, for either kind: `inventory_value_shape` emits a
+  per-alternative `recursive-value-shape` demand carrying
+  `recursive_value_callability(item)` — `Callable` for `Callable`,
+  `NonCallable` for `Plain` — and `require_path_callability` verifies both
+  against the census fact at that index, so a permutation refuses there
+  whichever kind sits at the permuted index. (An earlier version of this entry
+  said `require_export_recursive_subject` checks only `asserts_callable`; it
+  does not — it calls `require_path_callability`, which refuses
+  `(NonCallable, Callable)`.) What this comparison contributes on its own is
+  the refusal of every kind the census cannot classify, since a structural
+  kind's sibling demand carries `DemandedCallability::Unknown` and asserts
+  nothing. The multiset comparison over callability counts was rejected on that
+  ground: it keeps the unclassifiable-kind refusal, so it buys no reachable
+  certification — every permutation it would newly accept is already refused by
+  the sibling demand — while leaving two halves of one premise disagreeing
+  about what an index means. The failure direction is a refusal, never a pass.
+- `Domain(GuardPartition)`, on the invocation census only — a complete finite
+  partition with no unsupported branch, alongside closed parameter and result
+  values. Requiring a complete partition is new here: the branch census alone
+  says nothing was unsupported, not that the alternatives were enumerated.
+
+**Everything else refuses with a typed reason naming the missing premise.** Two
+groups, and the first is the one that matters:
+
+- **Behavioral call domains are blocked, not deferred by taste.** `creates`,
+  `reads`, `writes`, `callbacks`, `cleanups`, `disposals`, `invalidates`, and
+  equally `throws` and `returns` are decided by the implementation, and no
+  declaration says anything about them. `throws` and `returns` are refused with
+  the rest even though a control-flow census enumerates their *sites*: an
+  exception propagates through any call in the body, so enumerating throw
+  statements does not enumerate what a call can throw. The premise these need
+  is an implementation census — a complete `ExportImplementationTranscript`,
+  every `calls` target resolved, and no resolved target able to perform the
+  domain's operation — which the witness never reads today. That is a
+  proof-mode change, and it is what the closures the Solid packages actually
+  want are waiting on. No harness work and no recipe can substitute for it.
+- **The other value domains** — object properties, tuple items, array bounds,
+  capabilities, and any non-root path — are declaration-decided too, but the
+  census hands over no enumeration of them to compare a proposal against, so
+  admitting them would certify the proposal's own word.
+
+**Measured on `fixtures/package-contracts/closed-domain-probe-gate`.** One
+export proposing a closed root choice-alternatives domain, one hand-authored
+recipe, two isolated repeat runs: the row certifies with a nonempty
+`probe_gate_root` and its receipt authenticates. Its sibling export has a
+byte-identical declared type — so an identical closure witness — and a runtime
+that ships a value the declaration excludes; the same recipe body pointed at it
+observes that publisher defect and the veto refuses the row. A `creates: []`
+proposal for an export that really does create an owner refuses as
+`UnsupportedDemand` at witness acquisition even with a recipe supplied, which
+is the case that pins the paragraph above. A corpus that does not address a
+scheduled gate refuses it by name — which is also how an operator learns the
+claim id to author against. The fixture's `consumer/` keeps its `tsc` claim
+verified rather than asserted: every probed export is used under `strict` with
+`moduleResolution: nodenext`, and `tsc --noEmit` (TypeScript 5.9.3) exits 0.
+
+Two producer facts shaped that fixture, both read from the census rather than
+guessed, and both recorded because they are traps for the next closed-value
+claim: a string alternative is reported locally open (`openIndex`, from
+`String`'s numeric index signature), so a union containing one can never
+satisfy the closure premise; and the alternative *order* in the census is the
+producer's, not the declaration's, while the per-alternative
+`recursive-value-shape` demands a closed choice inventories are looked up by
+alternative index.
+
+**Nothing moved.** Every current row derives an *empty* veto schedule, which
+now authenticates on its own and keeps the byte-identical canonical
+`empty("empty-probe-gate-schedule")` root, so no receipt, `semanticDigest`, or
+fixture snapshot changed. Re-measured with the debug binary,
+`@solid-primitives/marker@0.2.2|solid1|only` and `solid-js@2.0.0-rc.3|solid2|only`
+both still certify, with `exportsProven` still 0 of 2 and 0 of 10: no real row
+has a recipe, and none of them proposes a closed domain, so none gains closure.
+
+### Export conditions: which file the gate actually ran against
+
+**Fixed 2026-09-03, and it was a false pass.** The probe environment recorded
+`conditions: ["import", "node"]` as a constant — hashed into the runtime-probe
+plan digest and therefore into `probe_gate_root` — while nothing enforced it:
+no `--conditions` flag was passed, the worker echoed the environment verbatim,
+and the whole snapshot (every conditional target) was copied into the private
+`node_modules`. Measured on the pinned Node 24.11.1 under the launch's own
+environment allowlist: a package whose `exports` lists
+`{module-sync, import, require, default}` answers **both** `import()` and
+`createRequire` with the `module-sync` target; `{import, require, default}`
+answers a `createRequire` with the `require` target; and a request asking for
+`["import", "development"]` gets the `default` target, because Node does not
+apply a requested condition unless the flag is passed. Since
+`plan.import_request.export_conditions` is what selects the artifact case the
+gate subject names and the Type Facts witness reads, a package with a
+conforming `module-sync` target beside a contradicting `import` one was
+certified on one file and probed against the other — no contradiction observed,
+closure certified.
+
+What enforces it now: a recipe declares `importKind` (`esm` or `require`, bound
+into the recipe-corpus root); the requested conditions are passed as
+`--conditions=` flags; the applied sets are read back from the pinned bytes per
+kind and recorded tagged (`requested:` / `esm:` / `require:`) instead of as a
+constant; Rust refuses at planning when its own resolution replay under the
+applied set selects a different runtime target than the transaction certifies;
+and every launch's reported `import.meta.resolve` / `createRequire` answer must
+name that exact file or the gate refuses with `ConditionMismatch`.
+`probe_harness::tests::the_pinned_interpreter_can_select_a_target_the_artifact_case_did_not`
+reproduces the table above against a real interpreter and asserts both the
+refusal and the matching pass.
+
+*Remaining gaps*, all refusal directions:
+
+- **One selection per gate.** A gate speaks for the single runtime target it
+  resolved to. A sibling conditional target of the same export — `module-sync`,
+  `require`, `browser`, `development` — is a different artifact case and needs
+  its own gate; every recipe carries that in its `coverageLimitations`.
+- **The candidate list bounds the record, not the check.**
+  `OBSERVED_CONDITION_CANDIDATES` is what the interpreter is asked about, so a
+  condition a future Node applies that is absent from the list is missing from
+  the recorded set. It cannot become a false pass — the resolution check refuses
+  whenever the selected file differs — but the receipt's condition record would
+  be incomplete until the list grows.
+- **`types` on the runtime axis.** Rust's replay strips `types` for a runtime
+  target while the interpreter would apply it if requested, so a request naming
+  `types` whose package answers a `types` key first refuses at the run frame
+  rather than at planning. Refusal either way.
+- **The ESM answer is the worker's module URL**, not the recipe's;
+  `import.meta.resolve` is per-module and Node exposes no
+  resolve-from-another-URL API. The two directories carry identical package
+  scopes and one `node_modules` ancestry, so they diverge only if a
+  `node_modules` appears inside `<private>/harness/` or `<private>/recipes/` —
+  both watched trees, so that is an isolation violation on the next census.
+- **Only the analyzed package is copied**, so a recipe or package that imports a
+  dependency by bare specifier fails to resolve and the gate refuses. A package
+  whose export cannot run without its dependencies is therefore unprobeable at
+  Stage 1.
+- **A probe that writes into `TMPDIR` refuses the gate**, now that the private
+  directory's direct entries are censused (which is what closed the
+  `node.config.json` row).
+
+### The worker's realm is the package's realm
+
+A recipe imports the analyzed package, so package top-level code runs in the
+worker before any event is recorded, and anything the report path reaches by
+*name* is the package's to replace. Patching `structuredClone` to drop the
+contradiction event and renumber the rest produced a clean-looking frame and
+passed the gate. Two fixes, both structural:
+
+- Every primordial the report path needs is captured into module-local
+  bindings while `contract-probe-harness.mjs` and `contract-probe-worker.mjs`
+  evaluate — strictly before the recipe, and therefore the package, is
+  imported. `structuredClone` is gone entirely: an event is copied field by
+  field into a frozen null-prototype record of scalars, so a getter, a proxy,
+  and a later mutation cannot change what is reported, and a recipe cannot
+  number its own events.
+- **Capturing `JSON.stringify` was not enough**, which the first round of this
+  work claimed it was. The algorithm performs `Get(value, "toJSON")` on every
+  object it visits, so a package installing `Object.prototype.toJSON` (or
+  `Array.prototype.toJSON`, for the events container) was handed the real run
+  frame and could return a laundered one — contradiction dropped, events
+  renumbered — for a clean `CleanNonObservation` and a passing gate. A
+  `replacer` does not help: `toJSON` runs first. The frame is therefore built
+  end to end as null-prototype records and lists — frame, outcome, isolation,
+  echoed environment, events container — and serialized by the harness's own
+  `serializeFrame`, which walks own keys and indices and consults no `toJSON`
+  and no prototype chain; the captured `JSON.stringify` survives only as a
+  scalar escaper, where no `toJSON` lookup happens because a primitive is not
+  an object. Independently, the worker freezes `Object.prototype`,
+  `Array.prototype`, and `Function.prototype` before importing the recipe, so a
+  package that tries the patch throws and refuses the gate. Either half
+  suffices; both are in place.
+- Both frames travel on descriptor 3, a pipe Rust creates and hands over.
+  Stdout is `/dev/null` under the certification harness, so
+  `process.stdout.write` reaches nothing, and Rust refuses anything other than
+  exactly one startup frame and one run frame — taking the first or the last
+  would let a worker that wrote several choose which one is believed.
+
+`tampering-package` in the tracer fixture pins it: a package that replaces
+`structuredClone`, `JSON.stringify`, `process.stdout.write`, and `Object.keys`
+at its top level, installs both `toJSON` laundering arms, and whose runtime
+contradicts its own declaration, is still vetoed on the observed contradiction.
+The test is sensitive rather than vacuous: run against the pre-fix worker it
+fails with a *verified batch* — the laundered frame passing the veto.
+
+One rule the design cannot enforce, recorded so recipe authors carry it: **a
+recipe must never hand `session` or `harness` to the package under test.** That
+API is the only legitimate path by which package code could reach the
+transcript, and nothing detects the handover.
+
+Six limits, stated because each is a real one:
+
+- **Write isolation is detect-and-refuse, not denial.** The probe reads a
+  private copy of the snapshot, and the watched census — the whole private
+  `node_modules`, the harness image, the recipe modules, the two private
+  package scopes, the three CommonJS global folders (two `HOME`-relative,
+  plus `$PREFIX/lib/node`), every `<ancestor>/node_modules` and every
+  `<ancestor>/package.json` up to the filesystem root, the Node binary,
+  the Type Facts producer image, the verifier's own image — is re-hashed before
+  the first launch, **between** launches, and on every exit path, refusing the
+  gate on any change. It is keyed by label, and a duplicate label refuses rather
+  than being merged. The Node binary is compared against the *pin* on every
+  census rather than against the baseline, because two censuses of an
+  already-substituted binary agree with each other; bytes swapped in and
+  reverted between two censuses remain undetected. A write outside every
+  watched path is still not prevented; reads, imports by absolute path,
+  `file:` URL or `data:` URL, in-realm loader hooks, child processes, and
+  network access are **not** denied.
+  `SandboxKind::Process` carries a verifier-computed policy digest whose field
+  list says so outright, at `scheme-version:4`. Stage 2 replaces this with an
+  OS-level sandbox, and only then amends `ProbeRule` /
+  `ProbeProducerConstraints` — that amendment moves `POLICY_DIGEST` and every
+  receipt's policy binding, so it is an atomic cut of its own.
+- **Module resolution is now enumerated rather than patched** (2026-09-03).
+  Three review rounds each found a different escape from the private workspace
+  by walking one more step of Node's resolver: an ancestor `node_modules`, the
+  `HOME`-relative CommonJS global folders, and — the one that was a false
+  *pass* rather than a refusal — an ancestor `package.json` self-reference.
+  `PACKAGE_SELF_RESOLVE` runs before the `node_modules` walk and starts from
+  `LOOKUP_PACKAGE_SCOPE`, which climbed from the recipe to
+  `<tmpdir>/package.json`: a planted `{"name": "<the analyzed package>",
+  "exports": …}` there answered the recipe's own bare import, the probe observed
+  a conforming stub, nothing contradicted the proposal, and the closure
+  certified. The fix is an `exports`-less, `imports`-less `package.json` in
+  `<private>/harness/` and `<private>/recipes/`, which terminates the climb
+  inside the 0700 tree while being able to answer nothing itself; it closes the
+  ESM self-reference, the CommonJS `trySelf`, and `#specifier` imports at once.
+  `$PREFIX/lib/node` — the one global folder `env_clear` cannot reach, since
+  Node computes it from `process.execPath` — is refused and watched like an
+  ancestor `node_modules`. Every step of both resolvers, plus every
+  loader-affecting input, now has a written disposition (CONTAINED / WATCHED /
+  REFUSED / NOT DENIED) in `docs/adr/0006-probe-harness-binding.md`, mirrored
+  into the policy digest's field names. *Remaining:* the NOT DENIED rows are
+  real, and there are eight of them.
+- **The frozen intrinsic prototypes can refuse a benign package.** The worker
+  freezes `Object.prototype`, `Array.prototype`, and `Function.prototype`
+  before importing the recipe, so a package whose top level assigns to one in
+  strict mode — an old polyfill or shim — throws, the run fails, and the gate
+  is refused. This is a **refusal direction and never a pass**: a closure that
+  could have certified does not; nothing certifies that otherwise would not. It
+  is recorded in the ADR, the fixture README, and every recipe's
+  `coverageLimitations`. Removing the freeze is not the answer — the frame
+  representation and the freeze are two independent answers to the `toJSON`
+  laundering attack, and each is pinned by its own test now
+  (`a frame is serialized without consulting toJSON or any prototype`;
+  `the_probe_gate_tracer_observes_frozen_intrinsics_in_the_workers_realm`),
+  because neither can be exercised by an attack while the other holds.
+- **Containment stops at the process group.** Each launch is its own group,
+  killed on every exit path, but a probe that calls `setsid()` leaves it: such
+  a grandchild outlives the transaction and anything it does to a watched path
+  after the final census is undetected. The impact is bounded because every
+  Type Facts witness is acquired before any probe runs, so a certified row's
+  facts were read before such a process existed.
+- **The recipe corpus is an input, not a root of trust.** Rust derives every
+  construction digest from the module bytes it copied, and a corpus inside the
+  analyzed package is refused, but corpus provenance is Stage 3. A vacuous
+  recipe can only fail to veto; it can never establish closure, which remains
+  the Type Facts `DomainExhaustiveness` witness's job.
+- **Probe evidence is bound but not persisted.** The receipt's gate root binds
+  the gate ids, the harness and runtime identity, and the recipe bytes through
+  the runtime-probe plan digest. The detailed `ProbeClaimMaterial` and
+  transcripts are not written to an evidence sidecar, because that re-derives
+  `sidecars` digests in the canonical main and would move existing receipts.
+
+### The gate that was proving nothing
+
+`scripts/verify.sh` set no certification environment, so the verify-profile
+test binary was compiled without `SOLID_CHECKER_PROBE_HARNESS_SHA256` /
+`SOLID_CHECKER_PROBE_NODE_SHA256`. `option_env!` is a compile-time read, so
+every production-path probe assertion in that binary returned early and `make
+verify` reported a green run that had exercised none of the binding. The script
+now computes the Makefile's `CERTIFICATION_ENV` after `build-typefacts` (the
+producer digest is of a binary that step may have just rewritten) and sets
+`SOLID_CHECKER_EXPECT_PROBE_PINS=1`, which
+`probe_harness::tests::a_build_that_must_carry_probe_pins_carries_them` turns
+into a loud failure instead of silence.
+
+`scripts/check-bundled-contracts.mjs` had the same shape of footgun from the
+other direction: its `cargo run` rebuilt `rust/target/debug` *without* the pins,
+so the next gate to use that binary silently lost both Type Facts certification
+and probe authority. It now supplies the same environment itself, and the trap
+is recorded in AGENTS.md's stale-binary bullet.
+
+The fast loop had it too, and now does not. `make test-rust` and the new
+`make test-probe-harness` set `SOLID_CHECKER_EXPECT_PROBE_PINS=1` whenever
+`PROBE_NODE` resolves, so a tracer cannot skip silently there either.
+*Stated limit:* the variable is conditional on `PROBE_NODE` being non-empty,
+because on a machine without Node the pins cannot be computed at all and
+demanding them would fail the build rather than the assertion — so `make
+test-rust` without Node still skips every tracer. Only `scripts/verify.sh`,
+which exits 127 without Node, closes that. `verify-delta` now maps the harness
+image's own paths (`packages/cli/scripts/contract-probe-*`,
+`probe-contract.mjs`, and the CLI manifest and lockfiles) to a row that runs
+`make test-probe-harness` — a `make` target rather than a `cargo` command
+precisely because a bare `cargo test` there recompiles without the pins.
+
+### Re-measured: 357 verified / 40 exact refusals / 21 not attempted, zero exports proven
+
+The complete 418-probe corpus was re-run with the pinned build after the
+binding landed (`make ecosystem-benchmark`; report SHA-256
+`f5aa99e2e106c3ccd6b71f4fd5b657f74eb3af905395544da5a317819969f6f0`). Against
+the committed report not one verdict, demand digest, or coverage
+classification moved: 306 verified-complete / 51 verified-partial, and every
+certified receipt still carries the empty probe-gate root because no real
+package has a recipe, so every closure candidate still refuses upstream of the
+gate. `exportsProven` remains 0 of 3410. That is the expected result of this
+stage: the mechanism is bound and proven on the fixture, and the corpus moves
+only when recipes exist.
+
 ## The generator invented owner and read operations inside the dialects' own archives; it no longer does (2026-09-03)
 
 `declaration_path_is_solid_package`

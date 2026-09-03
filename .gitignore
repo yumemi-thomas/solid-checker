@@ -1,4 +1,9 @@
 /bin/
+# Build-provenance stamp for the runtime-probe harness image, written by
+# scripts/probe-harness-source-identity.mjs --write-stamp. Generated like
+# bin/solid-typefacts.buildinfo, and never a root of trust on its own: the
+# probe adapter compares it with the manifest digest compiled into the verifier.
+/packages/cli/probe-harness.buildinfo
 # Per-user agent state; .claude/settings.json, skills, and hooks are shared.
 .claude/settings.local.json
 .claude/worktrees/

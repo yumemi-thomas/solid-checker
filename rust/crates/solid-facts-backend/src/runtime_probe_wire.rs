@@ -202,6 +202,21 @@ struct WireSession {
     mode: WireModeOutput,
     repeat: u16,
     policy: WirePolicy,
+    /// What the worker must resolve, and how, before it imports the recipe.
+    ///
+    /// Present only for a launch Rust owns: the certification harness compares
+    /// the answer against the artifact case's own runtime target, so it always
+    /// asks. The audit driver carries no such authority and asks for nothing,
+    /// which is why this is optional rather than defaulted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    resolution: Option<WireResolutionRequest>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WireResolutionRequest {
+    specifier: String,
+    import_kind: String,
 }
 
 #[derive(Serialize)]
@@ -337,6 +352,9 @@ pub fn plan_runtime_probes(
                 },
                 repeat: session.repeat(),
                 policy: session.policy().into(),
+                // The audit path establishes no realm integrity and binds no
+                // artifact case, so it asks the worker to prove no resolution.
+                resolution: None,
             }
         })
         .collect();
@@ -351,6 +369,106 @@ pub fn plan_runtime_probes(
     Ok(PlannedRuntimeProbes {
         plan: runtime,
         bytes,
+    })
+}
+
+/// Encodes one session for a worker Rust launches itself.
+///
+/// The certification harness has no plan *document*: it holds the opaque
+/// `RuntimeProbePlan` in process and emits one session at a time. Reusing
+/// [`WireSession`] keeps a single definition of what a worker reads, so the
+/// audit driver and the authority-bearing adapter cannot drift apart.
+pub(crate) fn encode_probe_session(
+    session: &crate::ProbeSessionRequest,
+    module: &str,
+    construction: &Digest,
+    resolution: Option<(&str, &str)>,
+) -> Result<Vec<u8>, RuntimeProbeWireError> {
+    validate_transport_string(module, "probe recipe module")?;
+    let resolution = match resolution {
+        Some((specifier, import_kind)) => {
+            validate_transport_string(specifier, "probe resolution specifier")?;
+            validate_transport_string(import_kind, "probe resolution import kind")?;
+            Some(WireResolutionRequest {
+                specifier: specifier.into(),
+                import_kind: import_kind.into(),
+            })
+        }
+        None => None,
+    };
+    emit(&WireSession {
+        id: session.id().as_str().into(),
+        claim_id: session.claim_id().as_str().into(),
+        subject: WireSemanticClaimSubject::from(session.subject()),
+        authority: session.authority().into(),
+        scenario: session.scenario().into(),
+        recipe: session.recipe().as_str().into(),
+        construction: construction.as_str().into(),
+        module: module.into(),
+        expected_event: WireExpectedEventOutput {
+            marker: session.expected_event().marker.clone(),
+            class: session.expected_event().class,
+            operation: session
+                .expected_event()
+                .operation
+                .as_ref()
+                .map(|operation| operation.0.clone()),
+        },
+        drain: session.drain().iter().copied().map(Into::into).collect(),
+        mode: WireModeOutput {
+            name: session.mode().name.clone(),
+            artifact_case: session.mode().artifact_case.clone(),
+            environment: WireEnvironment::from(&session.mode().environment),
+        },
+        repeat: session.repeat(),
+        policy: session.policy().into(),
+        resolution,
+    })
+}
+
+/// One worker's run frame: the semantic run, plus the module resolution it
+/// reported when the session asked for one.
+///
+/// The resolution is deliberately *not* a field of [`ProbeRun`]. It is not
+/// semantic material and no evaluator reads it; it is a transport echo the
+/// launching adapter compares against the artifact case it bound.
+pub(crate) struct DecodedProbeRun {
+    pub(crate) run: ProbeRun,
+    pub(crate) resolution: Option<ReportedResolution>,
+}
+
+/// What the worker resolved, before it imported the recipe. Transport data:
+/// the caller compares it against what Rust computed.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ReportedResolution {
+    pub(crate) specifier: String,
+    pub(crate) import_kind: String,
+    pub(crate) esm: String,
+    pub(crate) require: String,
+}
+
+/// Decodes one worker's run frame. Every field stays transport data: the
+/// caller reconciles it against what Rust computed for the session.
+pub(crate) fn decode_probe_run(bytes: &[u8]) -> Result<DecodedProbeRun, RuntimeProbeWireError> {
+    let wire = decode::<WireRun>(bytes)?;
+    let resolution = match wire.resolution.clone() {
+        Some(resolution) => {
+            for (value, field) in [
+                (&resolution.specifier, "probe resolution specifier"),
+                (&resolution.import_kind, "probe resolution import kind"),
+                (&resolution.esm, "probe ESM resolution"),
+                (&resolution.require, "probe CommonJS resolution"),
+            ] {
+                validate_transport_string(value, field)?;
+            }
+            Some(resolution)
+        }
+        None => None,
+    };
+    Ok(DecodedProbeRun {
+        run: probe_run(wire)?,
+        resolution,
     })
 }
 
@@ -373,6 +491,9 @@ struct WireRun {
     drained_microtasks: u16,
     drained_macrotasks: u16,
     outcome: WireRunOutcome,
+    /// Absent on the audit path, whose sessions ask for no resolution.
+    #[serde(default)]
+    resolution: Option<ReportedResolution>,
 }
 
 #[derive(Deserialize)]

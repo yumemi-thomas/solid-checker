@@ -1392,7 +1392,11 @@ Also retained unless Slice 14 establishes an exact model:
 - an opaque external helper’s call result;
 - ambiguous wildcard or package-condition selection;
 - unresolved dependency cycles or non-exact versions;
-- nonempty probe schedules without the pinned harness/runtime image;
+- nonempty probe schedules only where no bound harness is configured for the
+  transaction: the harness image and Node runtime are now pinned into the
+  verifier and launched directly, so such a schedule refuses for want of a
+  configured harness or a claim-addressed recipe, not for want of a binding
+  (`docs/adr/0006-probe-harness-binding.md`);
 - compiler-owned claims without exact source/output/options/tool evidence; and
 - any positive or closure premise whose witness is incomplete or subject-mismatched.
 

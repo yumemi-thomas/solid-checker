@@ -277,9 +277,11 @@ pub(crate) fn solid2_rc3_bundles_with_measurements()
 
     // The checked corpus remains an oracle for proposal construction, but it
     // is not proof authority. Every case currently reaches at least the
-    // mandatory live probe gate, whose authenticated harness binding is still
-    // unavailable, so the policy-2 cut retires rather than grandfathers these
-    // policy-1 bundles.
+    // mandatory live probe gate, and while the harness binding itself now
+    // exists (`docs/adr/0006-probe-harness-binding.md`), no case has a
+    // hand-authored recipe for the closures it proposes, so a scheduled veto
+    // has nothing to run and refuses. The policy-2 cut therefore retires
+    // rather than grandfathers these policy-1 bundles.
     for ((package_name, artifact_id), (artifact, package)) in grouped {
         let complete = ContractProposal::new(package, vec![artifact]).normalize()?;
         let _ = (package_name, artifact_id, complete);

@@ -1,12 +1,20 @@
 //! Semantic runtime-probe planning and transcript evaluation.
 //!
-//! Node remains the owner of package acquisition, process orchestration, and
-//! the worker implementation. This deep module owns every judgement made from
-//! worker output: exact artifact/mode selection, semantic event vocabulary,
-//! isolation and drain invariants, repeat consistency, and probe authority.
-//! A completed finite run can witness an occurrence or falsify proposed local
-//! closure. It can never prove absence, a positive minimum, a finite maximum,
+//! Node owns package acquisition for the audit path and the worker
+//! implementation. This deep module owns every judgement made from worker
+//! output: exact artifact/mode selection, semantic event vocabulary, isolation
+//! and drain invariants, repeat consistency, and probe authority. A completed
+//! finite run can witness an occurrence or falsify proposed local closure. It
+//! can never prove absence, a positive minimum, a finite maximum,
 //! exhaustiveness, or accepted closure.
+//!
+//! Inside a certification transaction the worker process is launched by
+//! `contract_certification::probe_harness`, not by the Node driver: Rust
+//! resolves and hashes the Node executable and the harness image against
+//! compiled-in pins, copies the image and the recipe into a private directory,
+//! and binds the process identity. The verdict one target's runs earn is
+//! derived here — `ProbeTargetVerdict` — and consumed only by
+//! `contract_certification::probe_gates`. A caller cannot construct one.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -610,11 +618,51 @@ pub struct ProbeContradictionRecord {
     pub transcript: Digest,
 }
 
+/// What one probe target's complete set of isolated repeat runs, across every
+/// covered mode, established about the proposed closure it vetoes.
+///
+/// This is the *only* channel through which a probe result reaches gate
+/// authority, and it is derived here from runs this module validated in the
+/// same call. `CleanNonObservation` says exactly that a complete, isolated,
+/// deterministic, scenario-satisfying execution did not observe the
+/// contradiction the recipe was written to provoke. It is not evidence of
+/// absence, and it never establishes closure: the Type Facts
+/// `DomainExhaustiveness` witness does that, and this verdict can only veto.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum ProbeTargetVerdict {
+    /// A run observed the behavior the proposed closure denies.
+    Contradiction,
+    /// Every mode completed cleanly and observed no contradiction.
+    CleanNonObservation,
+    /// A run was refused, errored, timed out, or was never returned.
+    Incomplete,
+    /// A possible-positive witness target. Witness targets veto nothing, so
+    /// they never satisfy or refuse a mandatory gate.
+    NotAGate,
+}
+
+impl ProbeTargetVerdict {
+    /// Combines the verdicts of one target's modes. A contradiction anywhere
+    /// vetoes; otherwise one incomplete mode makes the whole target
+    /// incomplete. Silence is never promoted over either.
+    fn join(self, other: Self) -> Self {
+        match (self, other) {
+            // Being a witness rather than a veto is a property of the target,
+            // not of its runs, so it survives every mode outcome.
+            (Self::NotAGate, _) | (_, Self::NotAGate) => Self::NotAGate,
+            (Self::Contradiction, _) | (_, Self::Contradiction) => Self::Contradiction,
+            (Self::Incomplete, _) | (_, Self::Incomplete) => Self::Incomplete,
+            (Self::CleanNonObservation, Self::CleanNonObservation) => Self::CleanNonObservation,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RuntimeProbeEvaluation {
     materials: Vec<ProbeClaimMaterial>,
     transcripts: Vec<ProbeTranscript>,
     contradictions: Vec<ProbeContradictionRecord>,
+    verdicts: BTreeMap<SemanticClaimId, ProbeTargetVerdict>,
 }
 
 impl RuntimeProbeEvaluation {
@@ -631,6 +679,12 @@ impl RuntimeProbeEvaluation {
     #[must_use]
     pub fn contradictions(&self) -> &[ProbeContradictionRecord] {
         &self.contradictions
+    }
+
+    /// The verdict this evaluation established for one exact semantic claim,
+    /// or `None` when the claim was not a probe target at all.
+    pub(crate) fn verdict(&self, claim_id: &SemanticClaimId) -> Option<ProbeTargetVerdict> {
+        self.verdicts.get(claim_id).copied()
     }
 }
 
@@ -684,6 +738,7 @@ pub fn evaluate_runtime_probes(
     let mut materials = Vec::new();
     let mut transcripts = Vec::new();
     let mut contradictions = Vec::new();
+    let mut verdicts = BTreeMap::<SemanticClaimId, ProbeTargetVerdict>::new();
     for target in &plan.targets {
         let mut observations = Vec::new();
         let modes = plan
@@ -703,6 +758,10 @@ pub fn evaluate_runtime_probes(
                 .map(|session| supplied.get(&session.id).map(|run| (*session, run)))
                 .collect::<Vec<_>>();
             let evaluated = evaluate_mode(plan, target, &mode, &mode_runs, &isolation_collisions)?;
+            verdicts
+                .entry(target.claim_id.clone())
+                .and_modify(|existing| *existing = existing.join(evaluated.verdict))
+                .or_insert(evaluated.verdict);
             if let Some(transcript) = evaluated.transcript {
                 if matches!(evaluated.outcome, ProbeOutcome::Falsification { .. }) {
                     contradictions.push(ProbeContradictionRecord {
@@ -737,12 +796,14 @@ pub fn evaluate_runtime_probes(
         materials,
         transcripts,
         contradictions,
+        verdicts,
     })
 }
 
 struct EvaluatedMode {
     outcome: ProbeOutcome,
     transcript: Option<ProbeTranscript>,
+    verdict: ProbeTargetVerdict,
 }
 
 fn evaluate_mode(
@@ -797,6 +858,7 @@ fn evaluate_mode(
                 limit_millis: plan.policy.timeout_millis,
             },
             transcript: None,
+            verdict: ProbeTargetVerdict::Incomplete,
         });
     }
     if let Some(details) = runs.iter().find_map(|(_, run)| match &run.outcome {
@@ -806,6 +868,7 @@ fn evaluate_mode(
         return Ok(EvaluatedMode {
             outcome: ProbeOutcome::Error { details },
             transcript: None,
+            verdict: ProbeTargetVerdict::Incomplete,
         });
     }
     if let Some(reason) = runs.iter().find_map(|(_, run)| match &run.outcome {
@@ -841,23 +904,42 @@ fn evaluate_mode(
         .iter()
         .any(|event| event_matches(event, &target.expected_event))
     {
-        return Ok(refused_mode(
-            "finite execution did not witness the planned positive marker",
-        ));
+        // A closure-falsification recipe's marker *is* the contradiction it
+        // was written to provoke. Not seeing it in a complete, isolated,
+        // deterministic, scenario-satisfying execution is therefore a clean
+        // pass of the mandatory veto — not a refusal of the run. It is still
+        // not evidence: the observation stays `Refused` in probe evidence
+        // material, because finite silence can never support a claim. Only
+        // the separate gate verdict records that nothing contradicted.
+        let verdict = match target.authority {
+            ProbeAuthority::ClosureFalsification => ProbeTargetVerdict::CleanNonObservation,
+            ProbeAuthority::PossiblePositiveWitness => ProbeTargetVerdict::Incomplete,
+        };
+        return Ok(EvaluatedMode {
+            verdict,
+            ..refused_mode("finite execution did not witness the planned positive marker")
+        });
     }
 
     let transcript = emit_transcript(plan, target, mode, &runs)?;
-    let outcome = match target.authority {
-        ProbeAuthority::PossiblePositiveWitness => ProbeOutcome::Witness {
-            transcript: transcript.digest.clone(),
-        },
-        ProbeAuthority::ClosureFalsification => ProbeOutcome::Falsification {
-            transcript: transcript.digest.clone(),
-        },
+    let (outcome, verdict) = match target.authority {
+        ProbeAuthority::PossiblePositiveWitness => (
+            ProbeOutcome::Witness {
+                transcript: transcript.digest.clone(),
+            },
+            ProbeTargetVerdict::NotAGate,
+        ),
+        ProbeAuthority::ClosureFalsification => (
+            ProbeOutcome::Falsification {
+                transcript: transcript.digest.clone(),
+            },
+            ProbeTargetVerdict::Contradiction,
+        ),
     };
     Ok(EvaluatedMode {
         outcome,
         transcript: Some(transcript),
+        verdict,
     })
 }
 
@@ -867,6 +949,7 @@ fn refused_mode(reason: impl Into<String>) -> EvaluatedMode {
             reason: reason.into(),
         },
         transcript: None,
+        verdict: ProbeTargetVerdict::Incomplete,
     }
 }
 

@@ -56,6 +56,44 @@ test("each table row claims its own owner's paths", () => {
   }
 });
 
+test("the runtime-probe harness image is not answered with the CLI test alone", () => {
+  // These files' bytes *are* the harness's executable image: they are hashed
+  // into SOLID_CHECKER_PROBE_HARNESS_SHA256 and compiled into the verifier with
+  // `option_env!`, so editing one moves the manifest digest and every pin. A
+  // row that ran only `bun test` would leave the binding untested -- and,
+  // worse, a bare `cargo test` afterwards would rebuild without the pins and
+  // turn every probe-gate tracer into a silent early return.
+  const probe = ["probe-harness", "contract-process", "bun-test-cli"];
+  for (const path of [
+    "packages/cli/scripts/contract-probe-harness.mjs",
+    "packages/cli/scripts/contract-probe-worker.mjs",
+    "packages/cli/scripts/contract-probe-driver.mjs",
+    "packages/cli/scripts/probe-contract.mjs",
+    "packages/cli/package.json",
+    "packages/cli/package-lock.json",
+    "packages/cli/bun.lock",
+  ]) {
+    assert.deepEqual(classify(path)?.checks, probe, path);
+  }
+  // An ordinary CLI script is still the ordinary row.
+  assert.deepEqual(classify("packages/cli/scripts/certify-contract.mjs")?.checks, [
+    "bun-test-cli",
+  ]);
+  // The rebuild-with-pins step runs before anything that reads the binary, and
+  // it is a `make` target rather than a `cargo` command for that same reason.
+  const plan = planFor(["packages/cli/scripts/contract-probe-worker.mjs"]);
+  assert.deepEqual(withoutUniversal(plan.checks), [
+    "build-typefacts",
+    "probe-harness",
+    "contract-process",
+    "bun-test-cli",
+  ]);
+  assert.deepEqual(CHECKS["probe-harness"].command, ["make", "test-probe-harness"]);
+  // The eighth manifest member lives under `scripts/`, which no row claims, so
+  // editing it escalates instead of being answered narrowly.
+  assert.equal(classify("scripts/probe-harness-source-identity.mjs"), null);
+});
+
 test("the longest matching prefix wins, so no row swallows another's directory", () => {
   // `rust/crates/solid-facts` is a prefix of `rust/crates/solid-facts-backend`
   // as a *string*; only as a path is it not. Matching longest-first is what

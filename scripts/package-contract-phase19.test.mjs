@@ -121,9 +121,14 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
     assert.deepEqual(auditPhase19DemandAuthority(), {
       demands: 43,
       families: 18,
-      alreadyExact: 31,
-      producerExtensionRequired: 5,
+      alreadyExact: 32,
+      producerExtensionRequired: 4,
       unsupported: 7,
+      // Still 7, and deliberately: the probe-consistency family also carries
+      // `nonobservation-as-negative-proof`, which stays unsupported because
+      // finite runtime silence can never prove absence or closure. Binding the
+      // harness made the family's *executable* demand exact; it did not and
+      // must not make the family certification-ready.
       certificationReadyFamilies: 7
     });
   });

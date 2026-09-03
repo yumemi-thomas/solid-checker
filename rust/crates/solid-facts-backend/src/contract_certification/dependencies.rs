@@ -435,6 +435,7 @@ impl PublishedContractGraphPlan {
         pin: &TypeFactsProducerPin,
         issuer: &ConfiguredReceiptIssuer,
         revocation_epoch: u64,
+        probes: Option<&super::ProbeHarnessConfiguration>,
     ) -> Result<FinalizedPolicy2Graph, PublishedGraphCertificationError> {
         let type_facts_requests = self.type_facts_requests()?;
         let root_plan = self.plan(self.root_identity()).ok_or_else(|| {
@@ -465,7 +466,13 @@ impl PublishedContractGraphPlan {
             .map(|(identity, _)| identity)
             .zip(type_facts_evidence)
             .collect::<BTreeMap<_, _>>();
-        self.finalize_value_only_with_type_facts(&type_facts_by_node, pin, issuer, revocation_epoch)
+        self.finalize_value_only_with_type_facts(
+            &type_facts_by_node,
+            pin,
+            issuer,
+            revocation_epoch,
+            probes,
+        )
     }
 
     fn type_facts_requests(
@@ -502,6 +509,7 @@ impl PublishedContractGraphPlan {
         pin: &TypeFactsProducerPin,
         issuer: &ConfiguredReceiptIssuer,
         revocation_epoch: u64,
+        probes: Option<&super::ProbeHarnessConfiguration>,
     ) -> Result<FinalizedPolicy2Graph, PublishedGraphCertificationError> {
         let mut finalized = Vec::<FinalizedGraphNode>::with_capacity(self.nodes.len());
         for node in &self.nodes {
@@ -537,11 +545,26 @@ impl PublishedContractGraphPlan {
                         revocation_epoch,
                     )?)
                 };
+            // Every graph node derives, runs, and authenticates its own veto
+            // set against its own snapshot and demand graph. A parent never
+            // inherits a child's probe authority.
+            let probe_gates =
+                super::finalization::authenticate_probe_gates(&node.plan, probes, pin).map_err(
+                    |source| PublishedGraphCertificationError::FinalizationAtNode {
+                        node: node.identity.digest().into(),
+                        package: format!(
+                            "{}@{}",
+                            node.identity.package_name, node.identity.package_version
+                        ),
+                        source,
+                    },
+                )?;
             let contract = super::finalization::finalize_value_only_with_dependencies(
                 &node.plan,
                 &proposal,
                 type_facts,
                 dependency_evidence.as_ref(),
+                &probe_gates,
                 pin,
                 issuer,
                 revocation_epoch,
@@ -578,6 +601,7 @@ pub fn certify_published_contract_graph_case_set(
     pin: &TypeFactsProducerPin,
     issuer: &ConfiguredReceiptIssuer,
     revocation_epoch: u64,
+    probes: Option<&super::ProbeHarnessConfiguration>,
 ) -> Result<Vec<FinalizedPolicy2Graph>, PublishedGraphCertificationError> {
     let first_graph = graphs
         .first()
@@ -645,6 +669,7 @@ pub fn certify_published_contract_graph_case_set(
                 pin,
                 issuer,
                 revocation_epoch,
+                probes,
             )
         })
         .collect()

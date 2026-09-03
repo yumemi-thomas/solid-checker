@@ -11,7 +11,8 @@ use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
 use solid_reactive_ir::contract_semantics::{
     CardinalityScope, ClaimDomain, ClaimPath, OperationKind, ReactiveRole, Requirement,
-    SemanticClaimPath, UpperBound, ValuePathSegment, ValueRoot, ValueShape, ValueSource,
+    SemanticClaimPath, UpperBound, ValueClaimDomain, ValuePathSegment, ValueRoot, ValueShape,
+    ValueSource,
     certification::{
         DemandedCallability, PositiveFactSubject, ProofDemand, ProofDemandGraph,
         ProofDemandSubject, ProofFamily, ProofWitnessVariant, WitnessBinding,
@@ -101,6 +102,13 @@ impl TypeFactsProducerPin {
             executable_sha256,
             source_manifest_sha256,
         })
+    }
+
+    /// The pinned producer image on disk. The probe harness watches these
+    /// bytes across a probe run so a run that altered a producer input refuses
+    /// its gate instead of being absorbed into the transaction.
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
     }
 
     pub(crate) fn executable_sha256(&self) -> &str {
@@ -2984,9 +2992,23 @@ fn verify_export_value_family(
             }
         }
         ProofFamily::DomainExhaustiveness => {
+            let ProofDemandSubject::DomainClosure { subject, .. } = &proof.subject else {
+                return Err(TypeFactsCertificationError::UnsupportedDemand {
+                    demand: proof.id.clone(),
+                    reason: "domain-exhaustiveness demand has no closure subject".into(),
+                });
+            };
+            // This census is the exported value's own observation and nothing
+            // else: no control-flow branch census, so no guard partition, and
+            // no implementation census, so no behavioral call domain.
+            require_census_decides_closure(proof, &subject.path, ClosureCensus::ExportedValue)?;
             require_closed_value(&transcript.value, &open)?;
             require_export_callable_paths_closed(transcript, &open)?;
-            sites.push("typefacts-export-value-domain:complete".into());
+            let alternatives =
+                require_export_value_enumeration_matches_census(plan, proof, transcript, &open)?;
+            sites.push(format!(
+                "typefacts-export-value-domain:choice-alternatives:{alternatives}"
+            ));
         }
         _ => {
             return Err(TypeFactsCertificationError::UnsupportedDemand {
@@ -6518,6 +6540,361 @@ fn translate_value_path(path: &[ValuePathSegment]) -> Option<(usize, Vec<typefac
     Some((alternative, translated))
 }
 
+/// Which Type Facts census is in hand when a domain-closure demand is verified.
+///
+/// The two carry different evidence, so they decide different claims, and
+/// neither decides most of them.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ClosureCensus {
+    /// The exported value's own observed shape: its alternative enumeration,
+    /// its recursive open reasons, its finite partitions, and its declared
+    /// callable-path census with every subtree enumerated.
+    ExportedValue,
+    /// One selected call signature's parameter and result values plus the
+    /// implementation's control-flow branch census.
+    Invocation,
+}
+
+/// Refuses a domain-closure demand whose claim the census in hand does not
+/// decide, naming the premise it lacks.
+///
+/// `DomainExhaustiveness` is one proof family over many different claims, and
+/// both censuses above are censuses of the **declaration**. What a declaration
+/// decides is narrow:
+///
+/// * A **root choice-alternatives** domain of the exported value. The producer
+///   enumerates that value's alternatives itself, so the premise is its own
+///   enumeration — which is why the proposal's enumeration is then required to
+///   *be* that enumeration, in
+///   [`require_export_value_enumeration_matches_census`]. Nothing weaker would
+///   do: a closed declared type says the alternative set is finite and fully
+///   observed, not that a proposal listing three of them is right.
+/// * A **guard partition**, whose premise is a complete finite partition in a
+///   control-flow census with no unsupported branch, alongside closed parameter
+///   and result values. Only the invocation census carries branches.
+///
+/// Everything else refuses. Two cases are worth naming because they look close:
+///
+/// * A **behavioral call domain** — `creates`, `reads`, `writes`, `callbacks`,
+///   `cleanups`, `disposals`, `invalidates`, and equally `throws` and `returns`
+///   — is decided by the implementation, and no declaration says anything about
+///   it. `fixtures/package-contracts/closed-domain-probe-gate` pins the
+///   consequence: `run` and `runCreatingOwner` have byte-identical declarations
+///   and opposite ownership behavior, so their censuses are identical.
+///   Admitting the family for `creates: []` would leave the probe gate's finite
+///   non-observation as the only thing separating a certified row from a
+///   refused one — closure decided by non-observation, which a veto may never
+///   do. The premise it needs is an implementation census: a complete
+///   `ExportImplementationTranscript`, every `calls` target resolved, and no
+///   resolved target able to perform the domain's operation.
+/// * The **other value domains** — object properties, tuple items, array
+///   bounds, capabilities, and any non-root path — are decided by a declaration
+///   too, but this census hands over no enumeration of them to compare a
+///   proposal against, so admitting them would certify the proposal's own word.
+///
+/// Both refusals are proof-mode work, recorded in `docs/precision-backlog.md`
+/// and `docs/adr/0006-probe-harness-binding.md`.
+fn require_census_decides_closure(
+    proof: &ScheduledProofDemand,
+    path: &SemanticClaimPath,
+    census: ClosureCensus,
+) -> Result<(), TypeFactsCertificationError> {
+    let unsupported = |reason: String| TypeFactsCertificationError::UnsupportedDemand {
+        demand: proof.id.clone(),
+        reason,
+    };
+    match (census, path) {
+        (
+            ClosureCensus::ExportedValue,
+            SemanticClaimPath::Domain(ClaimPath::Value {
+                root: ValueRoot::Export,
+                path: value_path,
+                domain: ValueClaimDomain::ChoiceAlternatives,
+            }),
+        ) if value_path.0.is_empty() => Ok(()),
+        (ClosureCensus::Invocation, SemanticClaimPath::Domain(ClaimPath::GuardPartition)) => Ok(()),
+        (_, SemanticClaimPath::Domain(ClaimPath::Value { root, domain, .. })) => {
+            Err(unsupported(format!(
+                "value-enumeration premise required: closing the {} domain of a {} value needs a \
+                 producer enumeration of that domain to compare the proposal against, and this \
+                 census carries one only for the exported value's own choice alternatives",
+                value_claim_domain_name(*domain),
+                value_root_name(root)
+            )))
+        }
+        (_, SemanticClaimPath::Domain(ClaimPath::GuardPartition)) => Err(unsupported(
+            "control-flow-census premise required: closing a guard partition needs the branch \
+             census, which an export-value transcript does not carry"
+                .into(),
+        )),
+        (_, SemanticClaimPath::Domain(ClaimPath::Call(domain))) => Err(unsupported(format!(
+            "implementation-census premise required: closing the {} call domain needs a \
+             complete ExportImplementationTranscript, every `calls` target resolved, and no \
+             resolved target able to perform the domain's operation. A declaration census \
+             cannot decide it, because two exports with identical declarations have identical \
+             censuses",
+            call_claim_domain_name(*domain)
+        ))),
+        (
+            _,
+            SemanticClaimPath::Domain(ClaimPath::Operation { .. } | ClaimPath::Resource { .. }),
+        ) => Err(unsupported(
+            "implementation-census premise required: closing an operation or resource \
+                 domain needs the operation graph's own census, which no declaration decides"
+                .into(),
+        )),
+        (_, SemanticClaimPath::Operation(_)) => Err(unsupported(
+            "a domain-closure demand must name a claim domain, not one operation".into(),
+        )),
+    }
+}
+
+/// Requires the proposal's root alternative enumeration to *be* the producer's:
+/// the same number of alternatives, and at every index the kind the census
+/// observed there.
+///
+/// This is the closure premise for a root choice-alternatives domain, and it is
+/// the part that makes the claim the census's rather than the proposal's.
+/// `require_closed_value` already proves the producer observed the value and
+/// every alternative exhaustively — no open reason anywhere, every finite
+/// partition complete — so an enumeration of the same size as that observation
+/// is the observation's *cardinality*. A proposal naming a different number of
+/// alternatives is not a weaker claim about the same value; it is a claim the
+/// producer's exhaustive observation contradicts.
+///
+/// Cardinality is not identity, though, and the difference is not academic. The
+/// sibling per-index `recursive-value-shape` demands this shape inventories
+/// carry a `DemandedCallability` that is `Unknown` for every structural kind
+/// (`Object`, `Tuple`, `Promise`, `Reactive`, `Store`, `Action`, `Cleanup`, …),
+/// so on their own they would let a proposal name two alternatives of the wrong
+/// kinds and still "equal" a census of two. Each index is therefore compared
+/// here as well — against the only classification this census carries, which is
+/// callability — and any proposed kind the census cannot classify refuses.
+fn require_export_value_enumeration_matches_census(
+    plan: &CertificationPlan,
+    proof: &ScheduledProofDemand,
+    transcript: &ExportValueTranscript,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+) -> Result<usize, TypeFactsCertificationError> {
+    let (artifact_case, export_name) = proof_artifact_export(&proof.subject);
+    let export = plan
+        .candidates
+        .proposal()
+        .artifact_case(artifact_case)
+        .and_then(|case| case.exports.get(export_name))
+        .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason: "closure subject names an export absent from the selected candidate".into(),
+        })?;
+    let ValueShape::Choice(alternatives) = &export.shape else {
+        return Err(TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason: "a root choice-alternatives closure requires a proposed choice shape".into(),
+        });
+    };
+    let proposed = alternatives.items().len();
+    let observed = transcript.value.alternatives.len();
+    if proposed != observed {
+        return Err(open(&format!(
+            "proposed {proposed} root choice alternatives, but the producer exhaustively \
+             observed {observed}"
+        )));
+    }
+    if proposed == 0 {
+        return Err(open(
+            "a root choice-alternatives closure over no alternative enumerates nothing",
+        ));
+    }
+    for (index, alternative) in alternatives.items().iter().enumerate() {
+        require_export_alternative_kind_matches_census(
+            proof,
+            transcript,
+            index,
+            alternative,
+            open,
+        )?;
+    }
+    Ok(proposed)
+}
+
+/// Requires the proposal's alternative at one index to be the kind the census
+/// observed at that index.
+///
+/// The census classifies an alternative by **callability** and nothing else:
+/// [`typefacts::ValueAlternative`] carries an index, discriminants, and open
+/// reasons, and the per-alternative root [`typefacts::CallablePathFact`] adds
+/// presence and callability. So exactly two proposed kinds can be compared
+/// against it — `Callable`, which must be observed callable, and `Plain`, which
+/// must be observed non-callable — and every other kind refuses for want of a
+/// producer *kind* fact at that index. That refusal is the honest one:
+/// admitting, say, a proposed `Object` alternative would certify the proposal's
+/// own word about a structure the census never described. The remaining gap is
+/// recorded in `docs/precision-backlog.md`.
+///
+/// **`Component` refuses too**, and it is the one kind where that is not
+/// obvious. `recursive_value_callability` groups it with `Callable`, which is
+/// correct for the question *that* function asks — a component is callable —
+/// but this function decides whether a **closed** claim may be certified, and
+/// the artifact a receipt binds then names the alternative `component`. The
+/// only evidence in hand is bare callability, which every function has, so
+/// `component` would be a strictly stronger name than the census can support:
+/// nothing here observes a props parameter, a JSX or element result, or a
+/// render-time owner. A publisher who wants that closure can propose
+/// `Callable`, which is the claim the evidence actually makes.
+///
+/// The empty path names the alternative's own root, of which the census has one
+/// per alternative.
+///
+/// # What this comparison contributes, and what the sibling demand already does
+///
+/// Comparing proposal index *i* against census alternative *i* presumes the two
+/// enumerations are ordered alike, and neither side chose to be: the proposal's
+/// order is `normalize_knowledge`'s canonical sort and the producer's is its
+/// own. The correspondence is a *checked* property rather than an assumption,
+/// and — this is the part an earlier version of this comment got wrong — it is
+/// checked independently for **both** callability kinds:
+/// `inventory_value_shape` emits one `recursive-value-shape` demand per
+/// alternative carrying `recursive_value_callability(item)`, which is
+/// `Callable` for a `Callable` alternative and `NonCallable` for a `Plain` one,
+/// and `require_export_recursive_subject` verifies that against the census fact
+/// whose `alternative` field *is* `i` (see `translate_value_path`) through
+/// `require_path_callability`, which refuses `NonCallable` against an observed
+/// callable exactly as it refuses the converse. A permuted enumeration
+/// therefore refuses through those demands whichever of the two kinds sits at
+/// the permuted index, and every scheduled demand has to be discharged for the
+/// closure to certify.
+///
+/// What *this* comparison contributes on its own is the refusal of every kind
+/// the census cannot classify: each structural shape carries
+/// `DemandedCallability::Unknown`, which the sibling demand accepts without
+/// asserting anything, so a proposal naming two alternatives of the wrong
+/// structural kinds would otherwise have "equalled" a census of two. It also
+/// requires the index to appear in the producer's own enumeration and that
+/// alternative's root observation to be present and locally closed.
+///
+/// A multiset comparison — matching the *counts* of callable and non-callable
+/// alternatives instead of their positions — was considered and rejected on
+/// that ground. It keeps the unclassifiable-kind refusal, so it buys no
+/// reachable certification: every permutation it would newly accept is already
+/// refused by the sibling per-index demand. What it would cost is coherence —
+/// two halves of one premise disagreeing about what an index means, with this
+/// half no longer stating the reading the other half enforces.
+fn require_export_alternative_kind_matches_census(
+    proof: &ScheduledProofDemand,
+    transcript: &ExportValueTranscript,
+    index: usize,
+    alternative: &ValueShape,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+) -> Result<(), TypeFactsCertificationError> {
+    let expected = match alternative {
+        ValueShape::Callable => Callability::Callable,
+        ValueShape::Plain => Callability::NonCallable,
+        other => {
+            return Err(TypeFactsCertificationError::UnsupportedDemand {
+                demand: proof.id.clone(),
+                reason: format!(
+                    "alternative-kind premise required: this census classifies an alternative \
+                     only by callability, so it cannot decide that root choice alternative \
+                     {index} is a {} value",
+                    value_shape_kind_name(other)
+                ),
+            });
+        }
+    };
+    if !transcript
+        .value
+        .alternatives
+        .iter()
+        .any(|observed| observed.index == index)
+    {
+        return Err(open(&format!(
+            "root choice alternative {index} is absent from the producer's own enumeration"
+        )));
+    }
+    let fact = transcript
+        .callable_paths
+        .iter()
+        .find(|fact| fact.alternative == index && fact.path.is_empty())
+        .ok_or_else(|| {
+            open(&format!(
+                "root choice alternative {index} has no root observation in the exact producer \
+                 census"
+            ))
+        })?;
+    if !callable_path_is_present_and_locally_closed(fact) {
+        return Err(open(&format!(
+            "root choice alternative {index} is locally open in the producer census"
+        )));
+    }
+    if fact.callability != expected {
+        return Err(open(&format!(
+            "root choice alternative {index} is proposed as a {} value, which requires \
+             {expected:?}, but the producer census observed {:?}",
+            value_shape_kind_name(alternative),
+            fact.callability
+        )));
+    }
+    Ok(())
+}
+
+/// The proposal-side name of one value shape's kind, for a refusal that says
+/// which kind had no census classification.
+const fn value_shape_kind_name(shape: &ValueShape) -> &'static str {
+    match shape {
+        ValueShape::Unknown => "unknown",
+        ValueShape::Plain => "plain",
+        ValueShape::Parameter { .. } => "parameter",
+        ValueShape::Tuple(_) => "tuple",
+        ValueShape::Array { .. } => "array",
+        ValueShape::Object(_) => "object",
+        ValueShape::Choice(_) => "choice",
+        ValueShape::Callable => "callable",
+        ValueShape::Promise(_) => "promise",
+        ValueShape::AsyncIterable(_) => "async-iterable",
+        ValueShape::Reactive { .. } => "reactive",
+        ValueShape::Store { .. } => "store",
+        ValueShape::Action { .. } => "action",
+        ValueShape::Component => "component",
+        ValueShape::Cleanup { .. } => "cleanup",
+        ValueShape::RefApplication => "ref-application",
+        ValueShape::ServerFunctionReference { .. } => "server-function-reference",
+    }
+}
+
+const fn value_root_name(root: &ValueRoot) -> &'static str {
+    match root {
+        ValueRoot::Export => "exported",
+        ValueRoot::OperationInput { .. } => "operation-input",
+        ValueRoot::OperationOutput { .. } => "operation-output",
+    }
+}
+
+const fn value_claim_domain_name(domain: ValueClaimDomain) -> &'static str {
+    match domain {
+        ValueClaimDomain::Shape => "shape",
+        ValueClaimDomain::TupleItems => "tuple-items",
+        ValueClaimDomain::ObjectProperties => "object-properties",
+        ValueClaimDomain::ChoiceAlternatives => "choice-alternatives",
+        ValueClaimDomain::ArrayMinimumLength => "array-minimum-length",
+        ValueClaimDomain::ArrayMaximumLength => "array-maximum-length",
+        ValueClaimDomain::Capabilities => "capabilities",
+    }
+}
+
+const fn call_claim_domain_name(domain: ClaimDomain) -> &'static str {
+    match domain {
+        ClaimDomain::Reads => "reads",
+        ClaimDomain::Writes => "writes",
+        ClaimDomain::Creates => "creates",
+        ClaimDomain::Invalidates => "invalidates",
+        ClaimDomain::Throws => "throws",
+        ClaimDomain::Returns => "returns",
+        ClaimDomain::Cleanups => "cleanups",
+        ClaimDomain::Disposals => "disposals",
+        ClaimDomain::Callbacks => "callbacks",
+    }
+}
+
 fn require_domain_closure(
     proof: &ScheduledProofDemand,
     transcript: &InvocationTranscript,
@@ -6530,37 +6907,27 @@ fn require_domain_closure(
             reason: "domain-exhaustiveness demand has no closure subject".into(),
         });
     };
-    let domains: &[InvocationDomain] = match &subject.path {
-        SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Callbacks)) => &[
-            InvocationDomain::Signature,
-            InvocationDomain::Bindings,
-            InvocationDomain::Uses,
-        ],
-        SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Throws | ClaimDomain::Returns))
-        | SemanticClaimPath::Domain(ClaimPath::Operation { .. })
-        | SemanticClaimPath::Operation(_) => &[
-            InvocationDomain::Signature,
-            InvocationDomain::Uses,
-            InvocationDomain::ControlFlow,
-        ],
-        SemanticClaimPath::Domain(ClaimPath::Value { .. }) => &[
-            InvocationDomain::Signature,
-            InvocationDomain::Parameters,
-            InvocationDomain::Result,
-        ],
-        SemanticClaimPath::Domain(ClaimPath::GuardPartition) => &[
-            InvocationDomain::Signature,
-            InvocationDomain::Parameters,
-            InvocationDomain::Result,
-            InvocationDomain::ControlFlow,
-        ],
-        SemanticClaimPath::Domain(ClaimPath::Call(_) | ClaimPath::Resource { .. }) => &[
-            InvocationDomain::Signature,
-            InvocationDomain::Bindings,
-            InvocationDomain::Uses,
-            InvocationDomain::ControlFlow,
-        ],
-    };
+    // The invocation census carries the control-flow branch census, so a guard
+    // partition is the one closure it can decide.
+    require_census_decides_closure(proof, &subject.path, ClosureCensus::Invocation)?;
+    // Unreachable by construction: the gate above admits exactly
+    // `Domain(GuardPartition)` for this census and refuses every other claim
+    // path by name, so a per-path domain table here would be dead code that
+    // reads as if other paths were supported. When the implementation-census
+    // premise lands, the gate is what widens, and this is what follows it.
+    debug_assert!(
+        matches!(
+            &subject.path,
+            SemanticClaimPath::Domain(ClaimPath::GuardPartition)
+        ),
+        "require_census_decides_closure admits only a guard partition here"
+    );
+    let domains: &[InvocationDomain] = &[
+        InvocationDomain::Signature,
+        InvocationDomain::Parameters,
+        InvocationDomain::Result,
+        InvocationDomain::ControlFlow,
+    ];
     require_domains(transcript, domains, open)?;
     require_closed_signature_values(signature, open)?;
     require_all_callable_paths_closed(signature, open)?;
@@ -6571,6 +6938,31 @@ fn require_domain_closure(
             .is_none_or(|flow| !flow.unsupported.is_empty())
     {
         return Err(open("closure control-flow census is absent or unsupported"));
+    }
+    // A guard-partition closure's premise is a *complete* finite partition, not
+    // merely a branch census with nothing unsupported in it. The
+    // `GuardPartition` family already requires one for a positive guard case;
+    // closing the domain cannot ask for less.
+    if matches!(
+        &subject.path,
+        SemanticClaimPath::Domain(ClaimPath::GuardPartition)
+    ) && !signature
+        .parameters
+        .iter()
+        .flat_map(|parameter| &parameter.value.partitions)
+        .chain(&signature.result.partitions)
+        .chain(
+            transcript
+                .control_flow
+                .iter()
+                .flat_map(|flow| &flow.branches)
+                .flat_map(|branch| &branch.partitions),
+        )
+        .any(|partition| partition.complete)
+    {
+        return Err(open(
+            "guard-partition closure has no complete finite partition to enumerate",
+        ));
     }
     Ok(())
 }
@@ -10043,6 +10435,126 @@ mod tests {
                 callable,
             }),
         )
+    }
+
+    /// A two-alternative root choice census: alternative 0 observed
+    /// non-callable, alternative 1 observed callable, both locally closed.
+    ///
+    /// That is the whole classification this census carries about an
+    /// alternative, which is what makes the kind comparison in
+    /// `require_export_alternative_kind_matches_census` decide exactly two
+    /// proposed kinds and refuse the rest.
+    fn choice_export_value_transcript() -> ExportValueTranscript {
+        let root_path = |alternative: usize, callability: &str| {
+            json!({
+                "alternative": alternative,
+                "path": [],
+                "presence": "required",
+                "callability": callability,
+                "constructability": "nonConstructable",
+                "complete": true,
+                "apparent": false,
+                "subtreeEnumerated": true
+            })
+        };
+        serde_json::from_value(json!({
+            "location": {"path": "/project/index.d.ts", "startByte": 0, "endByte": 4},
+            "value": {
+                "callability": "mixed",
+                "constructability": "nonConstructable",
+                "primitive": {"mayBeObject": true},
+                "alternatives": [{"index": 0}, {"index": 1}]
+            },
+            "callablePaths": [
+                root_path(0, "nonCallable"),
+                root_path(1, "callable")
+            ],
+            "complete": true
+        }))
+        .expect("a two-alternative export-value transcript")
+    }
+
+    #[test]
+    fn the_alternative_kind_premise_admits_only_what_callability_decides() {
+        let transcript = choice_export_value_transcript();
+        // Only `proof.id` is read here; the subject shape is irrelevant to the
+        // kind comparison.
+        let demand = proof(ProofFamily::DomainExhaustiveness, selected_subject());
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "test".into(),
+            reason: reason.into(),
+        };
+        let verify = |index: usize, alternative: &ValueShape| {
+            require_export_alternative_kind_matches_census(
+                &demand,
+                &transcript,
+                index,
+                alternative,
+                &open,
+            )
+        };
+
+        // The two kinds callability decides, at the indices the census observed
+        // them.
+        verify(0, &ValueShape::Plain).expect("a non-callable observation decides a plain value");
+        verify(1, &ValueShape::Callable).expect("a callable observation decides a callable value");
+
+        // `Component` is *not* one of them, and this is the assertion that
+        // pins it. `recursive_value_callability` groups it with `Callable`
+        // because a component is callable, but the receipt-bound artifact then
+        // names the alternative `component` — a strictly stronger claim than
+        // bare callability, which every function satisfies. Nothing in this
+        // census observes props, an element result, or a render-time owner, so
+        // the honest answer is the same refusal every unclassifiable kind gets.
+        for (index, unclassifiable) in [
+            (1, ValueShape::Component),
+            (
+                0,
+                ValueShape::Object(solid_reactive_ir::contract_semantics::KnowledgeSet::Unknown),
+            ),
+            (0, ValueShape::Unknown),
+            (
+                0,
+                ValueShape::Tuple(solid_reactive_ir::contract_semantics::KnowledgeSet::Unknown),
+            ),
+        ] {
+            let error = verify(index, &unclassifiable)
+                .expect_err("a kind this census cannot classify must refuse");
+            assert!(
+                matches!(&error, TypeFactsCertificationError::UnsupportedDemand { reason, .. }
+                    if reason.contains("alternative-kind premise required")),
+                "unexpected error for {unclassifiable:?}: {error}"
+            );
+        }
+
+        // The index correspondence itself: a proposal whose canonical order
+        // disagrees with the producer's enumeration refuses rather than
+        // certifying. That is the safe direction. It is *not* the half no
+        // sibling demand covers: the per-index `recursive-value-shape` demand
+        // carries `NonCallable` for a `Plain` alternative and `Callable` for a
+        // `Callable` one, and `require_path_callability` verifies both against
+        // the census, so a permutation of either kind refuses there too. What
+        // this comparison alone refuses is a kind the census cannot classify,
+        // which the loop above covers.
+        for (index, permuted) in [(0, ValueShape::Callable), (1, ValueShape::Plain)] {
+            let error = verify(index, &permuted)
+                .expect_err("a kind the census contradicts at that index must refuse");
+            assert!(
+                matches!(&error, TypeFactsCertificationError::FamilyOpen { reason, .. }
+                    if reason.contains("but the producer census observed")),
+                "unexpected error at index {index}: {error}"
+            );
+        }
+
+        // An index the producer never enumerated is not a weaker claim about
+        // the same value; it is one the census cannot speak to.
+        let error =
+            verify(2, &ValueShape::Callable).expect_err("an unenumerated index must refuse");
+        assert!(
+            matches!(&error, TypeFactsCertificationError::FamilyOpen { reason, .. }
+                if reason.contains("absent from the producer's own enumeration")),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]

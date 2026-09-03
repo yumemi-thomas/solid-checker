@@ -113,6 +113,14 @@ _Avoid_: Package directory, temporary extraction, artifact case, generation
 A verifier-derived mandatory contradiction veto for one proposed closed claim. A contradiction blocks closure; success or finite non-observation never proves absence, completeness, or safety.
 _Avoid_: Runtime proof, passing probe, negative observation
 
+**Recipe corpus**:
+A directory of hand-authored, claim-addressed probe modules plus its manifest, supplied to one certification transaction and keyed by exact semantic claim id. It is an **input**, never a root of trust: omitting a scheduled gate refuses that gate, a vacuous recipe only fails to veto, and the verifier derives every module's construction digest from the bytes it copied. A corpus inside the analyzed package is refused outright.
+_Avoid_: Probe suite, test corpus, trusted recipes, probe fixtures
+
+**Detect-and-refuse isolation**:
+The Stage 1 probe scheme: instead of denying a probe's writes, the verifier proves none of the inputs the rest of the transaction reads was disturbed — a private snapshot copy, a watched census re-hashed before, between, and after launches, and refusal of any resolvable `node_modules` above the private directory — and refuses the gate when it cannot show that. It denies nothing, including network access, and its recorded sandbox policy digest says so in its own field list.
+_Avoid_: Sandboxed probe, isolated execution, denied writes, probe sandbox (that is Stage 2's OS-level scheme)
+
 **Verified positive fact**:
 An analyzer-visible possible behavior retained only after its exact proof demand has an authoritative witness. It does not close its surrounding claim domain or imply that unobserved sibling behavior is absent.
 _Avoid_: Partial proof, inferred behavior, closed claim

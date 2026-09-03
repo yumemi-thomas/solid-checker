@@ -186,7 +186,12 @@ The checked Solid 1.x and Solid 2 RC.3 main documents remain proposal/audit
 oracles in both `pkg/contracts/bundled/` and
 `rust/crates/solid-dialect/contracts/`. Their active bundle indexes are empty:
 all 24 former first-party artifact cases lost policy-1 authority at the atomic
-cut and none can be reissued before the mandatory probe harness is bound.
+cut. The mandatory probe harness is now bound
+(`docs/adr/0006-probe-harness-binding.md`), so a reissue is no longer blocked
+on that. Two things still block it: a hand-authored recipe for every closed
+claim domain each case proposes, because a scheduled veto with no recipe
+refuses; and, for the behavioral call domains these cases actually propose, the
+implementation-census premise the Type Facts closure witness does not yet have.
 
 The bundle is selected by exact installed artifact identity and environment,
 never by package name. Reduced fixture stubs and byte-different local copies are

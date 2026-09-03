@@ -10,7 +10,43 @@ TYPEFACTS_CERTIFICATION_ENV = \
 	SOLID_TYPEFACTS_CERTIFICATION_SHA256="sha256:$$(shasum -a 256 bin/solid-typefacts | awk '{print $$1}')" \
 	SOLID_TYPEFACTS_SOURCE_MANIFEST_SHA256="sha256:$$(node scripts/typefacts-source-identity.mjs --build-id "$(SOLID_CHECKER_BUILD_ID)" --digest)"
 
-.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit phase19-audit phase20-ledger phase21-ledger compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
+# The runtime-probe harness image and the Node runtime it is launched with.
+# Both are compiled into the verifier; a build without them refuses probe
+# authority, so a nonempty probe-gate schedule cannot certify at all rather
+# than certifying an unvetoed closure.
+#
+# PROBE_NODE must name the *real path* of the Node executable, because the
+# adapter refuses a symlink: a symlink is a name that can be repointed at other
+# bytes after the pin was taken. Override it to pin a different interpreter
+# (`make PROBE_NODE=/usr/local/bin/node …`); CI pins whichever `node` its
+# toolchain step installed, which is what the default expression resolves.
+PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
+#
+# `PROBE_NODE` is exported alongside the digests, not only consumed here: the
+# probe-gate tracers and `scripts/check-bundled-contracts.mjs` would otherwise
+# re-resolve `node` from `PATH` and could pin — or skip on — a different
+# executable than the one this build hashed.
+PROBE_HARNESS_ENV = \
+	PROBE_NODE="$(PROBE_NODE)" \
+	SOLID_CHECKER_PROBE_HARNESS_SHA256="sha256:$$(node scripts/probe-harness-source-identity.mjs --build-id "$(SOLID_CHECKER_BUILD_ID)" --write-stamp --digest)" \
+	SOLID_CHECKER_PROBE_NODE_SHA256="sha256:$$(shasum -a 256 "$(PROBE_NODE)" | awk '{print $$1}')"
+
+CERTIFICATION_ENV = $(TYPEFACTS_CERTIFICATION_ENV) $(PROBE_HARNESS_ENV)
+
+# Turns a silently skipped probe assertion into a loud failure, exactly as
+# `scripts/verify.sh` does. Every probe-gate tracer returns early when the
+# binary was compiled without the pins or when no Node executable can be
+# resolved, so the fast loop would otherwise report a green run that asserted
+# nothing about the binding.
+#
+# Conditional on `PROBE_NODE`, which is empty when `node` is not installed: on
+# such a machine the pins cannot be computed at all, so demanding them would
+# fail the build rather than the assertion. **That is the stated limit** — a
+# `make test-rust` without Node still skips every tracer, and only
+# `scripts/verify.sh` (which exits 127 without Node) closes it.
+PROBE_EXPECT_PINS = $(if $(PROBE_NODE),SOLID_CHECKER_EXPECT_PROBE_PINS=1,)
+
+.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-probe-harness test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit phase19-audit phase20-ledger phase21-ledger compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
 
 build: build-rust
 
@@ -21,29 +57,40 @@ build-typefacts:
 
 build-rust: build-typefacts
 	mkdir -p bin
-	$(TYPEFACTS_CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) --workspace
+	$(CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) --workspace
 	cp rust/target/debug/solid-checker-rust bin/solid-checker-rust
 
 # A fresh source build for gates. Unlike build-rust this does not rebuild the
 # pinned TypeFacts producer or overwrite the packaged/check-in binary under bin/.
 build-checker-debug: build-typefacts
-	$(TYPEFACTS_CERTIFICATION_ENV) cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) \
+	$(CERTIFICATION_ENV) cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) \
 	  -p solid-facts-backend --bin solid-checker-rust
 
 # A fresh optimized checker for performance measurements. Like the debug gate
 # build, this leaves the checked-in packaged binary under bin/ untouched.
 build-checker-release: build-typefacts
-	$(TYPEFACTS_CERTIFICATION_ENV) cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) \
+	$(CERTIFICATION_ENV) cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) \
 	  -p solid-facts-backend --bin solid-checker-rust
 
 package: build-typefacts
-	$(TYPEFACTS_CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) --workspace
+	$(CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) --workspace
 	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" $(BUN) scripts/package-rust.mjs --output dist/solid-checker
 
 test: test-rust test-cli
 
 test-rust: build-typefacts
-	$(TYPEFACTS_CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_TEST_BIN="$(CURDIR)/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) $(CARGO_TEST_RUNNER) --manifest-path $(RUST_MANIFEST) --workspace
+	$(CERTIFICATION_ENV) $(PROBE_EXPECT_PINS) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_TEST_BIN="$(CURDIR)/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) $(CARGO_TEST_RUNNER) --manifest-path $(RUST_MANIFEST) --workspace
+
+# The probe-harness binding on its own, for the fast loop and for
+# `verify-delta`'s harness-script row.
+#
+# It must go through this Makefile rather than a bare `cargo test`: the two
+# harness digests are read with `option_env!`, so a bare invocation compiles a
+# binary that refuses probe authority and turns every assertion below into an
+# early return. The `probe` filter selects `probe_harness::tests::*`, the
+# `runtime_probes` evaluator tests, and `contract_certification::tests::the_probe_gate_tracer_*`.
+test-probe-harness: build-typefacts
+	$(CERTIFICATION_ENV) $(PROBE_EXPECT_PINS) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_TEST_BIN="$(CURDIR)/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) $(CARGO_TEST_RUNNER) --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --lib probe
 
 test-cli:
 	$(BUN) install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
@@ -141,7 +188,7 @@ contract-differential: build-checker-debug tsc-oracle-provision
 	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/contract-differential.mjs
 
 contract-conformance:
-	$(BUN) scripts/check-bundled-contracts.mjs
+	PROBE_NODE="$(PROBE_NODE)" $(BUN) scripts/check-bundled-contracts.mjs
 	$(BUN) scripts/check-contract-pins.mjs
 	$(BUN) scripts/dialect-manifests.mjs check-composed-contracts
 
