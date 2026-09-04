@@ -1,0 +1,25 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "parameter-member-read",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "drop",
+      "domain": "creates",
+      "kind": "unresolved-callee",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.js:49:66",
+      "declaration": ""
+    }
+  ]
+}

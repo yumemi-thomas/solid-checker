@@ -1,5 +1,191 @@
 # Precision backlog
 
+
+### Measured on all 418 rows: the ranking, and it inverts the plan
+
+`make ecosystem-benchmark` with the decline records compiled in (report SHA-256
+`4cb052d7cc677a0ce8d2d1b587e5524d37fc23185cb309993474b1f7b84c0d3f`). Verdicts unchanged: 357 verified, 40 refused,
+21 not attempted, `withheldClosures` and `exportsProven` still 0.
+
+381 of 418 rows measured a decline; 113 named a dialect-silent blocker. 41,957
+declined proposals: **20,450 `unresolved-callee`, 13,341
+`refusing-callee-fixpoint`, 8,166 `dialect-silent`**. The fixpoint kind is
+derivative -- it blames a module-local helper whose own decline is one of the
+other two -- so the two root causes are an unresolved callee (about half) and a
+Solid primitive with no negative row (about a fifth).
+
+`bun scripts/dialect-audit-yield.mjs` ranks the silent primitives by distinct
+consumer exports blocked:
+
+| primitive | exports blocked | rows |
+| --- | ---: | ---: |
+| `useContext` | 485 | 13 |
+| `createEffect` | 279 | 57 |
+| `splitProps` | 232 | 5 |
+| `mergeProps` | 129 | 5 |
+| `on` | 86 | 9 |
+| `omit` | 69 | 5 |
+| `merge` | 68 | 4 |
+| `onMount` | 63 | 11 |
+| `runWithOwner` | 54 | 18 |
+| `createRenderEffect` | 42 | 19 |
+
+Three things follow, and the first corrects a plan written before the
+measurement existed. **The highest-yield audits are the pure helpers, not the
+reactive core**: `splitProps`, `mergeProps`, `omit`, `merge` and `on` are
+argument-shuffling functions whose bodies are short and whose `creates` answer
+is almost certainly "none", and together they block 584 consumer exports.
+`useContext` alone blocks 485. **`createEffect` is second, not first**, and its
+row cannot simply be re-added -- it needs the condition-aware row shape, because
+the 2026-09-04 decision withdrew it for a guarded server reach. **And the list
+mixes dialects**: `splitProps`, `mergeProps`, `batch`, `createComputed`,
+`mapArray`, `children`, `on` and `onMount` are 1.x spellings, so their rows
+need the Solid 1.x audit that does not exist -- which is now quantified rather
+than asserted.
+
+The larger half is not addressed at all. 20,450 records name a callee this
+build resolves to no symbol, and nothing yet says what shape they are (member
+dispatch, computed callee, undeclared global, re-export chain). Refining
+`unresolved-callee` into those shapes is the next measurement, and it is
+plausibly worth more than any audit on this list.
+## The generator's `creates` walk names its own blockers, and the first ranking says the dialect audits are no longer the bottleneck (2026-09-04)
+
+ADR 0008 shipped a census that can close `creates` on a consumer export and a
+generator gate that decides whether to *propose* the candidate at all
+(`rust/crates/solid-reactive-ir/src/creates_walk.rs`). Zero real corpus rows
+proposed one. The cause was known structurally -- the gate refuses on any
+canonical dialect primitive no audit denies `creates` for -- and not at all
+countably: the gate reported one bit per export and nothing about why. "Audit
+more primitives" was therefore a guess about *which* primitives, on how many
+exports, in how many packages.
+
+### What was added
+
+Every refusing call now carries a `CreatesDeclineKind`, and
+`CreatesProposalWalk::declines_for` answers the set of blockers reachable from
+one export's span. Exactly the dispositions the walk distinguishes:
+
+| kind | payload | what it means |
+| --- | --- | --- |
+| `dialect-silent` | `{ package, export }` | a canonical dialect primitive no audit denies `creates` for -- the number the slice exists to produce |
+| `create-publishing-callee` | `{ package, export }` | an accepted dependency contract that does not close `creates` empty |
+| `unresolved-callee` | the record's own location | this build resolved no symbol for the callee |
+| `refusing-callee-fixpoint` | `{ declaration }` | the propagated case, naming the refusing project function's exact span |
+
+The set is **transitive** through the same resolved local call edges the
+fixpoint follows (depth-bounded at 8, visited-set guarded), because an export
+whose only refusing call is a helper's `createEffect` would otherwise name no
+primitive -- and that is the shape a real consumer package has. A propagated
+record keeps its own location inside the helper.
+
+A `dialect-silent` record's `package` comes from the compiler's own
+`ResolvedDeclaration::origin_module` for the callee, or, failing that, from the
+module specifier of the import statement that exact callee **symbol** is the
+binding of. Never from the spelling. In practice on the corpus the *second*
+answer is the one that fires, which is worth knowing: the package half is as
+good as the build's binding facts and no better, and where neither answers the
+field is empty and the ranking prints `(unresolved)`.
+
+Threading, following the `solid-checker:withheld-owner-requirement=` precedent
+exactly: `normalize_export` -> `ProposalArtifacts::declined` -> one
+`solid-checker:declined-closure=` line per record -> the proposal refusal
+audit's additive `declinedClosures` array (locations folded to
+`<package-root>`) -> validated and counted by `scripts/contract-corpus.mjs` ->
+`contractContent.declinedClosures` / `declinedClosuresByKind` /
+`dialectSilentBlockers` per ecosystem row, plus `declinedClosures` at row level
+and a top-10 `topDialectSilentBlockers` table in the report's contract-content
+section. `scripts/dialect-audit-yield.mjs` ranks the `dialect-silent` records
+across every row by how many **distinct consumer exports** each
+`(package, export)` primitive blocks, with the row count beside it and a
+`--json` mode; `scripts/dialect-audit-yield.test.mjs` pins it against a
+synthesized report.
+
+**Measurement, never evidence.** Nothing is decided from a record, none is
+encoded into a contract document, `POLICY_DIGEST` did not move, and no verdict
+on any row changed. `dialect-silent` is the audits' *silence* about a spelling
+and `unresolved-callee` is this build's own ignorance; neither says a callee
+performs a `create`. Records are emitted only where a proposal was on the table
+-- a `ConsumingPackage` function export -- so a primitive-defining archive's
+and a `value` export's structural silence never enters the ranking, because no
+audit could clear them.
+
+### The first ranking, and what it actually says
+
+Six representative rows, run with `--attempt-certification` against a fresh
+debug binary. Every verdict, lane, `withheldClosures` (0) and `exportsProven`
+(0) is identical to the checked-in report:
+
+| package, export | consumer exports blocked | rows |
+| --- | ---: | ---: |
+| `solid-js`, `createEffect` | 1 | 1 |
+| `solid-js`, `mergeProps` | 1 | 1 |
+| `solid-js`, `runWithOwner` | 1 | 1 |
+
+47 declined closure proposals across those six rows: **29 `unresolved-callee`,
+14 `refusing-callee-fixpoint`, 4 `dialect-silent`**.
+
+That inverts ADR 0008's own expectation, and it is the finding of this slice.
+When the ADR was written the five core 2.0 primitives had no negative rows and
+"almost every real consumer export calls one of them" was true; the
+2026-09-04 audit granted rows for all five and withdrew `createEffect`'s, so
+dialect silence has collapsed to a long tail. **The dominant blocker on real
+rows is now callee resolution, not the dialect audits**: a complete audit of
+every remaining silent 2.0 primitive would, on this sample, unblock three
+consumer exports, while 29 records name a callee this build resolves to no
+symbol at all.
+
+Two consequences for sequencing, neither taken here:
+
+1. **The next measurement should be the shape of those 29.** `unresolved-callee`
+   currently carries only a location. Whether they are member dispatch,
+   computed callees, untyped values, or genuinely undeclared globals decides
+   whether they are a producer gap, an IR gap, or correctly fail-closed
+   forever. That is a separate slice and needs its own kind refinement.
+2. **The dialect-audit ranking is still the right artifact**, and cheap; it is
+   just no longer the top of the queue. Run it on the full corpus before
+   commissioning any further audit -- a spelling that is small on six rows can
+   be large on 418.
+
+### Fixture and snapshot cost, stated
+
+`fixtures/package-contracts/creates-decline-records` is new: one export per
+kind plus a control. The control lives in its own `./clean` entrypoint because
+`index.js`'s top-level `import "solid-js"` is an
+`UnacceptedExternalDependency` closure hazard that opens every domain of that
+artifact case whatever the walk found -- so a control beside the declines would
+have shown no candidate either, and "nothing proposed" would have been
+ambiguous between the walk and the hazard. That fixture's `solid-js` stub
+cannot satisfy the audited-archive identity, so what its `dialect-silent`
+records pin is the *dialect's canonical-primitive recognition*, not the tier;
+its README says so.
+
+`declinedClosures` counts toward the corpus gate's `auditedCases`, so a decline
+cannot appear, change kind, or vanish unreviewed. The cost is real: 17 corpus
+fixtures gained a first `expected-refusals.json`, 5 existing ones gained rows,
+16 more gained an empty array, and a record carries byte offsets -- so editing
+a fixture's source now moves its decline snapshot. 20 fixtures carry 74 records
+(30 `dialect-silent`, 26 `unresolved-callee`, 18 `refusing-callee-fixpoint`).
+That churn is the yield made visible: adding an audit row is supposed to move
+every snapshot whose exports it unblocks. Coverage stayed at 94 projects / 546
+findings and the ownership gate at 289 cases; no `expected.json` or
+`expected-proposal.json` of an existing fixture moved.
+
+### Still open
+
+- The `create-publishing-callee` kind has no corpus fixture: it needs an
+  accepted dependency contract that publishes a `create`, which the generator
+  corpus has no lane for. Pinned by unit tests only.
+- A blocker past `MAX_DECLINE_REPORT_DEPTH` (8) local call hops is not named.
+  The export still declines -- the fixpoint itself is unbounded -- and the
+  `refusing-callee-fixpoint` record at the last named hop is the trace.
+- The `package` half of a `dialect-silent` record is empty wherever neither
+  `origin_module` nor an import binding answers (a bootstrap analysis of
+  Solid's own sources, a re-export chain). The ranking keeps those as their own
+  `(unresolved)` row rather than merging them into a named package.
+- Nothing ranks the *other* two kinds. `unresolved-callee` and
+  `refusing-callee-fixpoint` are counted per row and per kind, and that is all
+  -- see consequence 1 above.
+
 ## Five core Solid 2.0 primitives can now terminate a `creates` census; `createEffect` no longer can (2026-09-04)
 
 `docs/package-contract-v2/audits/2026-09-04-solid-2-rc3-core-primitives-creates.md`

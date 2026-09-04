@@ -27,7 +27,7 @@ mod timings;
 mod upstream_compat;
 
 pub use attribution::ObligationReach;
-pub use creates_walk::CreatesProposalWalk;
+pub use creates_walk::{CreatesDecline, CreatesDeclineKind, CreatesProposalWalk};
 pub use owners::function_binding_name;
 pub use pipeline::{build, build_with_accepted_contracts_measured};
 
@@ -1035,6 +1035,15 @@ pub struct ContractExport {
     /// reached proposes nothing. This is a *proposal* input — the claim itself
     /// is proved, or refused, by the certifier's implementation census.
     pub creates_walk_clean: bool,
+    /// Why that walk declined, when it did: every blocker reachable from this
+    /// export's implementation span, lexically and through the resolved local
+    /// call edges ([`crate::CreatesProposalWalk::declines_for`]).
+    ///
+    /// **Measurement, never evidence.** No claim is decided from it, it is
+    /// never encoded into a package-contract document, and an empty list means
+    /// only "no blocker was named" — for a summary no walk reached that is
+    /// silence, not a clean walk, which is what `creates_walk_clean` says.
+    pub creates_walk_declines: Vec<crate::CreatesDecline>,
 }
 
 impl ContractExport {

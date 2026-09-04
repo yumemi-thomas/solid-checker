@@ -70,7 +70,8 @@ import {
   recommendedArtifactAnalysisBatchConcurrency,
   retainIndependentlyMergeableProposalBatches,
   retainIndependentlyMergeableProposals,
-  withheldClaimsFromEmitterOutput
+  withheldClaimsFromEmitterOutput,
+  declinedClosuresFromEmitterOutput
 } from "../scripts/generate-package-contract.mjs";
 
 test("a withheld-closure record is read off the native transaction's stdout, and only when whole", () => {
@@ -118,6 +119,55 @@ test("a withheld-claim record is read only for its own target, and only when who
   ]);
   assert.deepEqual(withheldClaimsFromEmitterOutput("", "/scratch/a-proposal.json"), []);
   assert.deepEqual(withheldClaimsFromEmitterOutput(undefined, "/scratch/a-proposal.json"), []);
+});
+
+test("a declined-closure record is read per target, relativized, and only when whole", () => {
+  const marker = "solid-checker:declined-closure=";
+  const stdout = [
+    `${marker}/scratch/a-proposal.json\tdialectSilent\tcreates\tdialect-silent\tsolid-js\tcreateEffect\t/pkg/index.js:10:20\t`,
+    `${marker}/scratch/a-proposal.json\tviaHelper\tcreates\trefusing-callee-fixpoint\t\t\t/pkg/index.js:40:52\t/pkg/index.js:30:60`,
+    `${marker}/scratch/b-proposal.json\tother\tcreates\tunresolved-callee\t\t\t/pkg/other.js:1:9\t`,
+    // Another target of the same batch, a line missing its kind, and ordinary
+    // output all have to be ignored: the marker is a contract, not a prose
+    // scan.
+    `${marker}/scratch/a-proposal.json\tincomplete\tcreates`,
+    "generated unaccepted stable contract proposal for x@1.0.0"
+  ].join("\n");
+  assert.deepEqual(declinedClosuresFromEmitterOutput(stdout, "/scratch/a-proposal.json", "/pkg"), [
+    {
+      export: "dialectSilent",
+      domain: "creates",
+      kind: "dialect-silent",
+      package: "solid-js",
+      callee: "createEffect",
+      location: "<package-root>/index.js:10:20",
+      declaration: ""
+    },
+    {
+      export: "viaHelper",
+      domain: "creates",
+      kind: "refusing-callee-fixpoint",
+      package: "",
+      callee: "",
+      location: "<package-root>/index.js:40:52",
+      declaration: "<package-root>/index.js:30:60"
+    }
+  ]);
+  // A second target of the same batch is answered on its own, and without a
+  // package root the location is kept verbatim rather than truncated by guess.
+  assert.deepEqual(declinedClosuresFromEmitterOutput(stdout, "/scratch/b-proposal.json"), [
+    {
+      export: "other",
+      domain: "creates",
+      kind: "unresolved-callee",
+      package: "",
+      callee: "",
+      location: "/pkg/other.js:1:9",
+      declaration: ""
+    }
+  ]);
+  assert.deepEqual(declinedClosuresFromEmitterOutput("", "/scratch/a-proposal.json"), []);
+  assert.deepEqual(declinedClosuresFromEmitterOutput(undefined, "/scratch/a-proposal.json"), []);
 });
 
 test("artifact analysis batches only compatible demands under a bounded target count", () => {

@@ -16,5 +16,6 @@
       "role": "effect",
       "reason": "a free-standing owner requirement -- an export that must be called under an owner because it registers a computation on it -- has no operation kind that can carry it in schema version 1"
     }
-  ]
+  ],
+  "declinedClosures": []
 }

@@ -1,0 +1,70 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "creates-decline-records-package",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "export-claim",
+      "export": "dialectSilent",
+      "role": "effect",
+      "reason": "a free-standing owner requirement -- an export that must be called under an owner because it registers a computation on it -- has no operation kind that can carry it in schema version 1"
+    }
+  ],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "dialectSilent",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createEffect",
+      "location": "<package-root>/index.js:1289:1336",
+      "declaration": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "unresolvedCallee",
+      "domain": "creates",
+      "kind": "unresolved-callee",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.js:2524:2545",
+      "declaration": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "viaSilentHelper",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createEffect",
+      "location": "<package-root>/index.js:1927:1974",
+      "declaration": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "viaSilentHelper",
+      "domain": "creates",
+      "kind": "refusing-callee-fixpoint",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.js:2022:2041",
+      "declaration": "<package-root>/index.js:1894:1977"
+    }
+  ]
+}

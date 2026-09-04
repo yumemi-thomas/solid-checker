@@ -16,5 +16,127 @@
       "role": "effect",
       "reason": "a free-standing owner requirement -- an export that must be called under an owner because it registers a computation on it -- has no operation kind that can carry it in schema version 1"
     }
+  ],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "assignedResource",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createResource",
+      "location": "<package-root>/index.ts:1211:1250",
+      "declaration": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "conditionalInlineCallback",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "runWithOwner",
+      "location": "<package-root>/index.ts:3233:3268",
+      "declaration": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "contextLocation",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "useContext",
+      "location": "<package-root>/index.ts:4691:4716",
+      "declaration": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "contextLocation",
+      "domain": "creates",
+      "kind": "refusing-callee-fixpoint",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.ts:4767:4778",
+      "declaration": "<package-root>/index.ts:4631:4720"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "contextParams",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "useContext",
+      "location": "<package-root>/index.ts:4691:4716",
+      "declaration": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "contextParams",
+      "domain": "creates",
+      "kind": "refusing-callee-fixpoint",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.ts:4835:4846",
+      "declaration": "<package-root>/index.ts:4631:4720"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "effectThroughMaybeAccessor",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createEffect",
+      "location": "<package-root>/index.ts:3494:3532",
+      "declaration": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "indirectResource",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createResource",
+      "location": "<package-root>/index.ts:739:792",
+      "declaration": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "observe",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "on",
+      "location": "<package-root>/index.ts:370:396",
+      "declaration": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "returnedResource",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createResource",
+      "location": "<package-root>/index.ts:1014:1053",
+      "declaration": ""
+    }
   ]
 }

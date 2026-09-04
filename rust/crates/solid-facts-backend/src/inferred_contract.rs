@@ -36,6 +36,8 @@ pub(crate) struct NormalizedInference {
     pub(crate) contract: NormalizedContract,
     pub(crate) closure_candidates: Vec<SemanticClaimSubject>,
     pub(crate) withheld: Vec<WithheldOwnerRequirementRecord>,
+    /// Why no `creates` closure was proposed, per export. Measurement only.
+    pub(crate) declined: Vec<DeclinedClosureRecord>,
 }
 
 pub(crate) fn normalize_inferred_contract(
@@ -62,7 +64,7 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
     resolved: &ResolvedImport,
     external_targets: &BTreeSet<(String, String)>,
 ) -> Result<NormalizedInference, ContractFailure> {
-    let (selected, withheld) =
+    let (selected, withheld, declined) =
         normalize_inferred_contract_identity(inferred, resolved, external_targets)?;
     let package = selected.package().clone();
     let mut cases = selected.artifact_cases().to_vec();
@@ -85,6 +87,7 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
         contract,
         closure_candidates: candidates,
         withheld,
+        declined,
     })
 }
 
@@ -92,7 +95,14 @@ fn normalize_inferred_contract_identity(
     inferred: &PackageContract,
     resolved: &ResolvedImport,
     external_targets: &BTreeSet<(String, String)>,
-) -> Result<(NormalizedContract, Vec<WithheldOwnerRequirementRecord>), ContractFailure> {
+) -> Result<
+    (
+        NormalizedContract,
+        Vec<WithheldOwnerRequirementRecord>,
+        Vec<DeclinedClosureRecord>,
+    ),
+    ContractFailure,
+> {
     let entrypoint = inferred
         .entrypoints
         .get(&resolved.requested_entrypoint)
@@ -108,10 +118,18 @@ fn normalize_inferred_contract_identity(
     // resolved package name, and applies to every export of the case.
     let scope = GenerationScope::for_package(&resolved.package_name);
     let mut withheld = Vec::new();
+    let mut declined = Vec::new();
     for (name, summary) in &entrypoint.exports {
         artifact_case.exports.insert(
             name.clone(),
-            normalize_export(&artifact_case, name, summary, scope, &mut withheld)?,
+            normalize_export(
+                &artifact_case,
+                name,
+                summary,
+                scope,
+                &mut withheld,
+                &mut declined,
+            )?,
         );
     }
     let normalized = ContractProposal::new(package, vec![artifact_case])
@@ -122,7 +140,7 @@ fn normalize_inferred_contract_identity(
     } else {
         select_and_bind_with_external_targets(&normalized, resolved, external_targets)?
     };
-    Ok((selected, withheld))
+    Ok((selected, withheld, declined))
 }
 
 /// What this generation may claim about the archive it is describing.
@@ -179,6 +197,7 @@ fn normalize_export(
     summary: &ContractExport,
     scope: GenerationScope,
     withheld: &mut Vec<WithheldOwnerRequirementRecord>,
+    declined: &mut Vec<DeclinedClosureRecord>,
 ) -> Result<ExportSemantics, ContractFailure> {
     let prefix = format!("{}:{name}:operation:", artifact_case.id);
     let mut operations = Vec::new();
@@ -349,6 +368,21 @@ fn normalize_export(
     {
         KnowledgeSet::Complete(Vec::new())
     } else {
+        // Record *why* nothing was proposed, but only where a proposal was
+        // actually on the table: a `ConsumingPackage` function export. The
+        // other two gates are structural — a primitive-defining archive and a
+        // `value` export have no implementation walk to blame — and reporting
+        // their silence as a blocker would put rows in the ranking that no
+        // dialect audit could ever clear.
+        if scope.publishes_bootstrapped_reactive_domains() && summary.kind == "function" {
+            declined.extend(summary.creates_walk_declines.iter().map(|decline| {
+                DeclinedClosureRecord {
+                    export: name.to_owned(),
+                    domain: "creates",
+                    decline: decline.clone(),
+                }
+            }));
+        }
         KnowledgeSet::Unknown
     };
     // `cleanups` is never *closed* here either, for the same reason: the owner
@@ -583,6 +617,34 @@ fn owner_created(resource: ResourceId, leaf: bool) -> OwnerRelation {
 pub struct WithheldOwnerRequirementRecord {
     pub export: String,
     pub role: WithheldOwnerRequirement,
+}
+
+/// One reason the generator declined to *propose* a closed `creates` for one
+/// export, named by the blocker's own resolved identity.
+///
+/// The measurement channel of [`solid_reactive_ir::CreatesProposalWalk`], and
+/// only that. It travels the same road as
+/// [`WithheldOwnerRequirementRecord`] — out of normalization, through
+/// [`crate::ProposalArtifacts`], onto the emit boundary's machine-readable
+/// record, into the generator's proposal refusal audit — and for the same
+/// reason: an unproposed candidate leaves only an open domain behind, which is
+/// indistinguishable from "there was nothing to propose". It is not a refusal
+/// (no artifact case is refused) and not a withheld claim (no claim was
+/// derivable): it is why the earlier, weaker question was answered no.
+///
+/// **Nothing is certified from it.** A `dialect-silent` record is the audits'
+/// silence about a spelling, and a `unresolved-callee` record is this build's
+/// own ignorance; neither says the callee performs a `create`.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct DeclinedClosureRecord {
+    /// The export whose `creates` stayed open.
+    pub export: String,
+    /// The domain the decline is about. Always `creates` today — it is the only
+    /// behavioral call domain with a census — and carried explicitly so a
+    /// second domain does not have to change the record's shape.
+    pub domain: &'static str,
+    /// The blocking call site and its reason.
+    pub decline: solid_reactive_ir::CreatesDecline,
 }
 
 /// The owner-requirement role this generation withheld, named so the

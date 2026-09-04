@@ -73,5 +73,6 @@
       "reason": "runtime target emits no JavaScript (erasable-statements): 1 module-level statement(s)"
     }
   ],
-  "withheldClaims": []
+  "withheldClaims": [],
+  "declinedClosures": []
 }

@@ -89,6 +89,7 @@ fn inferred_entrypoint_workflow_refuses_a_same_named_export_from_the_wrong_subpa
             open_claims: Default::default(),
             creates_closed_empty: false,
             creates_walk_clean: false,
+            creates_walk_declines: Vec::new(),
         },
     )]);
 
@@ -139,6 +140,7 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
             open_claims: Default::default(),
             creates_closed_empty: false,
             creates_walk_clean: false,
+            creates_walk_declines: Vec::new(),
         },
     )]);
     let mut primary = resolved();

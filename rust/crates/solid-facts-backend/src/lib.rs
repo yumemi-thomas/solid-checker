@@ -238,6 +238,7 @@ pub fn encode_inferred_contract_workflow(
         &normalized.contract,
         normalized.closure_candidates,
         normalized.withheld,
+        normalized.declined,
         pretty,
     )
 }
@@ -312,6 +313,7 @@ pub fn encode_inferred_entrypoint_workflow_with_external_targets(
         &normalized.contract,
         normalized.closure_candidates,
         normalized.withheld,
+        normalized.declined,
         pretty,
     )
 }

@@ -28,5 +28,6 @@
       "reason": "runtime target is unpublished behind private namespaced export condition(s) \"unpublished-conditional-target/source\""
     }
   ],
-  "withheldClaims": []
+  "withheldClaims": [],
+  "declinedClosures": []
 }

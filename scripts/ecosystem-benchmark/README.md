@@ -154,6 +154,17 @@ unproven where nothing was ever provable. See the sidecar's `inapplicable`
 array and `artifactCaseDisposition` in
 `packages/cli/scripts/generate-package-contract.mjs`.
 
+The sidecar's `declinedClosures` array is read the same way, into
+`declinedClosures` (a count), `declinedClosuresByKind`, and
+`dialectSilentBlockers` — the `(package, export)` primitives whose missing
+dialect audit row is what stopped the generator proposing a closed `creates`
+for an export, with how many *distinct* exports each blocks. It is measurement,
+not a refusal: the row certifies and the domain is simply open. `bun
+scripts/dialect-audit-yield.mjs [--report <path>] [--json]` ranks those across
+every row of a report and is the answer to "which dialect audit would return
+the most candidates"; `docs/adr/0008-implementation-census-for-creates.md`
+§ "The decline records" owns the record kinds.
+
 It is additive: no outcome class, success rate, baseline comparison, or
 floor/head diff depends on it, and a result with no `contractContent` still
 builds and renders a report. See `lib/contract-content.mjs` for the counting

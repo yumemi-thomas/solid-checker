@@ -1,0 +1,102 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "77daa71c154e18abaf96fec4a07f3a6dc52e51322a6a7a2fa246bb357e29a061",
+            "path": "./index.js",
+            "sha256": "e5feeaa5aebb01718958df2acaaa0f57e2daa6dea31934b94380666fe55630f3"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "a186417e0d8043578f701ed7053fcd66dac1cfbb16b1f9871f7dd95291075a7d"
+          },
+          "exports": {
+            "dialectSilent": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "unresolvedCallee": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "viaSilentHelper": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    },
+    "./clean": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "5fed33e1312aa2ada9e6d419d0b32190bacaf5d656d6220f983611b546be3894",
+            "path": "./clean.js",
+            "sha256": "ee5e2923a63399ef7e0fdaed175ab09a14da119ee409b871b6ec11cb4365662c"
+          },
+          "declarations": {
+            "path": "./clean.d.ts",
+            "sha256": "95769ae56dc0f729cdd86b8041905370b9a656cd8302f29156f9939c5a563f68"
+          },
+          "exports": {
+            "proposes": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1clean/import",
+            "typesBranch": "/exports/.~1clean/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:83d4866789f821291cbe4a8129b4db50bf7be92ed6bcb115f74a7b30d8869f5e",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "83d4866789f821291cbe4a8129b4db50bf7be92ed6bcb115f74a7b30d8869f5e"
+    },
+    "name": "creates-decline-records-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

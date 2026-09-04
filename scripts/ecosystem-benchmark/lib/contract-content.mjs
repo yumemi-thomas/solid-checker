@@ -178,11 +178,64 @@ function byteLength(value) {
   return Buffer.byteLength(value);
 }
 
+/**
+ * The `dialect-silent` blockers of one row, as `{ package, export,
+ * blockedExports }` ordered by how many distinct consumer exports each
+ * primitive blocks.
+ *
+ * `blockedExports` counts *exports*, not call sites: one export calling
+ * `createEffect` four times is one export an audit row would unblock, and
+ * ranking by call sites would inflate a loop-heavy module into a priority.
+ * Every `(package, export)` the row named is listed — the report's own top-N
+ * truncation happens one level up, so an aggregate across rows never loses a
+ * primitive that is small everywhere and large in total.
+ */
+function dialectSilentBlockers(declined) {
+  const byPrimitive = new Map();
+  for (const record of declined) {
+    if (record?.kind !== "dialect-silent") continue;
+    const key = `${record.package ?? ""}\u0000${record.callee ?? ""}`;
+    if (!byPrimitive.has(key)) {
+      byPrimitive.set(key, {
+        package: record.package ?? "",
+        export: record.callee ?? "",
+        exports: new Set()
+      });
+    }
+    byPrimitive.get(key).exports.add(String(record.export ?? ""));
+  }
+  return [...byPrimitive.values()]
+    .map(({ package: packageName, export: exportName, exports }) => ({
+      package: packageName,
+      export: exportName,
+      blockedExports: exports.size
+    }))
+    .sort((left, right) => {
+      if (left.blockedExports !== right.blockedExports) {
+        return right.blockedExports - left.blockedExports;
+      }
+      if (left.package !== right.package) return left.package < right.package ? -1 : 1;
+      return left.export < right.export ? -1 : left.export > right.export ? 1 : 0;
+    });
+}
+
+function countByKind(declined) {
+  const counts = {};
+  for (const record of declined) {
+    const kind = record?.kind;
+    if (typeof kind === "string" && kind) counts[kind] = (counts[kind] ?? 0) + 1;
+  }
+  return Object.fromEntries(
+    Object.entries(counts).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+  );
+}
+
 export function summarizeContract({
   contract,
   reviewPlan,
   refusals = null,
   inapplicable = null,
+  declinedClosures = null,
   refusedEntrypointsFromStdout = null,
   mainBytes = null,
   planBytes = null
@@ -203,6 +256,11 @@ export function summarizeContract({
   // refusals: an entrypoint no consumer can reach as a module asserts nothing
   // about certifiable behavior, so it must not be counted as one.
   const inapplicableArtifactCases = Array.isArray(inapplicable) ? inapplicable : [];
+  // Every blocking call site that made the generator decline to propose a
+  // closed `creates` for an export. Additive and null-safe: a sidecar written
+  // before the decline records existed simply carries none, which is not the
+  // same measurement as a row that declined nowhere.
+  const declined = Array.isArray(declinedClosures) ? declinedClosures : [];
   const operationCount = Object.values(document.behavioralRows).reduce(
     (total, count) => total + count,
     0
@@ -221,6 +279,10 @@ export function summarizeContract({
     artifactCaseRefusals: refusedArtifactCases,
     artifactCasesInapplicable: inapplicableArtifactCases.length,
     artifactCaseInapplicabilities: inapplicableArtifactCases,
+    declinedClosures: declined.length,
+    declinedClosuresByKind: countByKind(declined),
+    // The per-row answer to "what would a dialect audit unblock here".
+    dialectSilentBlockers: dialectSilentBlockers(declined),
     refusedEntrypointNames: [],
     exportsTotal: document.exportsTotal,
     exportsProven: document.exportsProven,
@@ -284,6 +346,9 @@ export function readProposalRefusalAudit(contractPath) {
     // Additive under the same envelope version: a sidecar written before the
     // disposition census existed simply has none.
     inapplicable: Array.isArray(audit.value.inapplicable) ? audit.value.inapplicable : [],
+    declinedClosures: Array.isArray(audit.value.declinedClosures)
+      ? audit.value.declinedClosures
+      : [],
     bytes: audit.bytes
   };
 }
@@ -303,6 +368,7 @@ export function readContractContent(contractPath, refusedEntrypointsFromStdout =
           refusals: refusalAudit.refusals
         },
     inapplicable: refusalAudit?.inapplicable ?? null,
+    declinedClosures: refusalAudit?.declinedClosures ?? null,
     refusedEntrypointsFromStdout,
     mainBytes: contract?.bytes ?? null,
     planBytes: reviewPlan?.bytes ?? null

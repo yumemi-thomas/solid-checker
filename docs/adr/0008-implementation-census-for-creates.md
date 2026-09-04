@@ -287,6 +287,77 @@ iterated to a fixpoint. Still a proposal input; the census decides the same
 callee again against authenticated bytes. Eleven candidates across nine corpus
 fixtures were withdrawn by this (listed in `docs/precision-backlog.md`).
 
+### The decline records
+
+The gate above answered one bit per export and said nothing about *why*. That
+made the ADR's own "what still refuses" list — the five unaudited 2.0
+primitives — an argument nobody could size: with 0 candidates on every measured
+row, "audit more primitives" was a guess about which primitives, on how many
+exports, in how many packages.
+
+So each refusing call now carries a `CreatesDeclineKind`, and
+`CreatesProposalWalk::declines_for` answers, for one export's span, the set of
+blockers reachable from it. Exactly the dispositions the walk itself
+distinguishes and no invented sixth:
+
+- `dialect-silent { package, export }` — a canonical dialect primitive no
+  audit denies `creates` for. **The number this exists to produce.** `export`
+  is the exact spelling `some_audit_denies_primitive` was asked about, so an
+  audit row for it is what clears the record; `package` comes from the
+  compiler's own `ResolvedDeclaration::origin_module` for the callee, or, where
+  the build resolved no declaration, from the module specifier of the import
+  statement that exact callee *symbol* is the binding of. Never from the
+  spelling: a `dialect-silent` record with a guessed package would misdirect
+  the audit it ranks. Neither answering leaves it empty.
+- `create-publishing-callee { package, export }` — an accepted dependency
+  contract that does not close `creates` empty, named by the contract binding's
+  own package and imported export.
+- `unresolved-callee` — no symbol resolved. The record's location is the whole
+  payload, because there is no callee identity to name.
+- `refusing-callee-fixpoint { declaration }` — the propagated case, naming the
+  refusing project function's exact declaration span.
+
+**The set is transitive, and it has to be.** An export whose only refusing call
+is a module-local helper's `createEffect` would otherwise report
+`refusing-callee-fixpoint` and name no primitive — and that is the shape a real
+consumer package has, so the measurement would be empty on precisely the rows
+it was built for. `declines_for` therefore follows the same resolved local call
+edges the fixpoint followed, bounded by depth 8 and a visited set, and a
+propagated record keeps **its own** location inside the helper.
+
+**Measurement, never evidence.** No claim is decided from a record, none is
+encoded into a contract document, and `POLICY_DIGEST` does not move. A
+`dialect-silent` record is the audits' *silence* about a spelling and an
+`unresolved-callee` record is this build's own ignorance; neither says the
+callee performs a `create`. The records are recorded only where a proposal was
+actually on the table — a `ConsumingPackage` function export — because a
+primitive-defining archive and a `value` export have no implementation walk to
+blame, and listing their structural silence would put rows in the ranking that
+no audit could ever clear.
+
+They travel the road `WithheldOwnerRequirementRecord` already had: out of
+`normalize_export`, through `ProposalArtifacts`, onto one
+`solid-checker:declined-closure=` line per record at the emit boundary,
+parsed by `generate-package-contract.mjs` into the proposal refusal audit's
+additive `declinedClosures` array (locations folded to `<package-root>`, as
+`stableRefusalReason` folds a refusal's), validated by
+`scripts/contract-corpus.mjs`, and summarized per ecosystem row as
+`contractContent.declinedClosures`, `declinedClosuresByKind`, and
+`dialectSilentBlockers`. `scripts/dialect-audit-yield.mjs` ranks those across
+every row by how many **distinct consumer exports** each `(package, export)`
+primitive blocks, with the row count beside it; that script is the answer to
+"what do we audit next".
+
+**Why the sidecar pins them.** `declinedClosures` counts toward the corpus
+gate's `auditedCases`, so a decline cannot appear, change kind, or vanish
+unreviewed — the same discipline the other three arrays get. The cost is real
+and accepted: a record carries byte offsets, so editing a fixture's source
+moves its decline snapshot, and 20 corpus fixtures now carry one (74 records:
+30 `dialect-silent`, 26 `unresolved-callee`, 18 `refusing-callee-fixpoint`).
+That churn is
+the yield made visible: adding an audit row is *supposed* to move every
+snapshot whose exports it unblocks.
+
 **Why this is not a weakening.** Nothing that could certify closed before is
 lost: a candidate with a recipe is planned, censused, vetoed, and certified
 exactly as before; a candidate without one was never going to close — it could
@@ -308,7 +379,12 @@ refuses by name at witness acquisition, before any gate is consulted.
   five have none). Almost every real consumer export calls one of them, so the
   generator's walk falls silent and **no candidate is proposed** — before any
   recipe, workspace, or census question arises. Filling that is an audit,
-  recorded as an open item, not a census change.
+  recorded as an open item, not a census change. *Which* audit is no longer a
+  guess: the decline records below make each silent primitive name itself, and
+  `scripts/dialect-audit-yield.mjs` ranks them by how many consumer exports
+  each one blocks. (The five have since moved — the 2026-09-04 audit added
+  rows for all of them and withdrew `createEffect`'s — which is exactly why
+  the ranking, and not a list in this ADR, is the durable answer.)
 - **Every export whose frame carries a control-flow marker** — a loop, a
   `switch`, or a `try` at any depth of the recursion, and any `break`/`continue`
   inside the bound declaration node, nested callables included — refuses even
@@ -424,3 +500,23 @@ is proven end to end.
 - `scripts/coverage.mjs`'s `checkDialectStubs` scans nested fixture
   directories, so `closed-domain-probe-gate/primitive-consumer/node_modules/solid-js`
   is held to the same presence/parseability/tracking check as a root stub.
+- `fixtures/package-contracts/creates-decline-records`: the decline records,
+  one export per kind. `./clean`'s `proposes` still proposes (the control);
+  `.`'s `dialectSilent` declines `dialect-silent` on `solid-js`'s
+  `createEffect`, `viaSilentHelper` declines twice —
+  `refusing-callee-fixpoint` at the call plus the helper's own
+  `dialect-silent` at its own location — and `unresolvedCallee` declines
+  `unresolved-callee` with the call's location. The control lives in its own
+  entrypoint deliberately: `index.js`'s top-level `import "solid-js"` is an
+  `UnacceptedExternalDependency` closure hazard that opens every domain of
+  that artifact case whatever the walk found, so a control beside the declines
+  would prove nothing. Its stub cannot satisfy the audited-archive identity, so
+  what `dialect-silent` pins there is the *dialect's canonical-primitive
+  recognition*, not the tier — see the fixture README.
+- `creates_walk::tests` pins the transitive report through a local call edge,
+  the mutual-recursion termination, the module-specifier-to-package reduction,
+  and that a walk which never ran names no blocker;
+  `contract-workflow.test.mjs` pins the marker parse (per target, relativized,
+  refused when truncated); `scripts/dialect-audit-yield.test.mjs` pins the
+  ranking against a synthesized report, including that a row carrying no
+  records is *named* rather than counted as zero.

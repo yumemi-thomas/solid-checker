@@ -500,6 +500,35 @@ impl<'a> SemanticLookup<'a> {
             .map(|binding| binding.summary.creates_closed_empty)
     }
 
+    /// The exact compiler symbol demanded at one span of one file, if any.
+    ///
+    /// Deliberately narrower than [`Self::callee_symbol`]: no wrapper peeling
+    /// and no member fallback, because the callers are spans that *are* a
+    /// binding name (an import's local name) rather than an arbitrary callee
+    /// expression.
+    pub(super) fn entity_symbol(&self, file: &FileFacts, span: Span) -> Option<&'a str> {
+        self.entities
+            .at(file.path.as_str(), span)
+            .map(SymbolId::as_str)
+    }
+
+    /// The module specifier the compiler resolved this callee's declaration to
+    /// originate from, or `None` when the build has no resolved declaration for
+    /// it (or the producer recorded no origin).
+    ///
+    /// An exact resolved fact and nothing weaker: it is the callee's own
+    /// `ResolvedDeclaration::origin_module`, never derived from the callee's
+    /// spelling or from an import statement standing nearby. Used to name the
+    /// package half of a [`crate::CreatesDeclineKind::DialectSilent`] record,
+    /// where a wrong package would misdirect the very audit the record ranks.
+    pub(super) fn callee_origin_module(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
+        let declaration = self
+            .resolved_callee_call(file, callee)?
+            .declaration
+            .as_ref()?;
+        (!declaration.origin_module.is_empty()).then_some(declaration.origin_module.as_ref())
+    }
+
     pub(super) fn contract_owner_requirements(
         &self,
         symbol: &str,

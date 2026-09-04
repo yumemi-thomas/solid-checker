@@ -5239,6 +5239,26 @@ fn emit_package_contract(
             withheld.role.reason()
         );
     }
+    for declined in &proposal.declined {
+        // Same discipline, wider: `<document>\t<export>\t<domain>\t<kind>\t
+        // <package>\t<callee>\t<location>\t<declaration>`. An export name, a
+        // domain, a kind and a package/export identity carry no tab or
+        // newline; `location` is always the refusing *call*'s `path:start:end`,
+        // and `declaration` the refusing callee's, where the kind names one.
+        // A kind that names no such identity leaves its column empty, which
+        // the parser preserves rather than guesses at.
+        println!(
+            "{DECLINED_CLOSURE_MARKER}{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            output.display(),
+            declined.export,
+            declined.domain,
+            declined.decline.kind.name(),
+            declined.decline.kind.package(),
+            declined.decline.kind.callee_export(),
+            declined.decline.location(),
+            declined.decline.kind.declaration()
+        );
+    }
     Ok(())
 }
 
@@ -5251,6 +5271,21 @@ fn emit_package_contract(
 /// line, and the generator's refusal audit records it beside the artifact-case
 /// refusals it already keeps.
 const WITHHELD_OWNER_REQUIREMENT_MARKER: &str = "solid-checker:withheld-owner-requirement=";
+
+/// The machine-readable half of a *declined closure proposal*, beside
+/// [`WITHHELD_OWNER_REQUIREMENT_MARKER`].
+///
+/// One line per blocking call site the generator's `creates` walk named for an
+/// export whose closure it therefore did not propose
+/// (`solid_reactive_ir::CreatesProposalWalk`). A declined proposal leaves the
+/// same open domain behind as a census that found nothing to propose, and the
+/// difference is the whole measurement: which blocker, in which package, for
+/// which spelling. This is the line
+/// `scripts/dialect-audit-yield.mjs` ultimately ranks — it names what an audit
+/// would have to cover to make candidates appear on real rows at all.
+///
+/// It certifies nothing and is not part of either encoded artifact.
+const DECLINED_CLOSURE_MARKER: &str = "solid-checker:declined-closure=";
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -6320,6 +6355,11 @@ struct GeneratedOwnerRequirements {
     /// *positive* answer, so an export neither map reaches proposes nothing.
     clean_creates_walk_by_symbol: HashSet<String>,
     clean_creates_walk_by_function: HashSet<FunctionKey>,
+    /// Why the walk declined, for the functions it refused, by the same two
+    /// identities. Measurement only; the proposal decision reads the sets
+    /// above and nothing here.
+    creates_walk_declines_by_symbol: HashMap<String, Vec<solid_reactive_ir::CreatesDecline>>,
+    creates_walk_declines_by_function: HashMap<FunctionKey, Vec<solid_reactive_ir::CreatesDecline>>,
 }
 
 fn canonical_symbol_aliases(facts: &solid_facts::ProjectFacts) -> HashMap<String, String> {
@@ -6414,17 +6454,37 @@ fn generated_owner_requirements_by_symbol(
     // is exactly what a `creates: []` proposal needs.
     for file in &facts.files {
         for function in &file.ast.functions {
-            if !program.creates_proposal_walk.proposes(
-                file.path.as_str(),
-                (u64::from(function.span.start), u64::from(function.span.end)),
-            ) {
-                continue;
-            }
+            let span = (u64::from(function.span.start), u64::from(function.span.end));
             let key = (
                 file.path.to_string(),
                 function.span.start,
                 function.span.end,
             );
+            if !program
+                .creates_proposal_walk
+                .proposes(file.path.as_str(), span)
+            {
+                // Refused: record *why*, so "audit this primitive next" is a
+                // measured answer rather than a guess. The blockers are read
+                // once per function here, on the same pass and by the same two
+                // identities the positive verdict uses.
+                let declines = program
+                    .creates_proposal_walk
+                    .declines_for(file.path.as_str(), span);
+                if !declines.is_empty() {
+                    if let Some(Some(symbol)) = function_symbols.get(&key) {
+                        indexed
+                            .creates_walk_declines_by_symbol
+                            .entry(symbol.clone())
+                            .or_insert_with(|| declines.clone());
+                    }
+                    indexed
+                        .creates_walk_declines_by_function
+                        .entry(key)
+                        .or_insert(declines);
+                }
+                continue;
+            }
             if let Some(Some(symbol)) = function_symbols.get(&key) {
                 indexed.clean_creates_walk_by_symbol.insert(symbol.clone());
             }
@@ -6539,6 +6599,21 @@ fn attach_generated_owner_requirements(
         || default_function
             .as_ref()
             .is_some_and(|key| generated.clean_creates_walk_by_function.contains(key));
+    // The negative half, carried for measurement only: which blockers the walk
+    // named for this export. Attached whichever identity resolved it, in the
+    // same order the two `clean` sets are consulted.
+    if !summary.creates_walk_clean {
+        summary.creates_walk_declines = symbol
+            .as_ref()
+            .and_then(|symbol| generated.creates_walk_declines_by_symbol.get(symbol))
+            .or_else(|| {
+                default_function
+                    .as_ref()
+                    .and_then(|key| generated.creates_walk_declines_by_function.get(key))
+            })
+            .cloned()
+            .unwrap_or_default();
+    }
     let operations = symbol
         .as_ref()
         .and_then(|symbol| generated.by_symbol.get(symbol))

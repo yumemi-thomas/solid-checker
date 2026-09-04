@@ -1,0 +1,25 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "reexport-value-sibling-callback",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "subscribe",
+      "domain": "creates",
+      "kind": "unresolved-callee",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/inner.js:369:388",
+      "declaration": ""
+    }
+  ]
+}

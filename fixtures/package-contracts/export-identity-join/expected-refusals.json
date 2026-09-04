@@ -1,0 +1,49 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "export-identity-join",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "UseChannel",
+      "domain": "creates",
+      "kind": "unresolved-callee",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/channel.js:46:63",
+      "declaration": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "UseChannel",
+      "domain": "creates",
+      "kind": "refusing-callee-fixpoint",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.js:156:196",
+      "declaration": "<package-root>/internal.js:51:139"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "UseChannel",
+      "domain": "creates",
+      "kind": "refusing-callee-fixpoint",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/internal.js:92:116",
+      "declaration": "<package-root>/channel.js:7:66"
+    }
+  ]
+}

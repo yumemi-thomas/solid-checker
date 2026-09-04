@@ -1,8 +1,8 @@
 # Ecosystem Benchmark Report
 
-- Started: 2026-09-04T01:51:10.407Z
-- Finished: 2026-09-04T01:52:26.516Z
-- Duration: 76109 ms
+- Started: 2026-09-04T02:41:18.909Z
+- Finished: 2026-09-04T02:42:30.974Z
+- Duration: 72065 ms
 - Checker native binary: /Users/thomas/Documents/Github/solid-checker/rust/target/release/solid-checker-rust
 - Type Facts binary: /Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts
 - Registry cache for certification: /Users/thomas/Documents/Github/solid-checker/rust/target/registry-cache
@@ -933,6 +933,22 @@ None.
 - Entrypoints: 1128 emitted, 0 refused; 282 artifact cases refused, 548 artifact cases inapplicable
 - Closure notes (block byte-attested verification): 0
 - Attested closure notes (record complete, runtime unbounded): 0
+- Declined `creates` closure proposals (blocking call sites): 41957 -- 20450 unresolved-callee, 13341 refusing-callee-fixpoint, 8166 dialect-silent
+
+### Dialect-silent blockers (what an audit row would unblock)
+
+| Package | Export | Consumer exports blocked | Probes |
+| --- | --- | ---: | ---: |
+| solid-js | useContext | 485 | 13 |
+| solid-js | createEffect | 279 | 57 |
+| solid-js | splitProps | 232 | 5 |
+| solid-js | mergeProps | 129 | 5 |
+| solid-js | on | 86 | 9 |
+| solid-js | omit | 69 | 5 |
+| solid-js | merge | 68 | 4 |
+| solid-js | onMount | 63 | 11 |
+| solid-js | runWithOwner | 54 | 18 |
+| solid-js | createRenderEffect | 42 | 19 |
 
 ### Proposal wire size
 
@@ -1016,8 +1032,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Worker timings
 
-- Worker time: 1105953 ms
-- Phases: install 56979 ms, generation 424249 ms, harness 624725 ms
+- Worker time: 1028213 ms
+- Phases: install 64129 ms, generation 385158 ms, harness 578926 ms
 
 ### Top failure signatures
 

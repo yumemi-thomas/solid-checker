@@ -225,6 +225,54 @@ export function withheldClaimsFromEmitterOutput(stdout, documentPath) {
   return claims;
 }
 
+/// The one line the native emitter writes for each blocking call site that made
+/// it decline to *propose* a closed `creates` for an export
+/// (`DECLINED_CLOSURE_MARKER` in rust/crates/solid-facts-backend/src/main.rs),
+/// tab-separated as
+/// `<document path>\t<export>\t<domain>\t<kind>\t<package>\t<callee>\t<location>\t<declaration>`.
+///
+/// A declined proposal leaves the same open domain behind as a census with
+/// nothing to propose, so the decline has to be stated rather than inferred —
+/// and *which* blocker it was is the measurement: it says what a dialect audit
+/// would have to cover before any candidate appears on a real row. Measurement
+/// only; nothing here certifies or refuses anything.
+const DECLINED_CLOSURE_MARKER = "solid-checker:declined-closure=";
+
+/// Every declined-closure line the emitter wrote for `documentPath`, as
+/// `{ export, domain, kind, package, callee, location, declaration }`. Lines
+/// for other targets of the same batch, and any other emitter output, are
+/// ignored. `package`, `callee` and `declaration` are empty for the kinds that
+/// name no such identity, and are kept empty rather than filled in by guess.
+export function declinedClosuresFromEmitterOutput(stdout, documentPath, packageRoot = null) {
+  // A blocking call site is a `path:start:end` inside the analyzed package, and
+  // the emitter states it absolutely because that is the only path it has. A
+  // snapshot of an absolute path is a snapshot of one machine, so the package
+  // root is folded to `<package-root>` here -- the same substitution
+  // `stableRefusalReason` makes for an artifact-case refusal, and for the same
+  // reason. Absent a root the location is kept verbatim rather than truncated
+  // by guess.
+  const relativize = value =>
+    packageRoot ? value.replaceAll(packageRoot, "<package-root>") : value;
+  const declined = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    if (!line.startsWith(DECLINED_CLOSURE_MARKER)) continue;
+    const [document, exportName, domain, kind, packageName, callee, location, declaration] = line
+      .slice(DECLINED_CLOSURE_MARKER.length)
+      .split("\t");
+    if (document !== documentPath || !exportName || !domain || !kind) continue;
+    declined.push({
+      export: exportName,
+      domain,
+      kind,
+      package: packageName ?? "",
+      callee: callee ?? "",
+      location: relativize((location ?? "").trim()),
+      declaration: relativize((declaration ?? "").trim())
+    });
+  }
+  return declined;
+}
+
 /// The refusal classes a census row can carry, named after what would change
 /// the answer.
 export const REFUSAL_CLASSES = Object.freeze({
@@ -801,7 +849,8 @@ function writeProposalRefusalAudit(
   manifest,
   refusals,
   inapplicable = [],
-  withheldClaims = []
+  withheldClaims = [],
+  declinedClosures = []
 ) {
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(
@@ -813,7 +862,8 @@ function writeProposalRefusalAudit(
         package: { name: manifest.name, version: manifest.version },
         refusals,
         inapplicable,
-        withheldClaims
+        withheldClaims,
+        declinedClosures
       },
       null,
       2
@@ -985,6 +1035,7 @@ async function analyzeArtifact({
     resolution,
     identity,
     withheldClaims: withheldClaimsFromEmitterOutput(emitted.stdout, output),
+    declinedClosures: declinedClosuresFromEmitterOutput(emitted.stdout, output, packageRoot),
     analysisDurationMs: performance.now() - startedAt
   };
 }
@@ -1109,6 +1160,11 @@ async function analyzeArtifactsBatch({
             resolution: candidate.prepared.resolution,
             identity: candidate.prepared.identity,
             withheldClaims: withheldClaimsFromEmitterOutput(emitted.stdout, target.output),
+            declinedClosures: declinedClosuresFromEmitterOutput(
+              emitted.stdout,
+              target.output,
+              packageRoot
+            ),
             analysisDurationMs: Number.isFinite(result.durationNs)
               ? result.durationNs / 1_000_000
               : duration
@@ -1230,6 +1286,12 @@ export async function generatePackageContract(
   // an artifact case that certified: the case is not refused, one claim of it
   // is withheld, and the two are different census answers.
   const withheldClaims = [];
+  // Why the generator declined to *propose* a closed `creates`, per blocking
+  // call site. Not a refusal and not a withheld claim: the artifact case
+  // certifies and no claim was derivable in the first place. Recorded because
+  // an unmade proposal is invisible in the document, and which blocker it was
+  // is what `scripts/dialect-audit-yield.mjs` ranks.
+  const declinedClosures = [];
   const refusals = wildcardRefusals.map(entrypoint => ({
     entrypoint,
     conditions: null,
@@ -1400,6 +1462,20 @@ export async function generatePackageContract(
             reason: claim.reason
           });
         }
+        for (const record of outcome.proposal.declinedClosures ?? []) {
+          declinedClosures.push({
+            entrypoint: outcome.proposal.entrypoint,
+            conditions: outcome.proposal.conditions,
+            stage: "closure-proposal",
+            export: record.export,
+            domain: record.domain,
+            kind: record.kind,
+            package: record.package,
+            callee: record.callee,
+            location: record.location,
+            declaration: record.declaration
+          });
+        }
         if (timing) {
           timing.analyzedTargets += 1;
           timing.targets.push({
@@ -1427,7 +1503,14 @@ export async function generatePackageContract(
       // The benchmark and row ledger need the complete artifact-case census,
       // not only the first refusal repeated in the thrown message. Persist the
       // structured audit before taking the full-refusal exit.
-      writeProposalRefusalAudit(output, manifest, refusals, inapplicable, withheldClaims);
+      writeProposalRefusalAudit(
+        output,
+        manifest,
+        refusals,
+        inapplicable,
+        withheldClaims,
+        declinedClosures
+      );
       const first = refusals[0];
       // When nothing refused, the refusal clause names no cause at all and the
       // signature is unclassifiable. Name the first inapplicable class and
@@ -1505,7 +1588,14 @@ export async function generatePackageContract(
           });
         }
         if (!fallback.merged) {
-          writeProposalRefusalAudit(output, manifest, refusals, inapplicable, withheldClaims);
+          writeProposalRefusalAudit(
+        output,
+        manifest,
+        refusals,
+        inapplicable,
+        withheldClaims,
+        declinedClosures
+      );
           throw new Error("no independently mergeable artifact case remains");
         }
         emittedArtifactCases = fallback.acceptedCount;
@@ -1521,7 +1611,14 @@ export async function generatePackageContract(
       await checked(["--validate-contract", output], packageRoot);
     }
     if (timing) timing.validationMs = performance.now() - validationStartedAt;
-    writeProposalRefusalAudit(output, manifest, refusals, inapplicable, withheldClaims);
+    writeProposalRefusalAudit(
+        output,
+        manifest,
+        refusals,
+        inapplicable,
+        withheldClaims,
+        declinedClosures
+      );
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -1536,6 +1633,7 @@ export async function generatePackageContract(
     refusedArtifactCases: refusals.length,
     inapplicableArtifactCases: inapplicable.length,
     withheldClaims: withheldClaims.length,
+    declinedClosures: declinedClosures.length,
     // The subset of the inapplicable census whose premise is file content.
     // Certification carries these to Rust and refuses the whole proposal if the
     // authenticated archive refutes one; see `VERIFIER_PROVED_DISPOSITIONS`.

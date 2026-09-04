@@ -40,5 +40,6 @@
       "reason": "runtime target emits no JavaScript (declaration-file): 2 module-level statement(s)"
     }
   ],
-  "withheldClaims": []
+  "withheldClaims": [],
+  "declinedClosures": []
 }

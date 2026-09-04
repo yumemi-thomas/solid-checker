@@ -575,6 +575,12 @@ function emptyContentAccumulator() {
     behavioralRows: emptyBehavioralRows(),
     closureNotes: 0,
     attestedRuntimeNotes: 0,
+    // Why the generator declined to propose a closed `creates`. Additive, and
+    // measurement only: a decline is neither a refusal nor a withheld claim,
+    // it is the earlier "nothing was proposed, and here is what blocked it".
+    declinedClosures: 0,
+    declinedClosuresByKind: {},
+    dialectSilentBlockers: new Map(),
     packageStates: new Map(),
     wireSamples: {
       prettyMain: [],
@@ -604,6 +610,26 @@ function accumulateContent(accumulator, result) {
   addBehavioralRows(accumulator.behavioralRows, content.behavioralRows);
   accumulator.closureNotes += content.closureNotes ?? 0;
   accumulator.attestedRuntimeNotes += content.attestedRuntimeNotes ?? 0;
+  accumulator.declinedClosures += content.declinedClosures ?? 0;
+  for (const [kind, count] of Object.entries(content.declinedClosuresByKind ?? {})) {
+    accumulator.declinedClosuresByKind[kind] =
+      (accumulator.declinedClosuresByKind[kind] ?? 0) + count;
+  }
+  // Summed over rows, and the probe count kept beside it: one package with 40
+  // blocked exports and 20 packages with 2 each are different audit arguments,
+  // and a single total cannot tell them apart.
+  for (const blocker of content.dialectSilentBlockers ?? []) {
+    const key = `${blocker.package ?? ""}\u0000${blocker.export ?? ""}`;
+    const existing = accumulator.dialectSilentBlockers.get(key) ?? {
+      package: blocker.package ?? "",
+      export: blocker.export ?? "",
+      blockedExports: 0,
+      probes: 0
+    };
+    existing.blockedExports += blocker.blockedExports ?? 0;
+    existing.probes += 1;
+    accumulator.dialectSilentBlockers.set(key, existing);
+  }
   for (const field of Object.keys(accumulator.wireSamples)) {
     const value = content.wireBytes?.[field];
     if (Number.isFinite(value)) accumulator.wireSamples[field].push(value);
@@ -625,11 +651,24 @@ function accumulateContent(accumulator, result) {
   accumulator.packageStates.set(result.package, (previous ?? true) && Boolean(content.fullyProven));
 }
 
-function finalizeContentAccumulator(accumulator) {
+function finalizeContentAccumulator(accumulator, dialectSilentLimit = 10) {
   const packages = [...accumulator.packageStates.values()];
-  const { packageStates, wireSamples, ...counts } = accumulator;
+  const { packageStates, wireSamples, dialectSilentBlockers, ...counts } = accumulator;
   return {
     ...counts,
+    // Top-N only: the full per-row lists stay on every row's own
+    // `contractContent`, which is what `scripts/dialect-audit-yield.mjs`
+    // aggregates, so truncating the summary loses nothing recoverable.
+    topDialectSilentBlockers: [...dialectSilentBlockers.values()]
+      .sort((left, right) => {
+        if (left.blockedExports !== right.blockedExports) {
+          return right.blockedExports - left.blockedExports;
+        }
+        if (left.probes !== right.probes) return right.probes - left.probes;
+        if (left.package !== right.package) return left.package < right.package ? -1 : 1;
+        return compareStrings(left.export, right.export);
+      })
+      .slice(0, dialectSilentLimit),
     wireBytes: Object.fromEntries(
       Object.entries(wireSamples).map(([field, values]) => [field, distribution(values)])
     ),
@@ -1182,7 +1221,34 @@ function renderContractContentSection(content) {
   lines.push(
     `- Attested closure notes (record complete, runtime unbounded): ${content.attestedRuntimeNotes}`
   );
+  // The generator's own `creates` walk, from the other side: not what it
+  // proposed but what stopped it proposing. `dialect-silent` is the row to
+  // read -- a canonical primitive no dialect audit denies the domain for --
+  // because it is the only blocker an audit can clear.
+  lines.push(
+    `- Declined \`creates\` closure proposals (blocking call sites): ${content.declinedClosures ?? 0}` +
+      (Object.keys(content.declinedClosuresByKind ?? {}).length > 0
+        ? ` -- ${Object.entries(content.declinedClosuresByKind)
+            .map(([kind, count]) => `${count} ${kind}`)
+            .join(", ")}`
+        : "")
+  );
   lines.push("");
+
+  const blockers = content.topDialectSilentBlockers ?? [];
+  if (blockers.length > 0) {
+    lines.push("### Dialect-silent blockers (what an audit row would unblock)");
+    lines.push("");
+    lines.push("| Package | Export | Consumer exports blocked | Probes |");
+    lines.push("| --- | --- | ---: | ---: |");
+    for (const blocker of blockers) {
+      lines.push(
+        `| ${blocker.package || "(unresolved)"} | ${blocker.export} | ` +
+          `${blocker.blockedExports} | ${blocker.probes} |`
+      );
+    }
+    lines.push("");
+  }
 
   lines.push("### Proposal wire size");
   lines.push("");

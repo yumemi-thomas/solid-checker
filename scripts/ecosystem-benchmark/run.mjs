@@ -497,6 +497,7 @@ function buildResult({
   artifactCaseRefusals = null,
   inapplicableArtifactCases = null,
   artifactCaseInapplicabilities = null,
+  declinedClosures = null,
   externalEdges = [],
   dependencyPlan = null,
   checklistItems,
@@ -536,6 +537,12 @@ function buildResult({
     artifactCaseRefusals,
     inapplicableArtifactCases,
     artifactCaseInapplicabilities,
+    // The generator's declined `creates` closure proposals, as a row-level
+    // count beside the artifact-case censuses. Additive and null-safe: `null`
+    // is "no sidecar was read", which is not the measured zero a row that
+    // declined nowhere reports. The blockers themselves stay on
+    // `contractContent.dialectSilentBlockers`.
+    declinedClosures,
     externalEdges,
     dependencyPlan,
     checklistItems,
@@ -972,6 +979,7 @@ async function runProbe(
       artifactCaseRefusals: refusalAudit?.refusals ?? null,
       inapplicableArtifactCases: refusalAudit?.inapplicable.length ?? null,
       artifactCaseInapplicabilities: refusalAudit?.inapplicable ?? null,
+      declinedClosures: refusalAudit?.declinedClosures.length ?? null,
       externalEdges,
       dependencyPlan,
       checklistItems,

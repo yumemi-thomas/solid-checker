@@ -107,7 +107,11 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // export of that consuming package proposes `creates: []`, and the
       // certifier's implementation census proves, refuses, or withholds each
       // candidate by name.
-      stableMainDocuments: 178,
+      // 179 adds the creates-decline-records fixture's main document
+      // (ADR 0008 § "The decline records"): the other side of that walk --
+      // one export per blocker kind it declines on, pinned so "audit this
+      // primitive next" is a measured answer rather than a guess.
+      stableMainDocuments: 179,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
