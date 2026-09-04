@@ -5595,8 +5595,12 @@ mod tests {
         )
     }
 
+    /// The exact resolution inputs every test plan shares: one published
+    /// archive, its snapshot-resolved runtime and declaration targets, the
+    /// replayed module closure with one accepted edge per dependency plan, and
+    /// the import that selected it.
     #[expect(clippy::too_many_arguments, reason = "exact resolution inputs")]
-    fn try_plan_closing_for_test_package_from_importer(
+    fn test_package_resolution(
         archive: &PublishedArchive,
         name: &str,
         version: &str,
@@ -5606,9 +5610,7 @@ mod tests {
         exports: &[TestExportBinding<'_>],
         dependencies: &[&CertificationPlan],
         importer: &str,
-        closed_domains: &[(&str, ClaimDomain)],
-        shape: &dyn Fn(&str) -> ValueShape,
-    ) -> Result<CertificationPlan, super::CertificationPlanningError> {
+    ) -> (ImportRequest, ResolvedImport) {
         let snapshot =
             ArtifactSnapshot::from_published(archive, SnapshotLimits::policy_2()).unwrap();
         let parsed: SnapshotPackageManifest = serde_json::from_slice(manifest).unwrap();
@@ -5711,6 +5713,72 @@ mod tests {
             declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
+        (request, resolved)
+    }
+
+    /// Plans certification for a candidate contract the caller already has —
+    /// the bytes a generator emitted — against a test package built from the
+    /// same files.
+    ///
+    /// Nothing here reshapes the candidate: whether its artifact case agrees
+    /// with the resolution, and what it proposes, are the document's own
+    /// claims, so a document that disagrees refuses here exactly as it would
+    /// in a real transaction.
+    #[expect(clippy::too_many_arguments, reason = "exact resolution inputs")]
+    fn try_plan_supplied_candidate_for_test_package(
+        archive: &PublishedArchive,
+        name: &str,
+        version: &str,
+        root: &str,
+        manifest: &[u8],
+        conditions: &[&str],
+        exports: &[TestExportBinding<'_>],
+        candidate: solid_reactive_ir::contract_semantics::NormalizedContract,
+    ) -> Result<CertificationPlan, super::CertificationPlanningError> {
+        let (request, resolved) = test_package_resolution(
+            archive,
+            name,
+            version,
+            root,
+            manifest,
+            conditions,
+            exports,
+            &[],
+            "/project/src/app.ts",
+        );
+        super::plan_certification_with_dependencies(
+            &mut CertificationPlanningTransaction::new(),
+            CertificationRequest::new(candidate, request, resolved),
+            UntrustedArtifactEnvelope::Published(archive.clone()),
+            &[],
+        )
+    }
+
+    #[expect(clippy::too_many_arguments, reason = "exact resolution inputs")]
+    fn try_plan_closing_for_test_package_from_importer(
+        archive: &PublishedArchive,
+        name: &str,
+        version: &str,
+        root: &str,
+        manifest: &[u8],
+        conditions: &[&str],
+        exports: &[TestExportBinding<'_>],
+        dependencies: &[&CertificationPlan],
+        importer: &str,
+        closed_domains: &[(&str, ClaimDomain)],
+        shape: &dyn Fn(&str) -> ValueShape,
+    ) -> Result<CertificationPlan, super::CertificationPlanningError> {
+        let (request, resolved) = test_package_resolution(
+            archive,
+            name,
+            version,
+            root,
+            manifest,
+            conditions,
+            exports,
+            dependencies,
+            importer,
+        );
         let (package, mut artifact_case) =
             crate::artifact_resolution::proposal_identity(&resolved).unwrap();
         // Each export's proposed value shape is chosen per export name: the
@@ -9144,6 +9212,75 @@ export const value = phantom;
         )
     }
 
+    /// The census fixture planned from the bytes the **generator** emitted for
+    /// it — `expected.json`, the artifact `scripts/contract-corpus.mjs` pins
+    /// byte for byte — instead of from a candidate this test synthesized
+    /// closed.
+    ///
+    /// This is the seam that was broken and that nothing checked.
+    /// `plan_for_test_package_closing` hands the certifier a contract whose
+    /// `creates` is already `Complete([])`, which is a legitimate shape for a
+    /// hand-authored candidate but is *not* what generation emits: a proposal
+    /// may not publish closure, so the generator weakens the domain and states
+    /// the candidacy in `call.proposedClosures`. Planning that document is the
+    /// only way to prove the candidate survives generation, and with it that
+    /// the census can run at all on a real artifact case.
+    fn census_generated_fixture_plan() -> CertificationPlan {
+        let fixture = census_fixture();
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let generated = std::fs::read(fixture.join("expected.json")).expect("generated proposal");
+        let decoded = crate::contract_document::decode(&generated)
+            .expect("the generator's own document decodes")
+            .normalize()
+            .expect("the generator's own document normalizes");
+        let name = "implementation-census-creates-package";
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let root = "/project/node_modules/implementation-census-creates-package";
+        let bindings = CENSUS_FIXTURE_EXPORTS.map(|export| {
+            (
+                export,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        // One field is rebound, and only one: the corpus gate generates with a
+        // `fixture:sha256:` integrity token for the manifest bytes, while a
+        // transaction requires the published archive's own registry integrity.
+        // That is package identity, not a claim — every artifact identity the
+        // selection compares, the module-closure digest included, is the
+        // generator's own and is left alone, and the exports' claims and
+        // proposals are the emitted document's byte for byte.
+        let snapshot = ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2())
+            .expect("the fixture archive snapshots");
+        let mut package = decoded.package().clone();
+        package.integrity = snapshot.package_integrity().into();
+        let candidate = ContractProposal::new(package, decoded.artifact_cases().to_vec())
+            .normalize()
+            .expect("rebinding the integrity keeps the document normalizable");
+        try_plan_supplied_candidate_for_test_package(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            candidate,
+        )
+        .expect("the generated document plans against its own artifact")
+    }
+
     /// The id of the one `creates` closure demand a census plan carries.
     fn creates_demand_ids(plan: &CertificationPlan, export: &str) -> Vec<String> {
         use solid_reactive_ir::contract_semantics::{
@@ -9646,6 +9783,158 @@ export const value = phantom;
                 && rendered.contains("2.0.0-rc.4"),
             "the refusal must name the package and both versions: {rendered}"
         );
+    }
+
+    /// The generator's own `creates` candidates reach planning, and without a
+    /// recipe every one of them is withheld by name so the row plans exactly
+    /// what it planned before.
+    ///
+    /// No producer and no probe Node: this is the plumbing, not the census.
+    /// The document is `expected.json`, the bytes the corpus gate pins, so a
+    /// generator that stopped stating its candidacy fails here rather than
+    /// silently reverting the census to unreachable.
+    #[test]
+    fn the_generated_census_fixture_carries_every_creates_candidate_into_planning() {
+        let proposing = [
+            "cycle",
+            "deep",
+            "noRecipe",
+            "plain",
+            "reassignedHelper",
+            "reflectApply",
+            "spreadArgs",
+            "stdlibRefInvoker",
+            "switchBreak",
+            "taggedTemplate",
+            "viaHelperChain",
+            "whileBreak",
+        ];
+        let plan = census_generated_fixture_plan();
+        let creates = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates));
+        let candidates = plan
+            .candidates
+            .closure_candidates()
+            .iter()
+            .filter(|candidate| candidate.path == creates)
+            .map(|candidate| candidate.export.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            candidates, proposing,
+            "the generated document's own proposals, and only those"
+        );
+        // One mandatory contradiction veto per candidate, and one
+        // `DomainExhaustiveness` demand: the census is now reachable.
+        assert_eq!(
+            plan.probe_gate_schedule().unwrap().gates().len(),
+            proposing.len()
+        );
+        for export in proposing {
+            assert_eq!(creates_demand_ids(&plan, export).len(), 1, "{export}");
+        }
+
+        // And with no recipe corpus the row is exactly the row it was: every
+        // candidate withheld by name, no gate, no demand, the domain open.
+        let gated = plan.recipe_gated(None).expect("gating without a corpus");
+        assert_eq!(gated.withheld().len(), proposing.len());
+        for record in gated.withheld() {
+            assert_eq!(record.domain, "creates");
+            assert_eq!(record.reason, super::WITHHELD_CLOSURE_NO_RECIPE);
+        }
+        assert!(
+            gated
+                .plan()
+                .probe_gate_schedule()
+                .unwrap()
+                .gates()
+                .is_empty()
+        );
+        let case = &gated.plan().selected_candidate.artifact_cases()[0];
+        for export in proposing {
+            assert!(
+                creates_demand_ids(gated.plan(), export).is_empty(),
+                "{export}"
+            );
+            assert!(
+                !case.exports[export]
+                    .operation_claim(ClaimDomain::Creates)
+                    .unwrap()
+                    .is_closed(),
+                "{export}"
+            );
+            assert!(
+                case.exports[export].call.proposed_closures().is_empty(),
+                "{export}: a withheld candidate must not be offered again"
+            );
+        }
+    }
+
+    /// The census, on a candidate that came out of the generator.
+    ///
+    /// One recipe is supplied, for `plain` alone, so recipe gating withholds
+    /// the other eleven candidates and the census runs on exactly one — which
+    /// is also how a real row reaches its first proven closure. Everything
+    /// this asserts about `plain` is what the synthesized-candidate test
+    /// asserts; what is new is where the candidate came from.
+    #[test]
+    fn the_census_certifies_a_generated_creates_candidate_and_withholds_its_siblings() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let plan = census_generated_fixture_plan();
+        let creates = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates));
+        let subject = plan
+            .candidates
+            .closure_candidates()
+            .iter()
+            .find(|candidate| candidate.path == creates && candidate.export == "plain")
+            .expect("the generated document proposes plain's creates closure");
+        let claim_id = plan
+            .candidates
+            .proposal()
+            .claim_id(subject)
+            .expect("the candidate has a semantic claim id");
+        let scratch = TracerScratch::new("census-generated-plain");
+        let Some(configuration) = tracer_configuration_from(
+            &census_fixture(),
+            scratch.path(),
+            "census-generated-plain",
+            &[(claim_id.as_str(), "plain.mjs")],
+        ) else {
+            return;
+        };
+        let finalized = tracer_certify(&plan, &pin, &configuration)
+            .expect("plain's creates census must certify from the generated proposal");
+
+        assert!(creates_is_closed_in(finalized.canonical_main(), "plain"));
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan)
+        );
+        let withheld = finalized
+            .withheld_closures()
+            .iter()
+            .map(|record| record.export.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            withheld,
+            [
+                "cycle",
+                "deep",
+                "noRecipe",
+                "reassignedHelper",
+                "reflectApply",
+                "spreadArgs",
+                "stdlibRefInvoker",
+                "switchBreak",
+                "taggedTemplate",
+                "viaHelperChain",
+                "whileBreak",
+            ],
+            "every sibling candidate is withheld for want of a recipe, by name"
+        );
+        for export in &withheld {
+            assert!(!creates_is_closed_in(finalized.canonical_main(), export));
+        }
     }
 
     /// Recipe-gated planning, without a producer: a `creates` candidate with no

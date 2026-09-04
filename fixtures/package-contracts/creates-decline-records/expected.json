@@ -44,7 +44,7 @@
             "sha256": "95769ae56dc0f729cdd86b8041905370b9a656cd8302f29156f9939c5a563f68"
           },
           "exports": {
-            "proposes": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+            "proposes": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1clean/import",
@@ -68,7 +68,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+    "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1": {
       "call": {
         "callbacks": [
           {
@@ -79,6 +79,10 @@
             "operation": "callback-0"
           }
         ],
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -97,6 +101,9 @@
               "event": "call"
             }
           }
+        ],
+        "proposedClosures": [
+          "creates"
         ]
       },
       "shape": "callable"

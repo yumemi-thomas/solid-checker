@@ -51,10 +51,49 @@ declining**; each one aligned would have proposed a candidate this census
 refuses. See "The walk is not stricter than this census" below, and the
 per-shape evidence under "What still refuses".
 
-`normalize_knowledge` weakens the empty `Complete` into a closure **candidate**.
 A proposal is a claim to be proven, not a proof: the generator's word certifies
 nothing, and the census below may refuse what it proposed. Silence — an
 unresolved callee, an unaudited primitive — is "do not propose", never "close".
+
+**How the proposal is published: `call.proposedClosures` [2026-09-04].** The
+original mechanism was `normalize_knowledge` weakening the empty `Complete`
+into a candidate — and that weakening **destroyed** the candidate rather than
+recording it. The certifier rebuilds its candidate universe by weakening the
+emitted document's own closed claims (`inspect_candidates`), and the canonical
+main a receipt binds is that same document
+(`finalization::finalize_value_only` encodes `plan.selected_candidate` and
+refuses if its digest is not the planned candidate digest). A closure withdrawn
+at generation therefore reaches no demand, no probe gate, no census and no
+receipt: measured, `creates` was closed in **0 of 32,901** export slots handed
+to certification while one row's plan sidecar carried 33 `call/creates`
+candidates, and `census_creates_domain` had never run outside a unit test. See
+`phase21/2026-09-04-census-blockers-a-and-b.md` § 0.
+
+So a proposed `creates` closure is now **stated in the document and labelled**:
+`closed: ["creates"], creates: [], proposedClosures: ["creates"]`. The label is
+what the weakening was really for — an emitted proposal is otherwise
+byte-indistinguishable from a reviewed document asserting the same negative
+claim, and the audited bundled contracts are exactly such documents. The
+closure is not usable as knowledge without a receipt either way; the receipt,
+not the weakening, is what "a proposal cannot certify" rests on. `proposedClosures`
+joins normalized meaning under its own digest domain
+(`wire-format.md` § `proposedClosures`, `semantic-model.md` § Digest families),
+so no contract that proposes nothing moves and no receipt for one document can
+authenticate the other. Only domains this verifier can decide are publishable —
+`ClaimDomain::PROPOSABLE`, today `creates` alone — because publishing a closure
+no census can decide refuses the row rather than proving anything; the
+generator's `reads`/`returns`/`callbacks` candidates stay weakened and travel to
+the plan sidecar as measurement.
+
+**Rejected: passing the plan sidecar into the planning request.** It would have
+made the planner's candidate universe a caller's input, which
+`inspect_candidates` is written to prevent, and the authentication available is
+vacuous: every open claim in a document *could* have come from a weakened
+closed one (`Unknown` ← `Complete([])`, `Partial(items)` ← `Complete(items)`),
+so a check that a sidecar candidate "is one the document could have proposed"
+admits nearly every claim in the document and bounds nothing. It would also
+decouple what was planned from `candidate_semantic_digest`, the identity the
+receipt binds.
 
 ### 2. The census
 
@@ -297,9 +336,10 @@ fixtures were withdrawn by this (listed in `docs/precision-backlog.md`).
 
 The gate above answered one bit per export and said nothing about *why*. That
 made the ADR's own "what still refuses" list — the five unaudited 2.0
-primitives — an argument nobody could size: with 0 candidates on every measured
-row, "audit more primitives" was a guess about which primitives, on how many
-exports, in how many packages.
+primitives — an argument nobody could size: with no candidate visible on any
+measured row (which the 2026-09-04 correction above shows was a publication
+defect, not silence from the walk), "audit more primitives" was a guess about
+which primitives, on how many exports, in how many packages.
 
 So each refusing call now carries a `CreatesDeclineKind`, and
 `CreatesProposalWalk::declines_for` answers, for one export's span, the set of
@@ -587,17 +627,31 @@ multi-version decision, and what the echo does *not* prove are
 closure"; the end-to-end fixture is
 `fixtures/package-contracts/implementation-census-creates/dependency-consumer`.
 
-What that does **not** move is the blocker below it. On every measured real row
-**no `creates` candidate was proposed at all** — 0 candidates, not
-0-withheld-of-many — because each of those exports calls a 2.0 primitive with
-no negative row (above) or a 1.x primitive, and the generator's walk is silent
-there. Every verdict is unchanged and the withheld count is 0 on every row, and
-the dependency closure did not change either: with no candidate there is no
-gate, and with no gate nothing is copied. Once the audits carry the missing
-rows, candidates will appear and be withheld here until recipe *synthesis*
-exists (ADR 0006 Stage 3) — the authenticated dependency copying it also waited
-on is done. The fixtures, which ship their recipes, are where the whole chain
-is proven end to end.
+**Corrected 2026-09-04: candidates were being proposed and then discarded.**
+This section originally read "on every measured real row **no `creates`
+candidate was proposed at all** — 0 candidates, not 0-withheld-of-many". That
+was wrong, and the reason it looked true is the publication defect above: the
+generator's walk *did* clear real exports and the plan sidecar carried their
+candidates (33 for `@kobalte/utils@0.9.2|solid1|only`, 7 for
+`@kobalte/utils@2.0.0-alpha.0|solid2|only`), while the emitted document
+withdrew the closure and the certifier consequently saw none. With the
+publication fixed, a 20-row targeted rerun leaves every row's verdict, class,
+signature and decline census byte-identical and moves exactly the two kobalte
+rows' `withheldClosures` from 0 to **33** and **7** — the candidates the
+sidecar had been carrying all along, now withheld by name with the domain open,
+which is the row certifying exactly as before.
+
+Two things bound how far that goes today. **A candidate only survives on an
+artifact case with no closure hazard**: an `unaccepted-external-dependency`
+frontier opens `creates` before the label can be published, and 524 of 627
+measured artifact cases carry one — 18 of the 20 rerun rows report 0 withheld
+for that reason or because their walk declined. And **without a recipe corpus
+no candidate is ever censused**: `exportsProven` stays 0 on every real row
+until recipe *synthesis* exists (ADR 0006 Stage 3). The authenticated
+dependency copying that also waited on is done. The fixtures, which ship their
+recipes, are where the whole chain is proven end to end — and, since this
+correction, where the census first runs on a candidate that came out of the
+generator rather than out of a test helper.
 
 ## Pinned
 

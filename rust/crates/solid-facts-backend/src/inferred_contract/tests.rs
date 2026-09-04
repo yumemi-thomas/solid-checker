@@ -429,6 +429,105 @@ fn proposed_closure_domains(
     .collect()
 }
 
+/// The whole generate-then-certify seam for a `creates` closure candidate, in
+/// one test, because losing it here is what made the census unreachable.
+///
+/// The generator's walk cleared this export, so the normalization proposes a
+/// `creates` closure. Weakening alone dropped the candidacy: the certifier
+/// rebuilds its candidate universe by weakening the emitted document's own
+/// closed claims, and the canonical main its receipt binds is that same
+/// document, so a withdrawn closure reaches no demand, no probe gate and no
+/// census. The document therefore states the closure and labels it proposed —
+/// this generator's inference, not a reviewed claim.
+#[test]
+fn a_cleared_creates_walk_reaches_the_certifiers_candidate_universe_through_the_document() {
+    use solid_reactive_ir::contract_semantics::{
+        ClaimPath, KnowledgeState, SemanticClaimPath, certification::ProofPolicy2,
+    };
+
+    let summary = ContractExport {
+        kind: "function".into(),
+        creates_walk_clean: true,
+        ..ContractExport::default()
+    };
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(summary),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let creates = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates));
+    assert!(
+        normalized
+            .closure_candidates
+            .iter()
+            .any(|candidate| candidate.path == creates),
+        "the walk cleared this export, so the plan must carry its candidate: {:?}",
+        normalized.closure_candidates
+    );
+
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    assert_eq!(
+        export.claim_state(ClaimDomain::Creates),
+        KnowledgeState::CompleteNegative,
+        "the candidate has to state the closure it offers"
+    );
+    assert_eq!(
+        export.call.proposed_closures(),
+        &std::collections::BTreeSet::from([ClaimDomain::Creates]),
+        "labelled as proposed, so it stays distinguishable from a reviewed claim"
+    );
+    // Every other domain the walk cleared stays withdrawn: no census can
+    // decide them, so publishing their closure would refuse the row.
+    for domain in ClaimDomain::ALL {
+        assert!(
+            domain == ClaimDomain::Creates || export.claim_state(domain).is_open(),
+            "{domain:?} must stay open"
+        );
+    }
+
+    // Through the encoder and back: the marker is a wire field, so the
+    // candidate has to survive the canonicalization the emit boundary performs
+    // before anything reads the document again.
+    let bytes = crate::contract_document::encode(
+        &normalized.contract,
+        &crate::contract_document::SidecarDigests::default(),
+        false,
+    )
+    .unwrap();
+    let rendered = String::from_utf8_lossy(&bytes);
+    assert!(
+        rendered.contains("\"closed\":[\"creates\"]") && rendered.contains("\"creates\":[]"),
+        "the emitted document must state the closure: {rendered}"
+    );
+    assert!(
+        rendered.contains("\"proposedClosures\":[\"creates\"]"),
+        "and must label it as proposed: {rendered}"
+    );
+    let decoded = crate::contract_document::decode(&bytes)
+        .unwrap()
+        .normalize()
+        .unwrap();
+
+    let candidates = ProofPolicy2.inspect_candidates(&decoded).unwrap();
+    assert!(
+        candidates
+            .closure_candidates()
+            .iter()
+            .any(|candidate| candidate.path == creates && candidate.export == "read"),
+        "the certifier must rebuild the candidate from the document alone: {:?}",
+        candidates.closure_candidates()
+    );
+    // And having read it, the certifier's own proposal no longer offers it:
+    // one candidate, planned once.
+    let planned = &candidates.proposal().artifact_cases()[0].exports["read"];
+    assert!(planned.call.proposed_closures().is_empty());
+    assert_eq!(
+        planned.claim_state(ClaimDomain::Creates),
+        KnowledgeState::Unknown,
+        "the planning proposal withdraws the closure it is about to demand"
+    );
+}
+
 #[test]
 fn a_dialects_own_archive_proposes_no_read_or_create_closure_candidate() {
     let carries = |domains: &[solid_reactive_ir::contract_semantics::ClaimPath], domain| {

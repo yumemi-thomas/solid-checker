@@ -13,7 +13,7 @@
             "sha256": "2340dac402cc91c4fe5a3b9b52d7644f92110cff780a98d91c158acc28e944c6"
           },
           "exports": {
-            "schedule": "summary-30aab4b856518450ed6b0baee9dcdb5679db8fa5008354a3fc6db95cc52ad9e5"
+            "schedule": "summary-a830f7ca4514a2d4a15286680536e5caf83d74352a7fbe2e0c660df1da73a045"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -31,7 +31,7 @@
             "sha256": "8e66ea95b7e643a8d59c5256d3c569f0b2d79b606c1e46aa0605f15cfd262963"
           },
           "exports": {
-            "schedule": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+            "schedule": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1"
           },
           "resolution": {
             "runtimeBranch": "/exports/./development",
@@ -55,7 +55,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-30aab4b856518450ed6b0baee9dcdb5679db8fa5008354a3fc6db95cc52ad9e5": {
+    "summary-a830f7ca4514a2d4a15286680536e5caf83d74352a7fbe2e0c660df1da73a045": {
       "call": {
         "callbacks": [
           {
@@ -66,6 +66,10 @@
             "operation": "callback-0"
           }
         ],
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -84,11 +88,14 @@
               "event": "call"
             }
           }
+        ],
+        "proposedClosures": [
+          "creates"
         ]
       },
       "shape": "callable"
     },
-    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+    "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1": {
       "call": {
         "callbacks": [
           {
@@ -99,6 +106,10 @@
             "operation": "callback-0"
           }
         ],
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -117,6 +128,9 @@
               "event": "call"
             }
           }
+        ],
+        "proposedClosures": [
+          "creates"
         ]
       },
       "shape": "callable"

@@ -1070,6 +1070,142 @@ fn composed_provenance_digest_family_is_separate_and_frozen() {
     );
 }
 
+/// The proposed-closure families are separate, frozen, and disjoint from both
+/// families above.
+///
+/// A proposed closure states no knowledge — the domain it names stays open —
+/// but it is what `inspect_candidates` derives the planner's candidate
+/// universe from, so two documents that differ only in what they propose plan
+/// different demand graphs and must not share the identity a receipt binds.
+/// The features are independent, so the four combinations are four domains.
+#[test]
+fn proposed_closure_digest_family_is_separate_and_frozen() {
+    assert_eq!(
+        SEMANTIC_DIGEST_DOMAIN_PROPOSED_CLOSURE,
+        "solid-checker:normalized-package-contract:proposed-closure"
+    );
+    assert_eq!(
+        SEMANTIC_DIGEST_DOMAIN_COMPOSED_PROPOSED_CLOSURE,
+        "solid-checker:normalized-package-contract:composed-provenance:proposed-closure"
+    );
+
+    let read = operation("read", OperationKind::Read);
+    let write = operation("write", OperationKind::Write);
+    let owner = resource("owner", ResourceKind::Owner);
+    let cleanup = resource("cleanup", ResourceKind::Cleanup);
+    let contract = |propose: bool, composed: bool| {
+        let mut read = read.clone();
+        if composed {
+            read.composed_from = Some(ComposedFrom {
+                export: "createPolled".into(),
+                operation: OperationId("case:createPolled:operation:read-0".into()),
+            });
+        }
+        let mut behavior = call(
+            vec![read.clone(), write.clone()],
+            vec![owner.clone(), cleanup.clone()],
+        );
+        behavior.edges = vec![OperationEdge {
+            kind: EdgeKind::Data,
+            from: read.id.clone(),
+            to: write.id.clone(),
+        }];
+        // The label is over a closure the document states, which the helper
+        // already closes empty, so the two variants differ in the label alone.
+        let behavior = if propose {
+            behavior.with_proposed_closures([ClaimDomain::Creates])
+        } else {
+            behavior
+        };
+        proposal_with(ValueShape::Plain, behavior)
+            .normalize()
+            .unwrap()
+    };
+    assert_eq!(
+        contract(false, false).semantic_digest().as_str(),
+        "sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9",
+        "a contract that proposes nothing keeps the legacy vector byte for byte"
+    );
+    assert_eq!(
+        contract(true, false).semantic_digest().as_str(),
+        "sha256:46711b6a1ccebc437a1beb44d90854c7a53c8f5bf45fac89421ee6e935732a05"
+    );
+    assert_eq!(
+        contract(true, true).semantic_digest().as_str(),
+        "sha256:c2906640684350d1053c1b3409c2b69db35822fb3d7ffd4055a394cdd7395249"
+    );
+}
+
+/// The label is over a closure this document states, so it is well-formed only
+/// where the domain really is closed and only where a certifier can decide it.
+#[test]
+fn a_proposed_closure_is_refused_over_an_open_domain_and_over_an_undecidable_one() {
+    let mut behavior = call(vec![], vec![]);
+    behavior.claims.creates = KnowledgeSet::Unknown;
+    let open = proposal_with(
+        ValueShape::Plain,
+        behavior.with_proposed_closures([ClaimDomain::Creates]),
+    )
+    .normalize()
+    .expect_err("an open domain states no closure to propose");
+    assert!(
+        matches!(&open, ModelError::Contradiction { reason, .. } if reason.contains("creates")),
+        "{open}"
+    );
+
+    let undecidable = proposal_with(
+        ValueShape::Plain,
+        call(vec![], vec![]).with_proposed_closures([ClaimDomain::Reads]),
+    )
+    .normalize()
+    .expect_err("a domain with no closure proof mode cannot be proposed");
+    assert!(
+        matches!(
+            &undecidable,
+            ModelError::InvalidKnowledge { reason, .. }
+                if reason.contains("reads") && reason.contains("no closure proof mode")
+        ),
+        "{undecidable}"
+    );
+    assert!(ClaimDomain::Creates.is_proposable());
+    assert_eq!(ClaimDomain::PROPOSABLE, [ClaimDomain::Creates]);
+}
+
+/// Opening a domain withdraws its proposal.
+///
+/// This is what keeps an opaque closure frontier and a recipe-gated
+/// withholding effective: both reopen the domain, and a marker that survived
+/// would let the certifier rediscover the candidate it had just withdrawn.
+#[test]
+fn opening_a_call_domain_withdraws_its_proposed_closure() {
+    let mut export = normalized_export(proposal_with(
+        ValueShape::Plain,
+        call(vec![], vec![]).with_proposed_closures([ClaimDomain::Creates]),
+    ));
+    assert_eq!(
+        export.call.proposed_closures(),
+        &BTreeSet::from([ClaimDomain::Creates])
+    );
+    let mut weakened = export.clone();
+    assert!(
+        weakened
+            .open_proposed_closure()
+            .contains(&ClaimPath::Call(ClaimDomain::Creates))
+    );
+    assert!(weakened.call.proposed_closures().is_empty());
+
+    export.open_call_domains([ClaimDomain::Creates]);
+    assert!(export.call.proposed_closures().is_empty());
+    assert!(export.claim_state(ClaimDomain::Creates).is_open());
+    // And back again: the generator republishes exactly this pair.
+    export.propose_closures([ClaimDomain::Creates]);
+    assert!(!export.claim_state(ClaimDomain::Creates).is_open());
+    assert_eq!(
+        export.call.proposed_closures(),
+        &BTreeSet::from([ClaimDomain::Creates])
+    );
+}
+
 /// Provenance is part of the operation's identity, so it is part of the
 /// digest.
 ///

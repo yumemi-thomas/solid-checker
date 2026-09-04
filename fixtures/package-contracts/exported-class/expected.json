@@ -18,7 +18,7 @@
             "ChildError": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "DirectError": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "Watcher": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "plainFunction": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61",
+            "plainFunction": "summary-d56b106025dc3fe97c292b5aee63c737a503db6c44f4f037fe4c9a4f2eefb175",
             "settings": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
           },
           "resolution": {
@@ -135,8 +135,12 @@
       "call": {},
       "shape": "plain"
     },
-    "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61": {
+    "summary-d56b106025dc3fe97c292b5aee63c737a503db6c44f4f037fe4c9a4f2eefb175": {
       "call": {
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -160,6 +164,9 @@
               "event": "call"
             }
           }
+        ],
+        "proposedClosures": [
+          "creates"
         ],
         "returns": [
           "return"

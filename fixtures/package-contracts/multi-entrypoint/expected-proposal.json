@@ -2,7 +2,7 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:c89a6e81eda53dac719744b1c6c4a1b1bd7e7eddaa41cc2a5ca00ca66baf587e",
+  "semanticDigest": "sha256:544359c1d62b09cc9006df21cba6672953801a0b7b608d72f2d149b74820acc7",
   "closureCandidates": [
     {
       "claimId": "claim:v1:sha256:0c737cc9666baf2717f2e4620cfe1117f3397471b644b99ea89e3cbbf2fc8b07",
@@ -993,25 +993,6 @@
       }
     },
     {
-      "claimId": "claim:v1:sha256:5dce165c9a37e5e816b33f41fdd7aa1b7ac9f31b0b0230991f78e4352ccd51cc",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.ts",
-        "runtimeDigest": "sha256:699c98dfa55f68e9e69d5a1c079f0057eff36ba9984ac70cde2c23f852f14828",
-        "declarationsPath": "./index.ts",
-        "declarationsDigest": "sha256:699c98dfa55f68e9e69d5a1c079f0057eff36ba9984ac70cde2c23f852f14828",
-        "closureDigest": "sha256:72a8f54c6b72d0063a50f766fbd3406c24538c12e4a280f043328619c409325c"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:351baf262d41c317e4320b39e37750519a618d351589ffee5151cf3805817268",
-        "export": "rootValue",
-        "path": {
-          "kind": "call",
-          "domain": "creates"
-        }
-      }
-    },
-    {
       "claimId": "claim:v1:sha256:60ff3e5a89e6564f6a00214556b11489c3290ae7a12aa9069ca189ba51e5b423",
       "artifact": {
         "entrypoint": "./features/alpha",
@@ -1273,25 +1254,6 @@
         "path": {
           "kind": "call",
           "domain": "disposals"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:96d7ba3513b472c860afbff63cd1891d2b30e42f6174bdeac6e9631c0fb0922e",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.ts",
-        "runtimeDigest": "sha256:699c98dfa55f68e9e69d5a1c079f0057eff36ba9984ac70cde2c23f852f14828",
-        "declarationsPath": "./index.ts",
-        "declarationsDigest": "sha256:699c98dfa55f68e9e69d5a1c079f0057eff36ba9984ac70cde2c23f852f14828",
-        "closureDigest": "sha256:72a8f54c6b72d0063a50f766fbd3406c24538c12e4a280f043328619c409325c"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:351baf262d41c317e4320b39e37750519a618d351589ffee5151cf3805817268",
-        "export": "default",
-        "path": {
-          "kind": "call",
-          "domain": "creates"
         }
       }
     },

@@ -13,7 +13,7 @@
             "sha256": "252354a3dde324ce5d19f9923abe2b59ddb6e2a10b2006e04b0c1d81abe5954d"
           },
           "exports": {
-            "maybeRead": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+            "maybeRead": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1"
           },
           "resolution": {
             "runtimeBranch": "/exports/./development",
@@ -31,7 +31,7 @@
             "sha256": "252354a3dde324ce5d19f9923abe2b59ddb6e2a10b2006e04b0c1d81abe5954d"
           },
           "exports": {
-            "maybeRead": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+            "maybeRead": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -55,7 +55,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+    "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1": {
       "call": {
         "callbacks": [
           {
@@ -66,6 +66,10 @@
             "operation": "callback-0"
           }
         ],
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -84,6 +88,9 @@
               "event": "call"
             }
           }
+        ],
+        "proposedClosures": [
+          "creates"
         ]
       },
       "shape": "callable"

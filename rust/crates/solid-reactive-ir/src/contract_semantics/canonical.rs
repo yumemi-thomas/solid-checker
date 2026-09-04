@@ -27,6 +27,14 @@ pub(super) fn semantic_digest(
     // because the domain is the length-prefixed first thing written. The
     // family is a function of the contract, so it is not a mode a caller can
     // choose.
+    //
+    // `proposed_closures` is the same shape one field later, and the two
+    // features are independent, so the families are the four combinations
+    // rather than three. A proposed closure is not knowledge about the
+    // package — the domain it names stays open — but it *is* what the
+    // certifier's candidate universe is derived from, so a document that
+    // proposes one plans a different demand graph and must not share the
+    // identity a receipt binds with one that proposes nothing.
     let composed = artifact_cases.iter().any(|case| {
         case.exports.values().any(|export| {
             export
@@ -36,13 +44,20 @@ pub(super) fn semantic_digest(
                 .any(|operation| operation.composed_from.is_some())
         })
     });
+    let proposed_closure = artifact_cases.iter().any(|case| {
+        case.exports
+            .values()
+            .any(|export| !export.call.proposed_closures().is_empty())
+    });
     let mut writer = CanonicalWriter::new();
-    writer.text(if composed {
-        SEMANTIC_DIGEST_DOMAIN_COMPOSED
-    } else {
-        SEMANTIC_DIGEST_DOMAIN
+    writer.text(match (composed, proposed_closure) {
+        (false, false) => SEMANTIC_DIGEST_DOMAIN,
+        (true, false) => SEMANTIC_DIGEST_DOMAIN_COMPOSED,
+        (false, true) => SEMANTIC_DIGEST_DOMAIN_PROPOSED_CLOSURE,
+        (true, true) => SEMANTIC_DIGEST_DOMAIN_COMPOSED_PROPOSED_CLOSURE,
     });
     writer.composed_provenance = composed;
+    writer.proposed_closure = proposed_closure;
     writer.u16(SEMANTIC_MODEL_VERSION);
     writer.package(package);
     writer.sequence(artifact_cases, CanonicalWriter::artifact_case);
@@ -75,6 +90,9 @@ struct CanonicalWriter {
     /// operations and so cannot reach the field it gates. When false the
     /// operation encoding is the legacy one byte for byte.
     composed_provenance: bool,
+    /// Whether this stream belongs to a proposed-closure digest family. Set
+    /// the same way, from the contract, and false for every other entry point.
+    proposed_closure: bool,
 }
 
 impl CanonicalWriter {
@@ -82,6 +100,7 @@ impl CanonicalWriter {
         Self {
             hash: Sha256::new(),
             composed_provenance: false,
+            proposed_closure: false,
         }
     }
 
@@ -347,6 +366,16 @@ impl CanonicalWriter {
 
     fn call(&mut self, call: &CallSemantics) {
         self.call_claims(&call.claims);
+        // Written only in the proposed-closure families, so a contract that
+        // proposes nothing hashes the legacy stream byte for byte. The set is
+        // a `BTreeSet`, so the order is the vocabulary's own.
+        if self.proposed_closure {
+            let proposed = call.proposed_closures();
+            self.usize(proposed.len());
+            for domain in proposed {
+                self.claim_domain(*domain);
+            }
+        }
         self.sequence(&call.operations, Self::operation);
         self.sequence(&call.edges, Self::edge);
         self.sequence(&call.resources, Self::resource);

@@ -1,8 +1,8 @@
 # Ecosystem Benchmark Report
 
-- Started: 2026-09-04T03:17:50.049Z
-- Finished: 2026-09-04T03:19:03.565Z
-- Duration: 73516 ms
+- Started: 2026-09-04T05:53:05.730Z
+- Finished: 2026-09-04T05:54:18.938Z
+- Duration: 73208 ms
 - Checker native binary: /Users/thomas/Documents/Github/solid-checker/rust/target/release/solid-checker-rust
 - Type Facts binary: /Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts
 - Registry cache for certification: /Users/thomas/Documents/Github/solid-checker/rust/target/registry-cache
@@ -967,11 +967,11 @@ The concrete spellings behind each shape stay on every row's own `contractConten
 
 | Artifact | Samples | p50 bytes | p95 bytes | max bytes |
 | --- | ---: | ---: | ---: | ---: |
-| Pretty main | 381 | 2149 | 12864 | 679506 |
-| Canonical minified main | 381 | 1626 | 9629 | 505082 |
+| Pretty main | 381 | 2149 | 12864 | 681431 |
+| Canonical minified main | 381 | 1626 | 9961 | 506012 |
 | Proposal plan (not evidence) | 381 | 49252 | 540062 | 20327179 |
 | Canonical bytes per export | 381 | 353.67 | 1081 | 1567 |
-| Canonical bytes per operation | 90 | 902.5 | 2633 | 16836.07 |
+| Canonical bytes per operation | 90 | 931 | 2633 | 16867.07 |
 
 Proposal-plan bytes are construction obligations, not proof evidence and not acceptance authority. Proof-transcript and receipt bytes are measured separately by the Phase 16 accepted-corpus gate.
 
@@ -982,14 +982,14 @@ Proposal-plan bytes are construction obligations, not proof evidence and not acc
 | callbacks | 8847 |
 | reads | 8847 |
 | writes | 8847 |
-| creates | 8847 |
+| creates | 8742 |
 | invalidates | 8847 |
 | throws | 8847 |
 | returns | 8847 |
 | cleanups | 8847 |
 | disposals | 8847 |
 | recursiveValue | 37 |
-| **total** | **79660** |
+| **total** | **79555** |
 
 Read the domain columns together, not separately: 37 of the 8847 unknown exports are unknown in every measured domain at once, so the same export can contribute to several columns.
 
@@ -1011,11 +1011,11 @@ Read the domain columns together, not separately: 37 of the 8847 unknown exports
 | Family | Contracts | Fully proven | With unknowns | With refusals | Exports proven | Unknown claims |
 | --- | --- | --- | --- | --- | --- | --- |
 | Official Solid | 19 | 0/19 (0%) | 19 | 7 | 0/1638 (0%) | 14761 |
-| Kobalte | 5 | 0/5 (0%) | 5 | 4 | 0/3558 (0%) | 32022 |
-| Solid Primitives | 282 | 0/282 (0%) | 282 | 8 | 0/1935 (0%) | 17429 |
+| Kobalte | 5 | 0/5 (0%) | 5 | 4 | 0/3558 (0%) | 31962 |
+| Solid Primitives | 282 | 0/282 (0%) | 282 | 8 | 0/1935 (0%) | 17426 |
 | Corvu | 22 | 0/22 (0%) | 22 | 0 | 0/292 (0%) | 2632 |
 | TanStack | 38 | 0/38 (0%) | 38 | 8 | 0/271 (0%) | 2439 |
-| Solid Devtools | 10 | 0/10 (0%) | 10 | 4 | 0/278 (0%) | 2502 |
+| Solid Devtools | 10 | 0/10 (0%) | 10 | 4 | 0/278 (0%) | 2460 |
 | Solid Recharts | 3 | 0/3 (0%) | 3 | 0 | 0/545 (0%) | 4905 |
 | Motion for Solid | 2 | 0/2 (0%) | 2 | 2 | 0/330 (0%) | 2970 |
 
@@ -1023,7 +1023,7 @@ Read the domain columns together, not separately: 37 of the 8847 unknown exports
 
 | Package | Solid | Unknown claims | Exports with unknown / total | All five domains | Variant-only | Dominant cause |
 | --- | --- | --- | --- | --- | --- | --- |
-| @kobalte/core@0.13.13 | solid1 | 21168 | 2352/2352 | 0 | 0 | callbacks |
+| @kobalte/core@0.13.13 | solid1 | 21148 | 2352/2352 | 0 | 0 | callbacks |
 | @kobalte/core@2.0.0-alpha.0 | solid2 | 8748 | 972/972 | 0 | 0 | callbacks |
 | solid-js@1.9.14 | solid1 | 5742 | 636/636 | 18 | 0 | callbacks |
 | @solidjs/web@2.0.0-rc.3 | solid2 | 4347 | 483/483 | 0 | 0 | callbacks |
@@ -1032,7 +1032,7 @@ Read the domain columns together, not separately: 37 of the 8847 unknown exports
 | motion-solidjs@0.7.0-beta.4 | solid2 | 1485 | 165/165 | 0 | 0 | callbacks |
 | motion-solidjs@0.7.0-beta.4 | solid2 | 1485 | 165/165 | 0 | 0 | callbacks |
 | @kobalte/solidbase@0.6.13 | solid1 | 1296 | 144/144 | 0 | 0 | callbacks |
-| @solid-devtools/shared@0.20.0 | solid1 | 1224 | 136/136 | 0 | 0 | callbacks |
+| @solid-devtools/shared@0.20.0 | solid1 | 1182 | 136/136 | 0 | 0 | callbacks |
 | solid-recharts@2.0.0-beta.1 | solid2 | 981 | 109/109 | 0 | 0 | callbacks |
 | solid-recharts@2.0.0-beta.1 | solid2 | 981 | 109/109 | 0 | 0 | callbacks |
 | @solid-primitives/utils@7.0.0-next.4 | solid2 | 891 | 99/99 | 0 | 0 | callbacks |
@@ -1045,8 +1045,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Worker timings
 
-- Worker time: 1040280 ms
-- Phases: install 63814 ms, generation 397293 ms, harness 579173 ms
+- Worker time: 1037906 ms
+- Phases: install 55428 ms, generation 400851 ms, harness 581627 ms
 
 ### Top failure signatures
 

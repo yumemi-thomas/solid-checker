@@ -37,7 +37,10 @@ pub struct ArtifactSnapshotLimits {
 /// The source candidate list is deliberately not an argument. This typestate
 /// is constructed only by walking the normalized candidate, so a proof
 /// document cannot omit a proposed closure or positive operation from the
-/// planner's universe.
+/// planner's universe — and no caller can add one either. A generated proposal
+/// therefore states its closure in the document like any other candidate,
+/// labelled `CallSemantics::proposed_closures` to keep it distinguishable from
+/// a reviewed claim.
 #[derive(Clone)]
 pub struct CertificationCandidates {
     candidate_semantic_digest: Digest,
@@ -322,6 +325,11 @@ impl ProofPolicy2 {
                         path: SemanticClaimPath::Operation(operation.id.clone()),
                     }
                 }));
+                // One export's whole candidate universe, withdrawn from the
+                // returned proposal as it is read. A generated proposal states
+                // its `creates` closure like any other document and labels it
+                // `proposed_closures`; the label is withdrawn with the closure
+                // here, so the planning proposal offers nothing twice.
                 closure_candidates.extend(export.open_proposed_closure().into_iter().map(|path| {
                     SemanticClaimSubject {
                         artifact_case: artifact.id.clone(),

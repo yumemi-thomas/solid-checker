@@ -170,6 +170,51 @@ Rules:
 - closure never transfers through a summary reference;
 - normalizer expansion occurs before closure is interpreted.
 
+### `proposedClosures`
+
+A `call` may additionally carry `proposedClosures`, naming the closures in its
+own `closed` list that this document **proposes** rather than asserts as
+reviewed knowledge:
+
+```json
+{
+  "call": {
+    "closed": ["creates"],
+    "creates": [],
+    "proposedClosures": ["creates"]
+  }
+}
+```
+
+It means "a generator's implementation walk cleared this domain and offers the
+closure for proof", and it is what a proposal generator emits in place of the
+reviewed negative claim an audit writes. The closure itself is an ordinary
+closure: the certifier withdraws it while planning, derives a
+`DomainExhaustiveness` demand and a mandatory probe veto for it, and either the
+implementation census decides it (ADR 0008) or the row refuses by name. Nothing
+about the label weakens or strengthens what `closed` says — a consumer that
+does not understand the key reads the same closure, and a closure is usable as
+accepted knowledge only through an acceptance receipt either way.
+
+Rules:
+
+- every name must also appear in `closed` — a proposal of a closure the
+  document does not state is refused as a contradiction;
+- a name must be a domain the verifier has a closure proof mode for, which
+  today is `creates` alone; any other name is refused, because a proposed
+  closure nothing can decide refuses the row instead of proving anything;
+- duplicates are invalid, as in `closed`;
+- the label travels with the closure it labels: opening the domain (an opaque
+  closure frontier, a recipe-gated withholding, the certifier's own planning
+  weakening) withdraws both.
+
+Optional and additive to `schemaVersion: 1`. It **does** join normalized
+meaning: a document that labels its closure and one that asserts the same
+closure as reviewed are different documents, so they get digests in different
+families (see § semantic digest families in
+[semantic-model.md](semantic-model.md)) and a receipt for one cannot
+authenticate the other.
+
 ## Operations
 
 ```json

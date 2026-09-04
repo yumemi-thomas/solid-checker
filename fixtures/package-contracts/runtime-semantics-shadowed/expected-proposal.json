@@ -2,7 +2,7 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:cd94f9d0f661b6298877f139a61812cdc32a5e3be3b789733d81180d57a15120",
+  "semanticDigest": "sha256:5cc2a1eee3419131757f1557489eff16be88e805548109f912bfec6cc6b5301f",
   "closureCandidates": [
     {
       "claimId": "claim:v1:sha256:26b34c07519671278ee74d03744518b0429a77eaf8c1dd5d1438cb504aa141dc",

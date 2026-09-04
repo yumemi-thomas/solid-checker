@@ -78,7 +78,114 @@ closing that asymmetry is worth more than any audit on the dialect-silent list.
 its producer fact is already specified in
 `docs/typefacts/adr/0025-v1-callee-value-provenance.md`.
 
+
+### Re-measured: the candidates arrive, 43 of them, on three real rows
+
+`make ecosystem-benchmark` with the published proposed-closure label
+(report SHA-256 `f924e235988cef5c780062174d59f9d207bd08130d2505e3c3216e36ff8a4f29`). Verdicts unchanged: 357
+verified, 40 refused, 21 not attempted, `exportsProven` still 0. What changed
+is the number that was structurally zero all day:
+`certificationAttempt.withheldClosures` now sums to **43 across three rows** --
+`@kobalte/utils@0.9.2` 33, `@kobalte/utils@2.0.0-alpha.0` 7,
+`@solid-primitives/i18n@2.2.1` 3. Each is a `creates` candidate that reached
+planning and was withheld by name for want of a recipe, which is the honest
+state: the row certifies exactly as before, and the claim stays open.
+
+Three rows, not 103. The hazard-free artifact cases the blocker diagnosis
+counted are necessary but not sufficient -- a case also needs an export whose
+walk clears, and the walk gives no verdict to 76% of function exports. So the
+population that can reach a proven `creates: []` today is these three rows'
+43 claims, and the next measurement worth taking is a recipe for one of them.
+## The generator now publishes its `creates` closure candidate, and the implementation census runs (2026-09-04)
+
+Closes the plumbing gap the entry below diagnosed. A proposed `creates` closure
+is **stated in the emitted document and labelled** — `closed: ["creates"]`,
+`creates: []`, `proposedClosures: ["creates"]` — instead of being weakened away
+and recorded only in the plan sidecar.
+
+**Why the closure has to be in the document.** The certifier rebuilds its
+candidate universe by weakening the candidate document's own closed claims
+(`inspect_candidates`), and `finalization::finalize_value_only` encodes
+`plan.selected_candidate` as the canonical main and refuses unless its digest
+is the planned `candidate_semantic_digest`. So the document is simultaneously
+the only source of candidates and the thing a receipt binds: a closure
+withdrawn at generation cannot be planned, proven, or bound, whatever a sidecar
+says. Passing the plan sidecar into `ContractCertificationPlanningRequest` was
+rejected — it makes the planner's universe a caller's input, and the available
+authentication is vacuous, since *every* open claim could have come from a
+weakened closed one (`Unknown` ← `Complete([])`, `Partial(items)` ←
+`Complete(items)`), so "this candidate is one the document could have proposed"
+admits nearly the whole document.
+
+**What the label is for.** Without it, dropping the weakening would make an
+emitted proposal byte-indistinguishable from a reviewed document asserting the
+same negative claim — and the audited bundled contracts are exactly such
+documents. `proposedClosures` keeps ADR 0008 § 1's distinction while letting the
+closure travel; a receipt, not the weakening, is what "a proposal cannot
+certify" rests on. Only `ClaimDomain::PROPOSABLE` (today `creates` alone) may be
+published, because a candidate no census can decide refuses the row instead of
+proving anything; the generator's `reads`/`returns`/`callbacks` candidates stay
+weakened and remain sidecar measurement.
+
+**Digests.** `proposedClosures` joins normalized meaning, so it needed the
+`composedFrom` treatment: the features are independent, so the four
+combinations are four digest domains
+(`SEMANTIC_DIGEST_DOMAIN{,_COMPOSED}{,_PROPOSED_CLOSURE}`). Both frozen vectors
+are **unchanged** — a contract that proposes nothing hashes exactly what it
+hashed before — and the two new families have their own frozen vectors beside
+them. Measured cost: **49 of 88 corpus fixtures** moved, each by the new
+`proposedClosures` summary in `expected.json` and one `semanticDigest` line in
+`expected-proposal.json`; no `closed` array, envelope, claim id, refusal
+sidecar, or `closureCandidates` entry moved. Two fixtures
+(`multi-entrypoint`, `conditional-returns-divergence`) additionally *lost* two
+stale `unresolvedClaims` entries each: `call/creates` is no longer an open claim
+where the document now closes it. Coverage stays 94/546 and the ownership gate
+289.
+
+**Measured on real rows.** A 20-row targeted rerun (kobalte, corvu,
+solid-primitives, solid-js, solid-recharts, `@solidjs/*`; 12 certified, 2
+partial, 2 refused certifications, 4 failures) leaves every row's `outcome`,
+`class`, `signature`, `declinedClosures`, refusal counts, certification
+status/stage/family/demand and `exportsTotal`/`exportsProven` byte-identical.
+Exactly two rows move a number: `@kobalte/utils@0.9.2|solid1|only`
+`withheldClosures` **0 → 33** and `@kobalte/utils@2.0.0-alpha.0|solid2|only`
+**0 → 7** — precisely the counts the diagnosis found stranded in those rows'
+plan sidecars, now withheld by name with the domain open. One refusal *message*
+moved: `@solidjs/element@2.0.0-rc.3|solid2|only` names a different published
+graph digest, because a graph root is derived from its nodes' proposal digests.
+
+**What still does not happen on a real row.** The census still never runs
+there, for two reasons that are now separable. A candidate survives only on an
+artifact case with **no** closure hazard — an `unaccepted-external-dependency`
+frontier opens `creates` before publication, which is 524 of 627 measured cases
+— and a surviving candidate is **withheld** unless the transaction is handed a
+recipe for its exact semantic claim, which no ecosystem row has (ADR 0006
+Stage 3 recipe synthesis). So `exportsProven` stays 0 corpus-wide, and this
+entry moves the blocker from "the candidate is discarded" to "B, then recipes".
+
+**Where the census first runs for real.** On the generated document of
+`fixtures/package-contracts/implementation-census-creates`, through the
+production planning path, pinned by two new tests in
+`contract_certification::tests`:
+`the_generated_census_fixture_carries_every_creates_candidate_into_planning`
+(no producer: 12 candidates planned, one veto and one `DomainExhaustiveness`
+demand each, all 12 withheld by name with no corpus) and
+`the_census_certifies_a_generated_creates_candidate_and_withholds_its_siblings`
+(pinned producer and probe Node: one recipe for `plain`, so gating withholds
+the other 11 and the census decides `plain` — **`creates: []` certified**, with
+a nonempty gate root). Both plan from `expected.json`, the bytes
+`scripts/contract-corpus.mjs` pins, rebinding only the package integrity token
+(the corpus generates `fixture:sha256:…`; a transaction requires the published
+archive's own). The generate-side seam has its own test,
+`a_cleared_creates_walk_reaches_the_certifiers_candidate_universe_through_the_document`,
+which runs the real normalization, encodes, decodes, and asserts
+`inspect_candidates` rebuilds the candidate from the document alone. The
+previously-only path, `plan_for_test_package_closing`, synthesizes a closed
+candidate and is exactly what hid this.
+
 ## Neither accessor census nor closure hazard is the top blocker: the generator's `creates` closure candidate never reaches certification (2026-09-04)
+
+**Superseded in its remedy, not in its measurements — see the entry above.**
 
 A diagnosis slice set out to size the two blockers the previous section named —
 the producer's `property-access-unknown-accessor` census (**A**) and the
@@ -109,7 +216,7 @@ carries **33 `call/creates` closure candidates** (plus 41 `reads`, 41
 `returns`, 40 `callbacks`) and `@kobalte/utils@2.0.0-alpha.0|solid2|only`
 carries 7. **ADR 0008's "on every measured real row no `creates` candidate was
 proposed at all — 0 candidates" is no longer true**: candidates are produced and
-then lost. This also explains the corpus-wide facts nothing else did — across
+then lost. (Corrected in ADR 0008 itself, and fixed by the entry above.) This also explains the corpus-wide facts nothing else did — across
 all 418 rows `demandCountsByFamily` never names `domain-exhaustiveness`,
 `withheldClosures` is 0, and `exportsProven` is 0. No closure claim of *any*
 domain can currently be certified from a generated proposal, and
@@ -117,7 +224,9 @@ domain can currently be certified from a generated proposal, and
 (`contract_certification.rs:9190-9219`) synthesizes a candidate with `creates`
 already closed via `plan_for_test_package_closing`, and no gate exercises the
 generate-then-certify path (the scoping study's "Break A", now shown to hide a
-live gap rather than an unexercised lane).
+live gap rather than an unexercised lane). Both are closed by the entry above:
+the candidate is published, and two gates plan and certify the census fixture's
+own generated document.
 
 **B is measured and is not the binding constraint.** 524 of the 627 artifact
 cases carry an `unaccepted-external-dependency` hazard; 29 of 29 packages have
@@ -16958,7 +17067,9 @@ binary.
    `uncensused-invoking-forms` (13) and `asset-query-import-control` (1) did
    not move.
 6. **Documentation.** ADR 0008 no longer says every real row's candidates are
-   withheld (none were proposed — 0 candidates, not 0-withheld-of-many); names
+   withheld (at this cut none appeared to be proposed at all — "0 candidates,
+   not 0-withheld-of-many"; the 2026-09-04 entry below corrects that reading:
+   candidates *were* proposed and the emitted document discarded them); names
    the missing Solid 2.0 negative rows (`createSignal`, `onCleanup`, `untrack`,
    `getOwner`, `createRoot`) as the actual next blocker; documents the arrow
    helper and the written binding; and corrects the standard-library premise.

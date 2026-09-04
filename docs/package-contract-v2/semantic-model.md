@@ -734,6 +734,24 @@ The checked golden proposal in `solid-reactive-ir` hashes to
 Changing any rule in this paragraph is an incompatible semantic-model change;
 wire-schema numbering alone never changes this digest.
 
+### Digest families
+
+Two optional fields joined normalized meaning after version 1 froze:
+`composedFrom` on a `read` operation, and `proposedClosures` on a `call`. Each
+is written into the canonical stream only in the families that carry it, and
+each family is named by its own domain separator, so a contract carrying
+neither hashes exactly the bytes it hashed before either field existed — and
+keeps every receipt already issued for it. The four separators are the base
+string above, plus the suffix `:composed-provenance`, plus the suffix
+`:proposed-closure`, plus both suffixes in that order. The family is a function
+of the contract, never a mode a caller selects, and the domain is the
+length-delimited first thing written, so two families cannot collide. Each has
+its own frozen vector in `contract_semantics::tests`.
+
+A document that states provenance, or that labels a closure as proposed, is a
+new document making a new claim; it belongs in its own family rather than
+sharing an identity with the document that makes the plainer claim.
+
 ## Core invariants
 
 - Every referenced operation and resource exists.

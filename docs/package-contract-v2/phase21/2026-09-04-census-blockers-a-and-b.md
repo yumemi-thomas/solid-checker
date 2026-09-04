@@ -29,6 +29,14 @@ moved no verdict.
 
 ## 0. Headline, because it changes which question is worth asking
 
+> **Slice 1 has since landed.** The generator now publishes its `creates`
+> closure candidate in the emitted document, labelled `proposedClosures`, and
+> the census runs on a generated candidate. See ADR 0008 § 1 "How the proposal
+> is published" and the 2026-09-04 entry at the top of
+> `docs/precision-backlog.md` for the mechanism, the digest families, the
+> snapshot cost, and the 20-row rerun. Every measurement below stands as taken;
+> only the remedy in § 4 Slice 1 is now history rather than plan.
+
 Neither A nor B is the binding constraint. A third gate sits above both, and it
 is a plumbing gap rather than a semantic one.
 
@@ -310,6 +318,8 @@ a proposal for an archive the tier refuses to answer about.
 Neither A nor B is first. The order is forced by where the candidate dies.
 
 **Slice 1 — carry the closure candidate from generation into certification.**
+*(Landed. The second option below is the one taken, plus a label so the
+emitted proposal stays distinguishable from a reviewed document.)*
 The proposal plan sidecar's `closureCandidates` must reach
 `inspect_candidates`, either by adding the plan to
 `ContractCertificationPlanningRequest` and re-closing its named claims on the

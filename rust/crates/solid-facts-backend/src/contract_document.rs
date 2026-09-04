@@ -15,14 +15,14 @@ use serde_json::{Map as JsonMap, Value as JsonValue, json};
 use sha2::{Digest as _, Sha256};
 use solid_reactive_ir::contract_semantics::{
     ArrayLength, ArtifactCase, ArtifactIdentity, CallbackInvocation, CapabilityClaim,
-    CapabilityKnowledge, Cardinality, CardinalityScope, ContractProposal, Digest, EdgeKind, Event,
-    ExportIdentity, ExportSemantics, ExportTargetIdentity, Guard, GuardAtom, GuardPartition,
-    GuardedCase, KnowledgeSet, Lifetime, Literal, NormalizedContract, ObjectProperty,
-    ObservableCapability, Operation, OperationEdge, OperationId, OperationKind, OwnerCapabilities,
-    OwnerProduction, OwnerRelation, OwnerRequirements, OwnerSource, PackageIdentity, ReactiveRole,
-    Requirement, ResolutionStep, Resource, ResourceCapability, ResourceId, ResourceKind,
-    ResourceState, SEMANTIC_MODEL_VERSION, Schedule, StabilityKnowledge, Tracking, Trigger,
-    UpperBound, ValueKind, ValueShape, ValueSource,
+    CapabilityKnowledge, Cardinality, CardinalityScope, ClaimDomain, ContractProposal, Digest,
+    EdgeKind, Event, ExportIdentity, ExportSemantics, ExportTargetIdentity, Guard, GuardAtom,
+    GuardPartition, GuardedCase, KnowledgeSet, Lifetime, Literal, NormalizedContract,
+    ObjectProperty, ObservableCapability, Operation, OperationEdge, OperationId, OperationKind,
+    OwnerCapabilities, OwnerProduction, OwnerRelation, OwnerRequirements, OwnerSource,
+    PackageIdentity, ReactiveRole, Requirement, ResolutionStep, Resource, ResourceCapability,
+    ResourceId, ResourceKind, ResourceState, SEMANTIC_MODEL_VERSION, Schedule, StabilityKnowledge,
+    Tracking, Trigger, UpperBound, ValueKind, ValueShape, ValueSource,
 };
 
 use crate::contract_interface::ContractFailure;
@@ -405,6 +405,21 @@ fn compact_call(
     }
     if !closed.is_empty() {
         object.insert("closed".into(), json!(closed));
+    }
+    // A proposed closure is a sibling of `closed`, never a member of it: the
+    // domain it names stays open in this document, and a consumer that does
+    // not understand the key reads exactly the open domain it read before the
+    // key existed.
+    if !call.proposed_closures().is_empty() {
+        object.insert(
+            "proposedClosures".into(),
+            json!(
+                call.proposed_closures()
+                    .iter()
+                    .map(|domain| call_domain_name(*domain))
+                    .collect::<Vec<_>>()
+            ),
+        );
     }
     if !call.operations.is_empty() {
         object.insert(
@@ -1116,6 +1131,20 @@ const fn tracking_name(value: Tracking) -> &'static str {
     }
 }
 
+const fn call_domain_name(value: ClaimDomain) -> &'static str {
+    match value {
+        ClaimDomain::Callbacks => "callbacks",
+        ClaimDomain::Reads => "reads",
+        ClaimDomain::Writes => "writes",
+        ClaimDomain::Creates => "creates",
+        ClaimDomain::Invalidates => "invalidates",
+        ClaimDomain::Throws => "throws",
+        ClaimDomain::Returns => "returns",
+        ClaimDomain::Cleanups => "cleanups",
+        ClaimDomain::Disposals => "disposals",
+    }
+}
+
 const fn edge_kind(value: EdgeKind) -> &'static str {
     match value {
         EdgeKind::Orders => "orders",
@@ -1350,6 +1379,11 @@ struct WireSummary {
 struct WireCall {
     #[serde(default)]
     closed: Vec<WireCallDomain>,
+    /// The domains this document proposes closed without claiming closure.
+    /// Additive to `schemaVersion: 1`: a document that omits it proposes
+    /// nothing, which is what every document said before the key existed.
+    #[serde(default, rename = "proposedClosures")]
+    proposed_closures: Vec<WireCallDomain>,
     #[serde(default)]
     callbacks: Option<Vec<WireCallback>>,
     #[serde(default)]
@@ -2526,6 +2560,11 @@ fn expand_call(
         MAX_GUARD_CASES,
     )?;
     let closed = validate_closed(&call.closed, &WireCallDomain::ALL, "call.closed")?;
+    let proposed = validate_closed(
+        &call.proposed_closures,
+        &WireCallDomain::ALL,
+        "call.proposedClosures",
+    )?;
 
     let callbacks = call
         .callbacks
@@ -2579,7 +2618,27 @@ fn expand_call(
     let guards = expand_guard_partition(call.cases, ids)?;
     Ok(solid_reactive_ir::contract_semantics::CallSemantics::new(
         claims, operations, edges, resources, guards,
-    ))
+    )
+    // Whether the proposal is admissible at all — the domain open, and the
+    // domain one the certifier has a proof mode for — is a normalization
+    // invariant, refused by name in `validate_proposed_closures`.
+    .with_proposed_closures(proposed.into_iter().map(ClaimDomain::from)))
+}
+
+impl From<WireCallDomain> for ClaimDomain {
+    fn from(value: WireCallDomain) -> Self {
+        match value {
+            WireCallDomain::Callbacks => Self::Callbacks,
+            WireCallDomain::Reads => Self::Reads,
+            WireCallDomain::Writes => Self::Writes,
+            WireCallDomain::Creates => Self::Creates,
+            WireCallDomain::Invalidates => Self::Invalidates,
+            WireCallDomain::Throws => Self::Throws,
+            WireCallDomain::Returns => Self::Returns,
+            WireCallDomain::Cleanups => Self::Cleanups,
+            WireCallDomain::Disposals => Self::Disposals,
+        }
+    }
 }
 
 impl WireCallDomain {
@@ -3436,6 +3495,73 @@ mod tests {
             "the encoder dropped the provenance"
         );
         assert_eq!(normalized(&encoded), normalized_contract);
+    }
+
+    /// `proposedClosures` labels a closure the document states, so it names a
+    /// subset of `closed`.
+    ///
+    /// Decoding must keep the closure and the label together, refuse a label
+    /// over a domain the document leaves open, refuse a duplicate the way
+    /// `closed` is refused, refuse a domain no census can decide, and refuse a
+    /// spelling outside the vocabulary instead of ignoring it.
+    #[test]
+    fn a_proposed_closure_labels_a_stated_closure_and_is_otherwise_refused() {
+        let document = |call: &str| {
+            format!(
+                r#"{{"format":"solid-reactivity-contract","schemaVersion":1,"semanticModelVersion":1,"package":{{"name":"consumer","version":"1.0.0","integrity":"sha512:test","manifest":{{"path":"package.json","sha256":"{a}"}}}},"summaries":{{"fn":{{"shape":"callable","call":{call}}}}},"entrypoints":{{".":{{"artifact":{{"path":"dist/index.js","sha256":"{b}","closureSha256":"{c}"}},"declarations":{{"path":"dist/index.d.ts","sha256":"{d}"}},"exports":{{"run":"fn"}}}}}},"sidecars":{{}}}}"#,
+                a = "a".repeat(64),
+                b = "b".repeat(64),
+                c = "c".repeat(64),
+                d = "d".repeat(64),
+            )
+            .into_bytes()
+        };
+
+        let contract = normalized(&document(
+            r#"{"closed":["creates"],"creates":[],"proposedClosures":["creates"]}"#,
+        ));
+        let export = &contract.artifact_cases()[0].exports["run"];
+        assert!(
+            export
+                .operation_claim(ClaimDomain::Creates)
+                .unwrap()
+                .proves_absence(),
+            "the closure is the document's own claim"
+        );
+        assert_eq!(
+            export.call.proposed_closures(),
+            &BTreeSet::from([ClaimDomain::Creates]),
+            "and it is labelled as proposed rather than reviewed"
+        );
+        // And back out again, byte for byte in both directions.
+        let encoded = encode(&contract, &SidecarDigests::default(), false).unwrap();
+        assert!(String::from_utf8_lossy(&encoded).contains(r#""proposedClosures":["creates"]"#));
+        assert_eq!(normalized(&encoded), contract);
+
+        for (call, needle) in [
+            (r#"{"proposedClosures":["creates"]}"#, "states no closure"),
+            (
+                r#"{"closed":["creates"],"creates":[],"proposedClosures":["creates","creates"]}"#,
+                "duplicate closed domain",
+            ),
+            (
+                r#"{"closed":["reads"],"reads":[],"proposedClosures":["reads"]}"#,
+                "no closure proof mode",
+            ),
+        ] {
+            let error = decode(&document(call))
+                .and_then(|proposal| proposal.normalize())
+                .expect_err(&format!("{call} must be refused"));
+            assert!(
+                error.to_string().contains(needle),
+                "{call}: {error} does not name {needle:?}"
+            );
+        }
+
+        assert!(
+            decode(&document(r#"{"proposedClosures":["nonsense"]}"#)).is_err(),
+            "an unknown domain spelling must be refused, not ignored"
+        );
     }
 
     #[test]

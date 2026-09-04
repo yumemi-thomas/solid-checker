@@ -220,9 +220,53 @@ fn normalize_call(call: &mut CallSemantics, path: &str) -> Result<(), ModelError
         .sort_by(|left, right| left.id.cmp(&right.id));
 
     validate_call_claims(&call.claims, &call.operations, &resources, path)?;
+    validate_proposed_closures(call, path)?;
     normalize_operation_graph(&mut call.edges, &call.operations, &operation_ids, path)?;
     normalize_guard_partition(&mut call.guards, &operation_ids, path)?;
     Ok(())
+}
+
+/// A proposed closure labels a closure this document *states*, so the label
+/// is well-formed only over a domain the document actually closes, and only
+/// over a domain a certifier has a closure proof mode for — a proposal nothing
+/// can decide is a refused row, never a weaker document.
+fn validate_proposed_closures(call: &CallSemantics, path: &str) -> Result<(), ModelError> {
+    for domain in call.proposed_closures() {
+        if !domain.is_proposable() {
+            return Err(ModelError::InvalidKnowledge {
+                path: format!("{path}.proposedClosures"),
+                reason: format!(
+                    "call domain {} has no closure proof mode and cannot be proposed",
+                    claim_domain_name(*domain)
+                ),
+            });
+        }
+        if !call.claim_state(*domain).is_open() {
+            continue;
+        }
+        return Err(ModelError::Contradiction {
+            path: format!("{path}.proposedClosures"),
+            reason: format!(
+                "call domain {} is proposed closed and states no closure",
+                claim_domain_name(*domain)
+            ),
+        });
+    }
+    Ok(())
+}
+
+const fn claim_domain_name(domain: ClaimDomain) -> &'static str {
+    match domain {
+        ClaimDomain::Callbacks => "callbacks",
+        ClaimDomain::Reads => "reads",
+        ClaimDomain::Writes => "writes",
+        ClaimDomain::Creates => "creates",
+        ClaimDomain::Invalidates => "invalidates",
+        ClaimDomain::Throws => "throws",
+        ClaimDomain::Returns => "returns",
+        ClaimDomain::Cleanups => "cleanups",
+        ClaimDomain::Disposals => "disposals",
+    }
 }
 
 fn normalize_knowledge<T: Ord>(
@@ -1803,6 +1847,11 @@ pub(super) fn open_proposed_closure(export: &mut ExportSemantics) -> Vec<ClaimPa
     if export.call.guards.cases.open_proposed_closure() {
         candidates.push(ClaimPath::GuardPartition);
     }
+    // Every marked domain is a closed call domain, so the loop above has just
+    // withdrawn all of them: the label goes with the closure it labelled, and
+    // a document whose closure was weakened while the label survived would not
+    // normalize.
+    export.call.proposed_closures.clear();
     for guarded in export.call.guards.cases.items_mut() {
         let operations = match guarded {
             GuardedCase::When { operations, .. } | GuardedCase::Otherwise { operations } => {

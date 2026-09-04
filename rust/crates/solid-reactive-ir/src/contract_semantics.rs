@@ -43,6 +43,21 @@ pub const SEMANTIC_DIGEST_DOMAIN: &str = "solid-checker:normalized-package-contr
 /// digest in its own family.
 pub const SEMANTIC_DIGEST_DOMAIN_COMPOSED: &str =
     "solid-checker:normalized-package-contract:composed-provenance";
+/// The digest domain for a contract in which at least one export proposes a
+/// call domain for closure proof (`CallSemantics::proposed_closures`).
+///
+/// The same reasoning as `SEMANTIC_DIGEST_DOMAIN_COMPOSED`, one field later,
+/// and the two features are independent: a contract may carry either, both, or
+/// neither, so there are four domains and not three. Each is a distinct
+/// length-prefixed first write, so the families cannot collide, and every
+/// contract that proposes nothing keeps hashing exactly what it hashed before
+/// the marker existed.
+pub const SEMANTIC_DIGEST_DOMAIN_PROPOSED_CLOSURE: &str =
+    "solid-checker:normalized-package-contract:proposed-closure";
+/// The digest domain for a contract carrying composed provenance *and* a
+/// proposed closure.
+pub const SEMANTIC_DIGEST_DOMAIN_COMPOSED_PROPOSED_CLOSURE: &str =
+    "solid-checker:normalized-package-contract:composed-provenance:proposed-closure";
 pub const SEMANTIC_CLAIM_ID_VERSION: u16 = 1;
 
 /// Local knowledge for one immediate collection-valued claim domain.
@@ -671,6 +686,23 @@ impl ExportSemantics {
         validate::open_proposed_closure(self)
     }
 
+    /// Republishes the named call domains as *proposed* closures: the domain
+    /// closed over the positive items it already carries, and labelled as the
+    /// generator's proposal rather than a reviewed claim.
+    ///
+    /// The inverse of the weakening [`Self::open_proposed_closure`] performs,
+    /// used by the proposal generator on exactly the domains a certifier has a
+    /// census for. See [`CallSemantics::proposed_closures`].
+    pub fn propose_closures(&mut self, domains: impl IntoIterator<Item = ClaimDomain>) {
+        for domain in domains {
+            match self.call.claims.operation_claim_mut(domain) {
+                Some(claim) => claim.close_verified(),
+                None => self.call.claims.callbacks.close_verified(),
+            };
+            self.call.proposed_closures.insert(domain);
+        }
+    }
+
     fn close_verified_claim(&mut self, claim: &ClaimPath) -> Result<(), ModelError> {
         validate::close_verified_claim(self, claim)
     }
@@ -682,9 +714,17 @@ impl ExportSemantics {
     /// finite set of domains. A complete negative becomes unknown and a
     /// complete positive becomes partial; unrelated call and recursive value
     /// knowledge is unchanged.
+    /// Opening a domain also withdraws its *proposal*. A proposal is an offer
+    /// to prove closure over exactly the knowledge the document states; an
+    /// opaque closure frontier or a recipe-gated withholding that reopens the
+    /// domain has invalidated that offer, so leaving the marker in place would
+    /// let the candidate outlive the fact it was derived from — and would make
+    /// `withheld_weakening` a no-op, since the certifier would rediscover the
+    /// candidate it had just withheld.
     pub fn open_call_domains(&mut self, domains: impl IntoIterator<Item = ClaimDomain>) {
         for domain in domains {
             self.call.claims.open(domain);
+            self.call.proposed_closures.remove(&domain);
         }
     }
 
@@ -723,6 +763,27 @@ impl ClaimDomain {
         Self::Cleanups,
         Self::Disposals,
     ];
+
+    /// The call domains a document may *propose* closed
+    /// (`CallSemantics::proposed_closures`).
+    ///
+    /// One domain, because `creates` is the only behavioral call domain the
+    /// certifier has a proof mode for: the implementation census
+    /// (ADR 0008). A candidate the certifier cannot decide is not a weaker
+    /// proposal, it is a refused row — every other domain refuses by name at
+    /// witness acquisition, and only `creates` is recipe-gated, so a proposal
+    /// of one of them could never close and could only turn a row whose every
+    /// other claim was proven into a refusal. The generator's candidates for
+    /// the other domains therefore stay in the proposal plan sidecar as
+    /// measurement, and this list grows one domain at a time as each census
+    /// lands.
+    pub const PROPOSABLE: [Self; 1] = [Self::Creates];
+
+    /// Whether a document may propose this domain for closure proof.
+    #[must_use]
+    pub fn is_proposable(self) -> bool {
+        Self::PROPOSABLE.contains(&self)
+    }
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -801,6 +862,26 @@ pub enum ResourceClaimDomain {
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct CallSemantics {
     claims: CallClaims,
+    /// The closed call domains this document *proposes* rather than asserts:
+    /// closure a generator inferred and offers for proof, not closure an audit
+    /// established.
+    ///
+    /// Each named domain is closed in `claims` — a proposal of a closure the
+    /// document does not state is meaningless, and normalization refuses it.
+    /// The closure has to be in the document because that is the only place a
+    /// closure ever is: `ProofPolicy2::inspect_candidates` rebuilds the
+    /// planner's candidate universe by weakening the candidate's own closed
+    /// claims, and the canonical main a receipt binds is the candidate
+    /// document itself. A candidate that stated its closure anywhere else —
+    /// a sidecar, a request field — would make the planner's universe a
+    /// caller's choice and would leave nothing for a receipt to bind.
+    ///
+    /// What the marker adds is the distinction the weakening used to carry:
+    /// an emitted proposal is otherwise byte-indistinguishable from a reviewed
+    /// document making the same claim. It is in the semantic digest for the
+    /// same reason `composed_from` is — the two documents mean different
+    /// things, and a receipt for one must not authenticate the other.
+    proposed_closures: BTreeSet<ClaimDomain>,
     pub operations: Vec<Operation>,
     pub edges: Vec<OperationEdge>,
     pub resources: Vec<Resource>,
@@ -818,11 +899,28 @@ impl CallSemantics {
     ) -> Self {
         Self {
             claims,
+            proposed_closures: BTreeSet::new(),
             operations,
             edges,
             resources,
             guards,
         }
+    }
+
+    /// The same call semantics, additionally proposing the named domains for
+    /// closure proof. The domains' knowledge is untouched.
+    #[must_use]
+    pub fn with_proposed_closures(
+        mut self,
+        domains: impl IntoIterator<Item = ClaimDomain>,
+    ) -> Self {
+        self.proposed_closures.extend(domains);
+        self
+    }
+
+    #[must_use]
+    pub const fn proposed_closures(&self) -> &BTreeSet<ClaimDomain> {
+        &self.proposed_closures
     }
 
     #[must_use]
@@ -858,6 +956,23 @@ impl CallClaims {
                 .operation_claim(domain)
                 .expect("non-callback claim has an operation domain")
                 .state(),
+        }
+    }
+
+    fn operation_claim_mut(
+        &mut self,
+        domain: ClaimDomain,
+    ) -> Option<&mut KnowledgeSet<OperationId>> {
+        match domain {
+            ClaimDomain::Callbacks => None,
+            ClaimDomain::Reads => Some(&mut self.reads),
+            ClaimDomain::Writes => Some(&mut self.writes),
+            ClaimDomain::Creates => Some(&mut self.creates),
+            ClaimDomain::Invalidates => Some(&mut self.invalidates),
+            ClaimDomain::Throws => Some(&mut self.throws),
+            ClaimDomain::Returns => Some(&mut self.returns),
+            ClaimDomain::Cleanups => Some(&mut self.cleanups),
+            ClaimDomain::Disposals => Some(&mut self.disposals),
         }
     }
 

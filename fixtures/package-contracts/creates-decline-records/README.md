@@ -110,7 +110,11 @@ hazard: it opens every domain of that artifact case at closure replay, so no
 sitting beside the declines would therefore show no candidate either, and
 "nothing proposed" would be ambiguous between the walk and the hazard.
 `clean.js` imports nothing, so its closure carries no hazard and the candidate
-is visible in `expected-proposal.json`.
+is visible in `expected-proposal.json` — and, since the candidate is now
+published in the document too, as `proposedClosures: ["creates"]` on
+`proposes`'s summary in `expected.json`. The hazard's effect is visible in the
+same file from the other side: no export of `index.js` carries the label, since
+opening a domain withdraws its proposal along with its closure.
 
 That split is also the reason the decline records exist at all: on a real
 consumer row the domain is open for *several* independent reasons at once, and

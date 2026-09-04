@@ -13,13 +13,13 @@ use solid_reactive_ir::{
     ContractReturn, OwnerRequirementOperation, PackageContract,
     contract_semantics::{
         ArrayLength, ArtifactCase, CallClaims, CallSemantics, CallbackInvocation,
-        CapabilityKnowledge, Cardinality, CardinalityScope, ComposedFrom, ContractProposal, Event,
-        ExportIdentity, ExportSemantics, ExportTargetIdentity, GuardPartition, KnowledgeSet,
-        Lifetime, NormalizedContract, ObjectProperty, Operation, OperationId, OperationKind,
-        OwnerCapabilities, OwnerProduction, OwnerRelation, OwnerRequirements, OwnerSource,
-        ReactiveRole, Requirement, Resource, ResourceId, ResourceKind, ResourceState, Schedule,
-        SemanticClaimPath, SemanticClaimSubject, StabilityKnowledge, Tracking, Trigger, UpperBound,
-        ValueShape, ValueSource,
+        CapabilityKnowledge, Cardinality, CardinalityScope, ClaimPath, ComposedFrom,
+        ContractProposal, Event, ExportIdentity, ExportSemantics, ExportTargetIdentity,
+        GuardPartition, KnowledgeSet, Lifetime, NormalizedContract, ObjectProperty, Operation,
+        OperationId, OperationKind, OwnerCapabilities, OwnerProduction, OwnerRelation,
+        OwnerRequirements, OwnerSource, ReactiveRole, Requirement, Resource, ResourceId,
+        ResourceKind, ResourceState, Schedule, SemanticClaimPath, SemanticClaimSubject,
+        StabilityKnowledge, Tracking, Trigger, UpperBound, ValueShape, ValueSource,
     },
 };
 
@@ -71,12 +71,28 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
     let mut candidates = Vec::new();
     for artifact_case in &mut cases {
         for (name, export) in &mut artifact_case.exports {
-            candidates.extend(export.open_proposed_closure().into_iter().map(|path| {
-                SemanticClaimSubject {
-                    artifact_case: artifact_case.id.clone(),
-                    export: name.clone(),
-                    path: SemanticClaimPath::Domain(path),
-                }
+            let paths = export.open_proposed_closure();
+            // The weakening alone *loses* the candidate. The certifier rebuilds
+            // its candidate universe by weakening the emitted document's own
+            // closed claims, and the canonical main its receipt binds is that
+            // same document, so a closure withdrawn here is a closure nothing
+            // downstream can plan, prove, or bind — which is why
+            // `census_creates_domain` had never run on generated input.
+            //
+            // So every candidate the certifier has a census for is republished
+            // as a *proposed* closure: stated in the document, and labelled as
+            // this generator's inference rather than a reviewed claim. The rest
+            // stay withdrawn and travel to the plan sidecar below as
+            // measurement only — publishing a closure no census can decide
+            // would refuse the row instead of proving anything.
+            export.propose_closures(paths.iter().filter_map(|path| match path {
+                ClaimPath::Call(domain) if domain.is_proposable() => Some(*domain),
+                _ => None,
+            }));
+            candidates.extend(paths.into_iter().map(|path| SemanticClaimSubject {
+                artifact_case: artifact_case.id.clone(),
+                export: name.clone(),
+                path: SemanticClaimPath::Domain(path),
             }));
         }
     }

@@ -184,6 +184,11 @@
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/callDomain" }
         },
+        "proposedClosures": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/callDomain" }
+        },
         "callbacks": {
           "type": "array",
           "items": { "$ref": "#/$defs/callback" }

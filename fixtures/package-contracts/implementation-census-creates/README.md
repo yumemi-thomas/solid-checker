@@ -13,11 +13,35 @@ export **except `unresolved`, `memberParameterRooted` and `iife`** proposes
 of each implementation finds no call that a closed `creates` would contradict,
 and those three end at a callee it cannot resolve, which is never evidence of
 harmlessness — and the proposal plan carries one `{kind: "call", domain:
-"creates"}` closure candidate per proposing export. A proposal is a claim to be
-proven, not a proof; what the certifier does with each candidate is driven by
+"creates"}` closure candidate per proposing export.
+
+A proposing export's summary in `expected.json` states the closure and labels
+it: `closed: ["creates"]`, `creates: []`, `proposedClosures: ["creates"]`. That
+label is the difference between a generator's proposal and a reviewed negative
+claim, and stating the closure is what makes the candidate reach the certifier
+at all (ADR 0008 § 1 "How the proposal is published"). Because the label is
+part of the summary, a proposing and a non-proposing export never share a
+summary id even when their semantics are otherwise identical — which is why
+`iife` and `cycle` sit in different summaries here.
+
+A proposal is a claim to be proven, not a proof; what the certifier does with
+each candidate is driven by
 `contract_certification::tests::the_probe_gate_tracer_*census*` in
 `rust/crates/solid-facts-backend/src/contract_certification.rs`, against the
 pinned Type Facts producer.
+
+Two of those tests plan from **this fixture's own `expected.json`** rather than
+from a synthesized closed candidate, which is the only way the
+generate-then-certify path is exercised anywhere in the repository:
+`the_generated_census_fixture_carries_every_creates_candidate_into_planning`
+(no producer; asserts the twelve candidates survive into planning, each with
+its veto and its `DomainExhaustiveness` demand, and that all twelve are
+withheld by name when no corpus is supplied) and
+`the_census_certifies_a_generated_creates_candidate_and_withholds_its_siblings`
+(one recipe, for `plain`, so recipe gating withholds the other eleven and the
+census decides `plain`). They rebind exactly one field of the document, the
+package integrity token, because the corpus generates `fixture:sha256:…` and a
+certification transaction requires the published archive's own integrity.
 
 ## The predicate
 
