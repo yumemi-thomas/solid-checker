@@ -1,0 +1,73 @@
+{
+  "format": "solid-checker-probe-recipe-corpus",
+  "schemaVersion": 1,
+  "policy": {
+    "repeatRuns": 2,
+    "timeoutMillis": 60000,
+    "maxMicrotaskTurns": 4,
+    "maxMacrotaskTurns": 1,
+    "maxEvents": 64
+  },
+  "recipes": [
+    {
+      "claimId": "claim:v1:sha256:1553467a94fb362adae87d8f2809233d759d5c71fc3334a45fdf3ddc5cb7097d",
+      "module": "kobalte-utils-noop.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": { "marker": "create-operation", "class": "call" },
+      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "coverageLimitations": [
+        "one Node build, one artifact case, no OS-level write denial",
+        "one export-condition selection: sibling conditional targets are unprobed",
+        "frozen intrinsic prototypes can refuse a benign package that writes to one",
+        "the only create surface observable in this realm is globalThis's own key set: the worker has no DOM, so a register-delegation could not succeed here even if attempted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:81b7edd761d769aefa216403f32da380bef8c73ba229ff4a1a7cbfe1833c31a3",
+      "module": "solid-primitives-i18n-scoped-translator.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": { "marker": "create-operation", "class": "call" },
+      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "coverageLimitations": [
+        "one Node build, one artifact case, no OS-level write denial",
+        "one export-condition selection: sibling conditional targets are unprobed",
+        "frozen intrinsic prototypes can refuse a benign package that writes to one",
+        "the only create surface observable in this realm is globalThis's own key set: the worker has no DOM, so a register-delegation could not succeed here even if attempted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:a81964024691851949c5e803e3b413423de4d79b40267eb96dfb2dfaa535e066",
+      "module": "solid-primitives-i18n-flatten.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": { "marker": "create-operation", "class": "call" },
+      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "coverageLimitations": [
+        "one Node build, one artifact case, no OS-level write denial",
+        "one export-condition selection: sibling conditional targets are unprobed",
+        "frozen intrinsic prototypes can refuse a benign package that writes to one",
+        "the only create surface observable in this realm is globalThis's own key set: the worker has no DOM, so a register-delegation could not succeed here even if attempted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:d9e2897934618827a34bd8a379e204adac80c93e29cfd8cb5ea0d9a8aad9e5b4",
+      "module": "solid-primitives-i18n-chained-translator.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": { "marker": "create-operation", "class": "call" },
+      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "coverageLimitations": [
+        "one Node build, one artifact case, no OS-level write denial",
+        "one export-condition selection: sibling conditional targets are unprobed",
+        "frozen intrinsic prototypes can refuse a benign package that writes to one",
+        "the only create surface observable in this realm is globalThis's own key set: the worker has no DOM, so a register-delegation could not succeed here even if attempted"
+      ]
+    }
+  ]
+}

@@ -96,6 +96,95 @@ counted are necessary but not sufficient -- a case also needs an export whose
 walk clears, and the walk gives no verdict to 76% of function exports. So the
 population that can reach a proven `creates: []` today is these three rows'
 43 claims, and the next measurement worth taking is a recipe for one of them.
+
+## A real row's `creates: []` passes the implementation census; 40 of the 43 candidates cannot be probed at all (2026-09-04)
+
+The recipe the entry above called "the next measurement worth taking" is
+written, and it was taken on all four claims a recipe can address. Full record:
+`docs/package-contract-v2/phase21/2026-09-04-first-real-creates-certification.md`.
+Corpus: `scripts/ecosystem-benchmark/probe-recipes/`.
+
+**The chain runs end to end on real published bytes, and one claim clears the
+census.** `@kobalte/utils@0.9.2`'s `noop` — `export function noop() { return; }`,
+no call, no loop, no jump, no invoking form — reached a recipe, was **not**
+withheld, derived the corpus's first-ever nonzero
+`demandCountsByFamily["domain-exhaustiveness"]` on a real row, and the
+implementation census **proved `creates: []`** from its authenticated
+`ExportImplementationTranscript`. The refusal that follows is downstream of the
+census, at case-set finalization: `mandatory probe gate sha256:a9c9b71f… did not
+complete`.
+
+**Why it did not complete, and why that is structural.** `@kobalte/utils`
+publishes `"./src/*": "./src/*"`, and its `.` case carries an
+`unaccepted-external-dependency` frontier on `solid-js` that opens `creates`
+before publication — so every candidate either kobalte row can offer lives on a
+**TypeScript source** artifact case (33 + 7 = 40 of the 43). The private probe
+workspace places the authenticated snapshot at
+`<private>/node_modules/<package>/`, deliberately, because that is what contains
+every `node_modules` rung of Node's resolver; and the pinned Node 24.11.1
+refuses `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` for any `.ts` under
+`node_modules`. Reproduced twice — a bare harness, and a hand-built copy of the
+private workspace's exact layout with the same `--conditions` flags. Resolution
+succeeds; the *load* fails, so the resolution echo would have been satisfied and
+the run still dies. No interpreter flag lifts the restriction, the argument
+vector is pinned to `--conditions=` plus the worker path
+(`argv:worker-path-plus-requested-conditions-only`), and moving the copy out of
+`node_modules` would dismantle the containment the disposition table rests on. A
+pre-stripped private copy would substitute bytes the transaction authenticated.
+So this is a decision, not a fix.
+
+**The three probeable candidates all refuse in the census, each by name.**
+`@solid-primitives/i18n@2.2.1`'s case is `dist/index.js`, so its recipes import
+and run. Measured one at a time with a single-recipe corpus:
+
+| export | refusal |
+| --- | --- |
+| `flatten` | `iterationReachability` at depth 0, `dist/index.js:939..946` |
+| `chainedTranslator` | `iterationReachability` at depth 0, `dist/index.js:3397..3414` |
+| `scopedTranslator` | uncensused invoking form `coercion (TemplateExpression)` at `dist/index.js:3349..3367`, reach reachable |
+
+The first two iterate `Object.entries(dict)` with `for…of` and contain **no**
+`break` or `continue`, so nothing was withheld: this is ADR 0008 item 0's stated
+over-refusal, met on real code, and on this population it costs two of the three
+probeable claims. Its fix is producer-side (emit a withheld row with
+`reach: unknown`, or as an uncensused form) and remains deferred.
+`scopedTranslator`'s refusal is **correct** and stays: its
+`` translator(`${scope}.${path}`, ...args) `` applies `ToString` to operands that
+are untyped in the shipped runtime bytes, and a `toString` on a passed object is
+code the census never saw. Its rest-spread argument is a second, independent
+refusal behind it.
+
+**Numbers.** `exportsProven` is 0 of 50 before and after for the kobalte row, 0
+of 9 before and after for i18n. What moves is the row verdict under the opt-in
+flag: with no corpus both rows certify with `withheldClosures` 33 and 3; with
+this corpus supplied both **refuse** and `withheldClosures` drops to 0, because
+every candidate is now addressed. No `probe_gate_root` was ever nonempty on a
+real row, so no receipt moved and no snapshot moved.
+
+**What this says about recipe synthesis.** It is feasible and it is not the
+bottleneck. Each recipe is twenty lines and needed two non-obvious facts: that a
+factory export's returned closure has to be called for the body to run at all,
+and that a `claimId` must be read out of a previous run's
+`…certification-audit.json`. The bottleneck is the two blockers above — 40
+candidates behind a workspace decision, and 2 of the remaining 3 behind item 0.
+
+### Still open
+
+- **`exportsProven` stays 0 corpus-wide.** No real row's closed claim domain
+  certifies.
+- **A `.ts` artifact case is unprobeable.** Reproduced, not inferred; it needs a
+  decision about what the workspace may carry, not a recipe.
+- **`noop`'s census verdict is measured but not receipt-bound**, and no test can
+  pin it: reproducing it needs the network, an npm install, and a real launch.
+  `scripts/ecosystem-probe-recipes.test.mjs` pins only the corpus's shape and
+  ADR 0006's never-hand-over-`session`-or-`harness` rule.
+- **Claim ids are content digests.** Any generator change silently unaddresses a
+  recipe, and the candidate is then *withheld* rather than failing loudly. ADR
+  0006 Stage 3.
+- **`ProbeGateError::IncompleteGate` names no launch cause**, so diagnosing a
+  failed run means rebuilding the private workspace by hand. A typed cause would
+  have saved that; not taken here.
+
 ## The generator now publishes its `creates` closure candidate, and the implementation census runs (2026-09-04)
 
 Closes the plumbing gap the entry below diagnosed. A proposed `creates` closure
