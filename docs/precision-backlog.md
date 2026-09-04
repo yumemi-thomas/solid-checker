@@ -78,6 +78,128 @@ closing that asymmetry is worth more than any audit on the dialect-silent list.
 its producer fact is already specified in
 `docs/typefacts/adr/0025-v1-callee-value-provenance.md`.
 
+## Neither accessor census nor closure hazard is the top blocker: the generator's `creates` closure candidate never reaches certification (2026-09-04)
+
+A diagnosis slice set out to size the two blockers the previous section named —
+the producer's `property-access-unknown-accessor` census (**A**) and the
+`UnacceptedExternalDependency` closure hazard (**B**) — over a 33-row ecosystem
+sample (18 `solid1` / 15 `solid2`, seven families, verdicts byte-identical to
+the checked-in report on all three instrumented runs; three temporary probes
+added, measured and reverted). Full evidence in
+`docs/package-contract-v2/phase21/2026-09-04-census-blockers-a-and-b.md`.
+
+**A third gate sits above both, and it is plumbing.**
+`normalize_inferred_contract_with_candidates_and_external_targets`
+(`inferred_contract.rs:62-92`) calls `export.open_proposed_closure()`, which
+**weakens the closed domain in the emitted document** and records the candidate
+only in the proposal *plan sidecar*. The certifier rebuilds its candidate
+universe with `ProofPolicy::inspect_candidates`
+(`contract_semantics/certification.rs:299-347`), which calls
+`open_proposed_closure()` again over that already-weakened document and finds
+nothing; the plan sidecar never reaches the native planner, because
+`ContractCertificationPlanningRequest` (`main.rs:179-200`) carries only
+`proposal` and is `deny_unknown_fields`, and `certificationPlannings`
+(`certify-contract.mjs:611-633`) passes only `generated.output`.
+
+Measured over the sample's 627 planned artifact cases: **`creates` is closed in
+the proposal handed to certification for 0 of 32,901 export slots**, before and
+after `select_and_bind`; `recipe_gated` saw **0** closure candidates on all 331
+invocations; yet the plan sidecar for `@kobalte/utils@0.9.2|solid1|only`
+carries **33 `call/creates` closure candidates** (plus 41 `reads`, 41
+`returns`, 40 `callbacks`) and `@kobalte/utils@2.0.0-alpha.0|solid2|only`
+carries 7. **ADR 0008's "on every measured real row no `creates` candidate was
+proposed at all — 0 candidates" is no longer true**: candidates are produced and
+then lost. This also explains the corpus-wide facts nothing else did — across
+all 418 rows `demandCountsByFamily` never names `domain-exhaustiveness`,
+`withheldClosures` is 0, and `exportsProven` is 0. No closure claim of *any*
+domain can currently be certified from a generated proposal, and
+`census_creates_domain` has never run outside a unit test: `census_fixture_plan`
+(`contract_certification.rs:9190-9219`) synthesizes a candidate with `creates`
+already closed via `plan_for_test_package_closing`, and no gate exercises the
+generate-then-certify path (the scoping study's "Break A", now shown to hide a
+live gap rather than an unexercised lane).
+
+**B is measured and is not the binding constraint.** 524 of the 627 artifact
+cases carry an `unaccepted-external-dependency` hazard; 29 of 29 packages have
+at least one such case and 28 of 29 have an unaccepted `solid-js`/`@solidjs/*`
+edge. It is raised at `artifact-resolution.mjs:2388-2405` and
+`module_closure.rs:357-386` whenever a bare specifier is in neither the
+accepted lane (`--accepted-contracts` + catalog + trust configuration) nor the
+private proposal lane (`--proposal-dependencies` + private catalog), and the
+ecosystem runner passes neither (`run.mjs:1743-1771`). It cannot: it holds no
+receipts — each probe mints a random-seed throwaway issuer and deletes the tree
+afterwards. But **103 artifact cases carry no such hazard and still have
+`creates` closed for 0 exports**, so B is downstream. Accepting the edges would
+also not help by itself: it converts an open domain into a hard demand for an
+authenticated dependency receipt, and the checked-in report already carries 719
+`authenticated-receipt-unavailable` leaves on 47 rows, `@solidjs/signals` named
+on 24 of them, with 8 rows blocked *only* by dialect-defining archives the
+ADR 0007 tier refuses to answer about.
+
+**A is real, sized, and fourth.** Over 1,244 implementation transcripts the
+producer answered during generation: 250 (20.1%) are `complete` with **no**
+uncensused form at the floor, 248 (19.9%) are `complete` with **only**
+`property-access-unknown-accessor` — A as sole item-2 blocker — 364 carry A plus
+another kind, 59 only other kinds, and 323 are `complete: false` and refused
+before item 2. Counting a floor call as dispositionable when it is
+parameter-rooted, standard-library, or resolves into the package's own
+non-`.d.ts` source: **188 of the 250 already clear every premise this slice can
+evaluate, and closing A raises that to 254 (+66)**. Both are upper bounds
+(item 0's verifier-side `break`/`continue` refusal and the standard-library
+slot proofs were not evaluated).
+
+**A call-position narrowing is unsound, and would be worth 11 exports.**
+`obj.m()` runs `Get(obj, "m")` before the call, so a getter's own arbitrary body
+runs — as uncensused as the callee's, and `creates` is a zero upper bound over
+the whole invocation. Numerically it is also small: of 7,459 accessor forms at
+the floor only 1,502 are in a recorded call's callee position (5,957 are reads,
+spreads, destructured members); of the 640 transcripts carrying any accessor
+form, 107 are all-callee; and of the 1,173 floor calls whose callee sits on such
+an access only 219 (18.7%) carry `calleeParameter`, so the rest refuse at item 3
+regardless. The sound version needs a producer fact that separates the kind's
+three collapsed causes (no symbol; declarations outside the snapshot's runtime
+bytes; whole-object spread/rest) — ADR 0025's callee value provenance for the
+first, a runtime-bytes accessor census over the *declaring* archive for the
+second.
+
+**And a population larger than both decline kinds was invisible.** Partitioning
+every export at `attach_generated_owner_requirements` (`main.rs:6584-6626`): of
+1,164 function exports, **137 (11.8%) the walk cleared, 142 (12.2%) declined
+with records, and 885 (76.0%) got no verdict at all** — canonical symbol
+resolved, but in neither the clean set nor the declines map, so
+`creates_walk_clean` is false and `creates_walk_declines` empty. Two candidate
+mechanisms, not separated here: `function_symbols` is keyed from each
+`FunctionFact`'s **name node**, so an arrow or function expression bound to a
+variable is never keyed; and in a bundled artifact the export entity's canonical
+symbol may differ from the declaration name's symbol. Consequence for planning:
+`scripts/dialect-audit-yield.mjs`'s rankings are computed over the 12% of
+function exports the walk actually reached (`@corvu/utils` 2 clean / 0 declined /
+54 silent; `motion-solidjs` 0 / 0 / 165; `@tanstack/devtools-ui` 0 / 0 / 49;
+against `@kobalte/utils` 60 / 12 / 1).
+
+### The ordered path, and what it needs
+
+1. **Carry the plan sidecar's closure candidates into certification** — add the
+   plan to the planning request and re-close its named claims before
+   `inspect_candidates`, or emit the domain closed and let
+   `inspect_candidates`'s existing weakening do its job. Changes what a planned
+   contract asserts and therefore its semantic digest, so it needs its own slice
+   and a fixture gate over the real generate-then-certify path.
+2. **Choose a first row whose artifact case carries no closure hazard** — 103 of
+   627 exist (`@kobalte/utils` contributes 67 of its 111 cases), so **B is not
+   required for a first proven row**. Row selection, no code.
+3. **A recipe for that row's claim** — a proven candidate spawns a mandatory
+   probe veto, and no recipe means `recipe_gated` withholds the candidate with
+   the domain left open, so the row certifies and proves nothing. Recipes *are*
+   needed for the first proven row. The authenticated dependency-closure copying
+   into the probe workspace has already shipped, so that part is covered.
+4. **Then A** (ceiling +66 exports), and separately the 885 silent walks, which
+   is the larger population.
+
+Nothing was implemented in this slice: the fix at item 1 moves a semantic digest
+and corpus snapshots, and the cheap version of A is unsound. See the diagnosis
+document's "What we are not doing yet, and why".
+
 ## The generator's `creates` walk is **not** stricter than the census it feeds; the shape ranking's premise was wrong, and the blocker is the producer's accessor census (2026-09-04)
 
 The corpus-wide shape ranking (the addendum at the top of this file) measured
