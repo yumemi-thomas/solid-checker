@@ -22,13 +22,113 @@
       "entrypoint": ".",
       "conditions": [],
       "stage": "closure-proposal",
+      "export": "computedMember",
+      "domain": "creates",
+      "kind": "unresolved-callee",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.js:4402:4417",
+      "declaration": "",
+      "shape": "computed-member",
+      "spelling": "handlers"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
       "export": "dialectSilent",
       "domain": "creates",
       "kind": "dialect-silent",
       "package": "solid-js",
       "callee": "createEffect",
       "location": "<package-root>/index.js:1289:1336",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "expressionCallee",
+      "domain": "creates",
+      "kind": "unresolved-callee",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.js:5396:5435",
+      "declaration": "",
+      "shape": "expression-callee",
+      "spelling": "function-expression"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "memberPropertyUnresolved",
+      "domain": "creates",
+      "kind": "unresolved-callee",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.js:3624:3647",
+      "declaration": "",
+      "shape": "member-property-unresolved",
+      "spelling": "publish"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "memberReceiverUnresolved",
+      "domain": "creates",
+      "kind": "unresolved-callee",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.js:3975:4003",
+      "declaration": "",
+      "shape": "member-receiver-unresolved",
+      "spelling": "method"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "otherSyntax",
+      "domain": "creates",
+      "kind": "unresolved-callee",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.js:5781:5799",
+      "declaration": "",
+      "shape": "other",
+      "spelling": "await-expression"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "parameterAliasRooted",
+      "domain": "creates",
+      "kind": "unresolved-callee",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.js:5022:5034",
+      "declaration": "",
+      "shape": "parameter-rooted",
+      "spelling": "read"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "parameterRooted",
+      "domain": "creates",
+      "kind": "unresolved-callee",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.js:4692:4705",
+      "declaration": "",
+      "shape": "parameter-rooted",
+      "spelling": "read"
     },
     {
       "entrypoint": ".",
@@ -39,8 +139,10 @@
       "kind": "unresolved-callee",
       "package": "",
       "callee": "",
-      "location": "<package-root>/index.js:2524:2545",
-      "declaration": ""
+      "location": "<package-root>/index.js:2780:2801",
+      "declaration": "",
+      "shape": "undeclared-identifier",
+      "spelling": "externalGlobal"
     },
     {
       "entrypoint": ".",
@@ -52,7 +154,9 @@
       "package": "solid-js",
       "callee": "createEffect",
       "location": "<package-root>/index.js:1927:1974",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -64,7 +168,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/index.js:2022:2041",
-      "declaration": "<package-root>/index.js:1894:1977"
+      "declaration": "<package-root>/index.js:1894:1977",
+      "shape": "",
+      "spelling": ""
     }
   ]
 }

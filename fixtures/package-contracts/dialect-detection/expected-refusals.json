@@ -28,7 +28,9 @@
       "package": "solid-js",
       "callee": "createResource",
       "location": "<package-root>/index.ts:1211:1250",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -40,7 +42,9 @@
       "package": "solid-js",
       "callee": "runWithOwner",
       "location": "<package-root>/index.ts:3233:3268",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -52,7 +56,9 @@
       "package": "solid-js",
       "callee": "useContext",
       "location": "<package-root>/index.ts:4691:4716",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -64,7 +70,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/index.ts:4767:4778",
-      "declaration": "<package-root>/index.ts:4631:4720"
+      "declaration": "<package-root>/index.ts:4631:4720",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -76,7 +84,9 @@
       "package": "solid-js",
       "callee": "useContext",
       "location": "<package-root>/index.ts:4691:4716",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -88,7 +98,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/index.ts:4835:4846",
-      "declaration": "<package-root>/index.ts:4631:4720"
+      "declaration": "<package-root>/index.ts:4631:4720",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -100,7 +112,9 @@
       "package": "solid-js",
       "callee": "createEffect",
       "location": "<package-root>/index.ts:3494:3532",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -112,7 +126,9 @@
       "package": "solid-js",
       "callee": "createResource",
       "location": "<package-root>/index.ts:739:792",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -124,7 +140,9 @@
       "package": "solid-js",
       "callee": "on",
       "location": "<package-root>/index.ts:370:396",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -136,7 +154,9 @@
       "package": "solid-js",
       "callee": "createResource",
       "location": "<package-root>/index.ts:1014:1053",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     }
   ]
 }

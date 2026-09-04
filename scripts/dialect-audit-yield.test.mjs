@@ -5,6 +5,7 @@ import {
   parseArguments,
   rankDialectAuditYield,
   renderRanking,
+  renderShapeRanking,
   reportRows
 } from "./dialect-audit-yield.mjs";
 
@@ -13,7 +14,8 @@ function row({
   measured = true,
   blockers = [],
   declinedClosures = 0,
-  byKind = {}
+  byKind = {},
+  shapes = null
 }) {
   return {
     probeId,
@@ -23,7 +25,10 @@ function row({
           measured: true,
           declinedClosures,
           declinedClosuresByKind: byKind,
-          dialectSilentBlockers: blockers
+          dialectSilentBlockers: blockers,
+          // Additive: a row written before the shapes carries no array at all,
+          // which is not the same measurement as a row of zero shapes.
+          ...(shapes === null ? {} : { unresolvedCalleeShapes: shapes })
         }
       : { measured: false, note: "unparsable" }
   };
@@ -40,13 +45,46 @@ function synthesizedReport() {
         blockers: [
           { package: "solid-js", export: "createEffect", blockedExports: 4 },
           { package: "@solidjs/signals", export: "createContext", blockedExports: 1 }
+        ],
+        shapes: [
+          {
+            shape: "parameter-rooted",
+            blockedExports: 2,
+            records: 9,
+            spellings: [
+              { spelling: "read", blockedExports: 2, records: 7 },
+              { spelling: "write", blockedExports: 1, records: 2 }
+            ]
+          },
+          {
+            shape: "undeclared-identifier",
+            blockedExports: 1,
+            records: 1,
+            spellings: [{ spelling: "requestAnimationFrame", blockedExports: 1, records: 1 }]
+          }
         ]
       }),
       row({
         probeId: "b@2.0.0|solid2|floor",
         declinedClosures: 3,
         byKind: { "dialect-silent": 3 },
-        blockers: [{ package: "solid-js", export: "createEffect", blockedExports: 3 }]
+        blockers: [{ package: "solid-js", export: "createEffect", blockedExports: 3 }],
+        shapes: [
+          {
+            shape: "parameter-rooted",
+            blockedExports: 3,
+            records: 4,
+            spellings: [{ spelling: "read", blockedExports: 3, records: 4 }]
+          },
+          {
+            // A shape whose spelling is deliberately empty -- a computed member
+            // whose receiver is not a plain identifier names nothing.
+            shape: "computed-member",
+            blockedExports: 1,
+            records: 2,
+            spellings: [{ spelling: "", blockedExports: 1, records: 2 }]
+          }
+        ]
       }),
       row({
         probeId: "c@1.0.0|solid1|only",
@@ -162,6 +200,68 @@ describe("dialect audit yield ranking", () => {
     assert.match(rendered, /createEffect/);
     assert.doesNotMatch(rendered, /createContext/);
     assert.match(rendered, /\.\.\. 2 more/);
+  });
+
+  test("ranks the unresolved-callee shapes and their concrete spellings", () => {
+    const result = rankDialectAuditYield(synthesizedReport());
+    assert.deepEqual(
+      result.shapeRanking.map(entry => [
+        entry.shape,
+        entry.blockedExports,
+        entry.records,
+        entry.rows
+      ]),
+      [
+        // 2 + 3 exports across the two rows that named it, 9 + 4 call sites.
+        ["parameter-rooted", 5, 13, 2],
+        ["computed-member", 1, 2, 1],
+        ["undeclared-identifier", 1, 1, 1]
+      ]
+    );
+    // Spellings aggregate across rows the same way, and stay ranked by the
+    // exports they block rather than by call sites.
+    assert.deepEqual(
+      result.shapeRanking[0].spellings.map(entry => [
+        entry.spelling,
+        entry.blockedExports,
+        entry.records,
+        entry.rows
+      ]),
+      [
+        ["read", 5, 11, 2],
+        ["write", 1, 2, 1]
+      ]
+    );
+  });
+
+  test("renders the shape table with its spellings, and names an empty spelling", () => {
+    const rendered = renderShapeRanking(rankDialectAuditYield(synthesizedReport()));
+    assert.match(rendered, /parameter-rooted\s+5\s+13\s+2/);
+    assert.match(rendered, /read 5\/11\s+write 1\/2/);
+    assert.match(rendered, /\(none\) 1\/2/);
+    assert.match(rendered, /never a claim about what the callee does/);
+  });
+
+  test("a report written before the shapes ranks none rather than reporting zero", () => {
+    const report = synthesizedReport();
+    for (const entry of report.results) delete entry.contractContent.unresolvedCalleeShapes;
+    for (const entry of report.supplemental.results) {
+      delete entry.contractContent.unresolvedCalleeShapes;
+    }
+    const result = rankDialectAuditYield(report);
+    assert.deepEqual(result.shapeRanking, []);
+    assert.match(renderShapeRanking(result), /No unresolved-callee shape recorded/);
+    // The dialect-silent half is unaffected, which is what "additive" means.
+    assert.equal(result.blockedExportsTotal, 10);
+  });
+
+  test("the shape table is printed under the primitive table, not instead of it", () => {
+    const rendered = renderRanking(rankDialectAuditYield(synthesizedReport()));
+    assert.ok(
+      rendered.indexOf("consumer export(s) blocked in total") <
+        rendered.indexOf("Unresolved-callee shapes")
+    );
+    assert.match(rendered, /parameter-rooted/);
   });
 
   test("arguments are parsed exactly, and an unknown one refuses", () => {

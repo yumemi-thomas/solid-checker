@@ -581,6 +581,9 @@ function emptyContentAccumulator() {
     declinedClosures: 0,
     declinedClosuresByKind: {},
     dialectSilentBlockers: new Map(),
+    // The same measurement for the other, larger half of the declines: what
+    // shape the unresolved callees actually are.
+    unresolvedCalleeShapes: new Map(),
     packageStates: new Map(),
     wireSamples: {
       prettyMain: [],
@@ -630,6 +633,22 @@ function accumulateContent(accumulator, result) {
     existing.probes += 1;
     accumulator.dialectSilentBlockers.set(key, existing);
   }
+  // Summed the same way, and for the same reason: one row with 300 exports
+  // blocked by a member-property callee and 30 rows with 10 each are different
+  // arguments about where the resolver gap is.
+  for (const shape of content.unresolvedCalleeShapes ?? []) {
+    const key = String(shape.shape ?? "");
+    const existing = accumulator.unresolvedCalleeShapes.get(key) ?? {
+      shape: key,
+      blockedExports: 0,
+      records: 0,
+      probes: 0
+    };
+    existing.blockedExports += shape.blockedExports ?? 0;
+    existing.records += shape.records ?? 0;
+    existing.probes += 1;
+    accumulator.unresolvedCalleeShapes.set(key, existing);
+  }
   for (const field of Object.keys(accumulator.wireSamples)) {
     const value = content.wireBytes?.[field];
     if (Number.isFinite(value)) accumulator.wireSamples[field].push(value);
@@ -653,7 +672,13 @@ function accumulateContent(accumulator, result) {
 
 function finalizeContentAccumulator(accumulator, dialectSilentLimit = 10) {
   const packages = [...accumulator.packageStates.values()];
-  const { packageStates, wireSamples, dialectSilentBlockers, ...counts } = accumulator;
+  const {
+    packageStates,
+    wireSamples,
+    dialectSilentBlockers,
+    unresolvedCalleeShapes,
+    ...counts
+  } = accumulator;
   return {
     ...counts,
     // Top-N only: the full per-row lists stay on every row's own
@@ -669,6 +694,15 @@ function finalizeContentAccumulator(accumulator, dialectSilentLimit = 10) {
         return compareStrings(left.export, right.export);
       })
       .slice(0, dialectSilentLimit),
+    // Never truncated: the shape vocabulary is a fixed, small enumeration, so
+    // there is no long tail to cut and cutting it would hide a shape.
+    unresolvedCalleeShapes: [...unresolvedCalleeShapes.values()].sort((left, right) => {
+      if (left.blockedExports !== right.blockedExports) {
+        return right.blockedExports - left.blockedExports;
+      }
+      if (left.records !== right.records) return right.records - left.records;
+      return compareStrings(left.shape, right.shape);
+    }),
     wireBytes: Object.fromEntries(
       Object.entries(wireSamples).map(([field, values]) => [field, distribution(values)])
     ),
@@ -1247,6 +1281,27 @@ function renderContractContentSection(content) {
           `${blocker.blockedExports} | ${blocker.probes} |`
       );
     }
+    lines.push("");
+  }
+
+  const shapes = content.unresolvedCalleeShapes ?? [];
+  if (shapes.length > 0) {
+    lines.push("### Unresolved-callee shapes (what the unresolved callees are)");
+    lines.push("");
+    lines.push("| Shape | Consumer exports blocked | Call sites | Probes |");
+    lines.push("| --- | ---: | ---: | ---: |");
+    for (const shape of shapes) {
+      lines.push(
+        `| ${shape.shape || "(unclassified)"} | ${shape.blockedExports} | ` +
+          `${shape.records} | ${shape.probes} |`
+      );
+    }
+    lines.push("");
+    lines.push(
+      "The concrete spellings behind each shape stay on every row's own " +
+        "`contractContent.unresolvedCalleeShapes`; " +
+        "`bun scripts/dialect-audit-yield.mjs` ranks them across a whole report."
+    );
     lines.push("");
   }
 

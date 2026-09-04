@@ -19,7 +19,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/channel.js:46:63",
-      "declaration": ""
+      "declaration": "",
+      "shape": "parameter-rooted",
+      "spelling": "getThing"
     }
   ]
 }

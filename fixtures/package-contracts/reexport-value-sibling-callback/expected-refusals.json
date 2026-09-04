@@ -19,7 +19,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/inner.js:369:388",
-      "declaration": ""
+      "declaration": "",
+      "shape": "parameter-rooted",
+      "spelling": "getThing"
     }
   ]
 }

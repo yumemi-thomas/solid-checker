@@ -48,6 +48,227 @@ build resolves to no symbol, and nothing yet says what shape they are (member
 dispatch, computed callee, undeclared global, re-export chain). Refining
 `unresolved-callee` into those shapes is the next measurement, and it is
 plausibly worth more than any audit on this list.
+
+### Corpus-wide shape ranking (all 418 rows), and the two gaps are ours
+
+`make ecosystem-benchmark` with the shapes compiled in (report SHA-256
+`73d2d5fb5d2baf34d50c7fd3f17733c64e1b89827bce23c9e4a18684026b3b3e`). Verdicts unchanged; the 40-row sample's
+ordering held, with `parameter-rooted` overtaking
+`member-property-unresolved` by blocked exports:
+
+| shape | exports blocked | call sites | rows |
+| --- | ---: | ---: | ---: |
+| `parameter-rooted` | 384 | 5,218 | 123 |
+| `member-property-unresolved` | 381 | 14,733 | 96 |
+| `computed-member` | 68 | 152 | 36 |
+| `expression-callee` | 52 | 136 | 30 |
+
+**765 of the 885 blocked exports are two dispositions the census already has
+and the walk does not.** `parameter-rooted` is decided by the census verbatim,
+and the walk's own module doc already says a caller-supplied parameter is not a
+counterexample -- the `callee_symbol`-is-`None` branch simply fires first. The
+`member-property-unresolved` mass is dominated by default-library members
+(`map`, `slice`, `toLowerCase`, `addEventListener`, `dataset`), which the census
+disposes as `standard-library` and the walk has no gate for. `expression-callee`
+is spurious outright: an immediately-invoked function's body is lexically inside
+the export's span and was already walked.
+
+So the generator's pre-check is stricter than the certifier it feeds, and
+closing that asymmetry is worth more than any audit on the dialect-silent list.
+`computed-member` is the only genuinely undecidable shape here, 68 exports, and
+its producer fact is already specified in
+`docs/typefacts/adr/0025-v1-callee-value-provenance.md`.
+## `unresolved-callee` names its shape, and half the corpus's declines turn out to be two things the census already decides (2026-09-04)
+
+`unresolved-callee` was **20,450 of 41,957** declined `creates` proposals on the
+418-row corpus — the largest single cause, about half — while carrying only a
+location. That could not distinguish a resolver gap worth closing from a callee
+no analysis of the module could ever decide, so "is this worth more than another
+dialect audit" was unanswerable. It is now measured.
+
+### What was added
+
+`CreatesDeclineKind::UnresolvedCallee` carries an `UnresolvedCalleeShape`
+(`rust/crates/solid-reactive-ir/src/creates_walk.rs`). Seven shapes, each
+decided from facts the build already computed — Oxc's member, computed-member,
+identifier, parameter and binding-initializer tables, and the IR's own entity
+lookups. **No producer or Type Facts demand was added.** The kind's wire name is
+still `unresolved-callee`, so every existing `declinedClosuresByKind` count is
+unchanged; `shape` and `spelling` are two **appended** columns on the
+`solid-checker:declined-closure=` line, the refusal sidecar's `declinedClosures`
+records, and per row `contractContent.unresolvedCalleeShapes` — an eight-column
+line from an older emitter still parses with both empty, and
+`scripts/dialect-audit-yield.mjs` prints "the report predates the shapes"
+rather than reporting zero. ADR 0008 § "The unresolved-callee shapes" owns the
+table of what decides each and which spelling it carries.
+
+The order is part of the contract, because one call satisfies two predicates
+(`props[key]()` is computed *and* parameter-rooted): `computed-member`,
+`parameter-rooted`, `member-property-unresolved` / `member-receiver-unresolved`,
+`undeclared-identifier`, `expression-callee`, `other`. `other` carries the
+callee's syntactic kind from a fixed vocabulary, so a shape the classifier does
+not model stays visible instead of being folded into a neighbour.
+
+**One proposed shape was removed after measuring it.** `unaccepted-import` — a
+call through an import the project did not accept — cannot fire: an import of an
+unresolvable bare specifier, a deep subpath, or a missing default still gives
+its local binding an alias symbol, so the callee *resolves* and never reaches
+the unresolved branch. A namespace import's member call
+(`import * as ns; ns.thing()`) lands in `member-property-unresolved` with the
+receiver resolved. An unaccepted dependency is a closure hazard decided at
+certification, which is a different decision from this walk's.
+
+### The measurement
+
+A 40-row sample, run with the fresh debug binary and reports written outside the
+repository (sample report SHA-256
+`e764fac906cbadd4ac3f810d6c895a294d61f33ddb7df279693d43ed53586a9e`).
+**Composition**: 40 rows over 26 packages — 19 `solid1` and 21 `solid2`
+(floor/head/only) across six families: solid-primitives 19, official-solid 8,
+solid-devtools 5, kobalte 4, solid-recharts 3, tanstack 1, and no supplemental
+rows. Chosen to include all 13 rows the `useContext`
+ranking named, 23 of the 57 `solid-js createEffect` rows, the rows naming
+`splitProps`/`mergeProps`/`omit`/`merge`/`on`/`resolve`/`render`, and six rows
+that name **no** dialect-silent blocker at all. It covers 19,687 of the
+corpus's 20,450 `unresolved-callee` records (**96.2%**), because the
+distribution is extremely concentrated: `@kobalte/core` at 1.x and 2.0 alone
+carry 78% of them. **Every one of the 40 rows' `outcome`, `class`, `signature`,
+`declinedClosures`, `declinedClosuresByKind`, `exportsTotal`, `exportsProven`
+and `artifactCasesRefused` is byte-identical to the checked-in report** — the
+shapes are measurement and moved no verdict. Certification was not attempted
+(the declines are a generation-time artifact); the checked-in verdicts are the
+comparison basis.
+
+| shape | consumer exports blocked | call sites | rows | most frequent spellings (`exports`/`calls`) |
+| --- | ---: | ---: | ---: | --- |
+| `member-property-unresolved` | 275 | 14,445 | 33 | `generateId` 61/552, `dataset` 61/546, `map` 36/143, `value` 35/354, `orientation` 31/202, `toLowerCase` 29/148, `focus` 28/184, `isDisabled` 26/216, `addEventListener` 24/150, `filter` 24/84 (572 distinct) |
+| `parameter-rooted` | 217 | 4,845 | 36 | `preventDefault` 49/882, `split` 34/118, `map` 33/158, `forEach` 29/60, `startsWith` 28/69, `slice` 27/67, `stopPropagation` 24/237, `contains` 23/132, `replace` 22/41, `value` 20/240 (225 distinct) |
+| `expression-callee` | 38 | 119 | 20 | `function-expression` 38/119 (the only one) |
+| `computed-member` | 30 | 94 | 8 | `(none)` 12/34, `deps` 8/25, `signal` 5/6, `hsbChannels` 3/6, `handler` 2/4 (10 distinct) |
+| `member-receiver-unresolved` | 18 | 136 | 11 | `cwd` 5/20, `map` 4/32, `split` 4/16, `padStart` 2/44, `get` 2/6 (14 distinct) |
+| `other` | 2 | 48 | 1 | `unknown-expression` 2/48 (the only one) |
+
+`undeclared-identifier` did not appear on a single sampled row. On this corpus
+a bare global callee is a fixture shape, not an ecosystem one.
+
+**The two tables are not additive and neither is a yield estimate.** One export
+appears in several rows of both, so `useContext`'s 485 blocked exports and
+`member-property-unresolved`'s 275 cannot be compared as "which unblocks more" —
+an export blocked by a silent primitive is usually blocked by an unresolved
+callee too, and clearing either alone leaves the other. What the shape table
+establishes is *which* unresolved callees they are, and therefore whether
+clearing them is possible at all.
+
+### The verdicts, which are the point of this slice
+
+1. **`member-property-unresolved` (275 exports, 14,445 calls) — a resolver gap
+   we could close, in two independent pieces.** The spellings split cleanly.
+   `map`, `toLowerCase`, `filter`, `slice`, `split`, `includes`, `join`,
+   `replace`, `values`, `addEventListener`, `removeEventListener`,
+   `dispatchEvent`, `focus`, `dataset` are **default-library members**: they
+   resolve to no *project* symbol because `lib.dom.d.ts` and `lib.es*.d.ts` are
+   not project files, so the walk's `callee_symbol` answers nothing and the walk
+   refuses. The implementation census already has a `standard-library`
+   disposition for exactly these; the walk that *gates* the census has none, so
+   it is strictly stricter than the gate it feeds. The rest —
+   `generateId`, `orientation`, `isDisabled`, `listState`, `selectionManager`,
+   `setFocusedKey`, `focusedKey`, `selectionMode` — are project-local object
+   members, and the walk asks the narrow
+   `SemanticLookup::callee_symbol` rather than the richer `callee_symbols`,
+   whose `member_value_symbols` / `structural_parameter_member_symbols` paths
+   already resolve exact member dispatch. How much of that half the richer
+   lookup actually resolves is unmeasured and needs its own slice; the
+   default-library half does not.
+2. **`parameter-rooted` (217 exports, 4,845 calls) — not a gap at all: the
+   census already decides it, and the walk refusing on it is the asymmetry.**
+   `parameter-rooted` is one of the census's five dispositions (CONTEXT.md,
+   ADR 0008 § 2). The spellings confirm the shape — `preventDefault`,
+   `stopPropagation`, `getBoundingClientRect`, `setAttribute`, `split`,
+   `forEach`, `startsWith` — are standard-library methods on a caller-supplied
+   value, which is both dispositions at once. The walk's own module doc already
+   states that "a caller-supplied parameter is not a counterexample this walk
+   can name"; the `callee_symbol`-is-`None` branch simply fires first and
+   refuses it anyway. Mirroring the two census dispositions in the walk is a
+   proposal-input change only — the census re-decides every call against
+   authenticated bytes — and together these top two shapes are 492 of the 580
+   blocked exports the shapes account for.
+3. **`expression-callee` (38 exports, 119 calls) — a spurious blocker, and the
+   cheapest to remove.** Every one is `function-expression`: an immediately
+   invoked function whose body is *lexically inside* the export's own span, so
+   the walk already visits every call in it. The IIFE's own callee being
+   unresolved adds no counterexample the walk has not already considered.
+4. **`computed-member` (30 exports, 94 calls) — genuinely undecidable here, and
+   a producer fact for it is already specified.** `(none)`, `deps`, `signal`,
+   `handler` are dynamic dispatch tables; nothing in the callee's own syntax can
+   name the property. `docs/typefacts/adr/0025-v1-callee-value-provenance.md`
+   is the fact that would decide it. Smallest of the four actionable shapes and
+   the most expensive.
+5. **`member-receiver-unresolved` (18 exports, 136 calls) — mixed, and small.**
+   A receiver with no entity is either a default-library global (`cwd` is
+   `process.cwd`-shaped) — the same standard-library disposition as verdict 1 —
+   or a call-result receiver (`factory().method()`), which needs a return-value
+   fact. Not worth a slice on its own.
+6. **`other` (2 exports, 48 calls, one row) — unattributed, and the reason the
+   catch-all carries its syntax.** All 48 are `unknown-expression`, all in
+   `@kobalte/core@2.0.0-alpha.0`. Probing the classifier directly shows `this()`
+   and a class-expression callee both land there; which of them kobalte's 48
+   are is not established, because the marker lines do not survive into the
+   report row. Naming `classes` in `callee_syntax_kind`'s vocabulary is a cheap
+   follow-up that would shrink the catch-all honestly.
+
+**And six of the 40 rows name no dialect-silent blocker at all** —
+`@kobalte/utils`, `@solid-devtools/overlay`, `@solid-primitives/controlled-props`
+(floor and head), `@solid-primitives/pointer` (1.x and 2.0-next). On those rows
+no dialect audit, however complete, could ever produce a candidate; only
+verdicts 1-3 can. That is the sharpest argument in the measurement.
+
+### Fixture and snapshot cost, stated
+
+`fixtures/package-contracts/creates-decline-records` gained one export per
+shape — all seven are pinned by the refusal sidecar, and its README says which
+and names the two vocabulary arms no source is known to produce
+(`expression-callee` spelled `call-expression`, because a higher-order
+`factory()()` resolves; and every `other` spelling but `await-expression`,
+because `EntitySymbols::at` answers with an *operand's* symbol at a conditional
+or logical span). The shape vocabulary itself — every wire name, its one carried
+spelling, and that the kind's own name stays `unresolved-callee` — is pinned by
+unit tests in `creates_walk.rs`.
+
+Adding those exports shifted the fixture's byte offsets, so its
+`expected-refusals.json`, `expected.json` and `expected-proposal.json` moved;
+`parameterRooted` also gained a legitimate positive `read` operation with a
+`parameter` path of `["read"]`. 19 other corpus fixtures' `expected-refusals.json`
+gained the two additive fields on every record and nothing else. The corpus is
+81 records over 20 fixtures (30 `dialect-silent`, 33 `unresolved-callee`,
+18 `refusing-callee-fixpoint`). No other fixture's `expected.json` or
+`expected-proposal.json` moved, coverage stayed at 94 projects / 546 findings,
+and the ownership gate at 289 cases.
+
+### Still open
+
+- **The walk is stricter than the census it gates**, for `standard-library` and
+  `parameter-rooted` callees. Named here, not fixed here.
+- **`parameterAliasRooted` gets no positive `read` operation** where
+  `parameterRooted` does, in the same fixture: the read model does not follow
+  the binding-initializer alias the shape classifier does. An asymmetry worth
+  knowing, not a regression.
+- **How much of `member-property-unresolved`'s project-local half `callee_symbols`
+  would resolve is unmeasured.** The claim above is that the walk uses the
+  narrower lookup, which is a fact about the code; the yield is not.
+- **`unknown-expression`'s 48 kobalte call sites are unattributed** (see verdict
+  6). The marker line carries the location, but the ecosystem row does not
+  retain the emitter's stdout, so recovering them means re-running that one
+  package's generation.
+- **`undeclared-identifier` is fixture-only on this corpus.** It is pinned, and
+  it measured zero on 40 real rows; a full-corpus run may find some.
+- **The sample is 40 of 418 rows.** It covers 96.2% of the corpus's
+  `unresolved-callee` records because two kobalte rows dominate, which is
+  exactly why the *per-row* generality is weaker than the record coverage
+  suggests: a spelling table drawn largely from one component library will
+  over-represent that library's own vocabulary (`generateId`, `listState`,
+  `selectionManager`). The standard-library and parameter-rooted conclusions do
+  not depend on that; the project-local half of verdict 1 does.
+
 ## The generator's `creates` walk names its own blockers, and the first ranking says the dialect audits are no longer the bottleneck (2026-09-04)
 
 ADR 0008 shipped a census that can close `creates` on a consumer export and a
@@ -184,7 +405,9 @@ findings and the ownership gate at 289 cases; no `expected.json` or
   `(unresolved)` row rather than merging them into a named package.
 - Nothing ranks the *other* two kinds. `unresolved-callee` and
   `refusing-callee-fixpoint` are counted per row and per kind, and that is all
-  -- see consequence 1 above.
+  -- see consequence 1 above. **Superseded for `unresolved-callee` the same
+  day**: it now carries a shape and is ranked, in the section above this one.
+  `refusing-callee-fixpoint` is still counted only.
 
 ## Five core Solid 2.0 primitives can now terminate a `creates` census; `createEffect` no longer can (2026-09-04)
 

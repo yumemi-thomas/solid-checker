@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "documentKind": "solid-checker-package-contract-phase21-row-ledger",
-  "generatedAt": "2026-09-04T02:42:30.974Z",
+  "generatedAt": "2026-09-04T03:19:03.565Z",
   "authority": {
     "baselineCohort": {
       "path": "benchmarks/package-contract-v2/phase21/baseline-cohort.json",
@@ -9,7 +9,7 @@
     },
     "currentReport": {
       "path": "benchmarks/ecosystem/report.json",
-      "sha256": "4cb052d7cc677a0ce8d2d1b587e5524d37fc23185cb309993474b1f7b84c0d3f"
+      "sha256": "73d2d5fb5d2baf34d50c7fd3f17733c64e1b89827bce23c9e4a18684026b3b3e"
     },
     "phase20Report": {
       "path": "benchmarks/ecosystem/report.json",
@@ -497,12 +497,12 @@
             "rootCertified": true
           },
           "memoryExceeded": false,
-          "durationMs": 872,
+          "durationMs": 963,
           "stageDurationsMs": {
-            "artifactAcquisition": 0.92,
-            "proposalGeneration": 3.28,
-            "demandPlanning": 11.84,
-            "witnessAcquisition": 381.99,
+            "artifactAcquisition": 0.84,
+            "proposalGeneration": 1.56,
+            "demandPlanning": 26.75,
+            "witnessAcquisition": 500.26,
             "certification": 0.01,
             "receiptIssuance": 0,
             "catalogPublication": 0
@@ -1056,12 +1056,12 @@
             "rootCertified": true
           },
           "memoryExceeded": false,
-          "durationMs": 378,
+          "durationMs": 374,
           "stageDurationsMs": {
-            "artifactAcquisition": 0.68,
-            "proposalGeneration": 3.4,
-            "demandPlanning": 11.6,
-            "witnessAcquisition": 341.76,
+            "artifactAcquisition": 0.61,
+            "proposalGeneration": 1.19,
+            "demandPlanning": 14.41,
+            "witnessAcquisition": 339.88,
             "certification": 0.01,
             "receiptIssuance": 0,
             "catalogPublication": 0
@@ -1202,15 +1202,15 @@
             "rootCertified": true
           },
           "memoryExceeded": false,
-          "durationMs": 443,
+          "durationMs": 296,
           "stageDurationsMs": {
-            "artifactAcquisition": 3.58,
-            "proposalGeneration": 4.2,
-            "demandPlanning": 19.89,
-            "witnessAcquisition": 400.38,
-            "certification": 0.02,
+            "artifactAcquisition": 0.79,
+            "proposalGeneration": 4.42,
+            "demandPlanning": 9.8,
+            "witnessAcquisition": 254.2,
+            "certification": 0.01,
             "receiptIssuance": 0,
-            "catalogPublication": 0.61
+            "catalogPublication": 0
           },
           "graphPreparation": {
             "reusedProposal": true
@@ -1359,12 +1359,12 @@
             "rootCertified": true
           },
           "memoryExceeded": false,
-          "durationMs": 392,
+          "durationMs": 467,
           "stageDurationsMs": {
-            "artifactAcquisition": 0.59,
-            "proposalGeneration": 1.53,
-            "demandPlanning": 8.05,
-            "witnessAcquisition": 374.53,
+            "artifactAcquisition": 0.64,
+            "proposalGeneration": 3.95,
+            "demandPlanning": 9.43,
+            "witnessAcquisition": 423.74,
             "certification": 0.01,
             "receiptIssuance": 0,
             "catalogPublication": 0
@@ -1505,12 +1505,12 @@
             "rootCertified": true
           },
           "memoryExceeded": false,
-          "durationMs": 424,
+          "durationMs": 285,
           "stageDurationsMs": {
-            "artifactAcquisition": 0.45,
-            "proposalGeneration": 2.25,
-            "demandPlanning": 22.21,
-            "witnessAcquisition": 373.83,
+            "artifactAcquisition": 0.55,
+            "proposalGeneration": 5.63,
+            "demandPlanning": 11.63,
+            "witnessAcquisition": 246.83,
             "certification": 0.01,
             "receiptIssuance": 0,
             "catalogPublication": 0
@@ -1726,12 +1726,12 @@
           "reason": "solid-checker-rust: policy-2 proof finalization failed: Type Facts certification failed during live export-value verification: Type Facts demand sha256:15fde3fc57c55117d494a2ece2bd31fbd42fb424f58cf0e6b998eaa5e9878251 is locally open: operation-cardinality (artifact-case:d24421345876c98f1f7e7b7062e5b995a9a01ac776887b3af1b28a555f532388:until): callback parameter has no exact direct-call or resolved-argument flow",
           "refusalCount": 0,
           "memoryExceeded": false,
-          "durationMs": 452,
+          "durationMs": 313,
           "stageDurationsMs": {
-            "artifactAcquisition": 0.4,
-            "proposalGeneration": 2.3,
-            "demandPlanning": 12.78,
-            "witnessAcquisition": 429.57
+            "artifactAcquisition": 1.92,
+            "proposalGeneration": 3.93,
+            "demandPlanning": 9.13,
+            "witnessAcquisition": 283.19
           },
           "graphPreparation": {
             "reusedProposal": true
@@ -2426,33 +2426,47 @@
             {
               "entrypoint": ".",
               "conditions": [],
-              "node": "sha256:f2fb4a9e9fc5d81413de3fbdcc99ae999260e4cb9dbd9ed7ee495c6b47871b76"
+              "node": "sha256:d98dda8844d0dc86cf5802cc74feadcc355d0622ff2d14bd9a9492bbf58519c9"
             }
           ],
           "cycles": [],
           "leaves": [
             {
-              "id": "sha256:14b1804d432d3e01e58097aeb742e6f41a717f8b8d624f2bc89c5e2458ffca67",
+              "id": "sha256:047a77f656a84aea3ab4f3d45e8249ab816874f57386a9a4f293cb39e63a1425",
               "kind": "module-loading-frontier",
-              "node": "sha256:7cd06e89f9f724020e2cd052b1d4d523cea2600c3542323a67de528c53fa36e7",
+              "node": "sha256:9c5a312ee0e96f4b7ed5a73a21b3a1860fedb39c29ab138c6e4dcd9820e6b03f",
               "frontier": "semantic-require-binding",
-              "source": "./build/index.js:592-623",
-              "specifier": "./plugins/DOMElement"
+              "source": "./lib/index.js:222-247",
+              "specifier": "./ariaPropsMap"
             },
             {
-              "id": "sha256:183d7a3a329f06ea4cc0dd6b9a4e9ddcb083fda82d908113266236d81809c35b",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:74b58057de021e363e3f0ed9a9cdfd92d166b8a89645cf9a6705314cfea3aeda",
-              "package": "lz-string",
-              "version": "1.5.0",
-              "integrity": "sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ==",
-              "entrypoint": ".",
-              "conditions": []
+              "id": "sha256:0c3da0b96f7938ae0c8073046bfbf86d7b98990f40abdc699d03d326d087c1dc",
+              "kind": "module-loading-frontier",
+              "node": "sha256:7617c412587a2dc5f48878f353a920a47a6a33f9471719f05a70731277c99363",
+              "frontier": "semantic-require-binding",
+              "source": "./build/index.js:225-247",
+              "specifier": "ansi-styles"
             },
             {
-              "id": "sha256:29cae6cc8860d550302efd9e5087d2f89a388716e4041bd9d50e22228b951612",
+              "id": "sha256:0f8770c8a31a3074811357524b8a357dcb3a5f2aaa30f6d2b9f401d86eeb1399",
+              "kind": "module-loading-frontier",
+              "node": "sha256:7617c412587a2dc5f48878f353a920a47a6a33f9471719f05a70731277c99363",
+              "frontier": "semantic-require-binding",
+              "source": "./build/index.js:270-294",
+              "specifier": "./collections"
+            },
+            {
+              "id": "sha256:240ee52d498dc3ac4c53b2c32a1efc195aed3fdf28a4af377f753d3389b82ff0",
+              "kind": "module-loading-frontier",
+              "node": "sha256:7617c412587a2dc5f48878f353a920a47a6a33f9471719f05a70731277c99363",
+              "frontier": "semantic-require-binding",
+              "source": "./build/index.js:744-777",
+              "specifier": "./plugins/ReactElement"
+            },
+            {
+              "id": "sha256:29f80e3ab3d6c797c1a2d55fe65899bf6d5a51810db6f725872de0d0bbb74d5f",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:eab34a98ab7d328626cb204a9d234e2f96a7886bf37a06231cb4bee3ae93d4e5",
+              "node": "sha256:9c5a312ee0e96f4b7ed5a73a21b3a1860fedb39c29ab138c6e4dcd9820e6b03f",
               "package": "aria-query",
               "version": "5.3.0",
               "integrity": "sha512-b0P0sZPKtyu8HkeRAfCq0IfURZK+SuwMjY1UXGBU27wpAiTwQAIlq56IbIO+ytk/JjS1fMR14ee5WBBfKi5J6A==",
@@ -2460,33 +2474,33 @@
               "conditions": []
             },
             {
-              "id": "sha256:2c4c22a4e02233308564b6e865a7e84672955627e517252466c3ff963111b770",
+              "id": "sha256:321cec6374e380d1c8a0e592b6bf3c48f1eda3746a41acc4a4410e4d862e2fa4",
               "kind": "module-loading-frontier",
-              "node": "sha256:7cd06e89f9f724020e2cd052b1d4d523cea2600c3542323a67de528c53fa36e7",
+              "node": "sha256:9c5a312ee0e96f4b7ed5a73a21b3a1860fedb39c29ab138c6e4dcd9820e6b03f",
+              "frontier": "semantic-require-binding",
+              "source": "./lib/index.js:417-444",
+              "specifier": "./elementRoleMap"
+            },
+            {
+              "id": "sha256:439a8ddfe1cbbc6c57052325df1d1a19f4c838dbfed409f6b5d4752ab432abff",
+              "kind": "module-loading-frontier",
+              "node": "sha256:9c5a312ee0e96f4b7ed5a73a21b3a1860fedb39c29ab138c6e4dcd9820e6b03f",
+              "frontier": "semantic-require-binding",
+              "source": "./lib/index.js:348-369",
+              "specifier": "./rolesMap"
+            },
+            {
+              "id": "sha256:478fae55f55c4a2b273cef71f0b10935ca80afa31678eead3bb8f38098584734",
+              "kind": "module-loading-frontier",
+              "node": "sha256:7617c412587a2dc5f48878f353a920a47a6a33f9471719f05a70731277c99363",
               "frontier": "semantic-require-binding",
               "source": "./build/index.js:348-386",
               "specifier": "./plugins/AsymmetricMatcher"
             },
             {
-              "id": "sha256:342c864dcc796a8450823d27354138545362dde9bf6f473ebc0706dddb283ba3",
-              "kind": "module-loading-frontier",
-              "node": "sha256:7cd06e89f9f724020e2cd052b1d4d523cea2600c3542323a67de528c53fa36e7",
-              "frontier": "semantic-require-binding",
-              "source": "./build/index.js:667-697",
-              "specifier": "./plugins/Immutable"
-            },
-            {
-              "id": "sha256:4056e55b2246f0f1c20e49a314c210b3a33f528017c2bb4449aa4d2acb7abf3e",
-              "kind": "module-loading-frontier",
-              "node": "sha256:eab34a98ab7d328626cb204a9d234e2f96a7886bf37a06231cb4bee3ae93d4e5",
-              "frontier": "semantic-require-binding",
-              "source": "./lib/index.js:222-247",
-              "specifier": "./ariaPropsMap"
-            },
-            {
-              "id": "sha256:46ce760becf71198c8752d898962a11a0efb3ce7e7888d7babbef31d7e5fbf89",
+              "id": "sha256:575f85de2b1af651d714b369c5e16b037d565614e092ce8d6d4b3b03014fbb2f",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:7cd06e89f9f724020e2cd052b1d4d523cea2600c3542323a67de528c53fa36e7",
+              "node": "sha256:7617c412587a2dc5f48878f353a920a47a6a33f9471719f05a70731277c99363",
               "package": "pretty-format",
               "version": "27.5.1",
               "integrity": "sha512-Qb1gy5OrP5+zDf2Bvnzdl3jsTf1qXVMazbvCoKhtKqVs4/YK4ozX4gKQJJVyNe+cajNPn0KoC0MC3FUmaHWEmQ==",
@@ -2494,52 +2508,44 @@
               "conditions": []
             },
             {
-              "id": "sha256:506ae864ceb4e1339cb937651926d443770ad3fecdc3ee13f532141f93446db8",
+              "id": "sha256:6b903c549fbd3657d9e545b1088670f1e4f1c1c7455262fe2e4175d8bebab0e5",
               "kind": "module-loading-frontier",
-              "node": "sha256:7cd06e89f9f724020e2cd052b1d4d523cea2600c3542323a67de528c53fa36e7",
+              "node": "sha256:9c5a312ee0e96f4b7ed5a73a21b3a1860fedb39c29ab138c6e4dcd9820e6b03f",
+              "frontier": "semantic-require-binding",
+              "source": "./lib/index.js:287-306",
+              "specifier": "./domMap"
+            },
+            {
+              "id": "sha256:758d764b6798a1c846ca309b3b415340e1864fdfbe9fb0acf89b370c2ccacd49",
+              "kind": "module-loading-frontier",
+              "node": "sha256:7617c412587a2dc5f48878f353a920a47a6a33f9471719f05a70731277c99363",
+              "frontier": "semantic-require-binding",
+              "source": "./build/index.js:513-547",
+              "specifier": "./plugins/DOMCollection"
+            },
+            {
+              "id": "sha256:9bb5338c23ed311eb62cd4fc12ded3badd415b294101173480c0892dc4674f6f",
+              "kind": "module-loading-frontier",
+              "node": "sha256:7617c412587a2dc5f48878f353a920a47a6a33f9471719f05a70731277c99363",
               "frontier": "semantic-require-binding",
               "source": "./build/index.js:833-872",
               "specifier": "./plugins/ReactTestComponent"
             },
             {
-              "id": "sha256:5342582699916fe30ff550953ae07970ee2b62a119e65f284c00ea9a9fa618b7",
+              "id": "sha256:9e003da19f0fa10d1637395d1ccf7caa07416df634e35db07ec27a28dc9ecc3d",
               "kind": "module-loading-frontier",
-              "node": "sha256:eab34a98ab7d328626cb204a9d234e2f96a7886bf37a06231cb4bee3ae93d4e5",
-              "frontier": "semantic-require-binding",
-              "source": "./lib/index.js:417-444",
-              "specifier": "./elementRoleMap"
-            },
-            {
-              "id": "sha256:8b8fd1d2dbda1bf23eb1a9b4703d9dbc200ff005b4ea891f8fa1bb4e801ad0d1",
-              "kind": "module-loading-frontier",
-              "node": "sha256:7cd06e89f9f724020e2cd052b1d4d523cea2600c3542323a67de528c53fa36e7",
+              "node": "sha256:7617c412587a2dc5f48878f353a920a47a6a33f9471719f05a70731277c99363",
               "frontier": "semantic-require-binding",
               "source": "./build/index.js:433-465",
               "specifier": "./plugins/ConvertAnsi"
             },
             {
-              "id": "sha256:9c6cdde41c4422a39e905152614451301d968c83d138da8ac9a5243f852713c9",
+              "id": "sha256:b3a7a12ff5ce6370630d4c7b5e5b15122eaf68bb9bd5b2551246d926f00219c6",
               "kind": "module-loading-frontier",
-              "node": "sha256:eab34a98ab7d328626cb204a9d234e2f96a7886bf37a06231cb4bee3ae93d4e5",
+              "node": "sha256:7617c412587a2dc5f48878f353a920a47a6a33f9471719f05a70731277c99363",
               "frontier": "semantic-require-binding",
-              "source": "./lib/index.js:348-369",
-              "specifier": "./rolesMap"
-            },
-            {
-              "id": "sha256:ad73517e94c4b746e915644c2805da4155ebfad3ebbdf34630a1b5f87cc96ec6",
-              "kind": "module-loading-frontier",
-              "node": "sha256:eab34a98ab7d328626cb204a9d234e2f96a7886bf37a06231cb4bee3ae93d4e5",
-              "frontier": "semantic-require-binding",
-              "source": "./lib/index.js:492-519",
-              "specifier": "./roleElementMap"
-            },
-            {
-              "id": "sha256:bd4f8f3e16f0581074e6379fc59f78636f434030fd5fd375f4d999f3baee35c3",
-              "kind": "module-loading-frontier",
-              "node": "sha256:eab34a98ab7d328626cb204a9d234e2f96a7886bf37a06231cb4bee3ae93d4e5",
-              "frontier": "semantic-require-binding",
-              "source": "./lib/index.js:287-306",
-              "specifier": "./domMap"
+              "source": "./build/index.js:592-623",
+              "specifier": "./plugins/DOMElement"
             },
             {
               "id": "sha256:c2c5392346dc310178102c985809ceba0e8a094dc7272a0b63216d3d0abd421d",
@@ -2558,47 +2564,41 @@
               "reason": "no declaration target exists for <project-root>/node_modules/dom-accessibility-api/dist/index.mjs"
             },
             {
-              "id": "sha256:cd15b3ffbf53f33c336c5285aeb356d0f1b11cc61c82d8b2ba92059e1e8741bd",
+              "id": "sha256:cb3216b77d8c5bae85c2daaefabc631551d2129aebf1fdc9ce30351275b8a79a",
               "kind": "module-loading-frontier",
-              "node": "sha256:7cd06e89f9f724020e2cd052b1d4d523cea2600c3542323a67de528c53fa36e7",
+              "node": "sha256:9c5a312ee0e96f4b7ed5a73a21b3a1860fedb39c29ab138c6e4dcd9820e6b03f",
               "frontier": "semantic-require-binding",
-              "source": "./build/index.js:270-294",
-              "specifier": "./collections"
+              "source": "./lib/index.js:492-519",
+              "specifier": "./roleElementMap"
             },
             {
-              "id": "sha256:e6542ba7fe52973811d48689223eff0741d8241560453322191a089da0eac94e",
-              "kind": "module-loading-frontier",
-              "node": "sha256:7cd06e89f9f724020e2cd052b1d4d523cea2600c3542323a67de528c53fa36e7",
-              "frontier": "semantic-require-binding",
-              "source": "./build/index.js:513-547",
-              "specifier": "./plugins/DOMCollection"
+              "id": "sha256:ec35045d3bec3deffb0fac8e28bb12ea7511d150025118e64542fb8552f022c0",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:6ee884769c84ff00ad702c70912fd929ac5c4a012afbb008d7e7a5b57944a280",
+              "package": "lz-string",
+              "version": "1.5.0",
+              "integrity": "sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ==",
+              "entrypoint": ".",
+              "conditions": []
             },
             {
-              "id": "sha256:e65b7d661c4519282a16852aa06dfaaca26420542293c7bd93a113dc03f8d975",
+              "id": "sha256:f6d09097983c748be536946001a5a9b5ba010c92b0f1b313dc445ba75f2a102b",
               "kind": "module-loading-frontier",
-              "node": "sha256:7cd06e89f9f724020e2cd052b1d4d523cea2600c3542323a67de528c53fa36e7",
+              "node": "sha256:7617c412587a2dc5f48878f353a920a47a6a33f9471719f05a70731277c99363",
               "frontier": "semantic-require-binding",
-              "source": "./build/index.js:744-777",
-              "specifier": "./plugins/ReactElement"
-            },
-            {
-              "id": "sha256:fef7a75b19414efe28c617d54f4f7654cf890bdbc7574987dd5662386e67a240",
-              "kind": "module-loading-frontier",
-              "node": "sha256:7cd06e89f9f724020e2cd052b1d4d523cea2600c3542323a67de528c53fa36e7",
-              "frontier": "semantic-require-binding",
-              "source": "./build/index.js:225-247",
-              "specifier": "ansi-styles"
+              "source": "./build/index.js:667-697",
+              "specifier": "./plugins/Immutable"
             }
           ],
           "conditionalDependencies": [
             {
-              "id": "sha256:e2e9f01d30c8529237e99e6cde8d27fcbd9b2269da4c9e8ff170e0ec89749e6c",
+              "id": "sha256:91644fa0b26fb36c58ef3c3a15a2bf1240cf729e91f98f4100e468e68df5558c",
               "kind": "absent-optional-peer",
-              "node": "sha256:f2fb4a9e9fc5d81413de3fbdcc99ae999260e4cb9dbd9ed7ee495c6b47871b76",
+              "node": "sha256:d98dda8844d0dc86cf5802cc74feadcc355d0622ff2d14bd9a9492bbf58519c9",
               "specifier": "@solidjs/router"
             }
           ],
-          "graphDigest": "sha256:b6a977c836eaa68ebda4632fec1afa38eca36f94de10b992baf0866c480f4606"
+          "graphDigest": "sha256:9f76d0d68d8e93360b2c0a744aabc8db66a0047a30aa171f9ff3ebd3aecd357b"
         },
         "certificationAttempt": {
           "attempted": true,
@@ -2613,10 +2613,10 @@
           "reason": "no certifiable artifact case; 1 case(s) refused; first refusal: .: solid-checker-rust: emit package contract: entry file <package-root>/build/index.js has no runtime ESM exports",
           "refusalCount": 0,
           "memoryExceeded": false,
-          "durationMs": 1457,
+          "durationMs": 1281,
           "stageDurationsMs": {
-            "artifactAcquisition": 0.46,
-            "proposalGeneration": 1450.25
+            "artifactAcquisition": 0.69,
+            "proposalGeneration": 949.52
           },
           "graphPreparation": null,
           "demandCountsByFamily": {},
@@ -3325,7 +3325,7 @@
           "status": "refused",
           "stage": "witness-acquisition",
           "owner": "certifier",
-          "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:ee938e1261d62343823a7f0788651c6bfe3d6c41145d3ad80b307b338cc4242a: Type Facts certification failed for graph node @tanstack/db@0.8.5 (.) during live graph export-value verification: Type Facts demand sha256:69512bb464828723efe85639b0f8e38e587952b999b0cfd4f25926d1135f3983 is locally open: recursive-value-shape (artifact-case:e9909c77a806fe239b7401776ac2b9fed9f5509803e5ae7f83355d5f2d17f6e1:compareLiveQueryWindowDependencies): operation value path is locally open (complete=true, presence=Absent, callability=Unknown, reasons=[])",
+          "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:845e3da58b37fab032bcc3cb087863cdbbd17236c32e0488b1a6efce4807b638: Type Facts certification failed for graph node @tanstack/db@0.8.5 (.) during live graph export-value verification: Type Facts demand sha256:69512bb464828723efe85639b0f8e38e587952b999b0cfd4f25926d1135f3983 is locally open: recursive-value-shape (artifact-case:e9909c77a806fe239b7401776ac2b9fed9f5509803e5ae7f83355d5f2d17f6e1:compareLiveQueryWindowDependencies): operation value path is locally open (complete=true, presence=Absent, callability=Unknown, reasons=[])",
           "proofFamilies": []
         },
         "disposition": "proposal-blocked",
@@ -3366,49 +3366,29 @@
             {
               "entrypoint": ".",
               "conditions": [],
-              "node": "sha256:f74b8bc59259ed26b1b5a6c2b79669d08b90239aed802182b051eb5247717fbd"
+              "node": "sha256:a50057d9ee40545c5a37335ee5af4209dd7f092449049756f92752beb8145b94"
             }
           ],
           "cycles": [],
           "leaves": [
             {
-              "id": "sha256:3218e74b0937e19d6706cd676de2efb7f1ac2ce2fe50c2c07bd0b4422cb23988",
+              "id": "sha256:8cf614afbfa04b816ed47d622502f5ed0b4d6265770102523bbb2130cacbd2a4",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:77fb7af71078e585ee0cd6302bbea425e004c8f385497bf48e553606027c9838",
-              "package": "@tanstack/pacer-lite",
-              "version": "0.2.2",
-              "integrity": "sha512-eQ1MyLKCHyXiH7NbdmB80W77OhiMgGBUb+qDx/8WMGbwg5Lf/NlfD0TfNYAqY77i8V3AxoDoYdICrQE5ADw4Yw==",
-              "entrypoint": "./lite-queuer",
-              "conditions": []
-            },
-            {
-              "id": "sha256:50a2f42784c8f8675c005132db291289963c6c954a8e512f775ad49eefcbbd58",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:4196d80b6a75f6d4ac7f88df14db778c3a15bedfd494fac0d72e89b99693c999",
-              "package": "fractional-indexing",
-              "version": "3.4.0",
-              "integrity": "sha512-8J3glhz2rrpKG6KmI7wmJo3zH1VjeOpN+vTJSw1fOyO+Viqq3zX6/5NGh6oaZB2qIAYdOYuu5Dz9xp4faOO0Pg==",
-              "entrypoint": ".",
-              "conditions": []
-            },
-            {
-              "id": "sha256:632cfda16d341b276257cd1c60be87545f2ddbe0b669148f393d78388c18e35c",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:37aa8e8a80319a2dee8bbd72c87ec86a1bcdb9dc6a5a27ae5e97422f282481f0",
-              "package": "@tanstack/pacer-lite",
-              "version": "0.2.2",
-              "integrity": "sha512-eQ1MyLKCHyXiH7NbdmB80W77OhiMgGBUb+qDx/8WMGbwg5Lf/NlfD0TfNYAqY77i8V3AxoDoYdICrQE5ADw4Yw==",
-              "entrypoint": "./lite-debouncer",
-              "conditions": []
-            },
-            {
-              "id": "sha256:b6d2520b0b6e81845508115421e36d3cd34de06440784d8d4ea279d51be50c95",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:2f296c8dbc36a2ef643d1f057b10dfffe9054756d32640fb0c1f14707709fc85",
+              "node": "sha256:bc25089998720b6011e1960e171768d0ec5bec9606488600076a9735d222f9f7",
               "package": "@tanstack/pacer-lite",
               "version": "0.2.2",
               "integrity": "sha512-eQ1MyLKCHyXiH7NbdmB80W77OhiMgGBUb+qDx/8WMGbwg5Lf/NlfD0TfNYAqY77i8V3AxoDoYdICrQE5ADw4Yw==",
               "entrypoint": "./lite-throttler",
+              "conditions": []
+            },
+            {
+              "id": "sha256:9cfcbd9d95baadbc125dd2646cc8ca746b13d9e1875c5fe631c3d0e0ae2e4c22",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:8314544fbb3c6b8f2c9e73f9f8acd02d48de5fe118d59af438eb1862b87d9cb2",
+              "package": "fractional-indexing",
+              "version": "3.4.0",
+              "integrity": "sha512-8J3glhz2rrpKG6KmI7wmJo3zH1VjeOpN+vTJSw1fOyO+Viqq3zX6/5NGh6oaZB2qIAYdOYuu5Dz9xp4faOO0Pg==",
+              "entrypoint": ".",
               "conditions": []
             },
             {
@@ -3420,13 +3400,23 @@
               "reason": "resolved target <project-root>/node_modules/csstype/index.js is not a file"
             },
             {
-              "id": "sha256:e4a83afda9b910780cdbd209a12ea21eea027cf8d73ff92c98e7f0f373a3ecad",
+              "id": "sha256:cf2ae62f2904990f07bd376c080b73c11e29bbdd11596c7822d2cb6a7a32d324",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:1d2860059e52b956f58002834eb8acda34e0dedd3a3db528019014bd27fec0dd",
+              "node": "sha256:97bd913535b1ac4ee01bbd0ed8a5b19991d3cc44f9fc8f422979d9019f659f70",
               "package": "@standard-schema/spec",
               "version": "1.1.0",
               "integrity": "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==",
               "entrypoint": ".",
+              "conditions": []
+            },
+            {
+              "id": "sha256:ed882e81cb110854a828ce24c4f730e456d2eae9b135de18018c10ec984fb271",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:95b0624e5f4a0b6c5c45175b34ea4957c3b76f5d43248d9378750351f9e8d3e0",
+              "package": "@tanstack/pacer-lite",
+              "version": "0.2.2",
+              "integrity": "sha512-eQ1MyLKCHyXiH7NbdmB80W77OhiMgGBUb+qDx/8WMGbwg5Lf/NlfD0TfNYAqY77i8V3AxoDoYdICrQE5ADw4Yw==",
+              "entrypoint": "./lite-queuer",
               "conditions": []
             },
             {
@@ -3436,10 +3426,20 @@
               "conditions": [],
               "code": "target-not-found",
               "reason": "resolved target <project-root>/node_modules/solid-js/types/reactive/signal.js is not a file"
+            },
+            {
+              "id": "sha256:f2d77e2670e45e0529c202b277105b58bbf758ed8949405b6c3608c0766d155e",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:273f5f78bb846e378a08190918531c0b27cd065891d2db4ee674c1e07348e10a",
+              "package": "@tanstack/pacer-lite",
+              "version": "0.2.2",
+              "integrity": "sha512-eQ1MyLKCHyXiH7NbdmB80W77OhiMgGBUb+qDx/8WMGbwg5Lf/NlfD0TfNYAqY77i8V3AxoDoYdICrQE5ADw4Yw==",
+              "entrypoint": "./lite-debouncer",
+              "conditions": []
             }
           ],
           "conditionalDependencies": [],
-          "graphDigest": "sha256:bc9638f8ef6a6a19dc9b60270e5aa47249ef4fd5c3562b5c01aaf2cee2c4d137"
+          "graphDigest": "sha256:781fd324c1fe15282a0e00bb43275dffae3cfa3df6e2c7ce1b742e0c9bbba2a4"
         },
         "certificationAttempt": {
           "attempted": true,
@@ -3451,22 +3451,22 @@
           "owner": "certifier",
           "demandId": "sha256:69512bb464828723efe85639b0f8e38e587952b999b0cfd4f25926d1135f3983",
           "family": "recursive-value-shape",
-          "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:ee938e1261d62343823a7f0788651c6bfe3d6c41145d3ad80b307b338cc4242a: Type Facts certification failed for graph node @tanstack/db@0.8.5 (.) during live graph export-value verification: Type Facts demand sha256:69512bb464828723efe85639b0f8e38e587952b999b0cfd4f25926d1135f3983 is locally open: recursive-value-shape (artifact-case:e9909c77a806fe239b7401776ac2b9fed9f5509803e5ae7f83355d5f2d17f6e1:compareLiveQueryWindowDependencies): operation value path is locally open (complete=true, presence=Absent, callability=Unknown, reasons=[])",
+          "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:845e3da58b37fab032bcc3cb087863cdbbd17236c32e0488b1a6efce4807b638: Type Facts certification failed for graph node @tanstack/db@0.8.5 (.) during live graph export-value verification: Type Facts demand sha256:69512bb464828723efe85639b0f8e38e587952b999b0cfd4f25926d1135f3983 is locally open: recursive-value-shape (artifact-case:e9909c77a806fe239b7401776ac2b9fed9f5509803e5ae7f83355d5f2d17f6e1:compareLiveQueryWindowDependencies): operation value path is locally open (complete=true, presence=Absent, callability=Unknown, reasons=[])",
           "refusalCount": 0,
           "memoryExceeded": false,
-          "durationMs": 4746,
+          "durationMs": 5274,
           "stageDurationsMs": {
-            "artifactAcquisition": 0.89,
-            "proposalGeneration": 2358.74,
+            "artifactAcquisition": 3.84,
+            "proposalGeneration": 3984.68,
             "demandPlanning": 0.01,
-            "witnessAcquisition": 408.35
+            "witnessAcquisition": 476.14
           },
           "graphPreparation": {
             "rootCases": 1,
             "canonicalNodes": 2,
             "acquiredPublishedArtifacts": 8,
             "acquisitionUnits": 7,
-            "graphAcquisitionDurationMs": 8.93,
+            "graphAcquisitionDurationMs": 13.06,
             "resolutionSession": {
               "requests": 0,
               "semanticAcquisitions": 0,
@@ -3480,11 +3480,11 @@
             "proposalFrontiers": [
               {
                 "nodes": 1,
-                "durationMs": 1778.91
+                "durationMs": 2805.69
               },
               {
                 "nodes": 1,
-                "durationMs": 151.32
+                "durationMs": 173.1
               }
             ],
             "graphNodeReferences": 2,
@@ -4178,7 +4178,7 @@
           "status": "refused",
           "stage": "witness-acquisition",
           "owner": "certifier",
-          "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:d44f3b4927c5bae077790bfb9b7aeb166aa2ae02c5b60fa05311fe476526f6b2: Type Facts certification failed for graph node @tanstack/store@0.11.1 (.) during live graph export-value verification: Type Facts demand sha256:34aa664d54584eeec44f17ca0b58a64722eb8a7ace7be65c8c0c45d6904118ed is locally open: recursive-value-shape (artifact-case:0bdfa1cbfcd08632d3def1207aa3b0c24966e3093cf9cb6fa9ce35b1d52fce0d:shallow): operation value root shape has no verifiable premise: the demand asserts no callability and the producer's root observation is open",
+          "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:77ad98fb7effbf34419b725ef5d23c3808b4549a5fa18e0d6838bc39ae28115b: Type Facts certification failed for graph node @tanstack/store@0.11.1 (.) during live graph export-value verification: Type Facts demand sha256:34aa664d54584eeec44f17ca0b58a64722eb8a7ace7be65c8c0c45d6904118ed is locally open: recursive-value-shape (artifact-case:0bdfa1cbfcd08632d3def1207aa3b0c24966e3093cf9cb6fa9ce35b1d52fce0d:shallow): operation value root shape has no verifiable premise: the demand asserts no callability and the producer's root observation is open",
           "proofFamilies": []
         },
         "disposition": "proposal-blocked",
@@ -4219,25 +4219,15 @@
             {
               "entrypoint": ".",
               "conditions": [],
-              "node": "sha256:45e15857bd934603ff6d85ab6980f5533cb85c6483e373d8381bab2eb4685db0"
+              "node": "sha256:3d409f26e2efc55a8f3f33f5b250eb37be847cc4c2af568af77bdbb8da647ba9"
             }
           ],
           "cycles": [],
           "leaves": [
             {
-              "id": "sha256:624e24c8ce5b03d71f7ce7d7d66578bbb14edb74a2e132000c41b6b157b86578",
+              "id": "sha256:01eedd74ef4fbb756f57b2e975f66224013f78fe54204d5bf11310b95eedba8f",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:724a406b0e3e3c1721903d3955a97bc4f92068fd12feaa8e7611fb1b7234d04b",
-              "package": "@tanstack/store",
-              "version": "0.11.1",
-              "integrity": "sha512-mzTOBhypOuDJAy/D8n2MfUZ1HFkXnmSETviRyhqEC8LUE7/IZQExOTxMANj3KjTofYTkFNpBY67qaVrT41YccA==",
-              "entrypoint": ".",
-              "conditions": []
-            },
-            {
-              "id": "sha256:7047b164eb761a9a954deb46bc279fbed12e1217901a58e26eb5790d72b6d594",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:dd6a803d3638fd919cd2a01c3f84d8dc80315a6253d1cd803e8ea7c5255b1d91",
+              "node": "sha256:0829d2dbb5b9f54bc9ae35b7ba21870a1eb8886c90ba24e07797bc4d7b382b2b",
               "package": "@tanstack/pacer-lite",
               "version": "0.2.2",
               "integrity": "sha512-eQ1MyLKCHyXiH7NbdmB80W77OhiMgGBUb+qDx/8WMGbwg5Lf/NlfD0TfNYAqY77i8V3AxoDoYdICrQE5ADw4Yw==",
@@ -4251,10 +4241,20 @@
               "conditions": [],
               "code": "target-not-found",
               "reason": "resolved target <project-root>/node_modules/csstype/index.js is not a file"
+            },
+            {
+              "id": "sha256:ea90c0ccc05c8c76ad6dd13ef04da7e161d9dc4441c08e5926ca85e7cb5d2d91",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:d7eaaf1d034ce80a1b92adfc752d96b43b8ba743e21ce11eb3cde86d28ef1028",
+              "package": "@tanstack/store",
+              "version": "0.11.1",
+              "integrity": "sha512-mzTOBhypOuDJAy/D8n2MfUZ1HFkXnmSETviRyhqEC8LUE7/IZQExOTxMANj3KjTofYTkFNpBY67qaVrT41YccA==",
+              "entrypoint": ".",
+              "conditions": []
             }
           ],
           "conditionalDependencies": [],
-          "graphDigest": "sha256:56caf82b40fd49f2cd6c8bcf94bbb8d90dbf254aae55307a71bed8fbfd64157d"
+          "graphDigest": "sha256:21868aefbffa7ddd79760006d6fe0a6e7a20e91a53c951af4d2db2950218ba96"
         },
         "certificationAttempt": {
           "attempted": true,
@@ -4266,22 +4266,22 @@
           "owner": "certifier",
           "demandId": "sha256:34aa664d54584eeec44f17ca0b58a64722eb8a7ace7be65c8c0c45d6904118ed",
           "family": "recursive-value-shape",
-          "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:d44f3b4927c5bae077790bfb9b7aeb166aa2ae02c5b60fa05311fe476526f6b2: Type Facts certification failed for graph node @tanstack/store@0.11.1 (.) during live graph export-value verification: Type Facts demand sha256:34aa664d54584eeec44f17ca0b58a64722eb8a7ace7be65c8c0c45d6904118ed is locally open: recursive-value-shape (artifact-case:0bdfa1cbfcd08632d3def1207aa3b0c24966e3093cf9cb6fa9ce35b1d52fce0d:shallow): operation value root shape has no verifiable premise: the demand asserts no callability and the producer's root observation is open",
+          "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:77ad98fb7effbf34419b725ef5d23c3808b4549a5fa18e0d6838bc39ae28115b: Type Facts certification failed for graph node @tanstack/store@0.11.1 (.) during live graph export-value verification: Type Facts demand sha256:34aa664d54584eeec44f17ca0b58a64722eb8a7ace7be65c8c0c45d6904118ed is locally open: recursive-value-shape (artifact-case:0bdfa1cbfcd08632d3def1207aa3b0c24966e3093cf9cb6fa9ce35b1d52fce0d:shallow): operation value root shape has no verifiable premise: the demand asserts no callability and the producer's root observation is open",
           "refusalCount": 0,
           "memoryExceeded": false,
-          "durationMs": 1283,
+          "durationMs": 1158,
           "stageDurationsMs": {
-            "artifactAcquisition": 0.95,
-            "proposalGeneration": 657.92,
-            "demandPlanning": 0.01,
-            "witnessAcquisition": 240.59
+            "artifactAcquisition": 1.05,
+            "proposalGeneration": 735.36,
+            "demandPlanning": 0,
+            "witnessAcquisition": 386.04
           },
           "graphPreparation": {
             "rootCases": 1,
             "canonicalNodes": 4,
             "acquiredPublishedArtifacts": 6,
             "acquisitionUnits": 6,
-            "graphAcquisitionDurationMs": 10.77,
+            "graphAcquisitionDurationMs": 2.31,
             "resolutionSession": {
               "requests": 0,
               "semanticAcquisitions": 0,
@@ -4295,15 +4295,15 @@
             "proposalFrontiers": [
               {
                 "nodes": 2,
-                "durationMs": 164.33
+                "durationMs": 154.65
               },
               {
                 "nodes": 1,
-                "durationMs": 108.82
+                "durationMs": 86.81
               },
               {
                 "nodes": 1,
-                "durationMs": 132.91
+                "durationMs": 91.58
               }
             ],
             "graphNodeReferences": 4,
@@ -4898,15 +4898,15 @@
             {
               "entrypoint": ".",
               "conditions": [],
-              "node": "sha256:8ce369dd3148f47c75d4afb438ec8f242535a8ad6d9abb88353c290d99ea5675"
+              "node": "sha256:63f1d504c7b3889a49be15512660bbca8d586219c0c906e82ecc2e989a1fe7db"
             }
           ],
           "cycles": [],
           "leaves": [
             {
-              "id": "sha256:5cdd526c8cea502b3589619f57e45697c0316ad920205511aa3c7cda45f0d9be",
+              "id": "sha256:66f4bf709dcf18fbbfb2d50fde62e4fd95bdc8045ba0670a65938bc962d00cf5",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:61cb94346c9eebcfa95a98ebe709e25faa787b989fb7d72d448c7cee9ae12bce",
+              "node": "sha256:45580c0e856a351e109da1bff039caeb9acabe10bba0c39b4ccd3f1c65ee9026",
               "package": "@tanstack/store",
               "version": "0.11.1",
               "integrity": "sha512-mzTOBhypOuDJAy/D8n2MfUZ1HFkXnmSETviRyhqEC8LUE7/IZQExOTxMANj3KjTofYTkFNpBY67qaVrT41YccA==",
@@ -4923,7 +4923,7 @@
             }
           ],
           "conditionalDependencies": [],
-          "graphDigest": "sha256:1f45762d3530df9d28d56512c39e7deffcf205c697a262f016e63c5b89a14093"
+          "graphDigest": "sha256:ce9655944c539dbba8e4e6dcf71ce2e86e0759fcb96bd5a50710601cbd93f690"
         },
         "certificationAttempt": {
           "attempted": true,
@@ -4942,22 +4942,22 @@
             "rootCertified": true
           },
           "memoryExceeded": false,
-          "durationMs": 3887,
+          "durationMs": 3999,
           "stageDurationsMs": {
-            "artifactAcquisition": 0.57,
-            "proposalGeneration": 1289.36,
-            "demandPlanning": 0.04,
-            "witnessAcquisition": 1234.66,
-            "certification": 0.02,
+            "artifactAcquisition": 2.11,
+            "proposalGeneration": 1789.83,
+            "demandPlanning": 0.09,
+            "witnessAcquisition": 1325.93,
+            "certification": 0.03,
             "receiptIssuance": 0.01,
-            "catalogPublication": 0
+            "catalogPublication": 0.01
           },
           "graphPreparation": {
             "rootCases": 1,
             "canonicalNodes": 2,
             "acquiredPublishedArtifacts": 6,
             "acquisitionUnits": 5,
-            "graphAcquisitionDurationMs": 24.25,
+            "graphAcquisitionDurationMs": 33.51,
             "resolutionSession": {
               "requests": 0,
               "semanticAcquisitions": 0,
@@ -4971,11 +4971,11 @@
             "proposalFrontiers": [
               {
                 "nodes": 1,
-                "durationMs": 479.19
+                "durationMs": 482.86
               },
               {
                 "nodes": 1,
-                "durationMs": 370.89
+                "durationMs": 224.42
               }
             ],
             "graphNodeReferences": 2,
@@ -5817,25 +5817,37 @@
             {
               "entrypoint": ".",
               "conditions": [],
-              "node": "sha256:30b333d72f8cc34979afc70ecc37bffe9c578ae7382f68d006c72dd50b0d7216"
+              "node": "sha256:135e1ed0f64ee5e874e2f8cf567cbba0e02b28162fd668f50f36436859f2a0cd"
             },
             {
               "entrypoint": ".",
               "conditions": [
                 "@tanstack/custom-condition"
               ],
-              "node": "sha256:4b4f2cd5e09ad384a336ee6b5a9a1f2820c5e8aba8c6c46aeeff85e3df2a5ee2"
+              "node": "sha256:4f09f3d6a3e7a582340b8aab38a8ed74fe04e76e09fc2080e3e1e3cda89542ed"
             },
             {
               "entrypoint": ".",
               "conditions": [
                 "development"
               ],
-              "node": "sha256:b708abe64c46a53e1997b54bb77fe1c39e8fae2220af1146ee0a9a65fd4125c9"
+              "node": "sha256:9821eba719aea3034aa8cfc95a642e78c2d549bc0a012c01e1cb1cea21e247f2"
             }
           ],
           "cycles": [],
           "leaves": [
+            {
+              "id": "sha256:055c6ef3215ec0f0c4683fc7c3b19737d4a87a65f783c5475be79c4a8b0bb6b6",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:9ca5006bc9f03066ec8d8813596b03e6b87076d9ba7efe6a2ff376aeeaceec04",
+              "package": "@tanstack/query-core",
+              "version": "5.102.5",
+              "integrity": "sha512-RjCmHf9cPRYcH/dpO0Jagw3rxCM1bLzMKKSGzaDkQJADDKGpv5RFjN54IyHSOIPa822AUA7ASOXDjjy1jfyzIA==",
+              "entrypoint": ".",
+              "conditions": [
+                "development"
+              ]
+            },
             {
               "id": "sha256:080757e97ddd95ffab0bfd14d91200f1cb142b8196d22022b5d8bb6518f40668",
               "kind": "artifact-resolution",
@@ -5847,9 +5859,9 @@
               "reason": "resolved target <project-root>/node_modules/csstype/index.js is not a file"
             },
             {
-              "id": "sha256:124d0e167d422d0abb4bbb96e563a81e8d46b3092c4ca71146fa0d0896ce63e5",
+              "id": "sha256:3a27c9bceefd3ce22795f9fa20a26ef71dbd80430fcd2d86a230c6b5a3fbb3a0",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:27c757afcfd9d53ae273a27c66600ce594ded3d3934b90adaba4f48536c7de8a",
+              "node": "sha256:8f6b74ad48cb2d76a471e65a0d07b04e874b81d7853bf341b37d88c2eed2a22e",
               "package": "@tanstack/query-core",
               "version": "5.102.5",
               "integrity": "sha512-RjCmHf9cPRYcH/dpO0Jagw3rxCM1bLzMKKSGzaDkQJADDKGpv5RFjN54IyHSOIPa822AUA7ASOXDjjy1jfyzIA==",
@@ -5857,6 +5869,16 @@
               "conditions": [
                 "@tanstack/custom-condition"
               ]
+            },
+            {
+              "id": "sha256:57a920863a369dc6dfb8357427e264f4db7a1f1121675e817e7061daf23f6a83",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:d3cc25b60bd703a583106092a84f09c461e2066fa601aa6d81a12dbb2bffbd77",
+              "package": "@tanstack/query-core",
+              "version": "5.102.5",
+              "integrity": "sha512-RjCmHf9cPRYcH/dpO0Jagw3rxCM1bLzMKKSGzaDkQJADDKGpv5RFjN54IyHSOIPa822AUA7ASOXDjjy1jfyzIA==",
+              "entrypoint": ".",
+              "conditions": []
             },
             {
               "id": "sha256:8a73578cdc63953d042dde3ce4b01c5f70ad1ea532400338eac65814d72deefc",
@@ -5875,32 +5897,10 @@
               "conditions": [],
               "code": "target-not-found",
               "reason": "resolved target <project-root>/node_modules/csstype/index.js is not a file"
-            },
-            {
-              "id": "sha256:e492cc578e8e5ec28d271a3a7515373d0f9651221c86655827a5e55ff71802a8",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:5f3857ea96c74e294d9998fd5fec969a23901fa0491ad20fe528dcf30707e013",
-              "package": "@tanstack/query-core",
-              "version": "5.102.5",
-              "integrity": "sha512-RjCmHf9cPRYcH/dpO0Jagw3rxCM1bLzMKKSGzaDkQJADDKGpv5RFjN54IyHSOIPa822AUA7ASOXDjjy1jfyzIA==",
-              "entrypoint": ".",
-              "conditions": []
-            },
-            {
-              "id": "sha256:e7adbc339c5495fcbfb2204c0bbbf1dbde01f310c5b2d27809952f5c4d96fea3",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:e4de537b5528ad0e24abf9efc4321df9dd8498a2b4edae95087ecd708768043f",
-              "package": "@tanstack/query-core",
-              "version": "5.102.5",
-              "integrity": "sha512-RjCmHf9cPRYcH/dpO0Jagw3rxCM1bLzMKKSGzaDkQJADDKGpv5RFjN54IyHSOIPa822AUA7ASOXDjjy1jfyzIA==",
-              "entrypoint": ".",
-              "conditions": [
-                "development"
-              ]
             }
           ],
           "conditionalDependencies": [],
-          "graphDigest": "sha256:e5f753d2f6f2f75eca17a493495b333ada304c1222bbbe8a613ebc895be77bf4"
+          "graphDigest": "sha256:ea7e81d121503e960a6e8c2c997e00bea57906bc3d339d021af909a63d3e00db"
         },
         "certificationAttempt": {
           "attempted": true,
@@ -5915,19 +5915,19 @@
           "reason": "solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification failed for graph node @tanstack/query-core@5.102.5 (.) during live graph export-value verification: Type Facts demand sha256:f06329123be31f858423f45cf214f7255aac5faa0591373487ac92d1a842e4f9 is locally open: recursive-value-shape (artifact-case:f71c70c3ac72e568b4bef6250fbf0f6f931e9e8b7cb58ce69836ac1d56f62f25:keepPreviousData): operation value root shape has no verifiable premise: the demand asserts no callability and the producer did not exhaustively observe the root",
           "refusalCount": 0,
           "memoryExceeded": false,
-          "durationMs": 2611,
+          "durationMs": 2980,
           "stageDurationsMs": {
-            "artifactAcquisition": 1.57,
-            "proposalGeneration": 1804.73,
-            "demandPlanning": 0.01,
-            "witnessAcquisition": 781.94
+            "artifactAcquisition": 8.07,
+            "proposalGeneration": 1536.58,
+            "demandPlanning": 0,
+            "witnessAcquisition": 188.52
           },
           "graphPreparation": {
             "rootCases": 3,
             "canonicalNodes": 6,
             "acquiredPublishedArtifacts": 4,
             "acquisitionUnits": 5,
-            "graphAcquisitionDurationMs": 3.84,
+            "graphAcquisitionDurationMs": 2.67,
             "resolutionSession": {
               "requests": 0,
               "semanticAcquisitions": 0,
@@ -5941,11 +5941,11 @@
             "proposalFrontiers": [
               {
                 "nodes": 3,
-                "durationMs": 643.67
+                "durationMs": 488.03
               },
               {
                 "nodes": 3,
-                "durationMs": 426.16
+                "durationMs": 181.12
               }
             ],
             "graphNodeReferences": 6,
@@ -6704,7 +6704,7 @@
           "status": "refused",
           "stage": "artifact-or-demand-planning",
           "owner": "artifact-provenance",
-          "reason": "@solidjs/web is not installed above /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-vA0iTQ/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts",
+          "reason": "@solidjs/web is not installed above /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-wkvH4I/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts",
           "proofFamilies": []
         },
         "disposition": "proposal-blocked",
@@ -6769,49 +6769,77 @@
             {
               "entrypoint": ".",
               "conditions": [],
-              "node": "sha256:29f724881b605a80b53fec3c7b888aa1380e6a8bfca0dedcc08cab1a118eb13c"
+              "node": "sha256:46b81f2ae893a50b34467ec14f78f692d0adeb88060c991dc9f22f7ad0ea84ef"
             },
             {
               "entrypoint": ".",
               "conditions": [
                 "@tanstack/custom-condition"
               ],
-              "node": "sha256:40e1be78f87050af62a244df8dd8e32cf6e893bc4bd38ae537dd6f7054f6435d"
+              "node": "sha256:e8115125a990283a4db55ddea8d2e148534467f2cf9514c16c1f586d50248b8e"
             },
             {
               "entrypoint": ".",
               "conditions": [
                 "development"
               ],
-              "node": "sha256:ef6f53daf947ff90ca5d22d554407993ded4139eb0ef80315d2ca1ae1a1c3e56"
+              "node": "sha256:c9d973d7e538fce538b433bdc6a582120cc86f02ff6a9e4c1be2b6cba294b1ac"
             }
           ],
           "cycles": [],
           "leaves": [
             {
-              "id": "sha256:292db9738e128f90ab5d147470d7f92690566b1d73b0403347a864c62dcb3cef",
+              "id": "sha256:24e3efdd3b52d98c35dea0e9cc1d1e644317bf0003daaff35ae87807d72aafc7",
               "kind": "dependency-identity",
-              "node": "sha256:29f724881b605a80b53fec3c7b888aa1380e6a8bfca0dedcc08cab1a118eb13c",
+              "node": "sha256:46b81f2ae893a50b34467ec14f78f692d0adeb88060c991dc9f22f7ad0ea84ef",
               "specifier": "@solidjs/web",
               "code": "package-not-found",
               "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/index.js"
             },
             {
-              "id": "sha256:45c349d4c9bcdaebba0664725cbeee93c21f34835e49cab98e207bc795be7ae3",
+              "id": "sha256:368391107a9f4ee5a1fded2c0d20e4853fcd8489c22c9172eb5fa000824e396e",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:21b5209a2690c11faaac00632c82d2a9763a10c749f2a6cec53c1935fe6a9ec6",
+              "node": "sha256:22e075f9353e010eeab8fab4ebcd045b9895730c9a5aba8676cb8206b1b2e9fe",
               "package": "@solidjs/signals",
               "version": "2.0.0-rc.0",
               "integrity": "sha512-oKZSfvsCcKw1uJjOGbUkJ+OqlhXLHtZ+rShSyu9KH0lUH7UUwfMfsKeh81JPiQxDDg4YLhEwI38hg0JkwzTdvA==",
+              "entrypoint": ".",
+              "conditions": []
+            },
+            {
+              "id": "sha256:58223ee6536c84508a142bf8067e4dbb43724f56d24235b1ebcdf1e4569e1fc3",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:82a266785e7ff4555364f6d23fd0f180ad9e1def5aef84a47c6f44478adc9a98",
+              "package": "@tanstack/query-core",
+              "version": "5.101.0",
+              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
               "entrypoint": ".",
               "conditions": [
                 "@tanstack/custom-condition"
               ]
             },
             {
-              "id": "sha256:80b4b49ea4de399e455201091524cd79ec84772927fb7dcc36d54f02e4d8f3b8",
+              "id": "sha256:6c56fc2e8e5a229b9bf36e43388feca4a09679b4be6b1bbd0d688836e89ef353",
+              "kind": "dependency-identity",
+              "node": "sha256:46b81f2ae893a50b34467ec14f78f692d0adeb88060c991dc9f22f7ad0ea84ef",
+              "specifier": "@solidjs/web",
+              "code": "package-not-found",
+              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts"
+            },
+            {
+              "id": "sha256:8967d404fdebe34e4a6c9f4004caf2ae53fed8456ef1fd4d29681949d87d4dc8",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:ce687e8c882489fe8eab8e51becca6337932fe43ff082528ea7e5d5bd31a4bf6",
+              "node": "sha256:c83498824f9c6e6651c14355f985af609343d1acad63099508d3a0f586570b71",
+              "package": "@tanstack/query-core",
+              "version": "5.101.0",
+              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
+              "entrypoint": ".",
+              "conditions": []
+            },
+            {
+              "id": "sha256:8f29a7cbb79279057f098e4a7e613323821590597ce29965b1974686b1565abc",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:43c041a7aa043f0e0ebe2265ca5d1f86bb709c1e0042b479d79de0e56c1eae66",
               "package": "@solidjs/signals",
               "version": "2.0.0-rc.0",
               "integrity": "sha512-oKZSfvsCcKw1uJjOGbUkJ+OqlhXLHtZ+rShSyu9KH0lUH7UUwfMfsKeh81JPiQxDDg4YLhEwI38hg0JkwzTdvA==",
@@ -6821,73 +6849,17 @@
               ]
             },
             {
-              "id": "sha256:81b2308142fef0c66ad9469c1610011830497e5dec5e24e9e7ab1f51cf088f13",
+              "id": "sha256:986065c3ebe91f3b79abeadc9fddab81092503bebb6e422f85c12bb7eac033c2",
               "kind": "dependency-identity",
-              "node": "sha256:40e1be78f87050af62a244df8dd8e32cf6e893bc4bd38ae537dd6f7054f6435d",
+              "node": "sha256:e8115125a990283a4db55ddea8d2e148534467f2cf9514c16c1f586d50248b8e",
               "specifier": "@solidjs/web",
               "code": "package-not-found",
               "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/src/QueryClientProvider.tsx"
             },
             {
-              "id": "sha256:a1cf3aa6deba4a14f0003355b5afe00c88f7618ff5e199602e9285efedc4bbf6",
+              "id": "sha256:a6d086231422ea3da20de5affeb944a6510991e473b6705e95ebff2e8b0358c6",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:98281af019400b91c17b161980efa444ce0b43f0d8d5b1c62d67575b692f5136",
-              "package": "@tanstack/query-core",
-              "version": "5.101.0",
-              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
-              "entrypoint": ".",
-              "conditions": [
-                "@tanstack/custom-condition"
-              ]
-            },
-            {
-              "id": "sha256:b28b8d3bfcc30203b58d3e240e954390cfbe537d9c3f29afcc59046bdc4a29ba",
-              "kind": "dependency-identity",
-              "node": "sha256:ef6f53daf947ff90ca5d22d554407993ded4139eb0ef80315d2ca1ae1a1c3e56",
-              "specifier": "@solidjs/web",
-              "code": "package-not-found",
-              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/dev.js"
-            },
-            {
-              "id": "sha256:b78315795b5891d9107c46d2b824abfa4b0e29da3069ee1c3ee90ce8904a9136",
-              "kind": "dependency-identity",
-              "node": "sha256:29f724881b605a80b53fec3c7b888aa1380e6a8bfca0dedcc08cab1a118eb13c",
-              "specifier": "@solidjs/web",
-              "code": "package-not-found",
-              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts"
-            },
-            {
-              "id": "sha256:b8f06462e6632741286675c9c433e88a3a2d7729397318d6a2f154100e6f5645",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:371def3fe72e08d963e7ff841a027efbdb6d11a7a53d8f5f7f28b7c95c4031ba",
-              "package": "@tanstack/query-core",
-              "version": "5.101.0",
-              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
-              "entrypoint": ".",
-              "conditions": []
-            },
-            {
-              "id": "sha256:c75bb9290d0445bebb1a0551418329f67d7151de5548398e198ee5bc89d27392",
-              "kind": "dependency-identity",
-              "node": "sha256:ef6f53daf947ff90ca5d22d554407993ded4139eb0ef80315d2ca1ae1a1c3e56",
-              "specifier": "@solidjs/web",
-              "code": "package-not-found",
-              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts"
-            },
-            {
-              "id": "sha256:d2fb77ec09397a9d5fd36320ad5ee50fdd543d35cdb294c0cc5b9885ca67fa2e",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:321e59592f2c13115d5fcee4f38a1f3a4c40d5d32f896300e36356820e1202e1",
-              "package": "@solidjs/signals",
-              "version": "2.0.0-rc.0",
-              "integrity": "sha512-oKZSfvsCcKw1uJjOGbUkJ+OqlhXLHtZ+rShSyu9KH0lUH7UUwfMfsKeh81JPiQxDDg4YLhEwI38hg0JkwzTdvA==",
-              "entrypoint": ".",
-              "conditions": []
-            },
-            {
-              "id": "sha256:efeeef8910c68530134901e1225f26bebfbecb8b9e5a75aeb34e78cca7b4726e",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:87570a77af503366ec8c848a90339986fc7f583326358d280a732abf579ecb84",
+              "node": "sha256:b3021eadf14ed93fa1a9ebe32f8ce214f2aeea1775e1724b5badfeb204b2827d",
               "package": "@tanstack/query-core",
               "version": "5.101.0",
               "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
@@ -6895,10 +6867,38 @@
               "conditions": [
                 "development"
               ]
+            },
+            {
+              "id": "sha256:b544750d6953e6ee2409e87b0c1ff48e4226f7d99b007f7102f3ba0f798096d6",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:134a51c5170bfbc20dbbfc10a1a5c08ac3d5f5c8267ae0040174e634fe6ac95d",
+              "package": "@solidjs/signals",
+              "version": "2.0.0-rc.0",
+              "integrity": "sha512-oKZSfvsCcKw1uJjOGbUkJ+OqlhXLHtZ+rShSyu9KH0lUH7UUwfMfsKeh81JPiQxDDg4YLhEwI38hg0JkwzTdvA==",
+              "entrypoint": ".",
+              "conditions": [
+                "@tanstack/custom-condition"
+              ]
+            },
+            {
+              "id": "sha256:c05095aefc38d084301a8678084d1b67c04b60f0c91b0a89f1d168c8a007b1f7",
+              "kind": "dependency-identity",
+              "node": "sha256:c9d973d7e538fce538b433bdc6a582120cc86f02ff6a9e4c1be2b6cba294b1ac",
+              "specifier": "@solidjs/web",
+              "code": "package-not-found",
+              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/dev.js"
+            },
+            {
+              "id": "sha256:e5f2a25ea7ebef322d9d2610c9f8d20e2de02fe26bba232aaa40e4f66a737e1f",
+              "kind": "dependency-identity",
+              "node": "sha256:c9d973d7e538fce538b433bdc6a582120cc86f02ff6a9e4c1be2b6cba294b1ac",
+              "specifier": "@solidjs/web",
+              "code": "package-not-found",
+              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts"
             }
           ],
           "conditionalDependencies": [],
-          "graphDigest": "sha256:ed880db220c3f9fa7bb24cc1db2e4d4d7318834b4e5553426c933f30ae722a2f"
+          "graphDigest": "sha256:41dbf2dc08b033256a93c386e5d03f3a819ec2f7b0d0e0bed64568e56b258eb8"
         },
         "certificationAttempt": {
           "attempted": true,
@@ -6910,13 +6910,13 @@
           "owner": "artifact-provenance",
           "demandId": null,
           "family": null,
-          "reason": "@solidjs/web is not installed above /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-vA0iTQ/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts",
+          "reason": "@solidjs/web is not installed above /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-wkvH4I/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts",
           "refusalCount": 0,
           "memoryExceeded": false,
-          "durationMs": 1186,
+          "durationMs": 1807,
           "stageDurationsMs": {
-            "artifactAcquisition": 5.79,
-            "proposalGeneration": 757.79
+            "artifactAcquisition": 1.67,
+            "proposalGeneration": 493.08
           },
           "graphPreparation": null,
           "demandCountsByFamily": {},
@@ -7671,7 +7671,7 @@
           "status": "refused",
           "stage": "artifact-or-demand-planning",
           "owner": "artifact-provenance",
-          "reason": "@solidjs/web is not installed above /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-c5O6MZ/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts",
+          "reason": "@solidjs/web is not installed above /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-ncEduX/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts",
           "proofFamilies": []
         },
         "disposition": "proposal-blocked",
@@ -7736,37 +7736,29 @@
             {
               "entrypoint": ".",
               "conditions": [],
-              "node": "sha256:7e5a3a1fc53cfc1d64f6fef55c640d2f25bc77e59529b02ea67f8c279125ab00"
+              "node": "sha256:9d0ddd9520fa7b3f33bf4b06c380210d4b667f86c0bb53e8e295a733e14a1018"
             },
             {
               "entrypoint": ".",
               "conditions": [
                 "@tanstack/custom-condition"
               ],
-              "node": "sha256:af484118d726c0d2fc240bac322d2e51afb78da2a8f3959b6f5e0ef8777878fc"
+              "node": "sha256:8a398b26532827f9717ecdba13e580af38fd0645a9b89294ba8e9f1a49156f9d"
             },
             {
               "entrypoint": ".",
               "conditions": [
                 "development"
               ],
-              "node": "sha256:5c069c0cd3da5d807cfaffc8291c92610f22bf3f87c996e84a4d39bab4b04155"
+              "node": "sha256:abcf486c5eab56715f75db241418c781a220d8718e5edf78aeabe2b49fe74ffd"
             }
           ],
           "cycles": [],
           "leaves": [
             {
-              "id": "sha256:05fd4750e973e317e616fce66cc871719ae147b50d79d4fef55badbfccb645a7",
-              "kind": "dependency-identity",
-              "node": "sha256:5c069c0cd3da5d807cfaffc8291c92610f22bf3f87c996e84a4d39bab4b04155",
-              "specifier": "@solidjs/web",
-              "code": "package-not-found",
-              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts"
-            },
-            {
-              "id": "sha256:618c3468a0de1c0cabb5ec78a425bda3ec248a9b6ab0f61509016968c6fa9c37",
+              "id": "sha256:327265a14fb276b3cacabeaa1f725c5b6f976526923a12bea867abce78f10a0d",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:c735084357a5bea31212d37175588850641724f850a2a8cec22bb3789d643b8b",
+              "node": "sha256:fd3367fb30da9b3d331f1bcae0153122922b0dedd9ff1db33da25637ae294cbf",
               "package": "@tanstack/query-core",
               "version": "5.101.0",
               "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
@@ -7774,98 +7766,106 @@
               "conditions": []
             },
             {
-              "id": "sha256:85a80d71cdee8e5e2e11f1d2c744aec723164a08f119448e4974f1db8cad8ea9",
+              "id": "sha256:3e0d41743919a443a900bfcfd041dddc8db75be377c74721245244f85d56dcaf",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:3725f81030d91e7faf4033d865d406068c2866548a0ea5065ca2b8196ddc794d",
+              "node": "sha256:8e0a65925ae8c0dcfaaee3ab84c72f1578de871bd57694e931e48908a1a9ec58",
               "package": "@solidjs/signals",
               "version": "2.0.0-rc.5",
               "integrity": "sha512-Ks+97LbyN2vYqPEHWpy2YY+MYgoSCge0kHOUFN/Bzdz1Ex/M9Is1HIyBZGBVhf5y35394List5WWlU44yEnm4w==",
-              "entrypoint": ".",
-              "conditions": [
-                "development"
-              ]
-            },
-            {
-              "id": "sha256:9efb45121aac6c2c55543a31331441a7d5c1b0868f9ddbd888ff8d2c3b73464c",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:aab93d58a3a7fc20e1e9581ae0f6be992ece6c7d9be2538fa43d6c1a11a835c4",
-              "package": "@tanstack/query-core",
-              "version": "5.101.0",
-              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
               "entrypoint": ".",
               "conditions": [
                 "@tanstack/custom-condition"
               ]
             },
             {
-              "id": "sha256:a253599af2d3b9ff11048b9a93a4e28529ccae79b8475bfe14cdb6666c184995",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:1061f19301b7c67bddbeecefac168e471ee563d9067f35efc967f7e1ae38e810",
-              "package": "@solidjs/signals",
-              "version": "2.0.0-rc.5",
-              "integrity": "sha512-Ks+97LbyN2vYqPEHWpy2YY+MYgoSCge0kHOUFN/Bzdz1Ex/M9Is1HIyBZGBVhf5y35394List5WWlU44yEnm4w==",
-              "entrypoint": ".",
-              "conditions": []
-            },
-            {
-              "id": "sha256:a2696d71c8e34901c5650355fb4a219d4a2800359061b9fd55f8c5cf6cfdbf75",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:fcd1d075975b5476c599c9326f66507fae5095f09db4518b3df4650609cee680",
-              "package": "@tanstack/query-core",
-              "version": "5.101.0",
-              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
-              "entrypoint": ".",
-              "conditions": [
-                "development"
-              ]
-            },
-            {
-              "id": "sha256:ad2d20969e248e7b08c79a0bacf41bbcf554336a08d944b4a34973fa49620683",
+              "id": "sha256:3ef7aebb36c7c668e592aa719dfdbe20b19a4e215eb11c3d443b0aecb1c512d2",
               "kind": "dependency-identity",
-              "node": "sha256:7e5a3a1fc53cfc1d64f6fef55c640d2f25bc77e59529b02ea67f8c279125ab00",
-              "specifier": "@solidjs/web",
-              "code": "package-not-found",
-              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts"
-            },
-            {
-              "id": "sha256:d518c79ce7dda2abc06dc83ebaeffcf6d55941acf831a41a39d8f21c22481b1d",
-              "kind": "dependency-identity",
-              "node": "sha256:5c069c0cd3da5d807cfaffc8291c92610f22bf3f87c996e84a4d39bab4b04155",
+              "node": "sha256:abcf486c5eab56715f75db241418c781a220d8718e5edf78aeabe2b49fe74ffd",
               "specifier": "@solidjs/web",
               "code": "package-not-found",
               "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/dev.js"
             },
             {
-              "id": "sha256:d96ca5af6a0a345678f6116e9bce36463cb752fcc1b71e630335eb8b4259007f",
+              "id": "sha256:40db74f7d925f6b7a6a2eaa3f60b8420886b184af65ca8a077c7e87255248066",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:63e03d4c4c7f267f5b4fd0ac49d09b24c058bb10b95400ed6cc946071cd5f27c",
+              "package": "@solidjs/signals",
+              "version": "2.0.0-rc.5",
+              "integrity": "sha512-Ks+97LbyN2vYqPEHWpy2YY+MYgoSCge0kHOUFN/Bzdz1Ex/M9Is1HIyBZGBVhf5y35394List5WWlU44yEnm4w==",
+              "entrypoint": ".",
+              "conditions": []
+            },
+            {
+              "id": "sha256:419848049d7343136cc84b596af816fb303f70947460b976ba0576f7977ee03d",
               "kind": "dependency-identity",
-              "node": "sha256:7e5a3a1fc53cfc1d64f6fef55c640d2f25bc77e59529b02ea67f8c279125ab00",
+              "node": "sha256:9d0ddd9520fa7b3f33bf4b06c380210d4b667f86c0bb53e8e295a733e14a1018",
               "specifier": "@solidjs/web",
               "code": "package-not-found",
               "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/index.js"
             },
             {
-              "id": "sha256:e48cb3de3c261dd1803d8f808cb8e9bc1de4207dfac569bf2ced9ae7eec20e0f",
-              "kind": "dependency-identity",
-              "node": "sha256:af484118d726c0d2fc240bac322d2e51afb78da2a8f3959b6f5e0ef8777878fc",
-              "specifier": "@solidjs/web",
-              "code": "package-not-found",
-              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/src/QueryClientProvider.tsx"
+              "id": "sha256:455d18bcb1e2336e41f053e1a60ba9a8f5dfe31b4f3db0be193e1e28306f562c",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:cb140e22851e593da8481104b601e3ab0c8a09bd3a7a81663baf6c27b6843af3",
+              "package": "@tanstack/query-core",
+              "version": "5.101.0",
+              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
+              "entrypoint": ".",
+              "conditions": [
+                "@tanstack/custom-condition"
+              ]
             },
             {
-              "id": "sha256:f9d70d02a882b551a04d6213ab3e62faa0cf5756ee2093d76286b865c501b9f7",
+              "id": "sha256:46d758fdfc619000e92b105420530336275addcb895dc43f6043d0aff9fbee91",
+              "kind": "dependency-identity",
+              "node": "sha256:9d0ddd9520fa7b3f33bf4b06c380210d4b667f86c0bb53e8e295a733e14a1018",
+              "specifier": "@solidjs/web",
+              "code": "package-not-found",
+              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts"
+            },
+            {
+              "id": "sha256:5ae043969b3ce6b6e7cff0e7d23ea9ab6e933c047d81ef6d058053fe9a36a28a",
+              "kind": "dependency-identity",
+              "node": "sha256:abcf486c5eab56715f75db241418c781a220d8718e5edf78aeabe2b49fe74ffd",
+              "specifier": "@solidjs/web",
+              "code": "package-not-found",
+              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts"
+            },
+            {
+              "id": "sha256:ac8cf095e8bae6a1af23370cc54864441bdf751aba2ba8cd4b0d601998f08592",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:8326d3a529a18c8ab22bd3d798d09edcfbb1f87b7c117f6ecca2295e70bd4033",
+              "node": "sha256:d4ee0ab78617d6878b125bc504db22cab17e66a59a3ca48fa0bb7852b517d892",
+              "package": "@tanstack/query-core",
+              "version": "5.101.0",
+              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
+              "entrypoint": ".",
+              "conditions": [
+                "development"
+              ]
+            },
+            {
+              "id": "sha256:cfe5fc5531782f5818821c98fa3dd3330cf221da05fbf07ad88240dbe322e9f1",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:4b64a1071df0ac79b5372a4d7780ac8a8af5a4108ae479633c703d546575c3ac",
               "package": "@solidjs/signals",
               "version": "2.0.0-rc.5",
               "integrity": "sha512-Ks+97LbyN2vYqPEHWpy2YY+MYgoSCge0kHOUFN/Bzdz1Ex/M9Is1HIyBZGBVhf5y35394List5WWlU44yEnm4w==",
               "entrypoint": ".",
               "conditions": [
-                "@tanstack/custom-condition"
+                "development"
               ]
+            },
+            {
+              "id": "sha256:f3447445ff0d8403932038833295bf7a9362955b5b9ea65421823a39a295420d",
+              "kind": "dependency-identity",
+              "node": "sha256:8a398b26532827f9717ecdba13e580af38fd0645a9b89294ba8e9f1a49156f9d",
+              "specifier": "@solidjs/web",
+              "code": "package-not-found",
+              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/src/QueryClientProvider.tsx"
             }
           ],
           "conditionalDependencies": [],
-          "graphDigest": "sha256:96fe81c7513da48dca1629fff09162b118aebf3ff530899c7c49961137384f86"
+          "graphDigest": "sha256:5ac2883702c2caffea43a48c9c4d9a8ac3366cc0eddacc161b52f22c5895d340"
         },
         "certificationAttempt": {
           "attempted": true,
@@ -7877,13 +7877,13 @@
           "owner": "artifact-provenance",
           "demandId": null,
           "family": null,
-          "reason": "@solidjs/web is not installed above /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-c5O6MZ/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts",
+          "reason": "@solidjs/web is not installed above /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-ncEduX/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts",
           "refusalCount": 0,
           "memoryExceeded": false,
-          "durationMs": 1485,
+          "durationMs": 1627,
           "stageDurationsMs": {
-            "artifactAcquisition": 1.03,
-            "proposalGeneration": 1410.6
+            "artifactAcquisition": 1.33,
+            "proposalGeneration": 1327.11
           },
           "graphPreparation": null,
           "demandCountsByFamily": {},
@@ -9056,21 +9056,21 @@
             {
               "entrypoint": ".",
               "conditions": [],
-              "node": "sha256:3ac60ee75e978ca7d5066aa833ab3bb3d51fb86b42a8591635ab5eff6243f850"
+              "node": "sha256:8931a0e9fb49a38b1892141b69ed12458707d892173250d165aec63b4c98c008"
             },
             {
               "entrypoint": ".",
               "conditions": [
                 "@tanstack/custom-condition"
               ],
-              "node": "sha256:8f625a0ff6a4b90b29a8018d6c4d06915aa74cad07e4ab86c1bbde162443beff"
+              "node": "sha256:4299e1d6d2fdbda740f86dfa51810f05ec1773dd31915cd795c1017dbe297ab8"
             },
             {
               "entrypoint": ".",
               "conditions": [
                 "development"
               ],
-              "node": "sha256:703fee93e525737f904f80d37f6cd0111ccba10dd10399b45b7a1305a2bbc84f"
+              "node": "sha256:7b42790acf6cfa8345883007078c25afcfafbdcec03199ec4122fce93bd4adf7"
             }
           ],
           "cycles": [],
@@ -9086,33 +9086,9 @@
               "reason": "resolved target <project-root>/node_modules/csstype/index.js is not a file"
             },
             {
-              "id": "sha256:2336733b589cdcf0f3ab104115678f972ee7e4ca242fcf850ab43001271eae44",
+              "id": "sha256:342998c0598caa90c3e6cad58d5df2c3a979462684d1a707606407008724b1b3",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:ca677ab3499ee1f29622d164353f138b047b540a1b315c639b66070c11aef89f",
-              "package": "@tanstack/query-core",
-              "version": "5.102.5",
-              "integrity": "sha512-RjCmHf9cPRYcH/dpO0Jagw3rxCM1bLzMKKSGzaDkQJADDKGpv5RFjN54IyHSOIPa822AUA7ASOXDjjy1jfyzIA==",
-              "entrypoint": ".",
-              "conditions": [
-                "development"
-              ]
-            },
-            {
-              "id": "sha256:5113714034cf7428650500d0cc2de8ad820b99a9e73ff8763764cac4ce7f6945",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:b5348256fc96e3b1a26790da22a030703ed17200a3ad39fccfcf0b019506cb65",
-              "package": "@tanstack/query-core",
-              "version": "5.102.8",
-              "integrity": "sha512-ZNjkJ33CqvPNec/6lZBnHqLc3EVGPZ9ySLhYahU9TcuRFdmwXewuj0c4hwSWcGHqEUwcSrKeZ+oGcvPBqXcQcg==",
-              "entrypoint": ".",
-              "conditions": [
-                "development"
-              ]
-            },
-            {
-              "id": "sha256:516da34f5520aee7ed07f4a16645bbc9829420bc37cee97f0b6885524aba1086",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:7b38a933dfd5badd96eb6909610e19fc633652963fbfbb1460d8bf168f3e3920",
+              "node": "sha256:e9078ab9c67bb48c4cb74d59ac1344863a05a8e3ead9be35c32bdf745a607bea",
               "package": "@tanstack/query-core",
               "version": "5.102.8",
               "integrity": "sha512-ZNjkJ33CqvPNec/6lZBnHqLc3EVGPZ9ySLhYahU9TcuRFdmwXewuj0c4hwSWcGHqEUwcSrKeZ+oGcvPBqXcQcg==",
@@ -9122,22 +9098,34 @@
               ]
             },
             {
-              "id": "sha256:5436a1e830e94181d646a17b8fd0e79f2237a2ba0ce537711d37a1f7673d8ea2",
+              "id": "sha256:3cdf04c5e99461115384974fbd2dfcb74bff962b6e012e745ea4d900b12b1033",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:285b77639e450d9d1c4fc8e71176e22e5754eb5884c7f394b29b339c5bebd8b4",
+              "node": "sha256:617629482d1a4a0e4ab2509729b9730b3b002e942eec213cba5b863d6dbf8092",
               "package": "@tanstack/query-core",
-              "version": "5.102.5",
-              "integrity": "sha512-RjCmHf9cPRYcH/dpO0Jagw3rxCM1bLzMKKSGzaDkQJADDKGpv5RFjN54IyHSOIPa822AUA7ASOXDjjy1jfyzIA==",
+              "version": "5.102.8",
+              "integrity": "sha512-ZNjkJ33CqvPNec/6lZBnHqLc3EVGPZ9ySLhYahU9TcuRFdmwXewuj0c4hwSWcGHqEUwcSrKeZ+oGcvPBqXcQcg==",
+              "entrypoint": ".",
+              "conditions": [
+                "development"
+              ]
+            },
+            {
+              "id": "sha256:553a35a9235f7897de4e97cfc62d8407d7ae858b1b3e69011064b85178fabd54",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:cbbf79a08efa61b7b2838178095bc523eac4e664f1b30ef2d159c977098ed87e",
+              "package": "@tanstack/query-core",
+              "version": "5.102.8",
+              "integrity": "sha512-ZNjkJ33CqvPNec/6lZBnHqLc3EVGPZ9ySLhYahU9TcuRFdmwXewuj0c4hwSWcGHqEUwcSrKeZ+oGcvPBqXcQcg==",
               "entrypoint": ".",
               "conditions": []
             },
             {
-              "id": "sha256:89539b90cc9663bc62cdd633c83417ecf54896e35c2e642f4aba0a99d95940e7",
+              "id": "sha256:5d039b6cb65bcc70773915a5f51abbb05a7cbb25a75cffc1db182f8b070f8382",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:e2ff4bfe19edfca5796c44492adc1db2fe766f7a422998db0ea644226fd5550a",
+              "node": "sha256:a80571c6689e83e36e16a37aea9b7281b5c17d7a4e0590eb78f513145093b977",
               "package": "@tanstack/query-core",
-              "version": "5.102.8",
-              "integrity": "sha512-ZNjkJ33CqvPNec/6lZBnHqLc3EVGPZ9ySLhYahU9TcuRFdmwXewuj0c4hwSWcGHqEUwcSrKeZ+oGcvPBqXcQcg==",
+              "version": "5.102.5",
+              "integrity": "sha512-RjCmHf9cPRYcH/dpO0Jagw3rxCM1bLzMKKSGzaDkQJADDKGpv5RFjN54IyHSOIPa822AUA7ASOXDjjy1jfyzIA==",
               "entrypoint": ".",
               "conditions": []
             },
@@ -9152,9 +9140,9 @@
               "reason": "resolved target <project-root>/node_modules/csstype/index.js is not a file"
             },
             {
-              "id": "sha256:966b966e9ca51777fb9184388fe220f1cf8923c097e6c554b6f80ff0dd918961",
+              "id": "sha256:bbba0c83480cebbf340bbf2580c1a208b09a89fa50caf7348d406ee9ad9339ed",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:8cf2f3093314230c621b6412c42992f5e824c1a7e1cdfccec46b67cbf1c90080",
+              "node": "sha256:24dfef4e7f0d2c4e97c45ece5644c36e332f1572755fdb0f0a493c5a798c7066",
               "package": "@tanstack/query-core",
               "version": "5.102.5",
               "integrity": "sha512-RjCmHf9cPRYcH/dpO0Jagw3rxCM1bLzMKKSGzaDkQJADDKGpv5RFjN54IyHSOIPa822AUA7ASOXDjjy1jfyzIA==",
@@ -9170,10 +9158,22 @@
               "conditions": [],
               "code": "target-not-found",
               "reason": "resolved target <project-root>/node_modules/csstype/index.js is not a file"
+            },
+            {
+              "id": "sha256:e90d73a318077a4cb4a5a1683edffe92026cc29482cfecc537dc814c54bb3e3b",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:4aaefa7ccc1da50a0308f4f119a128d37c426c21851e7c280aa58fc6dad28229",
+              "package": "@tanstack/query-core",
+              "version": "5.102.5",
+              "integrity": "sha512-RjCmHf9cPRYcH/dpO0Jagw3rxCM1bLzMKKSGzaDkQJADDKGpv5RFjN54IyHSOIPa822AUA7ASOXDjjy1jfyzIA==",
+              "entrypoint": ".",
+              "conditions": [
+                "development"
+              ]
             }
           ],
           "conditionalDependencies": [],
-          "graphDigest": "sha256:d651fc82b332ef02cee70f9f3a8b0f44fb9492695aa3976ad6f9f197d136b25e"
+          "graphDigest": "sha256:57e0271976e159711cf8250033fd14f729de2dbc29a9aceec54a8939c18a86df"
         },
         "certificationAttempt": {
           "attempted": true,
@@ -9192,12 +9192,12 @@
             "rootCertified": true
           },
           "memoryExceeded": false,
-          "durationMs": 2569,
+          "durationMs": 2360,
           "stageDurationsMs": {
-            "artifactAcquisition": 3.43,
-            "proposalGeneration": 1548.39,
+            "artifactAcquisition": 1.28,
+            "proposalGeneration": 1396.5,
             "demandPlanning": 0.01,
-            "witnessAcquisition": 598.85,
+            "witnessAcquisition": 453.02,
             "certification": 0.01,
             "receiptIssuance": 0,
             "catalogPublication": 0
@@ -9207,7 +9207,7 @@
             "canonicalNodes": 6,
             "acquiredPublishedArtifacts": 7,
             "acquisitionUnits": 8,
-            "graphAcquisitionDurationMs": 5.27,
+            "graphAcquisitionDurationMs": 12.14,
             "resolutionSession": {
               "requests": 0,
               "semanticAcquisitions": 0,
@@ -9221,11 +9221,11 @@
             "proposalFrontiers": [
               {
                 "nodes": 3,
-                "durationMs": 137.59
+                "durationMs": 114.21
               },
               {
                 "nodes": 3,
-                "durationMs": 189.24
+                "durationMs": 249.86
               }
             ],
             "graphNodeReferences": 6,
@@ -10336,7 +10336,7 @@
           "status": "refused",
           "stage": "artifact-or-demand-planning",
           "owner": "artifact-provenance",
-          "reason": "@solidjs/web is not installed above /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-R5Q0jA/node_modules/@tanstack/solid-query-persist-client/build/_tsup-dts-rollup.d.ts",
+          "reason": "@solidjs/web is not installed above /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-F9SLFq/node_modules/@tanstack/solid-query-persist-client/build/_tsup-dts-rollup.d.ts",
           "proofFamilies": []
         },
         "disposition": "proposal-blocked",
@@ -10401,29 +10401,47 @@
             {
               "entrypoint": ".",
               "conditions": [],
-              "node": "sha256:4d51481dca4da8b1efadca0ce069d4d4ebba4eb8fe63f5b4074af6a2565a5c2b"
+              "node": "sha256:d4cc0e589a2de60edf01bc15ef4b23326cdbc2b6c14a1bd857da23f917c46720"
             },
             {
               "entrypoint": ".",
               "conditions": [
                 "@tanstack/custom-condition"
               ],
-              "node": "sha256:e26a82044d7f6e5806386356e07317277894765799d6af03fc17e19a8d6f9871"
+              "node": "sha256:ea7381e1dbaab8351da3f52e65639c06ea81b0822f0d288d3b3642053350542d"
             },
             {
               "entrypoint": ".",
               "conditions": [
                 "development"
               ],
-              "node": "sha256:933ce3ef71a667107ee8c56761c268dbd09f7945ca2238c26a37680f1295030a"
+              "node": "sha256:26df8cf73b48906df1cba34c4bad570ca364737cbff46d949b1638761c823bcb"
             }
           ],
           "cycles": [],
           "leaves": [
             {
-              "id": "sha256:1b1e0309e95ff899a74312245486e91a8ce1c1a9543eacc3654dc7d4cf8f7de5",
+              "id": "sha256:0c14838930c71df3d03f2bf9795a482a7c4ba9be2beeabdfa44c0dce04a5612b",
+              "kind": "dependency-identity",
+              "node": "sha256:bc81c156d144ad719cb15a1d283c15add0f65c1819a34843b8e3221a63dbf595",
+              "specifier": "@solidjs/web",
+              "code": "package-not-found",
+              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts"
+            },
+            {
+              "id": "sha256:1a40e7bd6b91620de699b2eb1ca4c0fc100dc8d7e0503f4e6f956b0903d9d470",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:df665d6530efb338fef59260aa8e02eab5f3b493885ef161e23ebc620a090907",
+              "node": "sha256:13707428d43932dfd63490d4dbd87b39297fca6c2b16262c366ef62a145cd669",
+              "package": "@tanstack/query-core",
+              "version": "5.101.4",
+              "integrity": "sha512-gNwcvOJcRbLWPOLG/2OBm+zM+Yv+MKsXKEOWC57USuZDEsI71hEErQsiEGx5wX9rzWWkfwM0fVSPoiIFSsxfiw==",
+              "entrypoint": ".",
+              "conditions": []
+            },
+            {
+              "id": "sha256:258b2b18aa42ea95789babfeab90bda3b18f25c364e60cd1aa11ad0ae3f46a10",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:373700e4c969da39601d5a387f0274b30e5a8d998896b76aefb9a1f91db6e2b9",
               "package": "@tanstack/query-core",
               "version": "5.101.4",
               "integrity": "sha512-gNwcvOJcRbLWPOLG/2OBm+zM+Yv+MKsXKEOWC57USuZDEsI71hEErQsiEGx5wX9rzWWkfwM0fVSPoiIFSsxfiw==",
@@ -10433,121 +10451,25 @@
               ]
             },
             {
-              "id": "sha256:69686af0a94df1dd951df40d6a9524f757cfa732f67381e84137b459655fbb12",
+              "id": "sha256:459d251aaa8d9e49907f4864a0bec2909296f14a1a2810fa24f36f804f197a6a",
               "kind": "dependency-identity",
-              "node": "sha256:2365a08de40a1eed34309887c920fa90bfa3e8a3484073be8adc1c1466dee809",
-              "specifier": "@solidjs/web",
-              "code": "package-not-found",
-              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts"
-            },
-            {
-              "id": "sha256:8687829a1adc743515e13f3ded0012632be827f411c569e565b14dde38a5dc94",
-              "kind": "dependency-identity",
-              "node": "sha256:4d51481dca4da8b1efadca0ce069d4d4ebba4eb8fe63f5b4074af6a2565a5c2b",
-              "specifier": "@solidjs/web",
-              "code": "package-not-found",
-              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query-persist-client/build/_tsup-dts-rollup.d.ts"
-            },
-            {
-              "id": "sha256:94eb44ac29a0c61ac525ca7293961bac760846622bb1661237f4eff1b31014ca",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:e3f13bf2fbac5b8a8ecf5754945b90bce83ce54c602e43da4c7e6a0a0af046de",
-              "package": "@tanstack/query-core",
-              "version": "5.101.0",
-              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
-              "entrypoint": ".",
-              "conditions": [
-                "development"
-              ]
-            },
-            {
-              "id": "sha256:9ad318a9d2425e289da4cf13cfb560d1c27c823ea1dcadb8c64dae8738941ebc",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:5c4b721b71222fad080a381ec77ea6565e2af83e9d332b0348d6d921e326965f",
-              "package": "@tanstack/query-core",
-              "version": "5.101.0",
-              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
-              "entrypoint": ".",
-              "conditions": []
-            },
-            {
-              "id": "sha256:9ec6475f1a0a3393dd8749b36bd30b07beebee3eded7161d21bd3407c4d20488",
-              "kind": "dependency-identity",
-              "node": "sha256:933ce3ef71a667107ee8c56761c268dbd09f7945ca2238c26a37680f1295030a",
-              "specifier": "@solidjs/web",
-              "code": "package-not-found",
-              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query-persist-client/build/_tsup-dts-rollup.d.ts"
-            },
-            {
-              "id": "sha256:a00cd5670faf6b2bfb05c3ad3d4e93929fdce6139eb463cadfc87d1d342af223",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:1964edaf6fc1347234bb4b4b906e05fcf88655cc498fa362630ce3607e78c9fb",
-              "package": "@tanstack/query-core",
-              "version": "5.101.4",
-              "integrity": "sha512-gNwcvOJcRbLWPOLG/2OBm+zM+Yv+MKsXKEOWC57USuZDEsI71hEErQsiEGx5wX9rzWWkfwM0fVSPoiIFSsxfiw==",
-              "entrypoint": ".",
-              "conditions": []
-            },
-            {
-              "id": "sha256:aa1e7b91084ff0dc3f3d533af3ffe73ecd13e8e479fff613f35bd9910e4e506d",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:1fdf980e16a31e8aba40419fe37bac4a992d43a494b746be6198f358afb4497e",
-              "package": "@solidjs/signals",
-              "version": "2.0.0-rc.0",
-              "integrity": "sha512-oKZSfvsCcKw1uJjOGbUkJ+OqlhXLHtZ+rShSyu9KH0lUH7UUwfMfsKeh81JPiQxDDg4YLhEwI38hg0JkwzTdvA==",
-              "entrypoint": ".",
-              "conditions": [
-                "@tanstack/custom-condition"
-              ]
-            },
-            {
-              "id": "sha256:afcf97d0e8d88ab9c32b0c4c7918505865daa977ff9d582230a5817fd59d7e0d",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:3905feef32f6a4469dd4588ac3f423f5f1c384dcefe1af8eccb5f2341cd90bb6",
-              "package": "@tanstack/query-core",
-              "version": "5.101.4",
-              "integrity": "sha512-gNwcvOJcRbLWPOLG/2OBm+zM+Yv+MKsXKEOWC57USuZDEsI71hEErQsiEGx5wX9rzWWkfwM0fVSPoiIFSsxfiw==",
-              "entrypoint": ".",
-              "conditions": [
-                "development"
-              ]
-            },
-            {
-              "id": "sha256:bb72826254374cc4ca68f6cbebd3d2da4daba5431c6fb591d8281637115a27a1",
-              "kind": "dependency-identity",
-              "node": "sha256:1ae7a187eba1ce6d049619a8e65ebf80cfcad0c63b0e5632a5bcc0fc1be76df2",
-              "specifier": "@solidjs/web",
-              "code": "package-not-found",
-              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts"
-            },
-            {
-              "id": "sha256:bd73c86e995d6b939a3aa3176a7f8be68be69a8200cfaa14fda3fedf56726e6b",
-              "kind": "dependency-identity",
-              "node": "sha256:e26a82044d7f6e5806386356e07317277894765799d6af03fc17e19a8d6f9871",
+              "node": "sha256:ea7381e1dbaab8351da3f52e65639c06ea81b0822f0d288d3b3642053350542d",
               "specifier": "@solidjs/web",
               "code": "package-not-found",
               "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query-persist-client/src/PersistQueryClientProvider.tsx"
             },
             {
-              "id": "sha256:bf0e7c8b9fb84527afd7b7d67fd86563a8449c2a88f8c5241f3edacdfeb871a9",
+              "id": "sha256:4d591d5d70fd8ebb8dab0a34f002df6ef2e835d622421aee8676f6eec564de76",
               "kind": "dependency-identity",
-              "node": "sha256:2365a08de40a1eed34309887c920fa90bfa3e8a3484073be8adc1c1466dee809",
-              "specifier": "@solidjs/web",
-              "code": "package-not-found",
-              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/index.js"
-            },
-            {
-              "id": "sha256:c1ab8c2fc0d2fb5b85202b9ac779649d7ddfe88e05c107588e7d96075e859202",
-              "kind": "dependency-identity",
-              "node": "sha256:f705bbde8aa728e262484ce6c941f9c9ac318db227c8ec75c1c631d831bd9d10",
+              "node": "sha256:6921c7c891f899db092141a7b4b7431b8f486bd4b22eb0179be666f2c86324bf",
               "specifier": "@solidjs/web",
               "code": "package-not-found",
               "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/src/QueryClientProvider.tsx"
             },
             {
-              "id": "sha256:ce087bf6aee1f682b71970f449e8e0ad77d35b48e47cb71fb69e3bc31c67e4d2",
+              "id": "sha256:52220192c83720f21ca5cb3e0279ffb818f4c09365c11f67d1727560a599b7af",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:7eaa59db99344256163a1711c851ef6c5b22ca98f6e3921317082bf1eca32874",
+              "node": "sha256:b493aa415f7aa8acb31d3ec9941fb95a8f3fc4637371374840bbdd4bc3835d9e",
               "package": "@solidjs/signals",
               "version": "2.0.0-rc.0",
               "integrity": "sha512-oKZSfvsCcKw1uJjOGbUkJ+OqlhXLHtZ+rShSyu9KH0lUH7UUwfMfsKeh81JPiQxDDg4YLhEwI38hg0JkwzTdvA==",
@@ -10555,17 +10477,17 @@
               "conditions": []
             },
             {
-              "id": "sha256:dcb79c9bc7385e22da774157ddb6a991009ed32ddd0c054db4e3dabb402073b0",
+              "id": "sha256:57dba01a9ffb2cceac75c88afc2d333de3f44491e88ceca11b4fb67eb08db520",
               "kind": "dependency-identity",
-              "node": "sha256:1ae7a187eba1ce6d049619a8e65ebf80cfcad0c63b0e5632a5bcc0fc1be76df2",
+              "node": "sha256:26df8cf73b48906df1cba34c4bad570ca364737cbff46d949b1638761c823bcb",
               "specifier": "@solidjs/web",
               "code": "package-not-found",
-              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/dev.js"
+              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query-persist-client/build/_tsup-dts-rollup.d.ts"
             },
             {
-              "id": "sha256:dfe4b1099bf5f5f897b701692943951de7517a84486e1b09718f23be6a221e4a",
+              "id": "sha256:59fbcefcb036d63946e0158a06ec53b0ed47dd54d781604615696da93e983adf",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:c07a190a2519d0307f5ec97081ad132dcdb7a098d154f100040f832181518c5a",
+              "node": "sha256:e050e3d220bf995785052760b054d0de3a3f3c884ce0b497863edd37e7e7ce24",
               "package": "@tanstack/query-core",
               "version": "5.101.0",
               "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
@@ -10575,9 +10497,31 @@
               ]
             },
             {
-              "id": "sha256:e59a4cc2299287569d053a642a80f021a2bb7a574bc156a5ac2085aeb98bd66d",
+              "id": "sha256:5add86d2294876e12ae2565717f15ac6c3f7fe824d672f3790451ad8305d68d7",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:5ce2d5fe1b283ed4635e41cfe62c2b91f0bd3bfdb00ded1c2612a0724a121e5c",
+              "node": "sha256:05f2eb9c5ea6ad5c2fd45fcc8da42524bea7ad0aa4247c84f2c6d89e6318deb4",
+              "package": "@solidjs/signals",
+              "version": "2.0.0-rc.0",
+              "integrity": "sha512-oKZSfvsCcKw1uJjOGbUkJ+OqlhXLHtZ+rShSyu9KH0lUH7UUwfMfsKeh81JPiQxDDg4YLhEwI38hg0JkwzTdvA==",
+              "entrypoint": ".",
+              "conditions": [
+                "@tanstack/custom-condition"
+              ]
+            },
+            {
+              "id": "sha256:5f51fa63fa6224dd433273992b4ce7af69d8f90050e51bdb9089a33a9f6d7bd9",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:9938c426656a1309a4e59cabd5725ec974201ef8df6da05aca874e5b09fe3db5",
+              "package": "@tanstack/query-core",
+              "version": "5.101.0",
+              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
+              "entrypoint": ".",
+              "conditions": []
+            },
+            {
+              "id": "sha256:72ad42be61dd03c045fd7a039d2f93ced3359f179929534491150c2349b5e5f6",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:76062937b29d1220a35e035b45da1912af95f13e658d2a716c733ef3c82672bc",
               "package": "@solidjs/signals",
               "version": "2.0.0-rc.0",
               "integrity": "sha512-oKZSfvsCcKw1uJjOGbUkJ+OqlhXLHtZ+rShSyu9KH0lUH7UUwfMfsKeh81JPiQxDDg4YLhEwI38hg0JkwzTdvA==",
@@ -10585,10 +10529,66 @@
               "conditions": [
                 "development"
               ]
+            },
+            {
+              "id": "sha256:8c9468c640b01969e20824a945504936197629e53c544d417431401301f65cb9",
+              "kind": "dependency-identity",
+              "node": "sha256:bc81c156d144ad719cb15a1d283c15add0f65c1819a34843b8e3221a63dbf595",
+              "specifier": "@solidjs/web",
+              "code": "package-not-found",
+              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/index.js"
+            },
+            {
+              "id": "sha256:db0f35cae8c6196f8c7fb6b35a42ffb95d5245d439db08d64a292012ab9867fc",
+              "kind": "dependency-identity",
+              "node": "sha256:7b7f86881f2e11726db6c275f1a02d3745fdf5607525f09d195bb2d7671369fa",
+              "specifier": "@solidjs/web",
+              "code": "package-not-found",
+              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/dev.js"
+            },
+            {
+              "id": "sha256:ea6b6e83c7f8c6f224a063b451789d451fc43eb4a9c7eb6a425d3debf1b1db48",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:0b4a5d778f1a9b03f2bf9d477e9d20ff35f56f1cc1190b273d9ab703ab367fe6",
+              "package": "@tanstack/query-core",
+              "version": "5.101.0",
+              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
+              "entrypoint": ".",
+              "conditions": [
+                "development"
+              ]
+            },
+            {
+              "id": "sha256:f1d2b481eb43e3478981fc677c0a0282837fa2d76a20746ba33938576564d916",
+              "kind": "dependency-identity",
+              "node": "sha256:7b7f86881f2e11726db6c275f1a02d3745fdf5607525f09d195bb2d7671369fa",
+              "specifier": "@solidjs/web",
+              "code": "package-not-found",
+              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts"
+            },
+            {
+              "id": "sha256:f8222e3ac54d9ea8363417d2ce1aaa46c81b7e7c2dcb930d297c239f017738b4",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:aacbf64943f60b9baa8b2dbc8add25cc2f16d5d12cf29f035be2346034d3b672",
+              "package": "@tanstack/query-core",
+              "version": "5.101.4",
+              "integrity": "sha512-gNwcvOJcRbLWPOLG/2OBm+zM+Yv+MKsXKEOWC57USuZDEsI71hEErQsiEGx5wX9rzWWkfwM0fVSPoiIFSsxfiw==",
+              "entrypoint": ".",
+              "conditions": [
+                "development"
+              ]
+            },
+            {
+              "id": "sha256:ff4878ec4dbf1005f91aae30b2899672291746bf04d4444dfa8bd924b53a71ce",
+              "kind": "dependency-identity",
+              "node": "sha256:d4cc0e589a2de60edf01bc15ef4b23326cdbc2b6c14a1bd857da23f917c46720",
+              "specifier": "@solidjs/web",
+              "code": "package-not-found",
+              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query-persist-client/build/_tsup-dts-rollup.d.ts"
             }
           ],
           "conditionalDependencies": [],
-          "graphDigest": "sha256:051b04d687c5ee943b272fa852912d9365fdb4495c5e52f8b9011eb38e83d22d"
+          "graphDigest": "sha256:217388518130126c9b7f178a135a5a3144ecd53b8e2a77ac5aca3cc9886d28d9"
         },
         "certificationAttempt": {
           "attempted": true,
@@ -10600,13 +10600,13 @@
           "owner": "artifact-provenance",
           "demandId": null,
           "family": null,
-          "reason": "@solidjs/web is not installed above /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-R5Q0jA/node_modules/@tanstack/solid-query-persist-client/build/_tsup-dts-rollup.d.ts",
+          "reason": "@solidjs/web is not installed above /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-F9SLFq/node_modules/@tanstack/solid-query-persist-client/build/_tsup-dts-rollup.d.ts",
           "refusalCount": 0,
           "memoryExceeded": false,
-          "durationMs": 1220,
+          "durationMs": 1275,
           "stageDurationsMs": {
-            "artifactAcquisition": 1.58,
-            "proposalGeneration": 1022.73
+            "artifactAcquisition": 4.84,
+            "proposalGeneration": 774.85
           },
           "graphPreparation": null,
           "demandCountsByFamily": {},
@@ -11709,7 +11709,7 @@
           "status": "refused",
           "stage": "artifact-or-demand-planning",
           "owner": "artifact-provenance",
-          "reason": "@solidjs/web is not installed above /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-wz7BGt/node_modules/@tanstack/solid-query-persist-client/build/_tsup-dts-rollup.d.ts",
+          "reason": "@solidjs/web is not installed above /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-XHzNw6/node_modules/@tanstack/solid-query-persist-client/build/_tsup-dts-rollup.d.ts",
           "proofFamilies": []
         },
         "disposition": "proposal-blocked",
@@ -11774,194 +11774,194 @@
             {
               "entrypoint": ".",
               "conditions": [],
-              "node": "sha256:7ef3b73e0394865a6833f75a0310a104fd499b6330eddbf839d2937651015e23"
+              "node": "sha256:d5d6f838df31b4d839af901bd4157f3d5ad6143073addced9ab25ebb83b15733"
             },
             {
               "entrypoint": ".",
               "conditions": [
                 "@tanstack/custom-condition"
               ],
-              "node": "sha256:b098ec86d05676ab1f549f69bbf39f4c1d0887340c4f8307f5a524e08faf13ea"
+              "node": "sha256:eca5cafd5f0fbd87ba33b9ff4b63886c5b732f6d7ede901ae311e8f752cf2499"
             },
             {
               "entrypoint": ".",
               "conditions": [
                 "development"
               ],
-              "node": "sha256:88c0fc13db067c89cabf26274d4d7e3f528a123e2c0dc9dadaf3ac6db56b4a37"
+              "node": "sha256:9d0f8b08f0b0a5a5a18746066e7171bec7c0aeefe330f38be824eaaa1588269e"
             }
           ],
           "cycles": [],
           "leaves": [
             {
-              "id": "sha256:0f20789e43e82ebbe5d66f0b12ccd61c3c8d49ad23a5beaf98e63c46667eb1d4",
+              "id": "sha256:338715621c9338c33a0e99809a1b87203c7ed9a5eca58e906d091db11f2c5acb",
               "kind": "dependency-identity",
-              "node": "sha256:47361ee00a9b96a8d9d7cf12956c04cd82e0f343ae61c330904fd13327c30daf",
+              "node": "sha256:36c5d48de8b0e36418cf692ba6c1f9c6b11f82fb6a3128ea5f92803a01a8bf4e",
               "specifier": "@solidjs/web",
               "code": "package-not-found",
               "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts"
             },
             {
-              "id": "sha256:15f7cd5a2436ed76b7dc20e4cd10dc48041fdcf6727815267bd7e1b6a29d1edb",
+              "id": "sha256:351613892bcb5a32ac3206260aad38f2505a78383c604b4faf42774e3459297d",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:81160cc9b362059dab14394887ac0e61ba3c4bcdd04da51fd711cb63bc5ffbf2",
+              "package": "@tanstack/query-core",
+              "version": "5.101.0",
+              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
+              "entrypoint": ".",
+              "conditions": [
+                "development"
+              ]
+            },
+            {
+              "id": "sha256:3d129e24776709f9a393b8270b6b2a1b05370a1539d6c79fa8082f7fb35fb721",
               "kind": "dependency-identity",
-              "node": "sha256:b098ec86d05676ab1f549f69bbf39f4c1d0887340c4f8307f5a524e08faf13ea",
+              "node": "sha256:eca5cafd5f0fbd87ba33b9ff4b63886c5b732f6d7ede901ae311e8f752cf2499",
               "specifier": "@solidjs/web",
               "code": "package-not-found",
               "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query-persist-client/src/PersistQueryClientProvider.tsx"
             },
             {
-              "id": "sha256:251bb18f58ae04d0d4e8035f2df5ed88bca03e4728397f840a35ad040b7abe97",
+              "id": "sha256:49623e07d58d2dbcf6e31cd7e28b12457eda87c00043be9d4239e23ef418969b",
               "kind": "dependency-identity",
-              "node": "sha256:47361ee00a9b96a8d9d7cf12956c04cd82e0f343ae61c330904fd13327c30daf",
+              "node": "sha256:20a60b8a401cdef153a8953e1b3912cf43262a5dfd3f1b35b6d9dcc3d489b020",
               "specifier": "@solidjs/web",
               "code": "package-not-found",
-              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/index.js"
+              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts"
             },
             {
-              "id": "sha256:26f5f10ce9a1b03a3fc9caafdeb24aeaa74d6557a9e03d2494f5931a5db53eac",
+              "id": "sha256:5e4a0d565d2fd311f7b4ec7f46f82bff3424c768d278788c219a821e417d9a81",
               "kind": "dependency-identity",
-              "node": "sha256:ab47f252f1ae82a28d0f1fb2afb75e3e2b3fb934a6ac9cc43bb2ce756f79d4c6",
-              "specifier": "@solidjs/web",
-              "code": "package-not-found",
-              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/dev.js"
-            },
-            {
-              "id": "sha256:2dbe317ea8d753402a2aaa3d8959396314be2fc56d7f40f42184982e5c3f7be5",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:e90b98bedd28984219b51847e56bd9c2381fbec391e5c5518fea1da07be5c3e2",
-              "package": "@tanstack/query-core",
-              "version": "5.101.0",
-              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
-              "entrypoint": ".",
-              "conditions": [
-                "@tanstack/custom-condition"
-              ]
-            },
-            {
-              "id": "sha256:3590e11917dd4959f4ddd44c38f5d91e0622310a4361a7b6127685052ef8de4b",
-              "kind": "dependency-identity",
-              "node": "sha256:88c0fc13db067c89cabf26274d4d7e3f528a123e2c0dc9dadaf3ac6db56b4a37",
-              "specifier": "@solidjs/web",
-              "code": "package-not-found",
-              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query-persist-client/build/_tsup-dts-rollup.d.ts"
-            },
-            {
-              "id": "sha256:3697adfc2660a8dee1a3516ad0f51f1eb4b8631f76ada835d71c286f03fa6192",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:3a1628534f19a3b9439c42e87c7669cb35cf253ac6535c1eb1987ffb2be4af75",
-              "package": "@tanstack/query-core",
-              "version": "5.101.0",
-              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
-              "entrypoint": ".",
-              "conditions": []
-            },
-            {
-              "id": "sha256:3de69f07708b14d8c8b17583bdee22186d5c90ad974b64a99f2cab529cc69043",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:ba541aead949b6eef798fc8ff6050593f9ba6e6a4124461c74556d426b0ba2a6",
-              "package": "@tanstack/query-core",
-              "version": "5.101.4",
-              "integrity": "sha512-gNwcvOJcRbLWPOLG/2OBm+zM+Yv+MKsXKEOWC57USuZDEsI71hEErQsiEGx5wX9rzWWkfwM0fVSPoiIFSsxfiw==",
-              "entrypoint": ".",
-              "conditions": [
-                "@tanstack/custom-condition"
-              ]
-            },
-            {
-              "id": "sha256:45096a7446347dc32bb661a06f5b74a36ca17af6964555aa60d5be850315a7fd",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:81f8e6af98ef94206d5adfcc5797507e1a68d33164606e6a5f13ae42ce2fd6d6",
-              "package": "@solidjs/signals",
-              "version": "2.0.0-rc.5",
-              "integrity": "sha512-Ks+97LbyN2vYqPEHWpy2YY+MYgoSCge0kHOUFN/Bzdz1Ex/M9Is1HIyBZGBVhf5y35394List5WWlU44yEnm4w==",
-              "entrypoint": ".",
-              "conditions": [
-                "development"
-              ]
-            },
-            {
-              "id": "sha256:47b76b0faf5669478be53de200e9a6dacbdea629404e878f0a7f7b588deb3b26",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:b905225570431c162c929cdd99e85eff804bb12f23d9bae2e2efe677e2c8b85b",
-              "package": "@solidjs/signals",
-              "version": "2.0.0-rc.5",
-              "integrity": "sha512-Ks+97LbyN2vYqPEHWpy2YY+MYgoSCge0kHOUFN/Bzdz1Ex/M9Is1HIyBZGBVhf5y35394List5WWlU44yEnm4w==",
-              "entrypoint": ".",
-              "conditions": [
-                "@tanstack/custom-condition"
-              ]
-            },
-            {
-              "id": "sha256:504860e2aa2271ba46c5e3a807bdf9fa8bdc38428b4233a3d0cb624b88e5d00a",
-              "kind": "dependency-identity",
-              "node": "sha256:7ef3b73e0394865a6833f75a0310a104fd499b6330eddbf839d2937651015e23",
-              "specifier": "@solidjs/web",
-              "code": "package-not-found",
-              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query-persist-client/build/_tsup-dts-rollup.d.ts"
-            },
-            {
-              "id": "sha256:5b9f95b9d744039c14cdd5fe46a0986ddecafaed02750bfc67182bfa7d018b4e",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:eaef4e4d39462e97a914a830813437c70617baa547f1aca7fbc05c258151c2c3",
-              "package": "@solidjs/signals",
-              "version": "2.0.0-rc.5",
-              "integrity": "sha512-Ks+97LbyN2vYqPEHWpy2YY+MYgoSCge0kHOUFN/Bzdz1Ex/M9Is1HIyBZGBVhf5y35394List5WWlU44yEnm4w==",
-              "entrypoint": ".",
-              "conditions": []
-            },
-            {
-              "id": "sha256:960808fa8ee70f7a6f961c5c34bf3be2f09f18053cf213a049925437ebe33825",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:7a120ca4cb0dd5f0f9aabb45a4a17e1e90995d50ddb6ece729b9ab83ce100609",
-              "package": "@tanstack/query-core",
-              "version": "5.101.0",
-              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
-              "entrypoint": ".",
-              "conditions": [
-                "development"
-              ]
-            },
-            {
-              "id": "sha256:97ffd6f1e4a8184954b42aa0a428a01706069bb8764e17c967fd53843d81c5ae",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:0260236a533b7a100cae34cf063657dafe614851877b435ed69d8d7bf250df4d",
-              "package": "@tanstack/query-core",
-              "version": "5.101.4",
-              "integrity": "sha512-gNwcvOJcRbLWPOLG/2OBm+zM+Yv+MKsXKEOWC57USuZDEsI71hEErQsiEGx5wX9rzWWkfwM0fVSPoiIFSsxfiw==",
-              "entrypoint": ".",
-              "conditions": []
-            },
-            {
-              "id": "sha256:b5c1521e15426bd069bae3ebd65e68e42902e3be74a8f9f7b50fb1857690b86a",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:8d91a364dc1717dcfdac7e20a020452aee93800e1f54bc1ff1de005846fb1a31",
-              "package": "@tanstack/query-core",
-              "version": "5.101.4",
-              "integrity": "sha512-gNwcvOJcRbLWPOLG/2OBm+zM+Yv+MKsXKEOWC57USuZDEsI71hEErQsiEGx5wX9rzWWkfwM0fVSPoiIFSsxfiw==",
-              "entrypoint": ".",
-              "conditions": [
-                "development"
-              ]
-            },
-            {
-              "id": "sha256:d63f14747c8669b02b26d6789418a9cb5f630eba53e102a8f51a962297dace5c",
-              "kind": "dependency-identity",
-              "node": "sha256:f371b56b425b7310c13c3e182ae2352876c73213492f240f98b6ad7ee1c919ef",
+              "node": "sha256:7d9634c1eefb2f444c397f6fe08ec34a4134783d7fb3f77fab5f68d36e37bd7a",
               "specifier": "@solidjs/web",
               "code": "package-not-found",
               "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/src/QueryClientProvider.tsx"
             },
             {
-              "id": "sha256:f095cf2d5d8821037e0215379f38094ec1d3df1ae567d8edafd55cfde0ab0981",
+              "id": "sha256:6166bcc5e36fb3f93db7b0fe750915633560504db0619181e6937ddb3a05a059",
               "kind": "dependency-identity",
-              "node": "sha256:ab47f252f1ae82a28d0f1fb2afb75e3e2b3fb934a6ac9cc43bb2ce756f79d4c6",
+              "node": "sha256:20a60b8a401cdef153a8953e1b3912cf43262a5dfd3f1b35b6d9dcc3d489b020",
               "specifier": "@solidjs/web",
               "code": "package-not-found",
-              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/_tsup-dts-rollup.d.ts"
+              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/dev.js"
+            },
+            {
+              "id": "sha256:6ae1c55a76a727aeef201abdc6b6cb4e7f4815fe6672c965ac7bf82f6ca18339",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:dcb36b7319828320beb2642ad5500fd8ced1e810b53ac444a08ab0ab64f512d2",
+              "package": "@tanstack/query-core",
+              "version": "5.101.4",
+              "integrity": "sha512-gNwcvOJcRbLWPOLG/2OBm+zM+Yv+MKsXKEOWC57USuZDEsI71hEErQsiEGx5wX9rzWWkfwM0fVSPoiIFSsxfiw==",
+              "entrypoint": ".",
+              "conditions": [
+                "@tanstack/custom-condition"
+              ]
+            },
+            {
+              "id": "sha256:80db0bf00598a63e8a15e11d0cd3a1b5b1aef5d1e92395a4a2dd189a0a124759",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:d125b8c0353a00436192a68487751d65283f7024caf5f37e51a04ec13bb19839",
+              "package": "@tanstack/query-core",
+              "version": "5.101.4",
+              "integrity": "sha512-gNwcvOJcRbLWPOLG/2OBm+zM+Yv+MKsXKEOWC57USuZDEsI71hEErQsiEGx5wX9rzWWkfwM0fVSPoiIFSsxfiw==",
+              "entrypoint": ".",
+              "conditions": [
+                "development"
+              ]
+            },
+            {
+              "id": "sha256:86ac362a317cf999bdd84751a92de5af6f0686aa5d5cdbdeb30dae4dc10f32e4",
+              "kind": "dependency-identity",
+              "node": "sha256:9d0f8b08f0b0a5a5a18746066e7171bec7c0aeefe330f38be824eaaa1588269e",
+              "specifier": "@solidjs/web",
+              "code": "package-not-found",
+              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query-persist-client/build/_tsup-dts-rollup.d.ts"
+            },
+            {
+              "id": "sha256:88d594f753a556b6eaef4738112bad5e5a7be338d625f5498bcb9abf3b650960",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:30cb08c87deb89a2129743ef4ed44d2c650a4567837709d1d0e59a59d3cfe448",
+              "package": "@tanstack/query-core",
+              "version": "5.101.0",
+              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
+              "entrypoint": ".",
+              "conditions": [
+                "@tanstack/custom-condition"
+              ]
+            },
+            {
+              "id": "sha256:9247e20bc8eaf6b4b8e3b60dec35760e8b80ed1e1167c03b18ec0c8df3d2176d",
+              "kind": "dependency-identity",
+              "node": "sha256:36c5d48de8b0e36418cf692ba6c1f9c6b11f82fb6a3128ea5f92803a01a8bf4e",
+              "specifier": "@solidjs/web",
+              "code": "package-not-found",
+              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query/build/index.js"
+            },
+            {
+              "id": "sha256:ad005255773bb21f05145eeaf7fe4c481bccb1bf2ff1e0c55150d6de7dcc7a66",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:6a77dbc161aabea5338398861661c01eaac7e672cbfde2c4e6063e7585e8c3fc",
+              "package": "@tanstack/query-core",
+              "version": "5.101.0",
+              "integrity": "sha512-cQetA74EB+seWySv1TTKr828TnP0u39m6LykwDXIo84SNortpDkp30TMEjkqtYCNP9c40uT/iwl6MLiufEt0Ow==",
+              "entrypoint": ".",
+              "conditions": []
+            },
+            {
+              "id": "sha256:c3ad9c879f40d76df4baa4ab5cccd729286ecf3e8a3aeaf0d9e125b53d0452b9",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:8ea54935a848acd82bf1052914d741a7021bc002c910f84aa3bb35182bb8724f",
+              "package": "@tanstack/query-core",
+              "version": "5.101.4",
+              "integrity": "sha512-gNwcvOJcRbLWPOLG/2OBm+zM+Yv+MKsXKEOWC57USuZDEsI71hEErQsiEGx5wX9rzWWkfwM0fVSPoiIFSsxfiw==",
+              "entrypoint": ".",
+              "conditions": []
+            },
+            {
+              "id": "sha256:d5821ab047660807581695c4a5f41a3a2f065cf35c4dad6c282e9f839711f1a7",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:6d6baca47d4668561ca65702335753ec364a1ecda045c9da582a373a99c008ac",
+              "package": "@solidjs/signals",
+              "version": "2.0.0-rc.5",
+              "integrity": "sha512-Ks+97LbyN2vYqPEHWpy2YY+MYgoSCge0kHOUFN/Bzdz1Ex/M9Is1HIyBZGBVhf5y35394List5WWlU44yEnm4w==",
+              "entrypoint": ".",
+              "conditions": [
+                "@tanstack/custom-condition"
+              ]
+            },
+            {
+              "id": "sha256:db1d59a86acb089e2b5b7de59905d06781f3214a13c12a284315042e5f277bb6",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:6c5c00fb5a9ba66755853850fa207c4ecfef684d500d42661115b5c23dcc789a",
+              "package": "@solidjs/signals",
+              "version": "2.0.0-rc.5",
+              "integrity": "sha512-Ks+97LbyN2vYqPEHWpy2YY+MYgoSCge0kHOUFN/Bzdz1Ex/M9Is1HIyBZGBVhf5y35394List5WWlU44yEnm4w==",
+              "entrypoint": ".",
+              "conditions": []
+            },
+            {
+              "id": "sha256:dc391dc2321ab382ebc6d3944598042b62b02e0b1fdf3de2d67a21cb4be246ab",
+              "kind": "dependency-identity",
+              "node": "sha256:d5d6f838df31b4d839af901bd4157f3d5ad6143073addced9ab25ebb83b15733",
+              "specifier": "@solidjs/web",
+              "code": "package-not-found",
+              "reason": "@solidjs/web is not installed above <project-root>/node_modules/@tanstack/solid-query-persist-client/build/_tsup-dts-rollup.d.ts"
+            },
+            {
+              "id": "sha256:f921f5feab7f72d0fb9cc54ad93a76b7aa233f760d7d96ed7af24eeba3cacd3a",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:7f0ea814c90651b659934d81bc83d616d0784ecc6c9da5ce55d46e142c45e763",
+              "package": "@solidjs/signals",
+              "version": "2.0.0-rc.5",
+              "integrity": "sha512-Ks+97LbyN2vYqPEHWpy2YY+MYgoSCge0kHOUFN/Bzdz1Ex/M9Is1HIyBZGBVhf5y35394List5WWlU44yEnm4w==",
+              "entrypoint": ".",
+              "conditions": [
+                "development"
+              ]
             }
           ],
           "conditionalDependencies": [],
-          "graphDigest": "sha256:b869f1d94c0150ad8ef877cc57d90a5736bf9dc5e2556a69e40fba9d5c856fec"
+          "graphDigest": "sha256:98297cfd52dc763cf0d6ea3ad88cc1b9cc60cd4c2a6965cc7d17c17ec5708603"
         },
         "certificationAttempt": {
           "attempted": true,
@@ -11973,13 +11973,13 @@
           "owner": "artifact-provenance",
           "demandId": null,
           "family": null,
-          "reason": "@solidjs/web is not installed above /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-wz7BGt/node_modules/@tanstack/solid-query-persist-client/build/_tsup-dts-rollup.d.ts",
+          "reason": "@solidjs/web is not installed above /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-XHzNw6/node_modules/@tanstack/solid-query-persist-client/build/_tsup-dts-rollup.d.ts",
           "refusalCount": 0,
           "memoryExceeded": false,
-          "durationMs": 736,
+          "durationMs": 1061,
           "stageDurationsMs": {
-            "artifactAcquisition": 2.19,
-            "proposalGeneration": 624.34
+            "artifactAcquisition": 0.9,
+            "proposalGeneration": 924.85
           },
           "graphPreparation": null,
           "demandCountsByFamily": {},
@@ -14442,21 +14442,15 @@
             {
               "entrypoint": ".",
               "conditions": [],
-              "node": "sha256:62f446512778aa5a2a8946dc999a1b94c42628aa230ab52e23d23a1a9fba3e94"
+              "node": "sha256:d9501972d78367157213eb1f62e4002bd25443c04217f99cb626d4fdb8953c9e"
             }
           ],
           "cycles": [],
           "leaves": [
             {
-              "id": "sha256:07f47f06299821fedadcb9c2bb3b432670349ebb347957a8df5a2e90f12331a2",
-              "kind": "unsupported-external-specifier",
-              "node": "sha256:8a7c44d4443fd4649c11ba55e467e1e4837d73fd22413947de8394ec617e6010",
-              "specifier": "node:stream/web"
-            },
-            {
-              "id": "sha256:5f79d2d87029697408d427cac95030a393d8cb34229c28ccdc2457a8529a0164",
+              "id": "sha256:31cd6b759e42fbf0372e95df106c207308c232ce49cf2665ad1fca1fbd798ddc",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:afb8866caeba73358eaf36749f4fe4626c5108be04af30c3f0b1fb6e531f84f6",
+              "node": "sha256:da6be6a2bad175e13b122e162c4c92272c4680d89d41c645b7649b2ab4fa5ee1",
               "package": "isbot",
               "version": "5.2.2",
               "integrity": "sha512-iQcBXcd+Rv/pkubRyGh2utW2j1oPG5hZY6TUhVPpqK4G+o3IbxpJNx04hgksjc/N7GK5pEorUxDeg31cFgEk/w==",
@@ -14464,29 +14458,55 @@
               "conditions": []
             },
             {
-              "id": "sha256:85189e270eccca7c4b1817f1a08b88f3c93655acfd82cba98d71b4d9897b53c2",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:288ae8d1fc620716c177b35f6aa9932f66a4f3606aa0f1bd9a7d45bcce805b1d",
-              "package": "@tanstack/router-core",
-              "version": "1.171.27",
-              "integrity": "sha512-wDwSLvoLwIaNcnx9UNcN9Mb7Y8QwCYq1U1RQZwyN186gnkIoIYI2SOxy8VqH1vFigbkHkk4FmwMAQlghPgDK2g==",
-              "entrypoint": "./isServer",
-              "conditions": []
-            },
-            {
-              "id": "sha256:8a9223de0df4c8859d56d6a40857cf2f96c2a38c0f62cc9da7ddef2b7520a1c5",
+              "id": "sha256:45f718e87ce8f66242e700ced817b0906ed3edd85ba93a6e0e11a009462393de",
               "kind": "unsupported-external-specifier",
-              "node": "sha256:8a7c44d4443fd4649c11ba55e467e1e4837d73fd22413947de8394ec617e6010",
-              "specifier": "node:stream"
+              "node": "sha256:182629bd6ead3dfd474d6eb1306c65032c50dc21673f91acf08b3ab9e6ea8de7",
+              "specifier": "node:stream/web"
             },
             {
-              "id": "sha256:ad67bf96ee63122b21e8ce951fc3d5835b3d58450e54c3eefec4d9bc08dc9c7b",
+              "id": "sha256:63b9941ce23dce99679e0f1bc6a31700038ebfd4907a03db0cee2942245edaec",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:11cbe09f4518edcdf697bd499e582f8f07550dd127ddec016ade33d85e92ff4a",
+              "node": "sha256:3ba6b2bea0d86ccc3e92be0f69692e272844c13826369cb4668b618e31b1c644",
               "package": "cookie-es",
               "version": "3.1.1",
               "integrity": "sha512-UaXxwISYJPTr9hwQxMFYZ7kNhSXboMXP+Z3TRX6f1/NyaGPfuNUZOWP1pUEb75B2HjfklIYLVRfWiFZJyC6Npg==",
               "entrypoint": ".",
+              "conditions": []
+            },
+            {
+              "id": "sha256:6d692131d2fa261b4254c0f5fb00ba12fd145402bb830c5d41449e8169bd6ac5",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:b595c1671d966b58a9d598dc82e6729f5627f9b241e026eb54478189f1b86929",
+              "package": "seroval",
+              "version": "1.6.4",
+              "integrity": "sha512-LErWMNS2RRFdu2RMA5u/PA59/IWs0XsikyEXGQ2/36iEWFrdG0ABmg17E17cikrv76891kOAMq3TkTFXpwAHXw==",
+              "entrypoint": ".",
+              "conditions": []
+            },
+            {
+              "id": "sha256:798c6e343175f7163cef7c1558b19f968e87da4405a7a071d4fa892c1c02ca73",
+              "kind": "unsupported-external-specifier",
+              "node": "sha256:182629bd6ead3dfd474d6eb1306c65032c50dc21673f91acf08b3ab9e6ea8de7",
+              "specifier": "node:stream"
+            },
+            {
+              "id": "sha256:7a0d537c6a93826e84daf3b3bff7c66634fd2382aab4a1d8f71e60e026faef69",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:a17772068569c57f5b3495e75cdbf7e9bffd95b2f6cb06400fe9952a85a1bc1e",
+              "package": "@tanstack/history",
+              "version": "1.162.1",
+              "integrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
+              "entrypoint": ".",
+              "conditions": []
+            },
+            {
+              "id": "sha256:810f70ff392b1474087fb0e4a09fe3cc32763cf0b659e81117db524b35710fc6",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:26ad6b05e813560bb8272f45571cdd971c1d4c40ae92a17fb7235724f59998ea",
+              "package": "@tanstack/router-core",
+              "version": "1.171.27",
+              "integrity": "sha512-wDwSLvoLwIaNcnx9UNcN9Mb7Y8QwCYq1U1RQZwyN186gnkIoIYI2SOxy8VqH1vFigbkHkk4FmwMAQlghPgDK2g==",
+              "entrypoint": "./isServer",
               "conditions": []
             },
             {
@@ -14506,26 +14526,6 @@
               "reason": "resolved target <project-root>/node_modules/csstype/index.js is not a file"
             },
             {
-              "id": "sha256:ce594e6d9a2ea76681ed4af9a856bb05def4441661b928c1784a77902fe4eb43",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:5326a5416afc2ab969b8d67c218b5f55c1ec705f45d45781f59cbc55524b1478",
-              "package": "@tanstack/history",
-              "version": "1.162.1",
-              "integrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
-              "entrypoint": ".",
-              "conditions": []
-            },
-            {
-              "id": "sha256:d33dc42c7c3fbf6d2abbab0aeb5b2200760ee344ebf12a0705a0f6279a1646b2",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:79a2766dda5f49c8e0c235e7d7282051a51b06780dd78e261569a1f69eca59ff",
-              "package": "seroval",
-              "version": "1.6.4",
-              "integrity": "sha512-LErWMNS2RRFdu2RMA5u/PA59/IWs0XsikyEXGQ2/36iEWFrdG0ABmg17E17cikrv76891kOAMq3TkTFXpwAHXw==",
-              "entrypoint": ".",
-              "conditions": []
-            },
-            {
               "id": "sha256:f2afe3a10a3a46e5a3451386c0dc805194b494393125a030475dcf2e2f25c5f4",
               "kind": "artifact-resolution",
               "specifier": "solid-js/types/reactive/signal.js",
@@ -14535,7 +14535,7 @@
             }
           ],
           "conditionalDependencies": [],
-          "graphDigest": "sha256:3683711c94142d4c12132d7f74dff7238abd56a65a7e61455555e41111ba1029"
+          "graphDigest": "sha256:2bda64e992cd56e1d0f8f4eb9c231809190317b87945d8f34aa00e3470ba9deb"
         },
         "certificationAttempt": {
           "attempted": true,
@@ -14550,10 +14550,10 @@
           "reason": "#tanstack-router-entry is not defined by the package imports map",
           "refusalCount": 0,
           "memoryExceeded": false,
-          "durationMs": 291,
+          "durationMs": 295,
           "stageDurationsMs": {
-            "artifactAcquisition": 5.31,
-            "proposalGeneration": 267.07
+            "artifactAcquisition": 23.1,
+            "proposalGeneration": 261.25
           },
           "graphPreparation": null,
           "demandCountsByFamily": {},
@@ -16834,47 +16834,35 @@
             {
               "entrypoint": ".",
               "conditions": [],
-              "node": "sha256:ea38764046e26625c0b95b56ef83a6cda229f9781de21f73368da87543e97201"
+              "node": "sha256:256331ec559b2574dd05445d20b9f863fdbb0dbf0d462c46a1d3d13cf84f70cd"
             }
           ],
           "cycles": [],
           "leaves": [
             {
-              "id": "sha256:1411096cfefb49da9038bd8194bab921e317269322ae69a5fbcb787855e33130",
+              "id": "sha256:022572b23b6f9bb629eeb5cb7edda96c41905c9be16dcd14f57342f3d78654bf",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:a46e443be39818c6419b4447cf490a51a859bba8d7786ea58d64aafcd970996a",
-              "package": "@tanstack/router-core",
-              "version": "1.171.22",
-              "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
-              "entrypoint": "./isServer",
-              "conditions": []
-            },
-            {
-              "id": "sha256:6d6707cfc26e62bdf679d873d4c06345404c31139bd99b84702aba2e8a978e98",
-              "kind": "unsupported-external-specifier",
-              "node": "sha256:4f8cc63ca43a126d39b92c081311c23fcdde2aa29827aadd5f0d357bf424a255",
-              "specifier": "node:stream"
-            },
-            {
-              "id": "sha256:74d0b1494f171c2085fce05686ef7b7c6228dad93718650447558bd25687c80e",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:15b01a0940ae5a6a72fd599ccb9fcbf9520b8bf03eef582f5e48bc8ea818640b",
-              "package": "cookie-es",
-              "version": "3.1.1",
-              "integrity": "sha512-UaXxwISYJPTr9hwQxMFYZ7kNhSXboMXP+Z3TRX6f1/NyaGPfuNUZOWP1pUEb75B2HjfklIYLVRfWiFZJyC6Npg==",
+              "node": "sha256:e1da68d2bbf8259383a8543176605e9fd67da2d8c2c2dd20515f239bddf66832",
+              "package": "seroval",
+              "version": "1.6.4",
+              "integrity": "sha512-LErWMNS2RRFdu2RMA5u/PA59/IWs0XsikyEXGQ2/36iEWFrdG0ABmg17E17cikrv76891kOAMq3TkTFXpwAHXw==",
               "entrypoint": ".",
               "conditions": []
             },
             {
-              "id": "sha256:88a9d9a0b7d5093190edc2d38871af21c1979e7e45ceb92aef3ecab0def8549e",
-              "kind": "unsupported-external-specifier",
-              "node": "sha256:4f8cc63ca43a126d39b92c081311c23fcdde2aa29827aadd5f0d357bf424a255",
-              "specifier": "node:stream/web"
+              "id": "sha256:336b9b7aeb0ca8fe81338459a9e988535f2a1788ad785d4d56ee4b38444e2c4a",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:ff00579bffbe1915512f5b2ccc81354e4e314a4514df83beef135f2526acd342",
+              "package": "@solidjs/signals",
+              "version": "2.0.0-rc.0",
+              "integrity": "sha512-oKZSfvsCcKw1uJjOGbUkJ+OqlhXLHtZ+rShSyu9KH0lUH7UUwfMfsKeh81JPiQxDDg4YLhEwI38hg0JkwzTdvA==",
+              "entrypoint": ".",
+              "conditions": []
             },
             {
-              "id": "sha256:89a9848bf382ff4a171a9a7bd7c0cef46747abefcb0683bc8eb241f8a1d15102",
+              "id": "sha256:3604ff3c129933425f4596809af2d2951a94b397758065cd2ff5184cc8a31bf8",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:3054dfa3b001d3cc984d583822b2d71009624bb61475f17bb4d3bc779775c2ae",
+              "node": "sha256:bd7b786b8fb54fcd083423ddfd32297f8e62e197a6937748dd9877e9dc07c73e",
               "package": "isbot",
               "version": "5.2.2",
               "integrity": "sha512-iQcBXcd+Rv/pkubRyGh2utW2j1oPG5hZY6TUhVPpqK4G+o3IbxpJNx04hgksjc/N7GK5pEorUxDeg31cFgEk/w==",
@@ -16882,9 +16870,9 @@
               "conditions": []
             },
             {
-              "id": "sha256:8d0424af3c02206b227203d9ad599f4c1d4d2c9f0a127f885b4066c3047a33a2",
+              "id": "sha256:39856afdaba5e98c8db29e8b6042fb7bb747c470af91e19dc0018ed21db4e2bf",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:5a62768a4cce96bc0842ee17182efc9fc52fdd4629020d40564e6d60e9930d6a",
+              "node": "sha256:540f5982644c4a7036d37e9f3c5016cfc17b15ccc7a229ab0fc4f54052559f93",
               "package": "@tanstack/history",
               "version": "1.162.1",
               "integrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
@@ -16892,9 +16880,21 @@
               "conditions": []
             },
             {
-              "id": "sha256:ab616de80476c8aae6d6d37b800e4b5c573150dbcb8261b8c964eaad7cfa2f4d",
+              "id": "sha256:432ca36839737836eef8bc98349c88c57405f846df267cd56569ab35e2e207ec",
+              "kind": "unsupported-external-specifier",
+              "node": "sha256:a8a26578f31d3546bed03b06e86fd90f0fd543f8b828b7a245bbcf179af7ce1e",
+              "specifier": "node:stream/web"
+            },
+            {
+              "id": "sha256:5456b9910c94aa7e2e2300980ab7d2332b1fc6ffded2556b6037ef422d6373b6",
+              "kind": "unsupported-external-specifier",
+              "node": "sha256:a8a26578f31d3546bed03b06e86fd90f0fd543f8b828b7a245bbcf179af7ce1e",
+              "specifier": "node:stream"
+            },
+            {
+              "id": "sha256:7a4d92fe7f10dc117cbfc6bfba36b4bd832422a7a5575e85e5ae5738425b7193",
               "kind": "module-loading-frontier",
-              "node": "sha256:59dcfaec0200745944c4abf9cd25e84102bd3502cab26493d81cf0452c699710",
+              "node": "sha256:b1a0bb147311c30695e5c064cd78f1b7aede66cb8c68d4dafa026f575b1d71f3",
               "frontier": "nonliteral-dynamic-loading",
               "source": "./dist/web.js:40662-40678",
               "specifier": null
@@ -16916,28 +16916,28 @@
               "reason": "resolved target <project-root>/node_modules/csstype/index.js is not a file"
             },
             {
-              "id": "sha256:c76b88c31a32e200ed5eb03b8537c70d4de101b5b44209366adad441ea69678a",
+              "id": "sha256:edd9471b274b3cb0dcc8e0a04168e605b149d4e825be82a435dda5b388ba85e6",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:fb8fe9e55b20da8030b56472569978ba4ae929420b004ef288a4177f26101e2a",
-              "package": "@solidjs/signals",
-              "version": "2.0.0-rc.0",
-              "integrity": "sha512-oKZSfvsCcKw1uJjOGbUkJ+OqlhXLHtZ+rShSyu9KH0lUH7UUwfMfsKeh81JPiQxDDg4YLhEwI38hg0JkwzTdvA==",
-              "entrypoint": ".",
+              "node": "sha256:721edc3cd6cf7849ffe0f859828c2007f38bbb5a40bc220767ce7f1beaf207f8",
+              "package": "@tanstack/router-core",
+              "version": "1.171.22",
+              "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+              "entrypoint": "./isServer",
               "conditions": []
             },
             {
-              "id": "sha256:f25a9b663ee24d59f315a927822e81650aec2d3133cdfb3b05c3ab074fcce93a",
+              "id": "sha256:fe7666236eda8663791e5dc14667e71d6e672ceab0ceb811c12c3a42cd789792",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:fa256e134a9ab8710de0dcf978a4e6a6db449bdeaddb6613dfbf700fe0bac6fa",
-              "package": "seroval",
-              "version": "1.6.4",
-              "integrity": "sha512-LErWMNS2RRFdu2RMA5u/PA59/IWs0XsikyEXGQ2/36iEWFrdG0ABmg17E17cikrv76891kOAMq3TkTFXpwAHXw==",
+              "node": "sha256:2326be12d0b6c1fe72c5aea550dd8a49fc2950af6605dedfbff5822d80be7bf8",
+              "package": "cookie-es",
+              "version": "3.1.1",
+              "integrity": "sha512-UaXxwISYJPTr9hwQxMFYZ7kNhSXboMXP+Z3TRX6f1/NyaGPfuNUZOWP1pUEb75B2HjfklIYLVRfWiFZJyC6Npg==",
               "entrypoint": ".",
               "conditions": []
             }
           ],
           "conditionalDependencies": [],
-          "graphDigest": "sha256:ea7956fdd1bfe796d83f80fe5cdf352746e7bc3504f3c5bbbd3dcba34573e3f9"
+          "graphDigest": "sha256:0f28c175b030507e78ec29478800f7afc45c7ad2ef23a5ad4bb8291057ef652e"
         },
         "certificationAttempt": {
           "attempted": true,
@@ -16952,10 +16952,10 @@
           "reason": "#tanstack-router-entry is not defined by the package imports map",
           "refusalCount": 0,
           "memoryExceeded": false,
-          "durationMs": 317,
+          "durationMs": 448,
           "stageDurationsMs": {
-            "artifactAcquisition": 1.38,
-            "proposalGeneration": 309.4
+            "artifactAcquisition": 2.76,
+            "proposalGeneration": 398.49
           },
           "graphPreparation": null,
           "demandCountsByFamily": {},
@@ -19236,31 +19236,15 @@
             {
               "entrypoint": ".",
               "conditions": [],
-              "node": "sha256:2bdac1e24946d046f393de5505a54ebcfbdf328a6b15d23305d05ea3de9383ec"
+              "node": "sha256:9b3989f86fbfa0a9bf370c3d9bd79f56b5132730d024911e446845aa70e89817"
             }
           ],
           "cycles": [],
           "leaves": [
             {
-              "id": "sha256:190f4f63a68bf483ca76670f481bcdb723bf08be284ece44c24f4a6251f160c7",
+              "id": "sha256:027dabd2a1e40071d42a4f2476fcc81276804b04a45592dfda7f4006d0d88548",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:17edef1ed02a959e806b6f89f30f957f6c9af7ea5c771cb9abefd15cdcabd4d5",
-              "package": "cookie-es",
-              "version": "3.1.1",
-              "integrity": "sha512-UaXxwISYJPTr9hwQxMFYZ7kNhSXboMXP+Z3TRX6f1/NyaGPfuNUZOWP1pUEb75B2HjfklIYLVRfWiFZJyC6Npg==",
-              "entrypoint": ".",
-              "conditions": []
-            },
-            {
-              "id": "sha256:21d25e4ef79d04791751b26e73647c7b42beb312c47cc6d26976063a00080c6a",
-              "kind": "unsupported-external-specifier",
-              "node": "sha256:e80177f934b3ad481294f762102f5acc5d4d1c744c2168ad3cf3929d6e7bde82",
-              "specifier": "node:stream/web"
-            },
-            {
-              "id": "sha256:2774aa217e76a0ede265ccd43d5b7bb231474a7d888071fe6d924ae7462eaba2",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:cd1411e3aeca26006126257a5c6f28cc9d29647dedf15842245d83e56344f59a",
+              "node": "sha256:e6b177e1794f33c199fd083e4d6fc22f917143aa2c390748c654efc2f680cd44",
               "package": "@tanstack/router-core",
               "version": "1.171.22",
               "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
@@ -19268,36 +19252,42 @@
               "conditions": []
             },
             {
-              "id": "sha256:460dfae1ba6fd28210ccdddb31978532f36011b931dc28e6db16c4d31c3a6cb5",
-              "kind": "unsupported-external-specifier",
-              "node": "sha256:e80177f934b3ad481294f762102f5acc5d4d1c744c2168ad3cf3929d6e7bde82",
-              "specifier": "node:stream"
-            },
-            {
-              "id": "sha256:4a71e779235b29dce50fe5ffb689d0b4aefa89587cd7f4b8372cdffde0076ae2",
-              "kind": "module-loading-frontier",
-              "node": "sha256:88b711d14fe06aa412bfb8de4bfda00576c4c276c541eddb46b81e350fe1969e",
-              "frontier": "nonliteral-dynamic-loading",
-              "source": "./dist/web.js:40181-40197",
-              "specifier": null
-            },
-            {
-              "id": "sha256:a22679c0a8979713fe54e12694f92d2a916288285ac11f6688e65c4498d095c3",
+              "id": "sha256:06eae5e6201b199dfe8d0a29ea5418377f458ea1b1f6177c5d401342c30ce1ef",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:1518fdca6b4758262df471ca6fda76d3b2257cdcb21b499e3de9532a3c9d650d",
-              "package": "@tanstack/history",
-              "version": "1.162.1",
-              "integrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
+              "node": "sha256:81da29d953c42df2732103336532376a5bb0f4e7c1924c5311b6a5aa64a5efa4",
+              "package": "cookie-es",
+              "version": "3.1.1",
+              "integrity": "sha512-UaXxwISYJPTr9hwQxMFYZ7kNhSXboMXP+Z3TRX6f1/NyaGPfuNUZOWP1pUEb75B2HjfklIYLVRfWiFZJyC6Npg==",
               "entrypoint": ".",
               "conditions": []
             },
             {
-              "id": "sha256:a431488e51c9368259d5c853349e86a240aa682796c644cbe84887ea2544d4a3",
+              "id": "sha256:3d66f5d48e6696c359edd6e611f2d62a787ab37b5c66f0dcc91a286cbed6091d",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:d3f3084259f587f2c7c9ee1ece651ff41ebdbeac5c5e09fafd372b5ff6461cf4",
+              "node": "sha256:907f4b1886b43738ae8dca35147ecfc4d1898a8dcc83c6b65aad7c906228e7f2",
+              "package": "@solidjs/signals",
+              "version": "2.0.0-rc.5",
+              "integrity": "sha512-Ks+97LbyN2vYqPEHWpy2YY+MYgoSCge0kHOUFN/Bzdz1Ex/M9Is1HIyBZGBVhf5y35394List5WWlU44yEnm4w==",
+              "entrypoint": ".",
+              "conditions": []
+            },
+            {
+              "id": "sha256:6b390c1a6bdca735e72d91cdb1c958668ec92bf8fed3f60e2e207c69606a2d53",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:a2551c5fb82847025ca459198b1c63c5c4f824b8827d874aceb2337517a52aad",
               "package": "seroval",
               "version": "1.6.4",
               "integrity": "sha512-LErWMNS2RRFdu2RMA5u/PA59/IWs0XsikyEXGQ2/36iEWFrdG0ABmg17E17cikrv76891kOAMq3TkTFXpwAHXw==",
+              "entrypoint": ".",
+              "conditions": []
+            },
+            {
+              "id": "sha256:87dae1bde7429f9424ed900819cec5b1215e073788809ce7a7947e8a6bdf719b",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:72f29ce49af0f2ef43cb68d83449cce598393110de6f87eaf36a804ca88389e6",
+              "package": "@tanstack/history",
+              "version": "1.162.1",
+              "integrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
               "entrypoint": ".",
               "conditions": []
             },
@@ -19310,6 +19300,14 @@
               "reason": "#tanstack-router-entry is not defined by the package imports map"
             },
             {
+              "id": "sha256:bb988358122aeb147c4a7bbf9d9e18ad1cbb4747e0e76c9238560553f81a5292",
+              "kind": "module-loading-frontier",
+              "node": "sha256:ead99e1d3e291601b092155e1a9b19e77418fadcacfd84f2564b47022b08496f",
+              "frontier": "nonliteral-dynamic-loading",
+              "source": "./dist/web.js:40181-40197",
+              "specifier": null
+            },
+            {
               "id": "sha256:c2c5392346dc310178102c985809ceba0e8a094dc7272a0b63216d3d0abd421d",
               "kind": "artifact-resolution",
               "specifier": "csstype",
@@ -19318,9 +19316,9 @@
               "reason": "resolved target <project-root>/node_modules/csstype/index.js is not a file"
             },
             {
-              "id": "sha256:d6d498bbdd4532b38f74c0bdc1b9fc168172db29b2f5648990392c9c3e789f59",
+              "id": "sha256:c86f766c16c6e852abaf6467877fc031114b989cec62471a80495553ed032958",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:9ef77d15968268908901c26e36c2c4903530c908fbf5807f605711f2be54630d",
+              "node": "sha256:6465f19135583fe11ce7bf50973c7386b981d3202f611e1b362775612d1647e9",
               "package": "isbot",
               "version": "5.2.2",
               "integrity": "sha512-iQcBXcd+Rv/pkubRyGh2utW2j1oPG5hZY6TUhVPpqK4G+o3IbxpJNx04hgksjc/N7GK5pEorUxDeg31cFgEk/w==",
@@ -19328,18 +19326,20 @@
               "conditions": []
             },
             {
-              "id": "sha256:f85fdfda2a5a1c4468cf66f5aa1109f6c0b2037a06e561840a52bb177e5a0e40",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:ffad36f35e33060a9aac167a5a113bd51102e6026a72944bfc776d5a94ad187e",
-              "package": "@solidjs/signals",
-              "version": "2.0.0-rc.5",
-              "integrity": "sha512-Ks+97LbyN2vYqPEHWpy2YY+MYgoSCge0kHOUFN/Bzdz1Ex/M9Is1HIyBZGBVhf5y35394List5WWlU44yEnm4w==",
-              "entrypoint": ".",
-              "conditions": []
+              "id": "sha256:c923aa09726237cafd200f88da6e02fa8f043ff84439c4a171adea20f8d4f936",
+              "kind": "unsupported-external-specifier",
+              "node": "sha256:4cdb4e9b16b8048030310d04108b83bae15ba2bfa057ff4eb5907f994f57982b",
+              "specifier": "node:stream"
+            },
+            {
+              "id": "sha256:fb504f2a8c5a2ef892aa7b4f691ec6349fd45b59cb4287a4113e4aa6a154aba2",
+              "kind": "unsupported-external-specifier",
+              "node": "sha256:4cdb4e9b16b8048030310d04108b83bae15ba2bfa057ff4eb5907f994f57982b",
+              "specifier": "node:stream/web"
             }
           ],
           "conditionalDependencies": [],
-          "graphDigest": "sha256:8596a49e355555a127430faf172135f1ab5756afaa92dc2bf0157cc80e65076f"
+          "graphDigest": "sha256:63b10d4a37325b56309e8ad37d4bf2f703c118830331b86b97a15b78125e03c9"
         },
         "certificationAttempt": {
           "attempted": true,
@@ -19354,10 +19354,10 @@
           "reason": "#tanstack-router-entry is not defined by the package imports map",
           "refusalCount": 0,
           "memoryExceeded": false,
-          "durationMs": 287,
+          "durationMs": 268,
           "stageDurationsMs": {
-            "artifactAcquisition": 2.04,
-            "proposalGeneration": 282.2
+            "artifactAcquisition": 1.25,
+            "proposalGeneration": 257.28
           },
           "graphPreparation": null,
           "demandCountsByFamily": {},
@@ -19638,7 +19638,7 @@
           "status": "refused",
           "stage": "witness-acquisition",
           "owner": "certifier",
-          "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:8d5ef4cdbebdd79c37e3ac0213c6cebf209d421a5bf775cadf5d2d53588a94da: Type Facts certification failed for graph node @tanstack/store@0.11.1 (.) during live graph export-value verification: Type Facts demand sha256:34aa664d54584eeec44f17ca0b58a64722eb8a7ace7be65c8c0c45d6904118ed is locally open: recursive-value-shape (artifact-case:0bdfa1cbfcd08632d3def1207aa3b0c24966e3093cf9cb6fa9ce35b1d52fce0d:shallow): operation value root shape has no verifiable premise: the demand asserts no callability and the producer's root observation is open",
+          "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:add43f4298110680dce32067c4c0f78e19dd483f7f84c60fbdd2df69ce5726d2: Type Facts certification failed for graph node @tanstack/store@0.11.1 (.) during live graph export-value verification: Type Facts demand sha256:34aa664d54584eeec44f17ca0b58a64722eb8a7ace7be65c8c0c45d6904118ed is locally open: recursive-value-shape (artifact-case:0bdfa1cbfcd08632d3def1207aa3b0c24966e3093cf9cb6fa9ce35b1d52fce0d:shallow): operation value root shape has no verifiable premise: the demand asserts no callability and the producer's root observation is open",
           "proofFamilies": []
         },
         "disposition": "proposal-blocked",
@@ -19679,15 +19679,15 @@
             {
               "entrypoint": ".",
               "conditions": [],
-              "node": "sha256:6230503f889f2cfd924a5c67776b7f51653871b5045790d803deb03cfb2f4487"
+              "node": "sha256:cf35ded45bd73312bb826e1fd6fb3a3879453f8de1235abfa956740ee620881f"
             }
           ],
           "cycles": [],
           "leaves": [
             {
-              "id": "sha256:4f6da7a458c1924656c7b35a7bb676c2fa086e73a1448aecca2597766c93e22d",
+              "id": "sha256:823a494f0f46595d2d44ea358d63d73833ac244a3fb9dc958397579d9ef17245",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:9742a186da399b915bf268571f7d7e23f4baf523b0205b26a523bb60db7ab46d",
+              "node": "sha256:1083049279befb92269e65ee01d180b72eb3dfcfede31d8c54144190e0ac5a83",
               "package": "@tanstack/store",
               "version": "0.11.1",
               "integrity": "sha512-mzTOBhypOuDJAy/D8n2MfUZ1HFkXnmSETviRyhqEC8LUE7/IZQExOTxMANj3KjTofYTkFNpBY67qaVrT41YccA==",
@@ -19704,7 +19704,7 @@
             }
           ],
           "conditionalDependencies": [],
-          "graphDigest": "sha256:7866bfee46f5778adbf5475864c20b201a6167b88d90aa9cf1f8978fbcd95bc6"
+          "graphDigest": "sha256:dd326797b2b3bac9ee12e3e69110ab0e0a03835e95aeffd3132f07ddb37481c1"
         },
         "certificationAttempt": {
           "attempted": true,
@@ -19716,22 +19716,22 @@
           "owner": "certifier",
           "demandId": "sha256:34aa664d54584eeec44f17ca0b58a64722eb8a7ace7be65c8c0c45d6904118ed",
           "family": "recursive-value-shape",
-          "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:8d5ef4cdbebdd79c37e3ac0213c6cebf209d421a5bf775cadf5d2d53588a94da: Type Facts certification failed for graph node @tanstack/store@0.11.1 (.) during live graph export-value verification: Type Facts demand sha256:34aa664d54584eeec44f17ca0b58a64722eb8a7ace7be65c8c0c45d6904118ed is locally open: recursive-value-shape (artifact-case:0bdfa1cbfcd08632d3def1207aa3b0c24966e3093cf9cb6fa9ce35b1d52fce0d:shallow): operation value root shape has no verifiable premise: the demand asserts no callability and the producer's root observation is open",
+          "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:add43f4298110680dce32067c4c0f78e19dd483f7f84c60fbdd2df69ce5726d2: Type Facts certification failed for graph node @tanstack/store@0.11.1 (.) during live graph export-value verification: Type Facts demand sha256:34aa664d54584eeec44f17ca0b58a64722eb8a7ace7be65c8c0c45d6904118ed is locally open: recursive-value-shape (artifact-case:0bdfa1cbfcd08632d3def1207aa3b0c24966e3093cf9cb6fa9ce35b1d52fce0d:shallow): operation value root shape has no verifiable premise: the demand asserts no callability and the producer's root observation is open",
           "refusalCount": 0,
           "memoryExceeded": false,
-          "durationMs": 1011,
+          "durationMs": 1057,
           "stageDurationsMs": {
-            "artifactAcquisition": 0.2,
-            "proposalGeneration": 774.69,
+            "artifactAcquisition": 0.22,
+            "proposalGeneration": 723.68,
             "demandPlanning": 0,
-            "witnessAcquisition": 231.06
+            "witnessAcquisition": 143.39
           },
           "graphPreparation": {
             "rootCases": 1,
             "canonicalNodes": 2,
             "acquiredPublishedArtifacts": 4,
             "acquisitionUnits": 3,
-            "graphAcquisitionDurationMs": 2.35,
+            "graphAcquisitionDurationMs": 2.29,
             "resolutionSession": {
               "requests": 0,
               "semanticAcquisitions": 0,
@@ -19745,11 +19745,11 @@
             "proposalFrontiers": [
               {
                 "nodes": 1,
-                "durationMs": 275.26
+                "durationMs": 259.79
               },
               {
                 "nodes": 1,
-                "durationMs": 258.21
+                "durationMs": 215.09
               }
             ],
             "graphNodeReferences": 2,
@@ -20025,15 +20025,15 @@
             {
               "entrypoint": ".",
               "conditions": [],
-              "node": "sha256:d9d48d4cc952187a89453246371b52e3f4533a70e5ba864cf548c5995d1118e9"
+              "node": "sha256:caabc4bd06fe191a884ffdbaf0a2bf48ba16d86e96180a2b72bdd6f8923a8c02"
             }
           ],
           "cycles": [],
           "leaves": [
             {
-              "id": "sha256:7f882098a61e6009bd11f74b42e68ee1ce7007d0325deb86d953b1896f94f948",
+              "id": "sha256:58622a5443d7bc601c42a3dd9de48b0518ed8a5dfbc4945a7936552043d59786",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:86cc47d2c1ea76a92440d807f20bffb515f7261d22804d7433e4c40937ec8ff5",
+              "node": "sha256:313389452d642668b686ba5075a6b5b8a5e3ad3d458e526948b3cf8bb66fc363",
               "package": "@tanstack/virtual-core",
               "version": "3.17.8",
               "integrity": "sha512-BfEvehNpOT75r5Ksc5xW6NZuXujTfb7nlSEyVu4XHG3gdxNg1KqXruWbDewXOUaUYIo4oRbSfkjIajz4MAT8tA==",
@@ -20050,7 +20050,7 @@
             }
           ],
           "conditionalDependencies": [],
-          "graphDigest": "sha256:3d508b45a603dbb4e5d8ad2a3e1857c8176cf2c8563b04eb8dd4f6d3fac35704"
+          "graphDigest": "sha256:34503aa9b7f04d4ec7f262567393ec01b0683658ce83850b2b085f783227b2ac"
         },
         "certificationAttempt": {
           "attempted": true,
@@ -20069,12 +20069,12 @@
             "rootCertified": true
           },
           "memoryExceeded": false,
-          "durationMs": 938,
+          "durationMs": 919,
           "stageDurationsMs": {
-            "artifactAcquisition": 0.69,
-            "proposalGeneration": 713.08,
+            "artifactAcquisition": 0.73,
+            "proposalGeneration": 534.66,
             "demandPlanning": 0,
-            "witnessAcquisition": 214.93,
+            "witnessAcquisition": 331.67,
             "certification": 0,
             "receiptIssuance": 0,
             "catalogPublication": 0
@@ -20084,7 +20084,7 @@
             "canonicalNodes": 2,
             "acquiredPublishedArtifacts": 4,
             "acquisitionUnits": 3,
-            "graphAcquisitionDurationMs": 3.32,
+            "graphAcquisitionDurationMs": 4.55,
             "resolutionSession": {
               "requests": 0,
               "semanticAcquisitions": 0,
@@ -20098,11 +20098,11 @@
             "proposalFrontiers": [
               {
                 "nodes": 1,
-                "durationMs": 385.1
+                "durationMs": 188.19
               },
               {
                 "nodes": 1,
-                "durationMs": 97.73
+                "durationMs": 93.86
               }
             ],
             "graphNodeReferences": 2,
@@ -26110,110 +26110,110 @@
             {
               "entrypoint": "./accordion",
               "conditions": [],
-              "node": "sha256:602f162a7dc777c4aee4a7711f21016a1413dc774ebffdf7b357fa37553d2315"
+              "node": "sha256:eacb478be5e4d721d8403246d58ca0d226108a4f7ef7d18d88f8559ca320ce62"
             },
             {
               "entrypoint": "./accordion",
               "conditions": [
                 "solid"
               ],
-              "node": "sha256:38f676ef17f0219866c8b55b926e5e974b7e9c7f8868a2cb56060ff81bb51f9c"
+              "node": "sha256:d3f08ff0e482d26c2d296a88dfd0a3fb2bb57c1038451895fee4c6d85d69a186"
             },
             {
               "entrypoint": "./calendar",
               "conditions": [],
-              "node": "sha256:347df99c29e8ad43e1774e18494585bbd1ce2e23a844253ebbf9e055abedd0c0"
+              "node": "sha256:c1ab3677716e2915e519e1474abc5cfd54f9bc2385c6bc67d2c4b76813642d36"
             },
             {
               "entrypoint": "./calendar",
               "conditions": [
                 "solid"
               ],
-              "node": "sha256:f176cf918756ced588b749a3c2109f41e5c4fe7c61a9091c49a13a68dba25b86"
+              "node": "sha256:7d33de1820ef44878db746e0f3f90f80533f937f1a7e03daca508e80c6aec6e9"
             },
             {
               "entrypoint": "./dialog",
               "conditions": [],
-              "node": "sha256:7107e36ed4c629dda6c4ab194eb96cbac68e6fa24c1427f1d271a29990b59867"
+              "node": "sha256:7ebf6ffde18844e21e14979dcdbefce9ff92d7e1b0db8c3f3ee9714a5c73d1d2"
             },
             {
               "entrypoint": "./dialog",
               "conditions": [
                 "solid"
               ],
-              "node": "sha256:2469cec257ba14c34c422bef24e0f20f3a3733994b5e9daab168ef289e595456"
+              "node": "sha256:9b44963603834be35a340896c31a005ede0f4fbd4ac95149fe3809902fff6c21"
             },
             {
               "entrypoint": "./disclosure",
               "conditions": [],
-              "node": "sha256:cc011baa55da2a8bf322e54e1dba09386039acf95da08094e407badd91d546b5"
+              "node": "sha256:3e8abea655fbb8339e69a09358585bf35c6f5df048d0a235ec9a3517691c1971"
             },
             {
               "entrypoint": "./disclosure",
               "conditions": [
                 "solid"
               ],
-              "node": "sha256:7ac19d343305003a16f575471262e47dfbfb2eed8c85eb875aa81054d4cb46f9"
+              "node": "sha256:dc98e952c199801067f95f65cceb04d0ebe87c5634954ea3952c46d668d17078"
             },
             {
               "entrypoint": "./drawer",
               "conditions": [],
-              "node": "sha256:d474d0714ec19ff2252b1a4c461ce35bd372b0d78afa8731d3910d648633b52b"
+              "node": "sha256:17dde6524b0567070099b62e80e003ebdd279c010394a7ce968ddb686a29f392"
             },
             {
               "entrypoint": "./drawer",
               "conditions": [
                 "solid"
               ],
-              "node": "sha256:3b9541089a1a10293b21299ce5d6961f8422f7bec846c48dfc5b346543f986f4"
+              "node": "sha256:0a992e70b2c51bef438643379e6fa4fd0741eaace9fb8ae5c03a7ef933eb18d4"
             },
             {
               "entrypoint": "./otp-field",
               "conditions": [],
-              "node": "sha256:15242c0df0c4ef4f255e26fd6f9f0f17570c992dba83b1c81f1fef63bcd8cb60"
+              "node": "sha256:4bfc3f22bf7d62aa32f59d1e28241912649a4369616f06ccb8b534cb55d5933e"
             },
             {
               "entrypoint": "./otp-field",
               "conditions": [
                 "solid"
               ],
-              "node": "sha256:3c55b58e56e412d7a7d1c9a26c976b9a93566144e4930fa52177ff53101fe583"
+              "node": "sha256:45857a755e526f81040427d5a1b8317d31b27717fdeac1a5ac669515fca2b5b9"
             },
             {
               "entrypoint": "./popover",
               "conditions": [],
-              "node": "sha256:a2e029855582f2fd813249091dd7bb1ed6e40396d6605b2b334da4538bea23e5"
+              "node": "sha256:771a941f8a52b394d8d0eb694be3fa7a4c63733d2d8806a233fc54e8887f368e"
             },
             {
               "entrypoint": "./popover",
               "conditions": [
                 "solid"
               ],
-              "node": "sha256:80eb678ce1997dd9955a4e9b4872c36a3692d82ac57a2a353cd3cc9d03d5506e"
+              "node": "sha256:1b2e1400873a82b03e2c84d5fccb98775a76a78d99e591c0598c54b6ecae90a6"
             },
             {
               "entrypoint": "./resizable",
               "conditions": [],
-              "node": "sha256:64858b933a204b1364dfbb4d0d792def965f857935fa3b12a7784e69415a0056"
+              "node": "sha256:6c499de5b51af3110a08a0e8c5b3c21d41df4f7fffd3a509a53a552475336e5a"
             },
             {
               "entrypoint": "./resizable",
               "conditions": [
                 "solid"
               ],
-              "node": "sha256:f9606678dd1bf71cc2e89ac7cc3166afc9ec484a96cc95f47cce45742db76d26"
+              "node": "sha256:4b601c25cffdebdec3855e4c1863b40d6e182da7e69689c8d45a63db5fc93424"
             },
             {
               "entrypoint": "./tooltip",
               "conditions": [],
-              "node": "sha256:586c94963a5cf5fa19f4ab921a81d18c224c7c82a7eb1b57bdd2fdc1a383a0f9"
+              "node": "sha256:9e351bd1db61f21f9e70787e6f162367f0469174bea2d2e1339e25d4e07bd7c8"
             },
             {
               "entrypoint": "./tooltip",
               "conditions": [
                 "solid"
               ],
-              "node": "sha256:665ccd2d1cd234c45422f6e2266432763eb82baf7e7fc4c607ec2a23a61cbfd0"
+              "node": "sha256:ba2eb84e9b8259c070500d48cf719ba5d974fbf05a406dfd42d49552856a9b61"
             }
           ],
           "cycles": [],
@@ -26229,9 +26229,19 @@
               "reason": "resolved target <project-root>/node_modules/solid-js/types/reactive/signal.js is not a file"
             },
             {
-              "id": "sha256:160b17755711269e13aff150a8b12e9d98eac4d70af4a003f7205fc374e8eb86",
+              "id": "sha256:403b3ec90779ad89449c7e3c0a68ce0ea03fb40c23d77d943907bacded580c99",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:da5e80f006afc2425dd7133fdc8902d46f35064e74ce8c9b8abc3fe6a5c64dc1",
+              "node": "sha256:35a85b9fb31606299e347cfcf406a66202dbbe8ec022816cbdc2743e5fdcb097",
+              "package": "@corvu/utils",
+              "version": "0.3.2",
+              "integrity": "sha512-ZWlyWEE8qV9+CB9OAyo2bTrZGXQN9ZeM+JfYv89zoR+lRACKTDuoOZEdiyL8Uc7U5dUSH1uTqKhTTnaHWb+wZA==",
+              "entrypoint": ".",
+              "conditions": []
+            },
+            {
+              "id": "sha256:5b508ddfec53a657f39e93512270e63dd456beedbd2f919d6e5ed3abc16c1734",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:7ff00298605465bee7cbaac7a5838907a9efca97276302a37ac8083fab7aa3b6",
               "package": "@corvu/utils",
               "version": "0.4.2",
               "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
@@ -26241,9 +26251,19 @@
               ]
             },
             {
-              "id": "sha256:3d6b18120d52ceefa0c643def4b7f19fa5643e0370fc0f19dc718a63e1d4ebf9",
+              "id": "sha256:628683c884ea89de686081a8e0de8251a63c5df8cb51484305394a3fe12ffab7",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:93c4e070e8680e66d58c96e697fd3e27b647e78def382d080306350cb5bd9fd9",
+              "node": "sha256:85a0643e027347dca75f4c09b454d756ac28e67c4518ffc45108c9ac2f20d777",
+              "package": "@floating-ui/utils",
+              "version": "0.2.12",
+              "integrity": "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==",
+              "entrypoint": ".",
+              "conditions": []
+            },
+            {
+              "id": "sha256:acdc28eabcda02cde1637696cf03330ee1ad8bd36020e413762f61569a972e73",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:ea2543e3798a493a818c2d47dbc3549a93585362f5cbd180ce5853077d7016f4",
               "package": "@corvu/utils",
               "version": "0.3.2",
               "integrity": "sha512-ZWlyWEE8qV9+CB9OAyo2bTrZGXQN9ZeM+JfYv89zoR+lRACKTDuoOZEdiyL8Uc7U5dUSH1uTqKhTTnaHWb+wZA==",
@@ -26253,68 +26273,16 @@
               ]
             },
             {
-              "id": "sha256:48506a336509c6ab875e90b31df503bb5de6666f9cc3fba9a6c01f2c33ce8e74",
+              "id": "sha256:bf3b13eef99f861f8c3b2789fe67337d94d9ded0bf4b2d78583bab2d7adebd2c",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:a0c85d946bfdab8ffc49edb6840ecc78611d3a1a0d51afbe61fc40673fb117c9",
-              "package": "@corvu/utils",
-              "version": "0.4.2",
-              "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
-              "entrypoint": ".",
-              "conditions": [
-                "solid"
-              ]
-            },
-            {
-              "id": "sha256:50dafc4bfd84b0d41fee759d300fff7b3c33a9b4c016fb18efb064476d62783a",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:dba019dd0f3b5945a9c6cde6dc71a232fb518f2b4a6c506f7a5f043db3b046be",
-              "package": "@floating-ui/utils",
-              "version": "0.2.12",
-              "integrity": "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==",
-              "entrypoint": ".",
-              "conditions": []
-            },
-            {
-              "id": "sha256:6ff9de647f48840e9aad6ee288d4a430fe562ac8a5821f4088a894f0532ba053",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:09f081fd5c66fcd395ffa36f27a10d20ac6aea7eb8c958b6d71b76e92e6b8853",
-              "package": "@corvu/utils",
-              "version": "0.4.2",
-              "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
-              "entrypoint": "./scroll",
-              "conditions": []
-            },
-            {
-              "id": "sha256:a10b4a6d2985c9743b8dfb401e8790f336914c34b1421a965984887cb54f2adf",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:6e1c84b45b881d12dffcf72db13f2d8f4a9d480808fa0c2953d3146b85f2d012",
-              "package": "@floating-ui/utils",
-              "version": "0.2.12",
-              "integrity": "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==",
-              "entrypoint": ".",
-              "conditions": [
-                "solid"
-              ]
-            },
-            {
-              "id": "sha256:aa6bcae86022df647d208b200dcd3c18b9123fca199006f7f6fa785f17adacba",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:d68d6d1c16b39e4a973a7260ac9d4cd16d2ce53d17a3b19c91794fca93f4a1f4",
+              "node": "sha256:867b96b056e5983f8338bd470c4cc61676c25fe733608d672d530ef6c00bbaf8",
               "package": "@floating-ui/utils",
               "version": "0.2.12",
               "integrity": "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==",
               "entrypoint": "./dom",
-              "conditions": []
-            },
-            {
-              "id": "sha256:be6f7c2e86cef3488d66570e0843a934941012bc8045bb07fae44555c9d39963",
-              "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:e826d6567de1d3c5e06b5622ddd2a70e6de43553d25e85c1db067fd25bf1d892",
-              "package": "@corvu/utils",
-              "version": "0.4.2",
-              "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
-              "entrypoint": ".",
-              "conditions": []
+              "conditions": [
+                "solid"
+              ]
             },
             {
               "id": "sha256:c14fafc672f749b43255b2597ff0cfca21ded2a1889b599352bfb8bc2cbba1a8",
@@ -26335,26 +26303,58 @@
               "reason": "resolved target <project-root>/node_modules/csstype/index.js is not a file"
             },
             {
-              "id": "sha256:c734aa96ac92d1a82feb071590fa3141a14630073aa4e9489395cb2fa19a3883",
+              "id": "sha256:cb198319a17a25e6999643c81cad423af65d886c82dc7b1b82856e597bc067a5",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:0f62ccc5cee2d36764080d664c79d63fd5b25253bd73052a8a209ec7ab0f0893",
+              "node": "sha256:ddaef8f204b6f6d994eae90f489b6b8b6ba167d1a85922a7bebcf4dd117f3383",
+              "package": "@corvu/utils",
+              "version": "0.4.2",
+              "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
+              "entrypoint": ".",
+              "conditions": []
+            },
+            {
+              "id": "sha256:d131e764f89ff9aa0b53011af8b29c76248c8384be68d041ca363a21b9a302bd",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:f0cbf48ec9e3bd27172577c13b5645758483752367e7c7f961356c0cd49c829c",
+              "package": "@corvu/utils",
+              "version": "0.4.2",
+              "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
+              "entrypoint": "./scroll",
+              "conditions": []
+            },
+            {
+              "id": "sha256:db55f544883b6ed74f1765f0a23d8b95675b397342ee7e4b407b134867ceb4e3",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:887ea5bfd428f21b11aa4b34b02ce7cd779e9a9621195c5c5b8dd1c6e7b84b99",
               "package": "@floating-ui/utils",
               "version": "0.2.12",
               "integrity": "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==",
               "entrypoint": "./dom",
+              "conditions": []
+            },
+            {
+              "id": "sha256:e7f7d48715c9d46d004a68dd53637a01e3cef8fccd74a65d4aff582a7cbdaad4",
+              "kind": "authenticated-receipt-unavailable",
+              "node": "sha256:0dbc9844bbd06309a45bb9cccb27b09f18d33b1d4423754d908beb243d491bf5",
+              "package": "@floating-ui/utils",
+              "version": "0.2.12",
+              "integrity": "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==",
+              "entrypoint": ".",
               "conditions": [
                 "solid"
               ]
             },
             {
-              "id": "sha256:d75fbd718f97daa364a9e9d6f079f6f62dd39c71c13207293c0761a8ff4fcdae",
+              "id": "sha256:ed2f14856f050d23a847a6d3e150dd3e84a5b97a827d2d5408987f8bae83f740",
               "kind": "authenticated-receipt-unavailable",
-              "node": "sha256:48cfebbc9eb398c1e6498ad2619239b140045ca874f41e0e812c0d1ba8357264",
+              "node": "sha256:4460f31350426a871ad4d03f6deba9fd33fcc90da0639f8a4af9db836c2511e3",
               "package": "@corvu/utils",
-              "version": "0.3.2",
-              "integrity": "sha512-ZWlyWEE8qV9+CB9OAyo2bTrZGXQN9ZeM+JfYv89zoR+lRACKTDuoOZEdiyL8Uc7U5dUSH1uTqKhTTnaHWb+wZA==",
+              "version": "0.4.2",
+              "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
               "entrypoint": ".",
-              "conditions": []
+              "conditions": [
+                "solid"
+              ]
             },
             {
               "id": "sha256:f2afe3a10a3a46e5a3451386c0dc805194b494393125a030475dcf2e2f25c5f4",
@@ -26366,7 +26366,7 @@
             }
           ],
           "conditionalDependencies": [],
-          "graphDigest": "sha256:d3819b428b7decbd73109dd8379381d0fba240b34d25a33798f60517e21e448e"
+          "graphDigest": "sha256:c7d47baa04178cb0ad036d070b2180fd299e0ff4b1d61fd83df27afb0cfcf618"
         },
         "certificationAttempt": {
           "attempted": true,
@@ -26385,22 +26385,22 @@
             "rootCertified": false
           },
           "memoryExceeded": false,
-          "durationMs": 5918,
+          "durationMs": 10828,
           "stageDurationsMs": {
-            "artifactAcquisition": 0.73,
-            "proposalGeneration": 2926.82,
-            "demandPlanning": 0.01,
-            "witnessAcquisition": 2739.63,
-            "certification": 0.01,
+            "artifactAcquisition": 4.71,
+            "proposalGeneration": 4001.3,
+            "demandPlanning": 0.05,
+            "witnessAcquisition": 4523.95,
+            "certification": 0.03,
             "receiptIssuance": 0.01,
-            "catalogPublication": 0
+            "catalogPublication": 0.01
           },
           "graphPreparation": {
             "rootCases": 18,
             "canonicalNodes": 42,
             "acquiredPublishedArtifacts": 25,
             "acquisitionUnits": 48,
-            "graphAcquisitionDurationMs": 14.04,
+            "graphAcquisitionDurationMs": 13.79,
             "resolutionSession": {
               "requests": 0,
               "semanticAcquisitions": 0,
@@ -26414,15 +26414,15 @@
             "proposalFrontiers": [
               {
                 "nodes": 18,
-                "durationMs": 1058.08
+                "durationMs": 1181.24
               },
               {
                 "nodes": 18,
-                "durationMs": 654.17
+                "durationMs": 743.42
               },
               {
                 "nodes": 6,
-                "durationMs": 303.16
+                "durationMs": 256.51
               }
             ],
             "graphNodeReferences": 42,

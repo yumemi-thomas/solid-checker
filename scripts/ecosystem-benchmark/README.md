@@ -155,10 +155,14 @@ array and `artifactCaseDisposition` in
 `packages/cli/scripts/generate-package-contract.mjs`.
 
 The sidecar's `declinedClosures` array is read the same way, into
-`declinedClosures` (a count), `declinedClosuresByKind`, and
+`declinedClosures` (a count), `declinedClosuresByKind`,
 `dialectSilentBlockers` — the `(package, export)` primitives whose missing
 dialect audit row is what stopped the generator proposing a closed `creates`
-for an export, with how many *distinct* exports each blocks. It is measurement,
+for an export, with how many *distinct* exports each blocks — and
+`unresolvedCalleeShapes`, the same measurement for the larger half of the
+declines: each `unresolved-callee` record's observed callee **shape**
+(`parameter-rooted`, `member-property-unresolved`, `computed-member`, …) with
+the concrete spellings it was seen on. It is measurement,
 not a refusal: the row certifies and the domain is simply open. `bun
 scripts/dialect-audit-yield.mjs [--report <path>] [--json]` ranks those across
 every row of a report and is the answer to "which dialect audit would return

@@ -4,16 +4,23 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "77daa71c154e18abaf96fec4a07f3a6dc52e51322a6a7a2fa246bb357e29a061",
+            "closureSha256": "79d08180aa617684c364476ecf16308796e0a71eedf4495769ca9e8ab3acf6e5",
             "path": "./index.js",
-            "sha256": "e5feeaa5aebb01718958df2acaaa0f57e2daa6dea31934b94380666fe55630f3"
+            "sha256": "835e684c790bdf640b5e914f39dcab4ff6c54f1d9d89da867e18b5a11187eb96"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "a186417e0d8043578f701ed7053fcd66dac1cfbb16b1f9871f7dd95291075a7d"
+            "sha256": "5d7871f52a626c94b82500b29804e37c9381cf396ad5a78b2c84321de1566c37"
           },
           "exports": {
+            "computedMember": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "dialectSilent": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "expressionCallee": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "memberPropertyUnresolved": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "memberReceiverUnresolved": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "otherSyntax": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "parameterAliasRooted": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "parameterRooted": "summary-dbf6fb3f94a549294e571240112f7733f56a4897c440709c324a03a678c472c6",
             "unresolvedCallee": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "viaSilentHelper": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
           },
@@ -90,6 +97,42 @@
               "event": "call"
             }
           }
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-dbf6fb3f94a549294e571240112f7733f56a4897c440709c324a03a678c472c6": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "read"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [
+          "read-0"
         ]
       },
       "shape": "callable"

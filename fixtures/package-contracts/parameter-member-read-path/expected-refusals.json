@@ -19,7 +19,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/index.js:1513:1545",
-      "declaration": ""
+      "declaration": "",
+      "shape": "parameter-rooted",
+      "spelling": "slice"
     },
     {
       "entrypoint": ".",
@@ -31,7 +33,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/index.js:1276:1301",
-      "declaration": ""
+      "declaration": "",
+      "shape": "parameter-rooted",
+      "spelling": "slice"
     },
     {
       "entrypoint": ".",
@@ -43,7 +47,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/index.js:1941:1968",
-      "declaration": ""
+      "declaration": "",
+      "shape": "parameter-rooted",
+      "spelling": "slice"
     },
     {
       "entrypoint": ".",
@@ -55,7 +61,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/index.js:1941:2003",
-      "declaration": ""
+      "declaration": "",
+      "shape": "member-property-unresolved",
+      "spelling": "concat"
     },
     {
       "entrypoint": ".",
@@ -67,7 +75,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/index.js:1976:2002",
-      "declaration": ""
+      "declaration": "",
+      "shape": "parameter-rooted",
+      "spelling": "slice"
     },
     {
       "entrypoint": ".",
@@ -79,7 +89,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/index.js:275:295",
-      "declaration": ""
+      "declaration": "",
+      "shape": "parameter-rooted",
+      "spelling": "slice"
     },
     {
       "entrypoint": ".",
@@ -91,7 +103,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/index.js:856:889",
-      "declaration": ""
+      "declaration": "",
+      "shape": "parameter-rooted",
+      "spelling": "slice"
     },
     {
       "entrypoint": ".",
@@ -103,7 +117,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/index.js:692:719",
-      "declaration": ""
+      "declaration": "",
+      "shape": "parameter-rooted",
+      "spelling": "slice"
     }
   ]
 }

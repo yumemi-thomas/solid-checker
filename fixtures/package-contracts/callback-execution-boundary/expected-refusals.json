@@ -19,7 +19,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/index.js:175:214",
-      "declaration": "<package-root>/schedule.js:7:69"
+      "declaration": "<package-root>/schedule.js:7:69",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -31,7 +33,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/schedule.js:49:66",
-      "declaration": ""
+      "declaration": "",
+      "shape": "parameter-rooted",
+      "spelling": "getThing"
     }
   ]
 }

@@ -5241,14 +5241,22 @@ fn emit_package_contract(
     }
     for declined in &proposal.declined {
         // Same discipline, wider: `<document>\t<export>\t<domain>\t<kind>\t
-        // <package>\t<callee>\t<location>\t<declaration>`. An export name, a
-        // domain, a kind and a package/export identity carry no tab or
-        // newline; `location` is always the refusing *call*'s `path:start:end`,
-        // and `declaration` the refusing callee's, where the kind names one.
-        // A kind that names no such identity leaves its column empty, which
-        // the parser preserves rather than guesses at.
+        // <package>\t<callee>\t<location>\t<declaration>\t<shape>\t
+        // <spelling>`. An export name, a domain, a kind and a package/export
+        // identity carry no tab or newline; `location` is always the refusing
+        // *call*'s `path:start:end`, and `declaration` the refusing callee's,
+        // where the kind names one. A kind that names no such identity leaves
+        // its column empty, which the parser preserves rather than guesses at.
+        //
+        // The last two columns are **appended**, never inserted: `shape` and
+        // `spelling` are the unresolved callee's observed shape and the one
+        // concrete string it carries (`solid_reactive_ir::UnresolvedCalleeShape`),
+        // empty for every other kind. A parser written against the eight-column
+        // form still reads the first eight, and `kind` still says
+        // `unresolved-callee` for every shape, so no existing count moves.
+        // `spelling` is whitespace-free and length-bounded at the source.
         println!(
-            "{DECLINED_CLOSURE_MARKER}{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{DECLINED_CLOSURE_MARKER}{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             output.display(),
             declined.export,
             declined.domain,
@@ -5256,7 +5264,9 @@ fn emit_package_contract(
             declined.decline.kind.package(),
             declined.decline.kind.callee_export(),
             declined.decline.location(),
-            declined.decline.kind.declaration()
+            declined.decline.kind.declaration(),
+            declined.decline.kind.shape(),
+            declined.decline.kind.shape_spelling()
         );
     }
     Ok(())

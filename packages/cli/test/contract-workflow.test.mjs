@@ -124,9 +124,12 @@ test("a withheld-claim record is read only for its own target, and only when who
 test("a declined-closure record is read per target, relativized, and only when whole", () => {
   const marker = "solid-checker:declined-closure=";
   const stdout = [
-    `${marker}/scratch/a-proposal.json\tdialectSilent\tcreates\tdialect-silent\tsolid-js\tcreateEffect\t/pkg/index.js:10:20\t`,
-    `${marker}/scratch/a-proposal.json\tviaHelper\tcreates\trefusing-callee-fixpoint\t\t\t/pkg/index.js:40:52\t/pkg/index.js:30:60`,
-    `${marker}/scratch/b-proposal.json\tother\tcreates\tunresolved-callee\t\t\t/pkg/other.js:1:9\t`,
+    `${marker}/scratch/a-proposal.json\tdialectSilent\tcreates\tdialect-silent\tsolid-js\tcreateEffect\t/pkg/index.js:10:20\t\t\t`,
+    `${marker}/scratch/a-proposal.json\tviaHelper\tcreates\trefusing-callee-fixpoint\t\t\t/pkg/index.js:40:52\t/pkg/index.js:30:60\t\t`,
+    `${marker}/scratch/b-proposal.json\tother\tcreates\tunresolved-callee\t\t\t/pkg/other.js:1:9\t\tmember-property-unresolved\tread`,
+    // The eight-column form an emitter predating the shape columns wrote: it
+    // still parses, with both new fields empty rather than absent.
+    `${marker}/scratch/c-proposal.json\tlegacy\tcreates\tunresolved-callee\t\t\t/pkg/legacy.js:2:8\t`,
     // Another target of the same batch, a line missing its kind, and ordinary
     // output all have to be ignored: the marker is a contract, not a prose
     // scan.
@@ -141,7 +144,9 @@ test("a declined-closure record is read per target, relativized, and only when w
       package: "solid-js",
       callee: "createEffect",
       location: "<package-root>/index.js:10:20",
-      declaration: ""
+      declaration: "",
+      shape: "",
+      spelling: ""
     },
     {
       export: "viaHelper",
@@ -150,7 +155,9 @@ test("a declined-closure record is read per target, relativized, and only when w
       package: "",
       callee: "",
       location: "<package-root>/index.js:40:52",
-      declaration: "<package-root>/index.js:30:60"
+      declaration: "<package-root>/index.js:30:60",
+      shape: "",
+      spelling: ""
     }
   ]);
   // A second target of the same batch is answered on its own, and without a
@@ -163,7 +170,26 @@ test("a declined-closure record is read per target, relativized, and only when w
       package: "",
       callee: "",
       location: "/pkg/other.js:1:9",
-      declaration: ""
+      declaration: "",
+      // The two appended columns: the shape of the callee expression, and the
+      // one concrete string that shape observed.
+      shape: "member-property-unresolved",
+      spelling: "read"
+    }
+  ]);
+  // An eight-column line stays readable: `kind` still says `unresolved-callee`,
+  // and the shape columns are empty rather than missing.
+  assert.deepEqual(declinedClosuresFromEmitterOutput(stdout, "/scratch/c-proposal.json"), [
+    {
+      export: "legacy",
+      domain: "creates",
+      kind: "unresolved-callee",
+      package: "",
+      callee: "",
+      location: "/pkg/legacy.js:2:8",
+      declaration: "",
+      shape: "",
+      spelling: ""
     }
   ]);
   assert.deepEqual(declinedClosuresFromEmitterOutput("", "/scratch/a-proposal.json"), []);

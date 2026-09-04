@@ -28,7 +28,9 @@
       "package": "solid-js",
       "callee": "runWithOwner",
       "location": "<package-root>/index.ts:1031:1066",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -40,7 +42,9 @@
       "package": "solid-js",
       "callee": "createEffect",
       "location": "<package-root>/index.ts:1283:1311",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     }
   ]
 }

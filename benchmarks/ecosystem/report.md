@@ -1,8 +1,8 @@
 # Ecosystem Benchmark Report
 
-- Started: 2026-09-04T02:41:18.909Z
-- Finished: 2026-09-04T02:42:30.974Z
-- Duration: 72065 ms
+- Started: 2026-09-04T03:17:50.049Z
+- Finished: 2026-09-04T03:19:03.565Z
+- Duration: 73516 ms
 - Checker native binary: /Users/thomas/Documents/Github/solid-checker/rust/target/release/solid-checker-rust
 - Type Facts binary: /Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts
 - Registry cache for certification: /Users/thomas/Documents/Github/solid-checker/rust/target/registry-cache
@@ -950,6 +950,19 @@ None.
 | solid-js | runWithOwner | 54 | 18 |
 | solid-js | createRenderEffect | 42 | 19 |
 
+### Unresolved-callee shapes (what the unresolved callees are)
+
+| Shape | Consumer exports blocked | Call sites | Probes |
+| --- | ---: | ---: | ---: |
+| parameter-rooted | 384 | 5218 | 123 |
+| member-property-unresolved | 381 | 14733 | 96 |
+| computed-member | 68 | 152 | 36 |
+| expression-callee | 52 | 136 | 30 |
+| member-receiver-unresolved | 26 | 163 | 19 |
+| other | 2 | 48 | 1 |
+
+The concrete spellings behind each shape stay on every row's own `contractContent.unresolvedCalleeShapes`; `bun scripts/dialect-audit-yield.mjs` ranks them across a whole report.
+
 ### Proposal wire size
 
 | Artifact | Samples | p50 bytes | p95 bytes | max bytes |
@@ -1032,8 +1045,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Worker timings
 
-- Worker time: 1028213 ms
-- Phases: install 64129 ms, generation 385158 ms, harness 578926 ms
+- Worker time: 1040280 ms
+- Phases: install 63814 ms, generation 397293 ms, harness 579173 ms
 
 ### Top failure signatures
 

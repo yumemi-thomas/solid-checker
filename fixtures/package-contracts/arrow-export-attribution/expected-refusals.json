@@ -19,7 +19,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/channel.js:46:63",
-      "declaration": ""
+      "declaration": "",
+      "shape": "parameter-rooted",
+      "spelling": "getThing"
     },
     {
       "entrypoint": ".",
@@ -31,7 +33,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/index.js:189:220",
-      "declaration": "<package-root>/panel.js:51:138"
+      "declaration": "<package-root>/panel.js:51:138",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -43,7 +47,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/panel.js:91:115",
-      "declaration": "<package-root>/channel.js:7:66"
+      "declaration": "<package-root>/channel.js:7:66",
+      "shape": "",
+      "spelling": ""
     }
   ]
 }

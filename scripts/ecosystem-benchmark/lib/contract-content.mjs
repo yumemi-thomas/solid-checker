@@ -219,6 +219,74 @@ function dialectSilentBlockers(declined) {
     });
 }
 
+/**
+ * The `unresolved-callee` declines of one row, grouped by the callee
+ * expression's observed **shape** and, inside each shape, by the one concrete
+ * spelling the shape carries (`solid_reactive_ir::UnresolvedCalleeShape`).
+ *
+ * `unresolved-callee` is about half of every decline the corpus measures, and
+ * as one undifferentiated kind it says only "something did not resolve" —
+ * which cannot tell a resolver gap from a callee no analysis of that module
+ * could decide. This is the per-row half of that measurement; the aggregate
+ * across rows is `scripts/dialect-audit-yield.mjs`.
+ *
+ * `blockedExports` counts **distinct consumer exports**, exactly as
+ * `dialectSilentBlockers` does and for the same reason: one export whose body
+ * calls `props.onX()` forty times is one export, not forty. `records` is the
+ * call-site count beside it, never folded in. Every shape and every spelling
+ * the row observed is listed — the report's own top-N truncation happens one
+ * level up, so an aggregate never loses a spelling that is small everywhere and
+ * large in total.
+ *
+ * Additive and null-safe: a record written before the shapes existed carries
+ * no `shape`, and is counted under the empty-string shape rather than being
+ * silently dropped or assigned one.
+ */
+function unresolvedCalleeShapes(declined) {
+  const byShape = new Map();
+  for (const record of declined) {
+    if (record?.kind !== "unresolved-callee") continue;
+    const shape = String(record.shape ?? "");
+    if (!byShape.has(shape)) {
+      byShape.set(shape, { shape, exports: new Set(), records: 0, spellings: new Map() });
+    }
+    const entry = byShape.get(shape);
+    const exportName = String(record.export ?? "");
+    entry.exports.add(exportName);
+    entry.records += 1;
+    const spelling = String(record.spelling ?? "");
+    if (!entry.spellings.has(spelling)) {
+      entry.spellings.set(spelling, { spelling, exports: new Set(), records: 0 });
+    }
+    const spellingEntry = entry.spellings.get(spelling);
+    spellingEntry.exports.add(exportName);
+    spellingEntry.records += 1;
+  }
+  const rank = (left, right) => {
+    if (left.blockedExports !== right.blockedExports) {
+      return right.blockedExports - left.blockedExports;
+    }
+    if (left.records !== right.records) return right.records - left.records;
+    const leftKey = left.shape ?? left.spelling;
+    const rightKey = right.shape ?? right.spelling;
+    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+  };
+  return [...byShape.values()]
+    .map(entry => ({
+      shape: entry.shape,
+      blockedExports: entry.exports.size,
+      records: entry.records,
+      spellings: [...entry.spellings.values()]
+        .map(spelling => ({
+          spelling: spelling.spelling,
+          blockedExports: spelling.exports.size,
+          records: spelling.records
+        }))
+        .sort(rank)
+    }))
+    .sort(rank);
+}
+
 function countByKind(declined) {
   const counts = {};
   for (const record of declined) {
@@ -283,6 +351,8 @@ export function summarizeContract({
     declinedClosuresByKind: countByKind(declined),
     // The per-row answer to "what would a dialect audit unblock here".
     dialectSilentBlockers: dialectSilentBlockers(declined),
+    // The per-row answer to "what *are* the unresolved callees here".
+    unresolvedCalleeShapes: unresolvedCalleeShapes(declined),
     refusedEntrypointNames: [],
     exportsTotal: document.exportsTotal,
     exportsProven: document.exportsProven,

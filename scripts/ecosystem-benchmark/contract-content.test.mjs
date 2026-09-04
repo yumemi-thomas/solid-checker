@@ -159,3 +159,47 @@ test("a refusal audit remains readable when no contract document was emitted", (
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("unresolved-callee declines are grouped by shape and by concrete spelling", () => {
+  const declinedClosures = [
+    // Two call sites of one export, one spelling: one *export* is blocked.
+    { export: "a", kind: "unresolved-callee", shape: "parameter-rooted", spelling: "read" },
+    { export: "a", kind: "unresolved-callee", shape: "parameter-rooted", spelling: "read" },
+    { export: "b", kind: "unresolved-callee", shape: "parameter-rooted", spelling: "write" },
+    { export: "c", kind: "unresolved-callee", shape: "undeclared-identifier", spelling: "fetch" },
+    // Other kinds never enter the shape table, and a `dialect-silent` record
+    // carries no shape at all.
+    { export: "d", kind: "dialect-silent", package: "solid-js", callee: "createEffect" },
+    { export: "e", kind: "refusing-callee-fixpoint", declaration: "/p/i.js:0:9" },
+    // A record written before the shapes exist is counted under the empty
+    // shape rather than dropped or assigned one.
+    { export: "f", kind: "unresolved-callee" }
+  ];
+  const content = summarizeContract({ contract: document(), reviewPlan: plan(), declinedClosures });
+  assert.equal(content.declinedClosures, 7);
+  assert.deepEqual(content.declinedClosuresByKind, {
+    "dialect-silent": 1,
+    "refusing-callee-fixpoint": 1,
+    "unresolved-callee": 5
+  });
+  assert.deepEqual(
+    content.unresolvedCalleeShapes.map(shape => [shape.shape, shape.blockedExports, shape.records]),
+    [
+      ["parameter-rooted", 2, 3],
+      // Tied on both counts, so the tie-break is the name: the unclassified
+      // shape sorts first as the empty string, and is never merged away.
+      ["", 1, 1],
+      ["undeclared-identifier", 1, 1]
+    ]
+  );
+  assert.deepEqual(content.unresolvedCalleeShapes[0].spellings, [
+    { spelling: "read", blockedExports: 1, records: 2 },
+    { spelling: "write", blockedExports: 1, records: 1 }
+  ]);
+  // A row with no declines at all names no shape, which is a different
+  // measurement from a row whose declines carry no shape.
+  assert.deepEqual(
+    summarizeContract({ contract: document(), reviewPlan: plan() }).unresolvedCalleeShapes,
+    []
+  );
+});

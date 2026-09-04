@@ -19,7 +19,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/index.js:727:757",
-      "declaration": ""
+      "declaration": "",
+      "shape": "parameter-rooted",
+      "spelling": "call"
     },
     {
       "entrypoint": ".",
@@ -31,7 +33,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/index.js:926:942",
-      "declaration": "<package-root>/index.js:669:778"
+      "declaration": "<package-root>/index.js:669:778",
+      "shape": "",
+      "spelling": ""
     }
   ]
 }

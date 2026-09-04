@@ -19,7 +19,9 @@
       "package": "",
       "callee": "",
       "location": "<package-root>/index.js:49:66",
-      "declaration": ""
+      "declaration": "",
+      "shape": "parameter-rooted",
+      "spelling": "slice"
     }
   ]
 }

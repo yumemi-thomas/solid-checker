@@ -229,7 +229,7 @@ export function withheldClaimsFromEmitterOutput(stdout, documentPath) {
 /// it decline to *propose* a closed `creates` for an export
 /// (`DECLINED_CLOSURE_MARKER` in rust/crates/solid-facts-backend/src/main.rs),
 /// tab-separated as
-/// `<document path>\t<export>\t<domain>\t<kind>\t<package>\t<callee>\t<location>\t<declaration>`.
+/// `<document path>\t<export>\t<domain>\t<kind>\t<package>\t<callee>\t<location>\t<declaration>\t<shape>\t<spelling>`.
 ///
 /// A declined proposal leaves the same open domain behind as a census with
 /// nothing to propose, so the decline has to be stated rather than inferred —
@@ -239,10 +239,18 @@ export function withheldClaimsFromEmitterOutput(stdout, documentPath) {
 const DECLINED_CLOSURE_MARKER = "solid-checker:declined-closure=";
 
 /// Every declined-closure line the emitter wrote for `documentPath`, as
-/// `{ export, domain, kind, package, callee, location, declaration }`. Lines
-/// for other targets of the same batch, and any other emitter output, are
-/// ignored. `package`, `callee` and `declaration` are empty for the kinds that
-/// name no such identity, and are kept empty rather than filled in by guess.
+/// `{ export, domain, kind, package, callee, location, declaration, shape,
+/// spelling }`. Lines for other targets of the same batch, and any other
+/// emitter output, are ignored. `package`, `callee` and `declaration` are empty
+/// for the kinds that name no such identity, and are kept empty rather than
+/// filled in by guess.
+///
+/// `shape` and `spelling` are the last two columns and are read the same way:
+/// the observed shape of an `unresolved-callee`'s callee expression and the one
+/// concrete string it carries (`solid_reactive_ir::UnresolvedCalleeShape`).
+/// They are **appended** columns, so a line written by an emitter that predates
+/// them parses with both empty rather than failing, and `kind` still says
+/// `unresolved-callee` for every shape.
 export function declinedClosuresFromEmitterOutput(stdout, documentPath, packageRoot = null) {
   // A blocking call site is a `path:start:end` inside the analyzed package, and
   // the emitter states it absolutely because that is the only path it has. A
@@ -256,9 +264,18 @@ export function declinedClosuresFromEmitterOutput(stdout, documentPath, packageR
   const declined = [];
   for (const line of String(stdout ?? "").split("\n")) {
     if (!line.startsWith(DECLINED_CLOSURE_MARKER)) continue;
-    const [document, exportName, domain, kind, packageName, callee, location, declaration] = line
-      .slice(DECLINED_CLOSURE_MARKER.length)
-      .split("\t");
+    const [
+      document,
+      exportName,
+      domain,
+      kind,
+      packageName,
+      callee,
+      location,
+      declaration,
+      shape,
+      spelling
+    ] = line.slice(DECLINED_CLOSURE_MARKER.length).split("\t");
     if (document !== documentPath || !exportName || !domain || !kind) continue;
     declined.push({
       export: exportName,
@@ -267,7 +284,9 @@ export function declinedClosuresFromEmitterOutput(stdout, documentPath, packageR
       package: packageName ?? "",
       callee: callee ?? "",
       location: relativize((location ?? "").trim()),
-      declaration: relativize((declaration ?? "").trim())
+      declaration: relativize((declaration ?? "").trim()),
+      shape: (shape ?? "").trim(),
+      spelling: (spelling ?? "").trim()
     });
   }
   return declined;
@@ -1473,7 +1492,9 @@ export async function generatePackageContract(
             package: record.package,
             callee: record.callee,
             location: record.location,
-            declaration: record.declaration
+            declaration: record.declaration,
+            shape: record.shape,
+            spelling: record.spelling
           });
         }
         if (timing) {

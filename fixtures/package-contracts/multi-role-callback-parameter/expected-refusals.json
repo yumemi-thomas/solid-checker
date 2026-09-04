@@ -60,7 +60,9 @@
       "package": "solid-js",
       "callee": "createEffect",
       "location": "<package-root>/index.ts:1812:1835",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -72,7 +74,9 @@
       "package": "solid-js",
       "callee": "createEffect",
       "location": "<package-root>/index.ts:1839:1862",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -84,7 +88,9 @@
       "package": "solid-js",
       "callee": "createEffect",
       "location": "<package-root>/index.ts:456:484",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -96,7 +102,9 @@
       "package": "solid-js",
       "callee": "createEffect",
       "location": "<package-root>/index.ts:2040:2068",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -108,7 +116,9 @@
       "package": "solid-js",
       "callee": "createEffect",
       "location": "<package-root>/index.ts:1462:1489",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -120,7 +130,9 @@
       "package": "solid-js",
       "callee": "createEffect",
       "location": "<package-root>/index.ts:1172:1200",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     },
     {
       "entrypoint": ".",
@@ -132,7 +144,9 @@
       "package": "solid-js",
       "callee": "createEffect",
       "location": "<package-root>/index.ts:1204:1232",
-      "declaration": ""
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
     }
   ]
 }

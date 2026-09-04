@@ -3,7 +3,8 @@
 The measurement fixture for the generator's own `creates` walk
 (`rust/crates/solid-reactive-ir/src/creates_walk.rs`,
 `docs/adr/0008-implementation-census-for-creates.md` § "The decline records"):
-one export per **blocker kind** the walk distinguishes, plus one that proposes.
+one export per **blocker kind** the walk distinguishes, one per
+**unresolved-callee shape** it classifies, plus one that proposes.
 
 It is a generator-corpus fixture (`corpus.json`) and nothing here is ever
 certified. What it pins is the `declinedClosures` array of the proposal refusal
@@ -19,7 +20,57 @@ for an export was one bit and the reason was unrecoverable, which is why
 | `./clean` | `proposes` | proposes `creates: []` | none — the control |
 | `.` | `dialectSilent` | declines | `dialect-silent { package: "solid-js", export: "createEffect" }` |
 | `.` | `viaSilentHelper` | declines | `refusing-callee-fixpoint`, naming `silentHelper`'s exact declaration span, **and** that helper's own `dialect-silent` record at its own location |
-| `.` | `unresolvedCallee` | declines | `unresolved-callee`, carrying the call's location and no callee identity |
+| `.` | `unresolvedCallee` | declines | `unresolved-callee`, no callee identity, shape `undeclared-identifier` spelled `externalGlobal` |
+
+## The unresolved-callee shapes, and which are pinned here
+
+`unresolved-callee` is about half of every decline the ecosystem corpus
+measures, and as one undifferentiated kind it says only "something did not
+resolve". The kind now carries an
+`UnresolvedCalleeShape` (`rust/crates/solid-reactive-ir/src/creates_walk.rs`),
+decided from facts the build already has — no producer or Type Facts demand was
+added. Its wire `kind` is still `unresolved-callee`, so every existing
+`declinedClosuresByKind` count is unchanged; `shape` and `spelling` are two
+appended columns.
+
+**All seven shapes are pinned here**, one export each:
+
+| entrypoint | export | shape | spelling |
+| --- | --- | --- | --- |
+| `.` | `unresolvedCallee` | `undeclared-identifier` | `externalGlobal` |
+| `.` | `memberPropertyUnresolved` | `member-property-unresolved` | `publish` |
+| `.` | `memberReceiverUnresolved` | `member-receiver-unresolved` | `method` |
+| `.` | `computedMember` | `computed-member` | `handlers` (the receiver) |
+| `.` | `parameterRooted` | `parameter-rooted` | `read` |
+| `.` | `parameterAliasRooted` | `parameter-rooted` | `read` |
+| `.` | `expressionCallee` | `expression-callee` | `function-expression` |
+| `.` | `otherSyntax` | `other` | `await-expression` |
+
+Nothing about the shapes is pinned by unit test alone. What the unit tests in
+`creates_walk.rs` do cover, and this fixture cannot, is the shape *vocabulary*
+itself — every shape's wire name, its one carried spelling, and that the kind's
+own name stays `unresolved-callee`.
+
+Two things the classifier can name but no source here produces, deliberately:
+
+- **`expression-callee` spelled `call-expression`.** A higher-order
+  `factory()()` resolves on this build — TypeScript answers an entity at the
+  inner call — so the walk records no shape for it at all. The arm exists so
+  that if such a callee ever stops resolving it lands in `expression-callee`
+  rather than in `other`.
+- **`other` spelled anything but `await-expression`.** A conditional or logical
+  callee (`(flag ? a : b)()`) also resolves here: `EntitySymbols::at` answers
+  with an *operand's* symbol at a compound span. `unknown-expression` is the
+  honest answer for a syntax no fact table names, and no source is known to
+  produce one.
+
+There is **no `unaccepted-import` shape**. It was implemented and measured
+first: an import of an unresolvable bare specifier, a deep subpath, or a
+missing default still gives its local binding an alias symbol, so the callee
+resolves and never reaches the unresolved branch. A namespace import's member
+call (`import * as ns; ns.thing()`) lands in `member-property-unresolved` with
+the receiver resolved. An unaccepted dependency is a closure hazard decided at
+certification, which is a different decision from this walk's.
 
 `proposes` is not decoration. Without an export that still proposes, an
 `expected-proposal.json` with no `creates` candidate would be equally
@@ -103,7 +154,20 @@ no better. With neither the field is empty and the ranking prints
   An import from an unaudited dependency is a closure hazard decided at
   certification, not a walk decision at all — and the entry file is JavaScript
   precisely so the undeclared global is a runtime fact rather than a `tsc`
-  diagnostic this checker would then be duplicating.
+  diagnostic this checker would then be duplicating. The same applies to every
+  shape export below it: they are unresolved *because* the module is JavaScript
+  with no `checkJs`, so an undeclared global, a missing property and a computed
+  callee are runtime facts here, not diagnostics `tsc` would already report
+  against these bytes.
+- **`index.d.ts` must stay exactly as tight as `index.js`.** Every shape export
+  has a declaration whose signature is the one the runtime module implements. A
+  loosened declaration is how a rule quietly starts inventing a defect
+  (AGENTS.md); no shape here depends on declaration slack, and the classifier
+  reads `index.js`'s own syntax and entity facts rather than the declarations.
+- **A record carries byte offsets, so editing this module moves the snapshot.**
+  Adding a shape export shifts every later record's `location`. That is the
+  cost the sidecar pin buys and it is accepted; review the moved offsets rather
+  than regenerating past them.
 
 ## Not the census
 

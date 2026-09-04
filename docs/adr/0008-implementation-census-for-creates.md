@@ -312,10 +312,65 @@ distinguishes and no invented sixth:
 - `create-publishing-callee { package, export }` — an accepted dependency
   contract that does not close `creates` empty, named by the contract binding's
   own package and imported export.
-- `unresolved-callee` — no symbol resolved. The record's location is the whole
-  payload, because there is no callee identity to name.
+- `unresolved-callee { shape }` — no symbol resolved. There is still no callee
+  identity to name, but the callee expression's **shape** is recorded; see
+  "The unresolved-callee shapes" below.
 - `refusing-callee-fixpoint { declaration }` — the propagated case, naming the
   refusing project function's exact declaration span.
+
+#### The unresolved-callee shapes
+
+`unresolved-callee` turned out to be **about half of every decline on the
+measured corpus** — 20,450 of 41,957 — while saying only "something here did
+not resolve". That cannot distinguish a resolver gap worth closing from a callee
+no analysis of the module could ever decide, so the kind carries an
+`UnresolvedCalleeShape` (`rust/crates/solid-reactive-ir/src/creates_walk.rs`).
+Its wire `kind` is still `unresolved-callee`, so every existing
+`declinedClosuresByKind` count is unchanged and `shape` plus `spelling` are two
+**appended** marker/sidecar columns; an eight-column line written by an older
+emitter still parses, with both empty.
+
+Every shape is decided from facts the build already computed — Oxc's member,
+computed-member, identifier, parameter and binding-initializer tables, and the
+IR's own entity lookups. **No producer or Type Facts demand was added.** The
+decision order is part of the contract, because one call can satisfy two
+predicates (`props[key]()` is computed *and* parameter-rooted):
+
+| shape | what decides it | spelling carried |
+| --- | --- | --- |
+| `computed-member` | the peeled callee span is in `computed_members` | the receiver, where the object is a plain identifier; else empty — no static property spelling exists, which is the shape's content |
+| `parameter-rooted` | `member_callee_receiver` answers a root symbol, and that symbol (or one up to four binding-initializer aliases away) is a parameter name of a function whose **body contains this call** | the leaf property |
+| `member-property-unresolved` | non-computed member fact, and `entity_symbol` answers for the (peeled) object span | the property |
+| `member-receiver-unresolved` | the same member fact with **no** entity symbol at the object span — an unresolved identifier receiver or an expression receiver such as `factory().method()` | the property |
+| `undeclared-identifier` | the peeled callee is an identifier fact with no entity symbol — in practice a global | the identifier |
+| `expression-callee` | the peeled callee span is exactly a `CallFact::span` or a `FunctionFact::span` | `call-expression` / `function-expression` |
+| `other` | which of the remaining syntax tables holds the span, from a fixed vocabulary (`await-expression`, `conditional-expression`, `logical-expression`, `jsx-element`), and `unknown-expression` where none does | the syntactic kind |
+
+`other` is deliberately not a bucket: it carries the syntactic kind, so a shape
+the classifier does not model stays visible in the ranking instead of being
+folded into a neighbour.
+
+**There is no `unaccepted-import` shape, and that is a measurement, not an
+omission.** It was implemented first and it cannot fire: an import of an
+unresolvable bare specifier, a deep subpath, or a missing default still gives
+its local binding an alias symbol, so such a callee *resolves* and never reaches
+the unresolved branch. A namespace import's member call reaches
+`member-property-unresolved` with the receiver resolved. An unaccepted
+dependency is a closure hazard decided at certification — a different decision
+from this walk's. Two arms of the vocabulary above are likewise not produced by
+any known source on this build: `expression-callee` spelled `call-expression`
+(a higher-order `factory()()` resolves, because TypeScript answers an entity at
+the inner call) and every `other` spelling but `await-expression` (a conditional
+or logical callee resolves too — `EntitySymbols::at` answers with an *operand's*
+symbol at a compound span). They are retained so that a callee which stops
+resolving lands in the right shape rather than in the catch-all.
+
+Per row the shapes reach `contractContent.unresolvedCalleeShapes`, ranked by
+**distinct consumer exports blocked** with the call-site count beside it and
+every concrete spelling listed; `scripts/dialect-audit-yield.mjs` prints the
+aggregate as a second table under the dialect-silent one, and the report's
+contract-content section gains an "Unresolved-callee shapes" table.
+`fixtures/package-contracts/creates-decline-records` pins one export per shape.
 
 **The set is transitive, and it has to be.** An export whose only refusing call
 is a module-local helper's `createEffect` would otherwise report
@@ -328,8 +383,9 @@ propagated record keeps **its own** location inside the helper.
 **Measurement, never evidence.** No claim is decided from a record, none is
 encoded into a contract document, and `POLICY_DIGEST` does not move. A
 `dialect-silent` record is the audits' *silence* about a spelling and an
-`unresolved-callee` record is this build's own ignorance; neither says the
-callee performs a `create`. The records are recorded only where a proposal was
+`unresolved-callee` record is this build's own ignorance — and a *shape* is only
+what this build observed about the callee expression, never a claim about what
+the callee does; neither says the callee performs a `create`. The records are recorded only where a proposal was
 actually on the table — a `ConsumingPackage` function export — because a
 primitive-defining archive and a `value` export have no implementation walk to
 blame, and listing their structural silence would put rows in the ranking that
@@ -352,8 +408,9 @@ primitive blocks, with the row count beside it; that script is the answer to
 gate's `auditedCases`, so a decline cannot appear, change kind, or vanish
 unreviewed — the same discipline the other three arrays get. The cost is real
 and accepted: a record carries byte offsets, so editing a fixture's source
-moves its decline snapshot, and 20 corpus fixtures now carry one (74 records:
-30 `dialect-silent`, 26 `unresolved-callee`, 18 `refusing-callee-fixpoint`).
+moves its decline snapshot, and 20 corpus fixtures now carry one (81 records:
+30 `dialect-silent`, 33 `unresolved-callee`, 18 `refusing-callee-fixpoint`),
+each `unresolved-callee` one also pinning its shape and spelling.
 That churn is
 the yield made visible: adding an audit row is *supposed* to move every
 snapshot whose exports it unblocks.
