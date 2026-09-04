@@ -233,7 +233,12 @@ Per gate schedule, `probe_harness::run_probe_gates`:
    the tree; and materializes a **private copy of the artifact snapshot** under
    `node_modules/<package>/` — the package name validated as an npm name first,
    because the upstream coordinate check admits a `..` segment — remembering
-   the artifact case's own runtime target inside that copy. The census is taken
+   the artifact case's own runtime target inside that copy. It then places the
+   **authenticated dependency closure** beside it, one
+   `node_modules/<dependency>/` per snapshot this transaction already
+   authenticated, refusing first when the analyzed package imports a dependency
+   nothing authenticated or when one name has two authenticated versions. The
+   census is taken
    after the permission changes and before the first launch, and re-taken
    between launches and on every exit path. "Module resolution: the disposition
    table" below enumerates each resolver step this covers, and what is left
@@ -257,7 +262,9 @@ Per gate schedule, `probe_harness::run_probe_gates`:
     reported process identity to name the pid Rust actually launched — and
     requires the resolution the worker reported for the recipe's declared
     import kind to name the artifact case's own runtime target inside the
-    private copy.
+    private copy — and, for every dependency specifier the recipe declared,
+    requires the reported answer to name a file *inside* that dependency's
+    authenticated private copy.
 
 The worker's runtime, isolation, and environment fields are transport data that
 must **equal** what Rust computed. It echoes `session.mode.environment`
@@ -428,18 +435,27 @@ protects — that no probe run can have altered the inputs the rest of the
 transaction reads — verifiably, and refuses when it cannot show that:
 
 * the probe reads a private copy of the artifact snapshot inside the 0700
-  directory, never the shared materialized store and never the analyzed tree —
-  and only the **analyzed package** is copied, so a bare specifier naming one
-  of its dependencies fails to resolve and the gate is refused rather than the
-  probe reaching bytes this transaction never authenticated;
+  directory, never the shared materialized store and never the analyzed tree.
+  The **authenticated dependency closure** is copied beside it, under the same
+  discipline — authenticated snapshot bytes, an `npm`-validated name as its
+  directory, its own watched census entry — so a recipe can `import` the
+  package under test and that package can resolve its own dependencies. A
+  dependency the package imports and this transaction authenticated no snapshot
+  for refuses the gate by name rather than the probe reaching bytes this
+  transaction never authenticated;
 * the private directory itself is censused **non-recursively** — its direct
   entry names and kinds — because `TMPDIR` and the cwd are that directory, so a
   `node.config.json` or any other loader-affecting file landing beside the three
   subdirectories has to be a change. Its cost is a refusal direction: a probe
   that writes a temporary file into `TMPDIR` refuses the gate;
 * digests of the whole private `node_modules` tree (not only the copied
-  package: a planted sibling would otherwise answer a bare specifier
-  unwatched), the copied harness image, the copied recipe modules — the two
+  packages: a planted sibling would otherwise answer a bare specifier
+  unwatched), **each authenticated dependency copy under its own
+  `private-dependency:<name>` label** — redundant with the whole-tree digest on
+  purpose, so a dependency file changing mid-run refuses by name rather than as
+  an anonymous change somewhere under `node_modules`, and so a future change
+  that stopped placing a copy inside the watched tree fails loudly — the copied
+  harness image, the copied recipe modules — the two
   private package scopes among them, since they live in those trees, and with
   them `<private>/harness/node_modules` and `<private>/recipes/node_modules`,
   the two first rungs of the `node_modules` walk — the two
@@ -498,7 +514,7 @@ this workspace's disposition. Four dispositions:
   omitted.
 
 `sandbox_policy_digest` (`probe_harness.rs`) mirrors these field names into the
-receipt-visible policy digest, at `scheme-version:4`.
+receipt-visible policy digest, at `scheme-version:6`.
 
 #### ESM (`ESM_RESOLVE`)
 
@@ -510,9 +526,9 @@ receipt-visible policy digest, at `scheme-version:4`.
 | specifier starts with `#` → `PACKAGE_IMPORTS_RESOLVE` | `LOOKUP_PACKAGE_SCOPE(parent)` → `imports` | **CONTAINED** — the private package scope has no `imports`, so a `#specifier` fails with `ERR_PACKAGE_IMPORT_NOT_DEFINED` instead of reaching an ancestor's map |
 | `PACKAGE_RESOLVE`: builtin (`node:*`, bare builtin) | the builtin table | **NOT DENIED**, deliberately: the worker itself imports `node:crypto`, `node:fs`, `node:url` |
 | `PACKAGE_RESOLVE` → `PACKAGE_SELF_RESOLVE` → `LOOKUP_PACKAGE_SCOPE` | the first `package.json` at or above the importer | **CONTAINED** — `<private>/harness/package.json` and `<private>/recipes/package.json` end the climb, and carry no `exports`, so self-resolution returns undefined. **WATCHED** as well: every `<ancestor>/package.json` is censused, so planting one mid-run refuses and a future change that drops a private scope fails loudly |
-| `LOOKUP_PACKAGE_SCOPE` from inside the snapshot copy | `<private>/node_modules/<pkg>/package.json` | **CONTAINED** — the climb returns null at a `node_modules` path segment, so it cannot pass the private `node_modules`, and the manifest it finds first is authenticated snapshot bytes |
-| `PACKAGE_RESOLVE`: the `node_modules` walk | `<dir>/node_modules` for the importer and every ancestor | **CONTAINED** to `<private>/node_modules` (a watched tree, whole, not only the copied package). Two candidates come *before* it and are named here because they are easy to miss: the importer's own directory is `<private>/harness/` for the worker and `<private>/recipes/` for a recipe, so `<private>/harness/node_modules` and `<private>/recipes/node_modules` are the first two rungs of the walk. Neither exists, and both sit *inside* a watched tree — `hash_tree` covers every regular file under `harness/` and `recipes/` — so one appearing mid-run changes that tree's digest and refuses. Every ancestor candidate *above* the private directory is **REFUSED** as a precondition and **WATCHED** afterwards, because the precondition is point-in-time on a tree this process does not own (`/tmp` is world-writable on Linux) |
-| `PACKAGE_RESOLVE`: a bare specifier naming a **dependency** of the analyzed package | `<private>/node_modules` | **REFUSED**, and by construction rather than by a check: only the analyzed package's own snapshot is copied, so `node_modules` holds exactly one package. A recipe (or package code) importing a dependency by bare specifier gets `ERR_MODULE_NOT_FOUND`, the run fails, and the gate is refused. That is the refusal direction — a probe never silently reaches an unauthenticated dependency — and it is also a real limit: a package whose export cannot run without its dependencies cannot be probed at Stage 1 |
+| `LOOKUP_PACKAGE_SCOPE` from inside the snapshot copy, or inside a dependency copy | `<private>/node_modules/<pkg>/package.json`, `<private>/node_modules/<dependency>/package.json` | **CONTAINED** — the climb returns null at a `node_modules` path segment, so it cannot pass the private `node_modules`, and the manifest it finds first is authenticated snapshot bytes. A dependency copy carries its **own** authenticated `package.json` and this module writes none there: that manifest's `exports` map is what answers its specifiers, and replacing it with the `exports`-less private scope would break the resolution the closure exists to permit. The two private scopes in `harness/` and `recipes/` are therefore unreachable from a dependency's own files, which is correct — they exist to terminate the climb for the *importers*, not for the packages |
+| `PACKAGE_RESOLVE`: the `node_modules` walk | `<dir>/node_modules` for the importer and every ancestor | **CONTAINED** to `<private>/node_modules` (a watched tree, whole, not only the copied packages). The walk now has more rungs, because package code is a real importer: from `<private>/node_modules/<pkg>/…` the first candidate is `<private>/node_modules/<pkg>/node_modules`, and from a dependency copy `<private>/node_modules/<dependency>/node_modules`. Neither exists unless the *snapshot itself* ships one — in which case those are authenticated bytes too, part of the snapshot, so a nested copy shadowing a hoisted one is not an escape — and both sit inside the watched `private-node-modules` tree, so one appearing mid-run refuses. Above them the walk reaches `<private>/node_modules` and stops mattering: two candidates come before it for the *harness* importers and are named here because they are easy to miss — the importer's own directory is `<private>/harness/` for the worker and `<private>/recipes/` for a recipe, so `<private>/harness/node_modules` and `<private>/recipes/node_modules` are the first two rungs there. Neither exists, and both sit inside a watched tree — `hash_tree` covers every regular file under `harness/` and `recipes/` — so one appearing mid-run changes that tree's digest and refuses. Every ancestor candidate *above* the private directory is **REFUSED** as a precondition and **WATCHED** afterwards, because the precondition is point-in-time on a tree this process does not own (`/tmp` is world-writable on Linux) |
+| `PACKAGE_RESOLVE`: a bare specifier naming a **dependency** of the analyzed package | `<private>/node_modules` | **CONTAINED** to the *authenticated* dependency closure, and **WATCHED** per copy. `PrivateProbeWorkspace::create` copies every dependency snapshot this certification transaction already authenticated — `plan.certification_sources`, the integrity-verified published archives whose lock selection replayed, the same set `type_facts::snapshot_source_roots` materializes the private Type Facts project from — into `<private>/node_modules/<name>/`, `@scope/` kept, each name through the same `safe_package_directory` validation as the analyzed package, each tree hashed under its own `private-dependency:<name>` label. Nothing is read from the project's real `node_modules`, from a registry, or from any path outside that set. A dependency the closure replay recorded an accepted edge for and this transaction authenticated **no** snapshot for is a typed refusal naming the specifier, the package, and the importer (`ProbeHarnessError::UnauthenticatedDependency`), before the private directory exists. **One version per name**: two authenticated snapshots of one name at different snapshot roots refuse (`AmbiguousDependencyVersion`) rather than one being chosen between — see "Why one version per name" below. See also "What the closure does not answer" |
 | `PACKAGE_EXPORTS_RESOLVE` / `PACKAGE_TARGET_RESOLVE` | the resolved package's own `exports` | **CONTAINED** — read from the private copy's manifest; Node refuses a target that escapes its package directory |
 | `LOAD_PACKAGE_EXPORTS` legacy `main` | the resolved package's `main` | **CONTAINED** — same manifest, same directory |
 | `ESM_FILE_FORMAT` / package.json `"type"` | the nearest package scope | **CONTAINED** — the private scopes declare `"type": "module"`, so a file's format is decided inside the tree rather than by an ancestor |
@@ -649,22 +665,124 @@ cannot reach, because Node computes it from `process.execPath` rather than from
 
 Precondition and census are both needed throughout; neither replaces the other.
 
+### The authenticated dependency closure
+
+The dependency row above was a **REFUSED** one, and refusing was the honest
+answer while nothing carried the bytes: a consumer package's veto recipe has to
+`import` the package under test, that package's module top level then runs its
+own `import "solid-js"`, and with only the analyzed package copied that is
+`ERR_MODULE_NOT_FOUND` — a failed run and a refused gate. Every consumer
+closure candidate was therefore unprobeable, which
+`docs/adr/0008-implementation-census-for-creates.md` § "What this does not yet
+buy on real rows" recorded as one of the three blockers to a certified closed
+claim on a real row.
+
+What changed is *which authenticated bytes the workspace carries*, and nothing
+else. The closure is `plan.certification_sources`: the integrity-verified
+published archives whose lock selection this transaction replayed, the exact
+set `type_facts::snapshot_source_roots` materializes the private Type Facts
+project from and the source census holds every producer-consulted file to.
+`authenticated_dependency_closure` derives it; `copy_snapshot_into` — one
+definition, shared with the analyzed package's own copy, so a dependency can
+never enter under weaker rules — writes it. Four properties, each enforced in
+code and pinned by a test:
+
+* **Only authenticated bytes.** No read of the project's real `node_modules`,
+  no registry, no path outside that set. A dependency the independently
+  replayed module closure recorded an accepted edge for and this transaction
+  authenticated no snapshot for is
+  `ProbeHarnessError::UnauthenticatedDependency`, naming the specifier, the
+  package, and the importer, before the private directory exists. A *recipe*
+  that declares a specifier nothing authenticated refuses too, separately and
+  by name, because the two are different claims.
+* **A layout that resolves.** `<private>/node_modules/<name>/`, `@scope/` kept,
+  the name through the same `safe_package_directory` validation the analyzed
+  package's is. Each copy keeps its own authenticated `package.json`.
+* **Every copied tree is watched**, whole, before the first launch, between
+  launches, and on every exit path — under `private-dependency:<name>` as well
+  as inside the whole-tree `private-node-modules` digest.
+* **The resolution echo extends.** A recipe declares `dependencySpecifiers` in
+  `recipes.json`; Rust binds them into the recipe-corpus root, asks the worker
+  to resolve each one *before* the recipe (and therefore the package) is
+  imported, and refuses unless every answer lands inside that dependency's
+  authenticated copy — in the order asked, one per specifier, so a frame with a
+  different count or a permuted order is a refusal rather than a set to search.
+
+#### Why one version per name
+
+Two authenticated snapshots of one name at different snapshot roots refuse
+(`AmbiguousDependencyVersion`) rather than one being chosen between, and the
+nesting alternative — placing the importer-specific copy at
+`<private>/node_modules/<importer>/node_modules/<name>/` — was rejected rather
+than deferred. The authenticated source set does carry an
+`installed_package_root`, but that root describes the *project's real tree*, and
+reading it as a nesting instruction would make the probe's resolution depend on
+a path this workspace does not reproduce: the private tree has no project root,
+no workspace layout, and no hoisting history. Choosing one copy would be
+substitution, which is the failure mode
+`type_facts::retain_collision_free_source_packages` already refuses on the Type
+Facts side for the same reason. The corpus does not need otherwise — every
+measured row's closure names each dependency once — so a row that genuinely
+installs two versions of one package refuses its gate, and that refusal is
+recorded rather than worked around.
+
+#### What the closure does not answer
+
+* **The echo is evidence about the rung, not about the package's own walk.**
+  `import.meta.resolve` is per-module and Node exposes no resolve-from-another-
+  URL API, so the ESM answer comes from `<private>/harness/` and the CommonJS
+  answer from `<private>/recipes/` — not from inside the analyzed package's
+  copy, which is where the package's own `import` actually resolves from. The
+  rung that answers is the same one (`<private>/node_modules`), every ancestor
+  candidate is refused as a precondition and watched afterwards, and both
+  importer directories are watched whole, so a nearer `node_modules` appearing
+  inside one is an `IsolationViolation` on the next census. But the echo does
+  not *prove* the package resolved there; the fixture's recipe does, by calling
+  an export whose body calls into the dependency copy and refusing the gate on
+  any other answer.
+* **The echo proves containment, not one exact file.** For the analyzed package
+  the check is equality with the artifact case's own runtime target, because
+  this transaction certifies that case. A dependency has no certified artifact
+  case here, and its `exports` map may legitimately answer several
+  entrypoints, so the check is that the answer is *inside* the authenticated
+  copy.
+* **A snapshot-shipped nested `node_modules` shadows a copy.** If the analyzed
+  package's own archive ships `node_modules/<name>/`, that copy wins the walk
+  from inside the package. Those are authenticated bytes too — part of the
+  snapshot — so it is not an escape, and it is watched with the rest of the
+  tree; it is named here because it means "the copy this module placed is the
+  one that answered" is not a property the workspace guarantees.
+* **A dependency's own dependencies are only as complete as the closure
+  supplied.** The workspace places what the transaction authenticated; it does
+  not compute a transitive closure of its own. A dependency whose module top
+  level imports a package nobody supplied fails at import, which refuses the
+  gate.
+
 `SandboxKind::Process` is recorded with a **verifier-computed** policy digest
-over exactly this scheme, at `scheme-version:5`. Its field list mirrors the
+over exactly this scheme, at `scheme-version:6`. Its field list mirrors the
 disposition table's own names — `resolution:private-package-scope`,
 `resolution:no-package-self-reference`,
 `resolution:no-package-imports-escape`,
 `resolution:no-ancestor-node-modules`, `resolution:no-cjs-global-folders`,
 `resolution:no-node-path`, `resolution:no-environment-loader-hooks`,
-`resolution:file-format-from-private-package-scope`, and, new at version 5,
+`resolution:file-format-from-private-package-scope`, version 5's
 `resolution:requested-conditions-passed-as-interpreter-flags`,
 `resolution:conditions-observed-from-pinned-interpreter`,
 `resolution:declared-import-kind-per-recipe`,
 `resolution:artifact-case-runtime-target-reproduced-or-refused`,
 `argv:worker-path-plus-requested-conditions-only`,
-`snapshot:analyzed-package-only`,
-`report:resolution-echoed-and-compared-to-artifact-case`, and
-`private-directory-entries` inside the `watched:` list — and says outright
+`report:resolution-echoed-and-compared-to-artifact-case`,
+`private-directory-entries` inside the `watched:` list, and, new at version 6,
+the dependency closure's own — one renamed field, five added, and one more
+entry inside the `watched:` list —
+`snapshot:analyzed-package-plus-authenticated-dependency-closure` (which
+*replaces* version 5's `snapshot:analyzed-package-only`),
+`snapshot:dependency-closure-from-transaction-authenticated-snapshots-only`,
+`snapshot:one-version-per-dependency-name-or-refuse`,
+`snapshot:unauthenticated-package-dependency-refuses-by-name`,
+`resolution:declared-dependency-specifiers-per-recipe`,
+`report:declared-dependency-resolutions-echoed-and-required-inside-the-authenticated-copy`,
+and `private-dependency-copies` inside the `watched:` list — and says outright
 `enforcement:detect-and-refuse`, `network:not-denied`,
 `filesystem-writes:not-denied`, `filesystem-reads:not-denied`,
 `absolute-and-file-url-imports:not-denied`, `data-url-imports:not-denied`,
@@ -735,12 +853,28 @@ its own proposed closure. Corpus provenance beyond that is Stage 3.
   `module-sync` before `import`, with a contradicting runtime behind it — and it
   refuses at planning instead of certifying.
 * Module resolution has a written disposition per resolver step, and the policy
-  digest's `resolution:` fields mirror it at `scheme-version:5`. The private
+  digest's `resolution:` fields mirror it at `scheme-version:6`. The private
   package scopes close the self-reference escape — a false *pass* — for ESM,
   CommonJS, and `#` specifiers at once, and `$PREFIX/lib/node` joins the
   refused-and-watched set. `an_ancestor_package_self_reference_cannot_answer_a_private_bare_specifier`
   runs a real interpreter, asserts the private copy wins, then removes the
   scope and asserts the ancestor wins, so it cannot go vacuous.
+* **The dependency row is CONTAINED rather than REFUSED, and a consumer recipe
+  can import the package under test.** The workspace carries the transaction's
+  authenticated dependency closure beside the analyzed package's copy — only
+  `plan.certification_sources` bytes, one version per name or a refusal, each
+  tree watched under its own label, and a recipe's declared
+  `dependencySpecifiers` echoed back and required to land inside the
+  authenticated copy. A dependency the package imports and nothing
+  authenticated refuses by name. `scheme-version:6` adds five fields, renames
+  `snapshot:analyzed-package-only`, and adds one entry to the `watched:` list;
+  no other row's truth changed
+  except the `node_modules` walk, which now has the package's and each
+  dependency's own first rung above it and says so.
+  `a_recipe_imports_the_package_and_its_dependency_resolves_inside_the_private_copy`
+  runs a real interpreter, asserts the dependency import lands inside the copy,
+  then removes the copy and asserts the package stops being importable at all,
+  so it cannot go vacuous.
 * The watched census is keyed by label and refuses a duplicate, so
   `verify_pinned` can no longer be answered by whichever of two same-named
   entries came first. Nothing constructs such a collision today; it is a
@@ -786,9 +920,21 @@ its own proposed closure. Corpus provenance beyond that is Stage 3.
 * Its `consumer/` keeps the `tsc` claim verified rather than asserted: every
   probed export is used under `strict` with `moduleResolution: nodenext`, and
   `tsc --noEmit` reports nothing.
-* No existing receipt, `semanticDigest`, or fixture snapshot moves. Every
-  current row has an empty probe schedule and keeps the byte-identical empty
-  authority root, and no row in the corpus has a recipe, so none gains closure.
+* `fixtures/package-contracts/implementation-census-creates/dependency-consumer`
+  is where the dependency closure is proven end to end: a consumer whose module
+  top level imports `solid-js`, its own authenticated stub, and a recipe that
+  imports the package, calls the census-proved export, and calls a second
+  export whose body calls into the stub — refusing the gate on any answer but
+  the stub's own, so resolving is not mistaken for running. Its negative arm is
+  the same package, the same recipe, the same accepted dependency edge, and no
+  authenticated snapshot: the gate refuses by name.
+* No existing receipt, `semanticDigest`, or fixture snapshot moves, and the
+  `scheme-version:6` bump cannot move one either. Every current row has an
+  empty probe schedule and keeps the byte-identical empty authority root, and
+  no row in the corpus has a recipe, so none gains closure; the recipe-corpus
+  root is byte-identical for a recipe that declares no `dependencySpecifiers`,
+  and the sandbox policy digest only reaches a *nonempty* batch's
+  `probe_gate_root`.
 * `certify_value_only`, `certify_value_only_case_set`, and the published-graph
   lane all take an optional `ProbeHarnessConfiguration`, and each plan or graph
   node derives, runs, and authenticates its own veto set. A parent never
@@ -872,7 +1018,12 @@ alternative enumeration is available today.
 
 **Stage 3 — a recipe corpus for real packages.** Recipe-corpus provenance,
 addressing that survives contract edits, and enough recipes for the closed
-claim domains the corpus actually wants.
+claim domains the corpus actually wants. The workspace half of this is now
+done — a consumer recipe can import the package under test and that package can
+resolve its authenticated dependencies — so what remains here is provenance and
+the recipes themselves, plus the two blockers the closure does not touch: the
+missing Solid 2.0 negative rows that keep the generator from proposing a
+candidate at all, and multi-version dependency layouts, which refuse.
 
 **Probe evidence sidecars.** The receipt binds *what was run* — gate ids,
 harness identity, recipe bytes through the plan digest — but the detailed

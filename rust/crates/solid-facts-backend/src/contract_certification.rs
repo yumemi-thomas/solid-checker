@@ -8386,11 +8386,33 @@ export const value = phantom;
         label: &str,
         entries: &[(&str, &str)],
     ) -> std::path::PathBuf {
+        let widened = entries
+            .iter()
+            .map(|(claim_id, module)| (*claim_id, *module, &[] as &[&str]))
+            .collect::<Vec<_>>();
+        tracer_corpus_with_dependencies(fixture, scratch, label, &widened)
+    }
+
+    /// As [`tracer_corpus_from`], with each recipe additionally declaring the
+    /// bare dependency specifiers it needs resolvable inside the private probe
+    /// workspace.
+    ///
+    /// A declared specifier asks for two things: that this transaction
+    /// authenticated a snapshot for it, and that every launch's echoed
+    /// resolution lands inside that authenticated private copy. A recipe that
+    /// declares none behaves exactly as before, including in the corpus root
+    /// the receipt binds.
+    fn tracer_corpus_with_dependencies(
+        fixture: &std::path::Path,
+        scratch: &std::path::Path,
+        label: &str,
+        entries: &[(&str, &str, &[&str])],
+    ) -> std::path::PathBuf {
         let corpus = scratch.join(format!("corpus-{label}"));
         std::fs::create_dir_all(&corpus).expect("corpus directory");
         let recipes = entries
             .iter()
-            .map(|(claim_id, module)| {
+            .map(|(claim_id, module, dependency_specifiers)| {
                 std::fs::copy(
                     fixture.join("probe-recipes").join(module),
                     corpus.join(module),
@@ -8399,6 +8421,7 @@ export const value = phantom;
                 serde_json::json!({
                     "claimId": claim_id,
                     "module": module,
+                    "dependencySpecifiers": dependency_specifiers,
                     // Every recipe in this corpus reaches its package with a
                     // static ESM import, and says so: the condition set Node
                     // applies to an `import` is not the one it applies to a
@@ -8719,9 +8742,22 @@ export const value = phantom;
         label: &str,
         entries: &[(&str, &str)],
     ) -> Option<super::ProbeHarnessConfiguration> {
+        let widened = entries
+            .iter()
+            .map(|(claim_id, module)| (*claim_id, *module, &[] as &[&str]))
+            .collect::<Vec<_>>();
+        tracer_configuration_with_dependencies(fixture, scratch, label, &widened)
+    }
+
+    fn tracer_configuration_with_dependencies(
+        fixture: &std::path::Path,
+        scratch: &std::path::Path,
+        label: &str,
+        entries: &[(&str, &str, &[&str])],
+    ) -> Option<super::ProbeHarnessConfiguration> {
         let (node, node_digest) = tracer_node()?;
         let (harness_root, harness_digest) = tracer_harness_root(scratch);
-        let corpus = tracer_corpus_from(fixture, scratch, label, entries);
+        let corpus = tracer_corpus_with_dependencies(fixture, scratch, label, entries);
         Some(
             super::ProbeHarnessConfiguration::with_test_pin(
                 harness_root,
@@ -9296,6 +9332,317 @@ export const value = phantom;
                 && rendered.contains("refuses an unresolved callee")
                 && rendered.contains("onSettled"),
             "the refusal must name the unresolved primitive: {rendered}"
+        );
+    }
+
+    // ---------------------------------------------------------------------
+    // The probe workspace's authenticated dependency closure:
+    // fixtures/package-contracts/implementation-census-creates/dependency-consumer
+    // ---------------------------------------------------------------------
+
+    const DEPENDENCY_CONSUMER: &str = "implementation-census-creates-dependency-consumer";
+    const DEPENDENCY_CONSUMER_ROOT: &str =
+        "/project/node_modules/implementation-census-creates-dependency-consumer";
+    const DEPENDENCY_STUB_ROOT: &str = "/project/node_modules/solid-js";
+
+    /// The `dependency-consumer/` fixture's `solid-js` stub as one published
+    /// archive, plus the integrity the transaction replays.
+    fn dependency_consumer_stub_archive() -> (PublishedArchive, Vec<u8>) {
+        let stub = census_fixture().join("dependency-consumer/node_modules/solid-js");
+        let manifest = std::fs::read(stub.join("package.json")).expect("stub manifest");
+        let runtime = std::fs::read(stub.join("index.js")).expect("stub runtime");
+        let declarations = std::fs::read(stub.join("index.d.ts")).expect("stub declarations");
+        let archive = published_archive_for(
+            "solid-js",
+            "2.0.0-rc.3",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        (archive, manifest)
+    }
+
+    /// The nested consumer whose module top level imports `solid-js`, planned
+    /// with that stub as an *accepted* dependency edge, closing `creates` for
+    /// `plainConsumer`.
+    ///
+    /// `authenticate_dependency` decides whether the stub also reaches the plan
+    /// as an authenticated **certification source** — the same channel the CLI
+    /// supplies `sourceDependencies` through and the same one the Type Facts
+    /// private project materializes from. That is the switch the two tests
+    /// below turn: with it the private probe workspace carries the dependency
+    /// closure and the recipe can import the package; without it the closure is
+    /// partial and the gate refuses by name.
+    fn dependency_consumer_plan(authenticate_dependency: bool) -> CertificationPlan {
+        let fixture = census_fixture().join("dependency-consumer");
+        let (stub_archive, stub_manifest) = dependency_consumer_stub_archive();
+        let stub_runtime = std::fs::read(
+            census_fixture().join("dependency-consumer/node_modules/solid-js/index.js"),
+        )
+        .expect("stub runtime");
+        let stub_declarations = std::fs::read(
+            census_fixture().join("dependency-consumer/node_modules/solid-js/index.d.ts"),
+        )
+        .expect("stub declarations");
+        let mut transaction = CertificationPlanningTransaction::new();
+        let stub_plan = plan_for_test_package_from_importer(
+            &stub_archive,
+            "solid-js",
+            "2.0.0-rc.3",
+            DEPENDENCY_STUB_ROOT,
+            &stub_manifest,
+            &["import"],
+            &[(
+                "record",
+                ("index.js", stub_runtime.as_slice()),
+                ("index.d.ts", stub_declarations.as_slice()),
+                DEPENDENCY_STUB_ROOT,
+            )],
+            &[],
+            &format!("{DEPENDENCY_CONSUMER_ROOT}/index.js"),
+        );
+
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let archive = published_archive_for(
+            DEPENDENCY_CONSUMER,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let bindings = ["callsDependency", "plainConsumer"].map(|export| {
+            (
+                export,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                DEPENDENCY_CONSUMER_ROOT,
+            )
+        });
+        let mut plan = try_plan_closing_for_test_package_from_importer(
+            &archive,
+            DEPENDENCY_CONSUMER,
+            "1.0.0",
+            DEPENDENCY_CONSUMER_ROOT,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[&stub_plan],
+            "/project/src/app.ts",
+            &[("plainConsumer", ClaimDomain::Creates)],
+            &|_| ValueShape::Callable,
+        )
+        .expect("the dependency consumer plans against its accepted stub edge");
+        if authenticate_dependency {
+            let integrity =
+                ArtifactSnapshot::from_published(&stub_archive, SnapshotLimits::policy_2())
+                    .expect("the stub archive assembles")
+                    .package_integrity()
+                    .to_owned();
+            plan.certification_sources = dependencies_verify_for_test(
+                &mut transaction,
+                vec![PublishedGraphSourceRequest::new(
+                    stub_archive,
+                    graph_lock("solid-js", "2.0.0-rc.3", &integrity),
+                    DEPENDENCY_STUB_ROOT,
+                )],
+            )
+            .expect("the stub authenticates as a certification source");
+        }
+        plan
+    }
+
+    /// The whole chain the dependency closure buys: the implementation census
+    /// proves `plainConsumer`'s `creates: []`, a consumer recipe then imports
+    /// the package under test, the package's own top-level `import "solid-js"`
+    /// resolves inside the authenticated private copy, an export whose body
+    /// calls into that copy answers with the stub's own value, and the
+    /// mandatory veto authenticates.
+    ///
+    /// Every link is load-bearing. The recipe cannot evaluate at all unless the
+    /// dependency resolves — that was `ERR_MODULE_NOT_FOUND` before this
+    /// workspace carried the closure. It throws, failing the run and refusing
+    /// the gate, unless the value comes back through the dependency copy's own
+    /// code. And its declared `dependencySpecifiers` make Rust require the
+    /// worker's echoed resolution for `solid-js` to name a file inside that
+    /// copy.
+    ///
+    /// It stops at the authenticated veto rather than at a finalized receipt
+    /// because this package has an accepted dependency edge, so its demand
+    /// graph carries dependency demands and value-only finalization refuses
+    /// with `DependenciesRequired` until a dependency receipt composes — a
+    /// property of the graph lane, unrelated to the probe workspace this
+    /// fixture exists to prove.
+    #[test]
+    fn the_probe_gate_tracer_probes_a_consumer_through_its_authenticated_dependency_closure() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("dependency-closure");
+        let plan = dependency_consumer_plan(true);
+        let schedule = plan.probe_gate_schedule().unwrap();
+        assert_eq!(
+            schedule.gates().len(),
+            1,
+            "the accepted dependency edge keeps the creates candidate: no hazard opened it"
+        );
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        let Some(configuration) = tracer_configuration_with_dependencies(
+            &census_fixture(),
+            scratch.path(),
+            "dependency-closure",
+            &[(
+                claim_id.as_str(),
+                "dependency-consumer.mjs",
+                &["solid-js"] as &[&str],
+            )],
+        ) else {
+            return;
+        };
+
+        // The census first, exactly as a transaction orders it: the closure is
+        // proved before any package code runs.
+        plan.acquire_and_verify_export_value_type_facts(&pin)
+            .expect(
+                "plainConsumer's one call is parameter-rooted, so the census proves creates: []",
+            );
+        let batch =
+            super::finalization::authenticate_probe_gates(&plan, Some(&configuration), &pin)
+                .expect(
+                    "a consumer whose dependency closure is authenticated must be probeable: the \
+                 recipe imports the package, the package resolves solid-js inside the private \
+                 copy, and the veto observes no contradiction",
+                );
+        assert_eq!(batch.gate_ids().len(), 1);
+    }
+
+    /// The negative half, and the refusal direction this whole mechanism is
+    /// built around: the same package, the same recipe, the same accepted
+    /// dependency edge — but no authenticated snapshot for `solid-js`. The gate
+    /// refuses by name before the private directory exists, rather than probing
+    /// a partial closure or letting the import reach bytes this transaction
+    /// never authenticated.
+    #[test]
+    fn a_dependency_with_no_authenticated_snapshot_refuses_the_probe_gate_by_name() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("dependency-unauthenticated");
+        let plan = dependency_consumer_plan(false);
+        let schedule = plan.probe_gate_schedule().unwrap();
+        assert_eq!(schedule.gates().len(), 1);
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        let Some(configuration) = tracer_configuration_with_dependencies(
+            &census_fixture(),
+            scratch.path(),
+            "dependency-unauthenticated",
+            &[(
+                claim_id.as_str(),
+                "dependency-consumer.mjs",
+                &["solid-js"] as &[&str],
+            )],
+        ) else {
+            return;
+        };
+
+        let Err(error) =
+            super::finalization::authenticate_probe_gates(&plan, Some(&configuration), &pin)
+        else {
+            panic!("an unauthenticated dependency must refuse the gate");
+        };
+        let rendered = error.to_string();
+        assert!(
+            matches!(&error, super::Policy2FinalizationError::ProbeHarness(_))
+                && rendered.contains("no authenticated snapshot for dependency")
+                && rendered.contains("solid-js")
+                && rendered.contains(DEPENDENCY_CONSUMER),
+            "the refusal must name the specifier and the importer: {rendered}"
+        );
+    }
+
+    /// Two authenticated versions of one dependency name refuse rather than one
+    /// being chosen between.
+    ///
+    /// `<private>/node_modules/solid-js` cannot be both, and the nesting
+    /// alternative would make the probe's resolution depend on the *project's*
+    /// installed layout, which the private workspace does not reproduce.
+    /// Choosing one would be substitution — the failure mode
+    /// `retain_collision_free_source_packages` refuses on the Type Facts side
+    /// for the same reason — so the ambiguity is refused by name.
+    #[test]
+    fn two_authenticated_versions_of_one_dependency_refuse_the_probe_gate() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("dependency-two-versions");
+        let mut plan = dependency_consumer_plan(true);
+        // A second authenticated snapshot of the same name at another version.
+        // Same bytes, so the only difference is the coordinate — which is
+        // exactly the case a shared temporary directory cannot disambiguate.
+        let stub = census_fixture().join("dependency-consumer/node_modules/solid-js");
+        let manifest =
+            String::from_utf8(std::fs::read(stub.join("package.json")).expect("stub manifest"))
+                .expect("the stub manifest is UTF-8")
+                .replace("2.0.0-rc.3", "2.0.0-rc.4");
+        let runtime = std::fs::read(stub.join("index.js")).expect("stub runtime");
+        let other = published_archive_for(
+            "solid-js",
+            "2.0.0-rc.4",
+            &[
+                ("package/package.json", manifest.as_bytes()),
+                ("package/index.js", runtime.as_slice()),
+            ],
+        );
+        let integrity = ArtifactSnapshot::from_published(&other, SnapshotLimits::policy_2())
+            .expect("the second stub archive assembles")
+            .package_integrity()
+            .to_owned();
+        let mut transaction = CertificationPlanningTransaction::new();
+        plan.certification_sources.extend(
+            dependencies_verify_for_test(
+                &mut transaction,
+                vec![PublishedGraphSourceRequest::new(
+                    other,
+                    graph_lock("solid-js", "2.0.0-rc.4", &integrity),
+                    DEPENDENCY_STUB_ROOT,
+                )],
+            )
+            .expect("the second stub authenticates too"),
+        );
+
+        let claim_id = plan.probe_gate_schedule().unwrap().gates()[0]
+            .semantic_claim_id()
+            .to_owned();
+        let Some(configuration) = tracer_configuration_with_dependencies(
+            &census_fixture(),
+            scratch.path(),
+            "dependency-two-versions",
+            &[(
+                claim_id.as_str(),
+                "dependency-consumer.mjs",
+                &["solid-js"] as &[&str],
+            )],
+        ) else {
+            return;
+        };
+
+        let Err(error) =
+            super::finalization::authenticate_probe_gates(&plan, Some(&configuration), &pin)
+        else {
+            panic!("one private node_modules/solid-js cannot be two versions");
+        };
+        let rendered = error.to_string();
+        assert!(
+            matches!(&error, super::Policy2FinalizationError::ProbeHarness(_))
+                && rendered.contains("cannot place dependency solid-js")
+                && rendered.contains("2.0.0-rc.3")
+                && rendered.contains("2.0.0-rc.4"),
+            "the refusal must name the package and both versions: {rendered}"
         );
     }
 

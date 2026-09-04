@@ -485,20 +485,63 @@ pub struct AuditedArchive {
 
 /// Exactly which audited bytes one negative row was read from.
 ///
-/// The byte range is the *summary object* inside the named document: the unit
-/// that carries both the domain's empty collection and the `closed` list that
-/// closes it. A test re-reads the range and re-derives the closure, so a row
-/// cannot drift from the bytes it cites.
+/// The two variants differ in **what the cited bytes are evidence of**, and the
+/// difference is not cosmetic — it decides what a test can mechanically
+/// re-establish:
+///
+/// - [`AuditedCitation::Summary`] cites a normalized contract document. The
+///   cited range *is the claim*: it parses as the summary object carrying the
+///   domain's empty collection and the `closed` list that closes it, so a test
+///   re-reads the range and **re-derives the closure itself**. A row cannot
+///   drift from the bytes it cites, and no human judgement sits between the
+///   bytes and the row.
+/// - [`AuditedCitation::Implementation`] cites the archive's own runtime bytes,
+///   read by hand in a repository audit document. The cited range is the
+///   *definition a human read*, and closure was the reading's conclusion, not
+///   the range's content: no machine here re-derives "this body performs no
+///   `create`" from a JavaScript function body. What the digests pin is
+///   therefore the **subject** of the review — that the row still cites the
+///   same bytes of the same published file that the audit's section walked —
+///   and the audit document is where the reasoning is reviewable. Use this
+///   variant only where no audited summary exists for the export.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct AuditedCitation {
-    /// Repository-relative path of the audited document.
-    pub document: &'static str,
-    /// The summary's id in that document's `summaries` map.
-    pub summary: &'static str,
-    /// First byte of the summary object in the document.
-    pub start_byte: usize,
-    /// One past the last byte of the summary object in the document.
-    pub end_byte: usize,
+pub enum AuditedCitation {
+    /// A summary object inside an audited contract document.
+    Summary {
+        /// Repository-relative path of the audited document.
+        document: &'static str,
+        /// The summary's id in that document's `summaries` map.
+        summary: &'static str,
+        /// First byte of the summary object in the document.
+        start_byte: usize,
+        /// One past the last byte of the summary object in the document.
+        end_byte: usize,
+    },
+    /// A hand implementation census over the archive's own runtime bytes,
+    /// recorded in a repository audit document.
+    Implementation {
+        /// Repository-relative path of the audit document.
+        audit: &'static str,
+        /// The section heading of the audit that decides this row, as the
+        /// literal heading text, so a reader can find it and a test can assert
+        /// it exists.
+        section: &'static str,
+        /// The runtime file inside the archive, package-relative, exactly as
+        /// spelled in the pinned per-file manifest.
+        archive_path: &'static str,
+        /// `sha256` of that whole file as recorded in
+        /// `benchmarks/package-contract-v2/phase0/rc3/<archive>/files.json`.
+        file_sha256: &'static str,
+        /// First byte of the cited definition in that file.
+        start_byte: usize,
+        /// One past the last byte of the cited definition in that file.
+        end_byte: usize,
+        /// `sha256` of exactly those bytes, so the range can be re-verified
+        /// without trusting the offsets. The same bytes are checked into
+        /// `rust/crates/solid-dialect/audited-slices/` so the check runs with
+        /// no archive install.
+        slice_sha256: &'static str,
+    },
 }
 
 /// One negative row: the audited contract for this archive publishes **no**
@@ -516,7 +559,9 @@ pub struct NegativeClaimRow {
     /// primitive spelling of the owning dialect.
     pub export: &'static str,
     pub domain: CallClaimDomain,
-    /// Every document and condition the row was read from. Never empty.
+    /// Every document, runtime file, and condition the row was read from.
+    /// Never empty, and never a mix of the two [`AuditedCitation`] kinds: a row
+    /// has one authority, and a test pins that.
     pub citations: &'static [AuditedCitation],
 }
 
@@ -3129,10 +3174,20 @@ mod tests {
             "hydrate",
             CallClaimDomain::Creates
         ));
-        // Real 2.0 export, audited archive, no audited summary.
-        assert!(!primitive_performs_no_operation(
+        // A denial whose authority is a hand implementation census over the
+        // archive's own runtime bytes rather than an audited summary — the
+        // second `AuditedCitation` kind, answered identically from here,
+        // because the citation is review material and never a runtime input.
+        assert!(primitive_performs_no_operation(
             &signals,
             "createSignal",
+            CallClaimDomain::Creates
+        ));
+        // Real 2.0 export, audited archive, neither an audited summary nor a
+        // hand census.
+        assert!(!primitive_performs_no_operation(
+            &signals,
+            "createContext",
             CallClaimDomain::Creates
         ));
         // A domain no dialect admits yet.
@@ -3219,7 +3274,16 @@ mod tests {
     #[test]
     fn one_dialect_answers_for_a_shared_archive_name_only_while_the_other_is_absent() {
         let solid_js = only_audited_archive("solid-js");
+        // `Show`, not `createEffect`: 2.0 withdrew the `createEffect` row on
+        // 2026-09-04 (its `node`-condition body reaches the SSR serializer, and
+        // a flat row cannot carry the guard), so it now answers `false` for a
+        // reason that has nothing to do with cross-dialect agreement.
         assert!(primitive_performs_no_operation(
+            &solid_js,
+            "Show",
+            CallClaimDomain::Creates
+        ));
+        assert!(!primitive_performs_no_operation(
             &solid_js,
             "createEffect",
             CallClaimDomain::Creates

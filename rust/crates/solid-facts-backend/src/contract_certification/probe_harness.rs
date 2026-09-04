@@ -109,15 +109,21 @@
 //! inputs the rest of the transaction reads — without an OS-level sandbox:
 //!
 //! * the probe runs against a *private copy* of the artifact snapshot inside a
-//!   0700 directory, never the shared materialized store or the analyzed tree —
-//!   and only the analyzed package is copied, so a bare specifier naming one of
-//!   its dependencies does not resolve and the gate refuses rather than the
-//!   probe reaching unauthenticated bytes;
+//!   0700 directory, never the shared materialized store or the analyzed tree.
+//!   The **authenticated dependency closure** is copied beside it, under the
+//!   same discipline: only snapshots this certification transaction already
+//!   authenticated ([`authenticated_dependency_closure`]), never the project's
+//!   real `node_modules` and never a registry. A dependency the analyzed
+//!   package imports and this transaction did not authenticate refuses the gate
+//!   by name ([`require_authenticated_dependency_closure`]) instead of the
+//!   probe reaching unauthenticated bytes, and two authenticated versions of
+//!   one name refuse rather than one being chosen between;
 //! * the private directory itself is censused by its *direct entries*, because
 //!   `TMPDIR` and the cwd are that directory and a `node.config.json` landing
 //!   there has to be a change; the cost is that a probe writing a temporary
 //!   file into `TMPDIR` refuses the gate;
-//! * digests of the whole private `node_modules` tree, the copied harness
+//! * digests of the whole private `node_modules` tree, each dependency copy
+//!   under its own label, the copied harness
 //!   image, the copied recipe modules, the two CommonJS "global folders" a
 //!   `HOME` inside the private directory would make resolvable, every
 //!   `<ancestor>/node_modules` a bare specifier could reach by walking up, the
@@ -333,11 +339,15 @@ impl ProbeImportKind {
 }
 
 /// What one launch has to prove it resolved: the plan's own specifier, reached
-/// the way the recipe declares it reaches its package.
+/// the way the recipe declares it reaches its package, plus every dependency
+/// specifier the recipe declared it needs.
 #[derive(Clone, Copy, Debug)]
 struct ResolutionSubject<'a> {
     specifier: &'a str,
     import_kind: ProbeImportKind,
+    /// The recipe's declared dependency specifiers, each of which must resolve
+    /// *inside* that dependency's authenticated private copy.
+    dependencies: &'a [String],
 }
 
 /// The closed, sorted file list the harness source manifest covers. It must
@@ -594,20 +604,29 @@ pub(crate) fn run_probe_gates(
     for kind in scheduled_import_kinds(schedule, &corpus)? {
         refuse_unreproducible_artifact_case(plan, kind, &observed)?;
     }
+    // The dependency closure the private workspace will carry, and the refusal
+    // that keeps it from being a partial one. Both happen before the private
+    // directory exists: a dependency the analyzed package imports and this
+    // transaction did not authenticate is a named refusal, never a probe
+    // against whatever the layout happens to resolve.
+    let dependencies = authenticated_dependency_closure(plan)?;
+    require_authenticated_dependency_closure(plan, &dependencies)?;
+    require_declared_dependencies_authenticated(schedule, &corpus, &dependencies)?;
 
-    let workspace = PrivateProbeWorkspace::create(
+    let workspace = PrivateProbeWorkspace::create(&PrivateWorkspaceInputs {
         plan,
-        &image,
-        &corpus,
-        &configuration.node_executable,
+        image: &image,
+        corpus: &corpus,
+        node_executable: &configuration.node_executable,
         // The pin's own value for the Node bytes, so the watched census
         // *re-asserts* it rather than recording whatever is on disk when the
         // baseline is taken. The pin check above and the first launch below are
         // separate reads of the same path.
-        &node,
+        node_executable_sha256: &node,
         type_facts_pin,
-        &requested,
-    )?;
+        requested_conditions: &requested,
+        dependencies: &dependencies,
+    })?;
 
     let launched = launch_every_session(
         &workspace,
@@ -685,12 +704,17 @@ fn launch_every_session(
         let subject = ResolutionSubject {
             specifier,
             import_kind: recipe.import_kind(),
+            dependencies: recipe.dependency_specifiers(),
         };
         let session_bytes = runtime_probe_wire::encode_probe_session(
             session,
             relative,
             recipe.construction(),
-            Some((subject.specifier, subject.import_kind.as_str())),
+            Some(runtime_probe_wire::ProbeResolutionRequest {
+                specifier: subject.specifier,
+                import_kind: subject.import_kind.as_str(),
+                dependencies: subject.dependencies,
+            }),
         )?;
         let run = workspace.launch(
             node_executable,
@@ -728,6 +752,42 @@ fn scheduled_import_kinds(
                 })
         })
         .collect()
+}
+
+/// Refuses a scheduled recipe that declares a dependency specifier this
+/// transaction authenticated no snapshot for.
+///
+/// [`require_authenticated_dependency_closure`] covers what the *package*
+/// imports; this covers what a *recipe* says it needs. The two are different
+/// claims and both refuse by name: a recipe may legitimately name a dependency
+/// the closure replay did not record an edge for (a peer the package reaches
+/// only through a re-export chain, say), and a recipe naming one that was never
+/// authenticated would otherwise ask the worker to resolve a specifier no
+/// private copy answers and refuse as a resolution mismatch instead of by name.
+fn require_declared_dependencies_authenticated(
+    schedule: &ProbeGateSchedule,
+    corpus: &RecipeCorpus,
+    closure: &BTreeMap<String, AuthenticatedDependency<'_>>,
+) -> Result<(), ProbeHarnessError> {
+    for gate in schedule.gates() {
+        let recipe = corpus.recipe_for(gate.semantic_claim_id()).ok_or_else(|| {
+            ProbeHarnessError::MissingRecipe {
+                gate_id: gate.id().to_owned(),
+                semantic_claim_id: gate.semantic_claim_id().to_owned(),
+            }
+        })?;
+        for specifier in recipe.dependency_specifiers() {
+            if closure.contains_key(specifier) {
+                continue;
+            }
+            return Err(ProbeHarnessError::CorpusInvalid(format!(
+                "probe gate {} declares dependency specifier {specifier:?}, which this \
+                 certification transaction authenticated no snapshot for",
+                gate.id()
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// The export conditions this plan's artifact case was selected under.
@@ -1024,12 +1084,22 @@ pub(crate) fn sandbox_policy_digest() -> Digest {
 /// against a literal copy, so dropping a field, renaming one, or bumping the
 /// scheme version without saying what changed fails a test rather than
 /// silently re-labelling every receipt's policy binding.
-pub(crate) const SANDBOX_POLICY_FIELDS: [&str; 37] = [
-    "scheme-version:5",
+pub(crate) const SANDBOX_POLICY_FIELDS: [&str; 42] = [
+    "scheme-version:6",
     "enforcement:detect-and-refuse",
     "private-directory-mode:0700",
     "snapshot:private-copy-per-transaction",
-    "snapshot:analyzed-package-only",
+    // Version 6: the workspace carries the analyzed package *and* the
+    // dependency closure the transaction authenticated, so a recipe can import
+    // the package under test and the package can resolve its own dependencies.
+    // The three fields below say where those bytes may come from, that a name
+    // with two authenticated versions refuses rather than being chosen between,
+    // and that a dependency the package imports and nothing authenticated
+    // refuses by name.
+    "snapshot:analyzed-package-plus-authenticated-dependency-closure",
+    "snapshot:dependency-closure-from-transaction-authenticated-snapshots-only",
+    "snapshot:one-version-per-dependency-name-or-refuse",
+    "snapshot:unauthenticated-package-dependency-refuses-by-name",
     "cwd:private-directory",
     "environment:allowlisted-not-inherited",
     "argv:worker-path-plus-requested-conditions-only",
@@ -1045,12 +1115,14 @@ pub(crate) const SANDBOX_POLICY_FIELDS: [&str; 37] = [
     "resolution:requested-conditions-passed-as-interpreter-flags",
     "resolution:conditions-observed-from-pinned-interpreter",
     "resolution:declared-import-kind-per-recipe",
+    "resolution:declared-dependency-specifiers-per-recipe",
     "resolution:artifact-case-runtime-target-reproduced-or-refused",
     "report:dedicated-descriptor-3,exactly-one-run-frame",
     "report:resolution-echoed-and-compared-to-artifact-case",
+    "report:declared-dependency-resolutions-echoed-and-required-inside-the-authenticated-copy",
     "startup-frame:protocol+nonce+node-version+platform+architecture",
     "process-group:own-group-killed-on-every-exit",
-    "watched:private-directory-entries,private-node-modules,harness-image,recipe-modules,private-package-scopes,home-node-modules,home-node-libraries,node-prefix-lib-node,ancestor-node-modules,ancestor-package-json,node-executable,type-facts-image,verifier-image",
+    "watched:private-directory-entries,private-node-modules,private-dependency-copies,harness-image,recipe-modules,private-package-scopes,home-node-modules,home-node-libraries,node-prefix-lib-node,ancestor-node-modules,ancestor-package-json,node-executable,type-facts-image,verifier-image",
     "watched-when:before-first-launch,between-launches,every-exit-path",
     "watched-node-executable:reasserted-against-build-pin",
     "network:not-denied",
@@ -1344,6 +1416,16 @@ struct WireRecipeEntry {
     /// two kinds resolve under different condition sets, so a corpus that does
     /// not say which one it uses is not saying what the gate observed.
     import_kind: ProbeImportKind,
+    /// Bare specifiers of the analyzed package's dependencies this recipe needs
+    /// resolvable. Optional and defaulted to none, so a corpus that declares
+    /// nothing behaves exactly as before.
+    ///
+    /// Declaring one asks for two things and gets both: the specifier must name
+    /// a dependency whose snapshot this transaction authenticated (else the
+    /// gate refuses by name before a launch), and every launch's echoed
+    /// resolution for it must land inside that authenticated private copy.
+    #[serde(default)]
+    dependency_specifiers: Vec<String>,
     scenario: WireRecipeScenario,
     expected_event: WireRecipeEvent,
     drain: Vec<WireRecipeDrainStep>,
@@ -1390,6 +1472,7 @@ pub(crate) struct CorpusRecipe {
     bytes: Vec<u8>,
     construction: Digest,
     import_kind: ProbeImportKind,
+    dependency_specifiers: Vec<String>,
     scenario: ProbeScenario,
     expected_event: ProbeEventMatch,
     drain: Vec<DrainStep>,
@@ -1475,12 +1558,29 @@ impl RecipeCorpus {
             let mut coverage_limitations = entry.coverage_limitations;
             coverage_limitations.sort();
             coverage_limitations.dedup();
+            // Sorted and deduplicated so the corpus root is a property of the
+            // declared *set*, and validated as plain npm names here so a
+            // specifier can never become a path component the workspace did not
+            // intend.
+            let mut dependency_specifiers = entry.dependency_specifiers;
+            dependency_specifiers.sort();
+            dependency_specifiers.dedup();
+            for specifier in &dependency_specifiers {
+                safe_package_directory(specifier).map_err(|error| {
+                    ProbeHarnessError::CorpusInvalid(format!(
+                        "probe recipe for claim {} declares dependency specifier \
+                         {specifier:?}, which is not a bare package specifier: {error}",
+                        entry.claim_id
+                    ))
+                })?;
+            }
             recipes.push(CorpusRecipe {
                 claim_id: entry.claim_id,
                 file_name,
                 bytes: module_bytes,
                 construction,
                 import_kind: entry.import_kind,
+                dependency_specifiers,
                 scenario: entry.scenario.into(),
                 expected_event: ProbeEventMatch {
                     marker: entry.expected_event.marker,
@@ -1520,6 +1620,10 @@ impl CorpusRecipe {
 
     pub(crate) const fn import_kind(&self) -> ProbeImportKind {
         self.import_kind
+    }
+
+    pub(crate) fn dependency_specifiers(&self) -> &[String] {
+        &self.dependency_specifiers
     }
 
     pub(crate) const fn scenario(&self) -> ProbeScenario {
@@ -1578,6 +1682,13 @@ fn corpus_root(policy: &ProbePolicy, recipes: &[CorpusRecipe]) -> Digest {
             recipe.import_kind.as_str(),
             recipe.construction.as_str()
         ));
+        // Appended per declared specifier rather than folded into the line
+        // above, so a corpus that declares none produces a byte-identical
+        // root: the receipt binding of every recipe written before this field
+        // existed is unchanged.
+        for specifier in &recipe.dependency_specifiers {
+            values.push(format!("recipe-dependency:{}:{specifier}", recipe.claim_id));
+        }
     }
     root("probe-recipe-corpus", values.iter().map(String::as_str))
 }
@@ -1593,9 +1704,18 @@ fn corpus_root(policy: &ProbePolicy, recipes: &[CorpusRecipe]) -> Digest {
 /// ```text
 /// <private>/
 ///   node_modules/<package-name>/…   private copy of the artifact snapshot
+///   node_modules/<dependency>/…     one private copy per authenticated
+///                                   dependency snapshot, `@scope/` kept
 ///   harness/contract-probe-worker.mjs, contract-probe-harness.mjs
 ///   recipes/<file>.mjs              copied recipe modules
 /// ```
+///
+/// A dependency copy carries its *own* authenticated `package.json` — this
+/// module writes none there — because that manifest's `exports` map is what
+/// answers its specifiers. `LOOKUP_PACKAGE_SCOPE` from a file inside the copy
+/// finds it and then returns null at the `node_modules` segment above, so the
+/// climb ends inside the copy and cannot reach the two private scopes or any
+/// ancestor's manifest.
 ///
 /// `harness/` and `recipes/` additionally hold a `package.json` this module
 /// writes, with no `exports`, `imports`, or `main`. It is the containment for
@@ -1629,6 +1749,14 @@ struct PrivateProbeWorkspace {
     /// conditions, and a probe that observed any other file observed a
     /// different artifact case than the one being certified.
     runtime_target: PathBuf,
+    /// Where each authenticated dependency copy sits, by package name.
+    ///
+    /// A recipe that declares it needs a dependency specifier has its echoed
+    /// resolution for that specifier required to name a file *inside* the
+    /// matching root ([`verify_reported_resolution`]), which is how "the
+    /// dependency import reached authenticated bytes" becomes a checked
+    /// property of the launch rather than a property of the layout.
+    dependency_roots: BTreeMap<String, PathBuf>,
     /// One `--conditions=<name>` flag per requested export condition, in the
     /// order a launch passes them.
     condition_flags: Vec<String>,
@@ -1654,16 +1782,37 @@ struct PrivateProbeWorkspace {
     before: BTreeMap<String, String>,
 }
 
+/// Everything one private workspace is built from, in one place.
+///
+/// A parameter list rather than a struct grew past what Clippy's
+/// `too_many_arguments` accepts once the dependency closure joined it, and the
+/// struct is the better shape anyway: every field is an authenticated input,
+/// and naming them at the call site says which is which.
+struct PrivateWorkspaceInputs<'a> {
+    plan: &'a CertificationPlan,
+    image: &'a VerifiedHarnessImage,
+    corpus: &'a RecipeCorpus,
+    node_executable: &'a Path,
+    /// The *pin's* value for the Node bytes, so the watched census re-asserts
+    /// it rather than recording whatever was on disk when the baseline ran.
+    node_executable_sha256: &'a str,
+    type_facts_pin: &'a TypeFactsProducerPin,
+    requested_conditions: &'a [String],
+    dependencies: &'a BTreeMap<String, AuthenticatedDependency<'a>>,
+}
+
 impl PrivateProbeWorkspace {
-    fn create(
-        plan: &CertificationPlan,
-        image: &VerifiedHarnessImage,
-        corpus: &RecipeCorpus,
-        node_executable: &Path,
-        node_executable_sha256: &str,
-        type_facts_pin: &TypeFactsProducerPin,
-        requested_conditions: &[String],
-    ) -> Result<Self, ProbeHarnessError> {
+    fn create(inputs: &PrivateWorkspaceInputs<'_>) -> Result<Self, ProbeHarnessError> {
+        let PrivateWorkspaceInputs {
+            plan,
+            image,
+            corpus,
+            node_executable,
+            node_executable_sha256,
+            type_facts_pin,
+            requested_conditions,
+            dependencies,
+        } = *inputs;
         let directory = create_private_directory("harness")?;
         // Refuse before anything is copied: every location outside the private
         // tree from which a *bare* specifier the private copy does not answer
@@ -1704,13 +1853,26 @@ impl PrivateProbeWorkspace {
         // `validate_coordinate` upstream admits a `..` segment.
         let package_directory =
             modules_directory.join(safe_package_directory(&plan.resolved_import.package_name)?);
-        fs::create_dir_all(&package_directory)?;
-        for (relative, bytes) in plan.snapshot.files() {
-            let target = package_directory.join(single_safe_relative_path(relative)?);
-            if let Some(parent) = target.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            write_private_file(&target, bytes)?;
+        copy_snapshot_into(&package_directory, &plan.snapshot)?;
+
+        // The authenticated dependency closure, beside the analyzed package and
+        // under exactly the same discipline: authenticated snapshot bytes, a
+        // validated npm name as its directory, and — below — its own watched
+        // census entry. This is what lets a recipe `import` the package under
+        // test at all, because the package's own top-level
+        // `import "<dependency>"` runs in the worker as soon as it does.
+        //
+        // Each dependency's own `package.json` is the authenticated one and is
+        // never replaced: it carries the `exports` map its specifiers resolve
+        // through. `LOOKUP_PACKAGE_SCOPE` from a file inside the copy finds
+        // that manifest first and then returns null at the `node_modules`
+        // segment above it, so the climb cannot leave `<private>/node_modules`
+        // and never reaches the two private scopes or an ancestor's.
+        let mut dependency_roots = BTreeMap::new();
+        for (name, dependency) in dependencies {
+            let target = modules_directory.join(&dependency.directory);
+            copy_snapshot_into(&target, dependency.snapshot)?;
+            dependency_roots.insert(name.clone(), target);
         }
 
         // The exact file the Type Facts witness read for the selected export
@@ -1770,6 +1932,20 @@ impl PrivateProbeWorkspace {
                 WatchedInput::Contents(type_facts_pin.path().to_path_buf()),
             ),
         ];
+        // One entry per dependency copy, on top of the whole-tree
+        // `private-node-modules` census that already covers them. The
+        // redundancy is deliberate and cheap: a dependency file changing
+        // mid-run then refuses by *name* rather than as an anonymous change
+        // somewhere under `node_modules`, and a future change that stopped
+        // placing a dependency inside the watched tree would fail here instead
+        // of leaving it unwatched. Labels cannot collide: the closure is keyed
+        // by package name, and two versions of one name were refused above.
+        watched.extend(dependency_roots.iter().map(|(name, root)| {
+            (
+                format!("private-dependency:{name}"),
+                WatchedInput::Contents(root.clone()),
+            )
+        }));
         // Every location outside the private tree a bare specifier could reach.
         // `refuse_resolvable_bare_specifier_sources` proved each absent a
         // moment ago, so each is recorded absent and one appearing mid-run is a
@@ -1800,6 +1976,7 @@ impl PrivateProbeWorkspace {
             worker,
             recipes,
             runtime_target,
+            dependency_roots,
             condition_flags: requested_conditions
                 .iter()
                 .map(|condition| format!("--conditions={condition}"))
@@ -2028,7 +2205,12 @@ impl PrivateProbeWorkspace {
                 decoded.run.isolation.process
             )));
         }
-        verify_reported_resolution(decoded.resolution.as_ref(), subject, &self.runtime_target)?;
+        verify_reported_resolution(
+            decoded.resolution.as_ref(),
+            subject,
+            &self.runtime_target,
+            &self.dependency_roots,
+        )?;
         Ok(decoded.run)
     }
 }
@@ -2376,14 +2558,37 @@ fn verify_startup_frame(
 /// * Nothing here defends against in-realm resolver patching *after* the
 ///   package is imported. It does not need to: the recipe's own import is
 ///   resolved before the package evaluates, and each launch runs one recipe.
+///
+/// # The declared dependency specifiers
+///
+/// A recipe that declares dependency specifiers has each one checked the same
+/// way, with one weaker claim stated rather than glossed: the answer proves the
+/// specifier resolves **inside that dependency's authenticated private copy**,
+/// not that it resolves to one exact file, because a dependency's own `exports`
+/// map may legitimately answer several entrypoints and this transaction
+/// certifies no artifact case for it.
+///
+/// It is also resolved from the worker's URL (ESM) or the recipe's (CommonJS),
+/// not from inside the analyzed package's copy, so it is evidence about the
+/// rung that answers rather than about the package's own walk. That rung is the
+/// same one: `<private>/harness`, `<private>/recipes`, and
+/// `<private>/node_modules/<package>` all reach `<private>/node_modules` and
+/// nothing above it — every ancestor candidate is refused as a precondition and
+/// watched afterwards, and both importer directories are watched whole, so a
+/// nearer `node_modules` appearing inside one is an
+/// [`ProbeHarnessError::IsolationViolation`]. A nested `node_modules` the
+/// *snapshot itself* ships would shadow the copy, and that is not an escape:
+/// those bytes are authenticated too, being part of the snapshot.
 fn verify_reported_resolution(
     reported: Option<&ReportedResolution>,
     subject: ResolutionSubject<'_>,
     expected: &Path,
+    dependency_roots: &BTreeMap<String, PathBuf>,
 ) -> Result<(), ProbeHarnessError> {
     let ResolutionSubject {
         specifier,
         import_kind,
+        dependencies,
     } = subject;
     let Some(reported) = reported else {
         return Err(ProbeHarnessError::ConditionMismatch(
@@ -2426,7 +2631,85 @@ fn verify_reported_resolution(
             import_kind.as_str()
         )));
     }
+    verify_reported_dependency_resolutions(reported, import_kind, dependencies, dependency_roots)
+}
+
+/// Requires one echoed resolution per declared dependency specifier, in the
+/// order asked, each landing inside that dependency's authenticated copy.
+///
+/// The count and the order are Rust's, not the worker's: a frame carrying fewer
+/// entries, more entries, or the same entries permuted is a refusal rather than
+/// a set to search, so a worker cannot answer a cheap specifier twice and leave
+/// the interesting one unproven.
+fn verify_reported_dependency_resolutions(
+    reported: &ReportedResolution,
+    import_kind: ProbeImportKind,
+    dependencies: &[String],
+    dependency_roots: &BTreeMap<String, PathBuf>,
+) -> Result<(), ProbeHarnessError> {
+    if reported.dependencies.len() != dependencies.len() {
+        return Err(ProbeHarnessError::ConditionMismatch(format!(
+            "this launch asked the probe worker to resolve {} declared dependency specifier(s) \
+             and it reported {}",
+            dependencies.len(),
+            reported.dependencies.len()
+        )));
+    }
+    for (specifier, answer) in dependencies.iter().zip(&reported.dependencies) {
+        if &answer.specifier != specifier {
+            return Err(ProbeHarnessError::ConditionMismatch(format!(
+                "the probe worker reported a dependency resolution of {:?} where this launch \
+                 asked for {specifier:?}",
+                answer.specifier
+            )));
+        }
+        let root = dependency_roots.get(specifier).ok_or_else(|| {
+            ProbeHarnessError::ConditionMismatch(format!(
+                "the probe recipe declared dependency {specifier:?}, which this workspace placed \
+                 no authenticated copy for"
+            ))
+        })?;
+        let (observed, resolved) = match import_kind {
+            ProbeImportKind::Esm => (answer.esm.as_str(), decode_file_url(&answer.esm)),
+            ProbeImportKind::Require => {
+                let path = Path::new(&answer.require);
+                (
+                    answer.require.as_str(),
+                    path.is_absolute().then(|| path.to_path_buf()),
+                )
+            }
+        };
+        let Some(resolved) = resolved else {
+            return Err(ProbeHarnessError::ConditionMismatch(format!(
+                "the probe worker resolved dependency {specifier:?} as {:?} to {observed:?}, \
+                 which is not a local file this verifier can compare against the authenticated \
+                 copy at {root:?}",
+                import_kind.as_str()
+            )));
+        };
+        if !path_is_inside(&resolved, root) {
+            return Err(ProbeHarnessError::ConditionMismatch(format!(
+                "the probe worker resolved dependency {specifier:?} as {:?} to {observed:?}, \
+                 which is not inside the authenticated private copy at {root:?}: the probe would \
+                 have run against bytes this transaction never authenticated",
+                import_kind.as_str()
+            )));
+        }
+    }
     Ok(())
+}
+
+/// Whether `candidate` names a file under `root`.
+///
+/// Both sides are canonicalized for the same reason [`names_same_file`] does
+/// it: on macOS `TMPDIR` lives under `/var`, a symlink to `/private/var`, and
+/// Node realpaths what it resolves. A path that cannot be canonicalized is not
+/// treated as inside, which is the fail-closed direction.
+fn path_is_inside(candidate: &Path, root: &Path) -> bool {
+    match (fs::canonicalize(candidate), fs::canonicalize(root)) {
+        (Ok(candidate), Ok(root)) => candidate.starts_with(&root),
+        _ => false,
+    }
 }
 
 /// One `file:` URL as the local path it names, or `None` when it names anything
@@ -2698,6 +2981,125 @@ fn hash_directory_entries(directory: &Path) -> Result<String, ProbeHarnessError>
         hash.update(b"\0");
     }
     Ok(format!("sha256:{:x}", hash.finalize()))
+}
+
+// ---------------------------------------------------------------------------
+// The authenticated dependency closure
+// ---------------------------------------------------------------------------
+
+/// One dependency of the analyzed package that this transaction authenticated,
+/// as it will sit in the private workspace.
+///
+/// The bytes are a *snapshot* the certification transaction already
+/// authenticated — an integrity-verified published archive whose lock selection
+/// replayed the same name, version, and integrity — which is the same channel
+/// the Type Facts private project materializes from
+/// (`type_facts::snapshot_source_roots`). Nothing here reads the project's real
+/// `node_modules`, a registry, or any path outside that authenticated set.
+struct AuthenticatedDependency<'a> {
+    /// The one or two ordinary path components the copy occupies under
+    /// `<private>/node_modules`, from [`safe_package_directory`]. A scoped name
+    /// keeps its `@scope/` component, because `node_modules/@scope/name` is
+    /// the directory a bare specifier resolves to and `node_modules/scope/name`
+    /// is a different one.
+    directory: PathBuf,
+    snapshot: &'a super::ArtifactSnapshot,
+}
+
+/// Every dependency snapshot this transaction authenticated, keyed by package
+/// name.
+///
+/// **One version per name, or refuse.** Two authenticated snapshots of one name
+/// at different versions cannot both be `<private>/node_modules/<name>`, and the
+/// alternative — placing the importer-specific copy at
+/// `<private>/node_modules/<importer>/node_modules/<name>` — would require this
+/// module to decide *which* importer each copy belongs to. The authenticated
+/// source set does carry an `installed_package_root`, but that root describes
+/// the project's real tree, not the private one, and reading it as a nesting
+/// instruction would make the probe's resolution depend on a path this
+/// workspace does not reproduce. So the ambiguity is refused by name. Nothing
+/// in the corpus needs otherwise: every measured row's closure names each
+/// dependency once, and a row that genuinely installs two versions of one
+/// package refuses its gate instead of being probed against a copy chosen here.
+///
+/// Two entries that carry the *same* snapshot root are one copy named twice —
+/// the source set is keyed by a canonical identity that includes the installed
+/// root, so a package hoisted and also nested appears twice — and are placed
+/// once.
+fn authenticated_dependency_closure(
+    plan: &CertificationPlan,
+) -> Result<BTreeMap<String, AuthenticatedDependency<'_>>, ProbeHarnessError> {
+    let mut closure = BTreeMap::<String, AuthenticatedDependency<'_>>::new();
+    for source in &plan.certification_sources {
+        let name = source.snapshot.package_name().to_owned();
+        let directory = safe_package_directory(&name)?;
+        match closure.get(&name) {
+            Some(existing) if existing.snapshot.root() == source.snapshot.root() => continue,
+            Some(existing) => {
+                let mut versions = [
+                    format!(
+                        "{}@{}",
+                        existing.snapshot.package_name(),
+                        existing.snapshot.package_version()
+                    ),
+                    format!("{name}@{}", source.snapshot.package_version()),
+                ];
+                versions.sort();
+                return Err(ProbeHarnessError::AmbiguousDependencyVersion {
+                    package_name: name,
+                    versions: versions.join(" and "),
+                });
+            }
+            None => {}
+        }
+        closure.insert(
+            name,
+            AuthenticatedDependency {
+                directory,
+                snapshot: &source.snapshot,
+            },
+        );
+    }
+    Ok(closure)
+}
+
+/// Refuses when the analyzed package imports a dependency this transaction
+/// authenticated no snapshot for.
+///
+/// A recipe imports the package under test, so the package's own top-level
+/// imports run in the worker. Probing a *partial* closure would mean one of two
+/// things: the import throws (a refusal wearing the wrong name — a launch
+/// failure rather than the missing-authenticated-bytes fact), or it resolves
+/// somewhere this transaction never authenticated. Both are refused here, by
+/// name, before the private directory exists.
+///
+/// The required set is the independently replayed module closure's own accepted
+/// dependency edges (`verified_closure`), never a manifest's `dependencies`
+/// field: the edges are what the closure replay proved this artifact case's
+/// modules actually import. An `UnacceptedExternalDependency` hazard is not
+/// consulted, because such a hazard already opens every affected claim domain
+/// at replay and no closure candidate — and so no gate — survives it.
+fn require_authenticated_dependency_closure(
+    plan: &CertificationPlan,
+    closure: &BTreeMap<String, AuthenticatedDependency<'_>>,
+) -> Result<(), ProbeHarnessError> {
+    for edge in &plan.verified_closure.manifest().dependencies {
+        if closure.contains_key(&edge.package_name) {
+            continue;
+        }
+        return Err(ProbeHarnessError::UnauthenticatedDependency(Box::new(
+            UnauthenticatedDependency {
+                specifier: edge.specifier.clone(),
+                package_name: edge.package_name.clone(),
+                importer: format!(
+                    "{}@{}",
+                    plan.snapshot.package_name(),
+                    plan.snapshot.package_version()
+                ),
+            },
+        )));
+    }
+    Ok(())
 }
 
 /// The private directory's three subdirectories.
@@ -2994,6 +3396,28 @@ fn safe_package_directory(name: &str) -> Result<PathBuf, ProbeHarnessError> {
     Ok(directory)
 }
 
+/// Writes one authenticated snapshot into `package_directory`, member by
+/// member, with every member path held to [`single_safe_relative_path`].
+///
+/// Shared by the analyzed package's copy and by every dependency copy on
+/// purpose: one definition of "how authenticated bytes enter the private
+/// workspace" means a dependency cannot be placed under weaker rules than the
+/// package under test.
+fn copy_snapshot_into(
+    package_directory: &Path,
+    snapshot: &super::ArtifactSnapshot,
+) -> Result<(), ProbeHarnessError> {
+    fs::create_dir_all(package_directory)?;
+    for (relative, bytes) in snapshot.files() {
+        let target = package_directory.join(single_safe_relative_path(relative)?);
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        write_private_file(&target, bytes)?;
+    }
+    Ok(())
+}
+
 /// A snapshot member path, rejected unless every component is ordinary.
 fn single_safe_relative_path(value: &str) -> Result<PathBuf, ProbeHarnessError> {
     let path = Path::new(value);
@@ -3074,6 +3498,24 @@ pub(crate) fn runtime_probe_plan(
     )?)
 }
 
+/// The dependency the analyzed package imports and this transaction
+/// authenticated no snapshot for.
+///
+/// Its own type, boxed inside [`ProbeHarnessError`], so naming the specifier,
+/// the package, and the importer does not enlarge every `Result` in the
+/// certification lanes.
+#[derive(Debug, Error)]
+#[error(
+    "probe workspace has no authenticated snapshot for dependency {specifier:?} (package \
+     {package_name}) of {importer}: this certification transaction authenticated no bytes for it, \
+     so the private workspace would carry a partial dependency closure"
+)]
+pub struct UnauthenticatedDependency {
+    specifier: String,
+    package_name: String,
+    importer: String,
+}
+
 #[derive(Debug, Error)]
 pub enum ProbeHarnessError {
     #[error("probe harness authority is unavailable: {0}")]
@@ -3094,6 +3536,20 @@ pub enum ProbeHarnessError {
     MissingRecipe {
         gate_id: String,
         semantic_claim_id: String,
+    },
+    /// Boxed: three `String`s inline would grow this enum — and, through
+    /// `Policy2FinalizationError`, every graph-lane `Result` that wraps it —
+    /// past the size Clippy's `result_large_err` accepts.
+    #[error(transparent)]
+    UnauthenticatedDependency(Box<UnauthenticatedDependency>),
+    #[error(
+        "probe workspace cannot place dependency {package_name}: this transaction authenticated \
+         {versions} at distinct snapshot roots, and one private `node_modules/{package_name}` \
+         cannot be both"
+    )]
+    AmbiguousDependencyVersion {
+        package_name: String,
+        versions: String,
     },
     #[error("probe write isolation was violated: {0}")]
     IsolationViolation(String),

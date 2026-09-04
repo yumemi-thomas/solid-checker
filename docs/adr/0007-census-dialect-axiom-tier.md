@@ -34,10 +34,50 @@ Add the fact as an **explicit, named, integrity-bound tier**, in two halves.
 `DialectNegativeAuthority` listing the exact archives that dialect audited —
 name, version, SRI, and the archive's own `package.json` digest — and, per
 canonical primitive and per call claim domain, the rows those audits *deny*.
-Every row cites the document and the byte range of the summary object it was
-read from, and a test re-reads that range and re-derives the closure, so a row
-cannot drift from the bytes. `primitive_performs_no_operation` unions the
+Every row cites exactly which audited bytes it was read from, and a test
+re-establishes that citation. `primitive_performs_no_operation` unions the
 dialects with cross-dialect agreement; silence is never "no".
+
+**Two citation kinds, and they are not equally mechanical.** This was one kind
+when the ADR was accepted, and the amendment below added the second; the
+difference is load-bearing and stating it plainly is part of the decision.
+
+- `AuditedCitation::Summary` names a byte range of a normalized contract
+  document. The cited range **is the claim**: it parses as the summary object
+  carrying the domain's empty collection and the `closed` list that closes it,
+  so the test re-reads the range and **re-derives the closure itself**. No human
+  judgement sits between the bytes and the row, and a row whose citation moved,
+  whose document changed, or whose domain is no longer closed there fails in
+  that test.
+- `AuditedCitation::Implementation` names a byte range of the archive's **own
+  runtime bytes**, read by hand in a repository audit document. Here the cited
+  range is *the definition a human read*, and the closure was that reading's
+  conclusion — **not** the range's content. Nothing re-derives "this body
+  performs no `create`" from a JavaScript function body, and the test does not
+  pretend to: what its digests pin is the **subject** of the review — that the
+  row still cites the same bytes of the same published file that the audit's
+  named section walked — while the reasoning stays reviewable in the audit
+  document and nowhere else. Concretely it checks, unconditionally, that the
+  audit file contains the cited section heading verbatim; that
+  `(archive_path, file_sha256)` matches the pinned entry in
+  `benchmarks/package-contract-v2/phase0/rc3/*/files.json` and the range fits
+  inside that file's pinned length; and that a checked-in copy of the range
+  under `rust/crates/solid-dialect/audited-slices/` hashes to the row's
+  `slice_sha256` and begins with the export's own definition. When
+  `SOLID_CHECKER_RC3_ARCHIVE_ROOT` names an install it additionally re-reads the
+  real archive and asserts the checked-in slice is still exactly
+  `bytes[start..end]` of it — the one thing a checked-in copy cannot establish
+  about itself. That arm may skip; it may not skip *silently*, so it fails under
+  `SOLID_CHECKER_EXPECT_PROBE_PINS=1`, and both `scripts/verify.sh` and
+  `make test-rust` export the root from the tsc-oracle install.
+
+This kind exists because a row can be needed where no audited summary is
+available: `solidjs-signals.json` audits twelve exports, and `createRoot`,
+`createSignal`, `getOwner`, `onCleanup` and `untrack` — the five ADR 0008 names
+as the actual next blocker on real consumer rows — are not among them.
+Inventing a summary id, or adding a summary to a frozen audited document, would
+be a fabricated authority; citing the bytes a human actually read, and saying
+that is what happened, is not.
 
 **A tier in the certifier.** `census_dialect_axiom_for_callee`
 (`contract_certification/type_facts.rs`) is a peer of
@@ -87,8 +127,12 @@ Two further asymmetries make the same point mechanically:
   disqualifying second finding was that the audited contract for the byte-identical
   bytes closes `creates: []` for `onSettled`, so the axiom would have
   discharged a demand the audit says does not exist. Here the audit's closure
-  *is* the answer, restated — the tier asserts exactly what the audited
-  document asserts, about exactly the bytes it was read from.
+  *is* the answer, restated — the tier asserts exactly what its audit asserts,
+  about exactly the bytes that audit was read from. For a `Summary` row the
+  audit is a normalized contract document and the restatement is mechanical;
+  for an `Implementation` row it is a hand census recorded in a repository audit
+  document, and the restatement is of a human's conclusion. Either way the tier
+  adds no claim of its own, which is the property this paragraph is about.
 
 ## Why an audited archive may not answer about another audited archive
 
@@ -156,18 +200,39 @@ no such mode is wired to this tier.
 | ADR 0005 | Status here |
 | --- | --- |
 | 1. Integrity-bound tuple, naming the disagreeing field | `AuditedArchive` carries name, version, SRI and manifest digest; `audited_archive_for_snapshot` compares all four and returns `AuditedArchiveDisagreement::{Name, Version, Integrity, Manifest}`. The manifest digest is re-derived from the authenticated snapshot's own `package.json`, never read from a resolver's report. |
-| 2. Version keyed to the actually-audited bytes | Each row cites the document whose `package` block *is* the tuple, and a test asserts the two agree field by field. There is no second version anywhere for a row to be keyed against. |
+| 2. Version keyed to the actually-audited bytes | A `Summary` row cites the document whose `package` block *is* the tuple, and a test asserts the two agree field by field. An `Implementation` row cites a file of the same archive by its digest in `benchmarks/package-contract-v2/phase0/rc3/*/files.json`, whose sibling `registry-metadata.json` `dist.integrity` is the tuple's own `integrity`. There is no second version anywhere for a row to be keyed against. |
 | 3. `floor == MayExecute` only, floor in scope | `floor` is a parameter of the tier and the first gate; `ReachabilityFloor::Reachable` refuses, and the refusal is pinned. |
 | 4. A corpus fixture exercising `from_plan` | **Not taken, and not needed for this tier.** That precondition existed because the *positive* axiom's identity derivation was unreachable from a unit test, `CertificationPlan` being unconstructible here. This tier takes the archive under certification as an `ArtifactSnapshot` rather than a plan, so the whole identity gate — including the integrity and manifest halves the corpus's fabricated `fixture:sha256:` would fail — is exercised by unit tests against the checked-in audited `package.json` bytes. A corpus fixture is still owed once the census *consumes* the terminator, because only then does a row's verdict move. |
 | 5. The generator's evidence for the owner claim named | Not applicable: this tier discharges no owner requirement and answers no demand about the audited package's own exports. |
 
 ## Scope shipped, and what was deliberately withheld
 
-Only `CallClaimDomain::Creates`, and only from the six hand-audited Solid 2.0
-documents (four of which carry a row). `solid-dialect`'s `NEGATIVE_ROWS` carries the reason for every
-withholding; three are worth restating because they are findings against the
-audits rather than gaps in the table:
+Only `CallClaimDomain::Creates`, from the six hand-audited Solid 2.0 documents
+(four of which carry a row) and, since 2026-09-04, from one hand implementation
+census over `@solidjs/signals@2.0.0-rc.3`'s own runtime bytes
+(`docs/package-contract-v2/audits/2026-09-04-solid-2-rc3-core-primitives-creates.md`;
+signed off by delegation, 2026-09-04). `solid-dialect`'s `NEGATIVE_ROWS`
+carries the reason for every withholding; these are worth restating because they
+are findings against the audits rather than gaps in the table:
 
+- **`(solid-js, createEffect, Creates)` was withdrawn on 2026-09-04.** This is
+  the one shipped row the § creates decision cost, and it is a defect in the
+  audited document rather than in the table. `solid-js.json` closes
+  `creates: []` for `createEffect`, but that document captures the
+  `browser/development` case only: `solid-js/dist/server.js:868-870` routes
+  `createEffect` to `serverEffect`, which calls `processResult` — and so
+  `ctx.serialize(id, deferred.promise, deferStream)` — whenever the caller
+  passes `options.ssrSource`, and `semantic-model.md` § creates'
+  **[Decision 2026-09-04]** settles that that registration **is** a `create`.
+  The reach is guarded (`node`/`worker`/`deno` ∧ an `async` render context ∧
+  `ssrSource ∈ {server, hybrid}` ∧ a thenable or async-iterable compute result ∧
+  an owner with an id ∧ no `NoHydrate` ancestor) and it is reachable
+  *type-correctly*: `solid-js/types/client/hydration.d.ts:42` augments
+  `EffectOptions` with `ssrSource` and `:568` re-declares the export carrying
+  it, so no consumer needs a cast to get there. A `(package, export, domain)`
+  row has nowhere to put the guard, so it goes to the withheld list rather than
+  being qualified. `(solid-js, createSignal, Creates)` is withheld for the same
+  reason and was never shipped. See "Open: the table is not guard-aware" below.
 - **`hydrate`'s `creates` row is withheld although the audit closes it.**
   `@solidjs/web@2.0.0-rc.3`'s `hydrate` reaches `render` on every path, and
   `render` calls `registerDelegatedRoot(element)` unconditionally before it
@@ -205,21 +270,66 @@ audits rather than gaps in the table:
   the resolved declaration's archive — see `docs/precision-backlog.md`'s
   "Four rows dead via cross-archive re-export".
 
+### Open: the table is not guard-aware
+
+A row is keyed by `(package, export, domain)` and nothing else, so it asserts
+the denial for **every** guard and **every** artifact case of the archive. A
+normalized contract document does not have this limitation: a closure is over
+one artifact case under one guard, so a document can close `creates: []` for
+`solid-js`'s browser case and publish the operation for its server case. The
+table flattens exactly that distinction away.
+
+That is why `(solid-js, createEffect)` had to be *withdrawn* rather than
+narrowed, and why `(solid-js, createSignal)` cannot be granted on an audit that
+found its browser bodies clean. Both are single exports whose reach depends on
+the resolved runtime condition and on an option the caller passes, and the row
+can say neither. **Not attempted here**: making the row carry a condition or
+guard predicate is a change to the row shape, to `denies`, to
+`primitive_performs_no_operation`'s cross-dialect agreement, and to
+`census_dialect_axiom_for_callee`'s identity gate — which today binds the
+archive and would have to bind the *condition* as well, meaning the certifier
+would have to know which `exports` condition the consumer's own build resolves.
+It is the same gap as the `browser/production` per-condition approximation
+above, reached from the other direction, and it is recorded in
+`docs/precision-backlog.md`.
+
+Until it is closed, the rule for this table is the blunt one: **any guarded
+reach to the domain's operation withholds the row.**
+
 ## Consequences
 
-- A `creates` census terminates on 24 Solid 2.0 primitive callees (ADR 0008
-  consumed the terminator). The primitives with no row — `createSignal`,
-  `onCleanup`, `untrack`, `getOwner`, `createRoot` among them — are where the
-  generator's proposal walk now falls silent, so most real consumers propose no
-  `creates` closure at all until those audits carry a row.
+- A `creates` census terminates on 28 Solid 2.0 primitive callees (ADR 0008
+  consumed the terminator): the 23 remaining document-derived rows plus the five
+  the 2026-09-04 implementation census closed — `@solidjs/signals`'
+  `createRoot`, `createSignal`, `getOwner`, `onCleanup` and `untrack`, which
+  ADR 0008 named as the actual next blocker. Those five are the primitives real
+  consumers call most, so a consumer census that previously fell silent on the
+  first `createSignal` can now terminate; expect proposals that were refused for
+  an unaudited primitive to become provable.
+- One row was lost in the same change: `(solid-js, createEffect)`. A consumer
+  calling `createEffect` from `solid-js` now refuses its `creates` census where
+  it previously terminated, which is a real regression in reach and the correct
+  answer — the previous termination rested on a document that had read one
+  condition of four.
 - A 1.x consumer's `creates` census cannot terminate on any Solid callee at all
   until a real 1.x `creates` audit exists. That is a refusal, not a defect.
-- Three audit-review items are now open against the audited documents rather
+- Four audit-review items are now open against the audited documents rather
   than against the verifier, recorded in `docs/precision-backlog.md`: `hydrate`'s
   withheld `creates` row (`@solidjs/web`'s audit contradicts itself about
   `hydrate` and `render` in one document), the `returns` closures on `flush`,
   `latest`, and `snapshot` (each hands a value to its caller, which
   `semantic-model.md` § returns' settled decision makes a `return` operation,
-  against the closed `returns: []` these three carry), and the `callbacks`
+  against the closed `returns: []` these three carry), the `callbacks`
   closure on `latest` (`latest(fn)` calls `fn()` directly, an `invoke` by
-  § callbacks, against the closed `callbacks: []` it carries).
+  § callbacks, against the closed `callbacks: []` it carries), and
+  `solid-js.json`'s `creates: []` on `createEffect`, which its own archive's
+  server condition contradicts (the withdrawal above).
+- The five implementation-audited rows carry one approximation of their own,
+  distinct from the `browser/production` one: they are keyed to
+  `@solidjs/signals` because that is where the declaration lives, while a
+  consumer importing those names from `solid-js` under the `node` condition
+  executes `solid-js/dist/server.js`'s own bodies. The audit read those bodies
+  too and reached the same verdict, which is what makes the rows sound on that
+  path — but the tier binds the declaration's archive and cannot see the split,
+  so the rows rest on the audit having read both. It is the mirror image of the
+  "Four rows dead via cross-archive re-export" item, and belongs beside it.

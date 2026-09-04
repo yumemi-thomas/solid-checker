@@ -101,6 +101,13 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/callback-slot-derived-store-server/node_modules/**
 !fixtures/package-contracts/implementation-census-creates/node_modules/
 !fixtures/package-contracts/implementation-census-creates/node_modules/**
+# The nested consumer whose own top-level `import "solid-js"` is what the
+# probe workspace's authenticated dependency closure has to resolve. Its stub
+# is copied into the private workspace and *run* there, so an untracked one
+# does not merely change the dialect in CI — it removes the only fixture that
+# proves a consumer recipe can import the package under test at all.
+!fixtures/package-contracts/implementation-census-creates/dependency-consumer/node_modules/
+!fixtures/package-contracts/implementation-census-creates/dependency-consumer/node_modules/**
 !fixtures/package-contracts/closed-domain-probe-gate/primitive-consumer/node_modules/
 !fixtures/package-contracts/closed-domain-probe-gate/primitive-consumer/node_modules/**
 # The dependency contract in this stub is the whole point of the fixture: it

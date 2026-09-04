@@ -1,5 +1,237 @@
 # Precision backlog
 
+## Five core Solid 2.0 primitives can now terminate a `creates` census; `createEffect` no longer can (2026-09-04)
+
+`docs/package-contract-v2/audits/2026-09-04-solid-2-rc3-core-primitives-creates.md`
+is a hand implementation census over the exact published bytes of
+`@solidjs/signals@2.0.0-rc.3`, for the five primitives ADR 0008 named as the
+actual next blocker on real consumer rows. Signed off by delegation,
+2026-09-04. Five rows were granted, one was withheld, and one **already-shipped
+row was withdrawn**. The negative table moves 24 -> 28.
+
+### Granted, on runtime bytes rather than a summary
+
+`(@solidjs/signals, createRoot | createSignal | getOwner | onCleanup | untrack,
+Creates)`. `solidjs-signals.json` audits twelve exports and none of these is
+among them, so there is no summary object to cite. Inventing a summary id, or
+adding one to a frozen audited document, would be a fabricated authority;
+citing the bytes a human actually read -- and saying that is what happened -- is
+not. `AuditedCitation` therefore became an enum: the existing `Summary` variant
+unchanged, plus `Implementation { audit, section, archive_path, file_sha256,
+start_byte, end_byte, slice_sha256 }`.
+
+**The two kinds are not equally mechanical, and the difference is the point.**
+A `Summary` citation's range *is* the claim -- it parses as the summary object
+carrying the domain's empty collection and its `closed` list, so the test
+re-reads the range and re-derives the closure, with no human judgement between
+the bytes and the row. An `Implementation` citation's range is *the definition a
+human read*, and closure was that reading's conclusion, not the range's
+content: nothing re-derives "this body performs no `create`" from a JavaScript
+function body. What the digests pin is the **subject** of the review -- that the
+row still cites the same bytes of the same published file the audit's named
+section walked. ADR 0007 previously said a test "re-reads the cited range and
+re-derives the closure" without qualification; that sentence was false for this
+kind and has been reworded rather than left to be read charitably.
+
+What the citation test does establish, unconditionally and with no package
+install: the audit file exists and contains the cited section heading verbatim;
+`(archive_path, file_sha256)` matches the pinned entry in
+`benchmarks/package-contract-v2/phase0/rc3/solidjs-signals/files.json` and
+`end_byte` is inside that file's pinned length; a checked-in copy of the range
+under `rust/crates/solid-dialect/audited-slices/` (15 files, 3417 bytes of
+MIT-licensed Solid bytes) has the right length, hashes to `slice_sha256`, and
+begins with the export's own definition. The slice's path is *derived* from the
+citation's fields, so a row and its slice cannot be named inconsistently.
+`SOLID_CHECKER_RC3_ARCHIVE_ROOT` arms the one check a checked-in copy cannot
+make about itself -- re-reading the real archive and asserting the slice is still
+`bytes[start..end]` of the pinned file. That arm may skip; it may not skip
+*silently*, so it fails under `SOLID_CHECKER_EXPECT_PROBE_PINS=1`, and both
+`scripts/verify.sh` (which now provisions the tsc-oracle before
+`test-workspace` for it) and `make test-rust` export the root.
+
+### Withheld, and withdrawn: the § creates decision's one real cost
+
+`semantic-model.md` § creates gained **[Decision 2026-09-04]**: handing a value
+to a per-request render context that writes it into the response **is** a
+`create`. The subject is `solid-js/dist/server.js`'s `processResult` reaching
+`ctx.serialize(id, deferred.promise, deferStream)`, where `ctx` is the context
+`@solidjs/web`'s `renderToStream` installs (`@solidjs/web/dist/server.js:1325`)
+and whose `serialize` (`:1383-1397`) adds the promise to `blockingPromises` and
+chains `serializer.write` into the response. It satisfies all four of the
+2026-09-03 definition's terms -- the export's own act, a version-1 resource kind
+(the memo's pending result, an `async-computation`, landing in a stream), a
+runtime that acts on it, live after the call and reached by that runtime rather
+than through the returned tuple. It is an *application* of the existing
+sentence, not a widening: a module-private binding nothing outside the
+invocation reads is still not a `create`.
+
+- **`(solid-js, createSignal, Creates)` is withheld.** `solid-js` re-*declares*
+  `createSignal` (`types/index.d.ts:8` -> `types/client/hydration.d.ts:246-253`)
+  rather than re-exporting `@solidjs/signals`', so the granted row above does
+  not cover a `solid-js` import. Its browser bodies perform no `create` (§ 7.3);
+  its `node`/`worker`/`deno` derived overload reaches `ctx.serialize`
+  (`dist/server.js:558`, `:699`, `:760`, `:797`).
+- **`(solid-js, createEffect, Creates)` is WITHDRAWN.** This is the row the
+  decision cost, and it is a defect in the audited document rather than in the
+  table. `solid-js.json` closes `creates: []` for it, from the
+  `browser/development` case only; `dist/server.js:868-870` routes
+  `createEffect` to `serverEffect` (`:810-867`), which calls `processResult`
+  (`:835`) whenever the caller passes `options.ssrSource`. The reach is guarded --
+  `node`/`worker`/`deno` and `ctx.async` (a `renderToStream` context) and
+  `ssrSource` in {server, hybrid} and a thenable or async-iterable compute result
+  and `owner.id` and no `NoHydrate` ancestor -- and it is reachable
+  **type-correctly**, with no cast: `types/client/hydration.d.ts:42` augments
+  `EffectOptions` with `ssrSource` and `:568` re-declares the export carrying it.
+
+**Open item against the audit:** `solid-v2/solid-js.json`'s `creates: []` on
+`createEffect` is contradicted by its own archive's server condition. It joins
+`hydrate`'s withheld row, the `returns` closures on `flush`/`latest`/`snapshot`,
+and the `callbacks` closure on `latest` as an audit-review item -- four now, not
+three.
+
+### Open: the table is not guard-aware
+
+A row is keyed by `(package, export, domain)` and nothing else, so it asserts
+the denial for **every** guard and **every** artifact case of the archive. A
+normalized contract document has no such limitation: a closure is over one
+artifact case under one guard, so a document can close `creates: []` for
+`solid-js`'s browser case and publish the operation for its server case. The
+table flattens exactly that away, which is why `createEffect` had to be
+*withdrawn* rather than narrowed and why `createSignal` cannot be granted on an
+audit that found its browser bodies clean.
+
+**Not attempted in this slice.** Making a row carry a condition or guard
+predicate changes the row shape, `denies`,
+`primitive_performs_no_operation`'s cross-dialect agreement, and
+`census_dialect_axiom_for_callee`'s identity gate -- which binds the archive
+today and would have to bind the *condition*, meaning the certifier must know
+which `exports` condition the consumer's own build resolves. It is the same gap
+as the `browser/production` per-condition approximation, reached from the other
+direction. Until it closes, the rule for this table is the blunt one: **any
+guarded reach to the domain's operation withholds the row.**
+
+### A second stated approximation, beside the per-condition one
+
+The five granted rows do *not* carry the `browser/production` gap: each cites
+all three `@solidjs/signals` bundles by name (`dist/prod/**`, `dist/dev.js`,
+`dist/node.cjs`), which is every runtime file the archive's `exports` map can
+select. They carry a different one. They are keyed to `@solidjs/signals`
+because that is where the declaration lives, while a consumer importing those
+names from `solid-js` under the `node` condition executes
+`solid-js/dist/server.js`'s **own** bodies -- not bytes of the archive the row
+names. The audit read those server bodies too (`getOwner` `:91-93`, `onCleanup`
+`:97-102`, `createRoot` `:175-178`, `untrack` `:1392-1394`) and reached the same
+verdict, which is what makes the rows sound on that path -- but
+`census_dialect_axiom_for_callee` binds the declaration's archive (gate 5) and
+cannot see the split, so the rows rest on the audit having read both. This is
+the mirror image of "Four rows dead via cross-archive re-export" and belongs
+beside it: **the tier binds the declaration's archive; the runtime archive can
+differ by condition, and a row is sound only when both were read.**
+
+### Measured: nothing moved in the fixtures
+
+Contract corpus non-updating (87 stable-v1 generator fixtures: 5 exact
+fail-closed refusals, 23 local artifact-case refusals, 10 inapplicable artifact
+cases, 14 withheld claims, 124 artifact cases, 190 possible operations, 812
+proof candidates, 4147 local open claims) and coverage (94 fixture projects,
+546 findings) are both unchanged at a fresh `make build-checker-debug` binary.
+That is the expected answer and it was checked rather than assumed:
+`census_dialect_axiom_for_callee`'s identity gate binds the exact published
+archive tuple, which no fixture's `node_modules/solid-js` stub can satisfy, so
+the dialect-axiom disposition is unreachable from the corpus; and
+`implementation-census-creates` calls no Solid primitive at all. The five rows
+move real ecosystem consumers, not fixtures -- a consumer census that previously
+fell silent on the first `createSignal` can now terminate -- and a consumer
+calling `createEffect` from `solid-js` now refuses where it previously
+terminated.
+
+### Re-measured: 357 verified / 40 refused / 21 not attempted, and still zero `creates` candidates -- the reason is now countable
+
+The complete 418-probe corpus was re-run with the five granted rows, the
+`createEffect` withdrawal and the dependency closure all compiled in
+(`make ecosystem-benchmark`; report SHA-256 `b9ed6f541aca3305ba6a3e7bd2ba86ec470de15fb1ce6f82e97fa03647b35fc5`).
+Every verdict and demand digest is identical to the committed report, and
+`certificationAttempt.withheldClosures` and `exportsProven` are both still 0
+across all 418 rows. No real export proposes a `creates` candidate.
+
+That is not the audit failing; it is the generator's gate being honest, and the
+three reasons are now exactly nameable:
+
+- **Solid 1.x has no negative authority at all** (the 19 `solid-v1` documents
+  are a schema-1 migration whose closures were manufactured), and 168 of the
+  418 rows are 1.x probes. No 1.x consumer can ever propose until those
+  primitives are genuinely audited.
+- **`createEffect` was withdrawn by this same decision.** It is the single most
+  called Solid primitive in the ecosystem, and the gate requires *every*
+  canonical-primitive callee to carry a denial row -- so the withdrawal removed
+  more 2.0 consumer exports from eligibility than the five grants added.
+- **The remaining 2.0 vocabulary is still mostly silent.** 21 audited-archive
+  exports the dialect declares as primitives still have no `creates` row.
+
+What this measurement buys is a ranked next step rather than a guess: the
+generator knows which primitive made it withhold each proposal, and recording
+that (one counter per `(package, export)` in the refusal audit) turns "audit
+more primitives" into a list ordered by how many real consumer exports each one
+unblocks. That instrumentation, not another audit chosen by intuition, is the
+next slice.
+
+## The probe workspace's authenticated dependency closure: what it buys, and the four limits it leaves (2026-09-04)
+
+`PrivateProbeWorkspace::create` now copies the certification transaction's
+authenticated dependency closure (`plan.certification_sources`) into
+`<private>/node_modules/<name>/` beside the analyzed package's own copy, so a
+consumer package's veto recipe can `import` the package under test and that
+package can resolve its own dependencies. ADR 0006's dependency row moves from
+REFUSED to CONTAINED, the sandbox policy digest is at `scheme-version:6`, and
+`docs/adr/0008-implementation-census-for-creates.md` § "What this does not yet
+buy on real rows" loses one of its three blockers. What it does *not* move: no
+real row proposes a `creates` candidate, so no gate is scheduled and nothing is
+copied -- the missing Solid 2.0 negative rows remain the next blocker, and every
+measured verdict and withheld count is unchanged.
+
+Four residual limits, each a refusal direction or a weaker claim, never a false
+pass:
+
+- **A dependency name with two authenticated versions refuses**
+  (`ProbeHarnessError::AmbiguousDependencyVersion`). One private
+  `node_modules/<name>` cannot be both, and the nesting alternative --
+  `<private>/node_modules/<importer>/node_modules/<name>/` -- was rejected
+  rather than deferred: the authenticated source set's `installed_package_root`
+  describes the *project's* installed tree, and reading it as a nesting
+  instruction would make the probe's resolution depend on a layout the private
+  workspace does not reproduce. Choosing one copy would be substitution, the
+  failure `type_facts::retain_collision_free_source_packages` already refuses
+  on the Type Facts side. A row that genuinely installs two versions of one
+  dependency therefore cannot be probed. Pinned by
+  `two_authenticated_versions_of_one_dependency_refuse_the_probe_gate`.
+- **The dependency resolution echo is evidence about the rung, not the
+  package's own walk.** `import.meta.resolve` is per-module and Node exposes no
+  resolve-from-another-URL API, so a launch's echoed answer for a declared
+  dependency specifier comes from `<private>/harness/` (ESM) or
+  `<private>/recipes/` (CommonJS), not from inside the analyzed package's copy --
+  which is where the package's own `import` actually resolves from. The rung
+  that answers is the same `<private>/node_modules`, every ancestor candidate is
+  refused as a precondition and watched afterwards, and both importer trees are
+  watched whole, so a nearer `node_modules` appearing inside one is an
+  `IsolationViolation`. But the echo does not *prove* the package resolved
+  there; only a recipe that calls an export whose body calls into the dependency
+  copy does, which is what
+  `implementation-census-creates/dependency-consumer` exists to do.
+- **The echo proves containment, not one exact file.** For the analyzed package
+  the check is equality with the artifact case's own runtime target, because the
+  transaction certifies that case. A dependency has no certified artifact case
+  here and its `exports` map may legitimately answer several entrypoints, so the
+  check is only that the answer lies inside the authenticated copy.
+- **A snapshot-shipped nested `node_modules` shadows a placed copy, and the
+  closure is not transitive.** If the analyzed package's archive ships
+  `node_modules/<name>/`, that copy wins the walk from inside the package.
+  Those bytes are authenticated too -- part of the snapshot -- and watched with
+  the rest of the tree, so it is not an escape; it does mean "the copy this
+  module placed is the one that answered" is not a guarantee. And the workspace
+  places only what the transaction authenticated: it computes no transitive
+  closure, so a dependency whose own top level imports a package nobody
+  supplied fails at import and refuses the gate.
+
 ## A negative dialect authority about a *callee*: the census's dialect terminator exists, for `creates` and Solid 2.0 only (2026-09-03)
 
 The dialect half of the implementation census

@@ -352,21 +352,34 @@ refuses by name at witness acquisition, before any gate is consulted.
 
 ## What this does not yet buy on real rows
 
-**Consumer probes cannot import the dependency in the private workspace.** The
-private probe directory holds the analyzed package's snapshot copy, the harness,
-and the recipes, and nothing else (`probe_harness.rs`); a consumer package's
-own `import "solid-js"` resolves to nothing there, and any resolvable ancestor
-`node_modules` refuses the gate by design. So no recipe can be written for a
-real consumer row today. The targeted re-measurement shows the earlier
-blocker, though: on every measured real row **no `creates` candidate was
-proposed at all** — 0 candidates, not 0-withheld-of-many — because each of
-those exports calls a 2.0 primitive with no negative row (above) or a 1.x
-primitive, and the generator's walk is silent there. Every verdict is
-unchanged and the withheld count is 0 on every row. Once the audits carry the
-missing rows, candidates will appear and be withheld here until recipe
-synthesis and authenticated dependency copying exist (ADR 0006 Stage 3). The
-fixture, which ships its recipes, is where the whole chain is proven end to
-end.
+**Consumer probes could not import the dependency in the private workspace —
+this is now done.** At this ADR's cut the private probe directory held the
+analyzed package's snapshot copy, the harness, and the recipes, and nothing
+else (`probe_harness.rs`); a consumer package's own `import "solid-js"`
+resolved to nothing there, and any resolvable ancestor `node_modules` refuses
+the gate by design, so no recipe could be written for a real consumer row. The
+workspace now carries the transaction's **authenticated dependency closure**
+beside the analyzed package's copy — only snapshots the transaction already
+authenticated, one version per name or a refusal, each tree watched, and a
+recipe's declared dependency specifiers echoed back and required to land inside
+the authenticated copy — so a consumer recipe can import the package under test
+and that package can resolve its own dependencies. The mechanism, the
+multi-version decision, and what the echo does *not* prove are
+`docs/adr/0006-probe-harness-binding.md` § "The authenticated dependency
+closure"; the end-to-end fixture is
+`fixtures/package-contracts/implementation-census-creates/dependency-consumer`.
+
+What that does **not** move is the blocker below it. On every measured real row
+**no `creates` candidate was proposed at all** — 0 candidates, not
+0-withheld-of-many — because each of those exports calls a 2.0 primitive with
+no negative row (above) or a 1.x primitive, and the generator's walk is silent
+there. Every verdict is unchanged and the withheld count is 0 on every row, and
+the dependency closure did not change either: with no candidate there is no
+gate, and with no gate nothing is copied. Once the audits carry the missing
+rows, candidates will appear and be withheld here until recipe *synthesis*
+exists (ADR 0006 Stage 3) — the authenticated dependency copying it also waited
+on is done. The fixtures, which ship their recipes, are where the whole chain
+is proven end to end.
 
 ## Pinned
 
@@ -381,7 +394,12 @@ end.
   qualified name), `reassignedHelper` (refused as a written binding) — all
   refused by name — and `noRecipe` (withheld; certifies with `creates` open and
   the empty gate root of the gated plan). Its generator snapshots pin the
-  proposals: every export but `unresolved` proposes.
+  proposals: every export but `unresolved` proposes. Its nested
+  `dependency-consumer/` pins the probe workspace's authenticated dependency
+  closure: `plainConsumer` is censused and vetoed while the package's own
+  top-level `import "solid-js"` resolves inside the authenticated private copy,
+  and the same row with no authenticated snapshot for that dependency refuses
+  the gate by name.
 - `fixtures/package-contracts/closed-domain-probe-gate`: `run` **certifies**
   `creates: []` through the census (parameter-rooted); `runCreatingOwner`, which
   does the same thing inside `try … finally`, **refuses** on the

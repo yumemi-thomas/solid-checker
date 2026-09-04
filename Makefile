@@ -46,6 +46,17 @@ CERTIFICATION_ENV = $(TYPEFACTS_CERTIFICATION_ENV) $(PROBE_HARNESS_ENV)
 # `scripts/verify.sh` (which exits 127 without Node) closes it.
 PROBE_EXPECT_PINS = $(if $(PROBE_NODE),SOLID_CHECKER_EXPECT_PROBE_PINS=1,)
 
+# The rc.3 archives the Solid 2.0 negative table's implementation-audited rows
+# quote by byte range. The cited ranges are checked into
+# `rust/crates/solid-dialect/audited-slices/` and their digests are verified
+# with no install; this arms the stronger arm, which re-reads the real archive
+# and asserts the checked-in slice is still exactly those bytes of the pinned
+# file. `PROBE_EXPECT_PINS` above makes its absence a loud failure, so any
+# target that sets that must set this too — which is why `test-rust` now
+# depends on `tsc-oracle-provision` (idempotent: it short-circuits on a tree
+# that already passes the version check).
+RC3_ARCHIVE_ENV = SOLID_CHECKER_RC3_ARCHIVE_ROOT="$(CURDIR)/rust/target/tsc-oracle/v2/node_modules"
+
 .PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-probe-harness test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit phase19-audit phase20-ledger phase21-ledger compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
 
 build: build-rust
@@ -78,8 +89,8 @@ package: build-typefacts
 
 test: test-rust test-cli
 
-test-rust: build-typefacts
-	$(CERTIFICATION_ENV) $(PROBE_EXPECT_PINS) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_TEST_BIN="$(CURDIR)/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) $(CARGO_TEST_RUNNER) --manifest-path $(RUST_MANIFEST) --workspace
+test-rust: build-typefacts tsc-oracle-provision
+	$(CERTIFICATION_ENV) $(PROBE_EXPECT_PINS) $(RC3_ARCHIVE_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_TEST_BIN="$(CURDIR)/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) $(CARGO_TEST_RUNNER) --manifest-path $(RUST_MANIFEST) --workspace
 
 # The probe-harness binding on its own, for the fast loop and for
 # `verify-delta`'s harness-script row.

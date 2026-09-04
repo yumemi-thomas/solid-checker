@@ -217,6 +217,24 @@ struct WireSession {
 struct WireResolutionRequest {
     specifier: String,
     import_kind: String,
+    /// The bare dependency specifiers this recipe declared it needs, which the
+    /// worker resolves — before it imports the recipe — so Rust can require
+    /// each answer to land inside that dependency's authenticated private copy.
+    ///
+    /// Omitted when the recipe declares none, so a corpus that names no
+    /// dependency produces a byte-identical session document.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    dependencies: Vec<String>,
+}
+
+/// What one launch asks the worker to resolve.
+///
+/// The analyzed package's own specifier and import kind are mandatory; the
+/// dependency specifiers are the recipe's declared closure needs.
+pub(crate) struct ProbeResolutionRequest<'a> {
+    pub(crate) specifier: &'a str,
+    pub(crate) import_kind: &'a str,
+    pub(crate) dependencies: &'a [String],
 }
 
 #[derive(Serialize)]
@@ -382,16 +400,20 @@ pub(crate) fn encode_probe_session(
     session: &crate::ProbeSessionRequest,
     module: &str,
     construction: &Digest,
-    resolution: Option<(&str, &str)>,
+    resolution: Option<ProbeResolutionRequest<'_>>,
 ) -> Result<Vec<u8>, RuntimeProbeWireError> {
     validate_transport_string(module, "probe recipe module")?;
     let resolution = match resolution {
-        Some((specifier, import_kind)) => {
-            validate_transport_string(specifier, "probe resolution specifier")?;
-            validate_transport_string(import_kind, "probe resolution import kind")?;
+        Some(request) => {
+            validate_transport_string(request.specifier, "probe resolution specifier")?;
+            validate_transport_string(request.import_kind, "probe resolution import kind")?;
+            for dependency in request.dependencies {
+                validate_transport_string(dependency, "probe dependency resolution specifier")?;
+            }
             Some(WireResolutionRequest {
-                specifier: specifier.into(),
-                import_kind: import_kind.into(),
+                specifier: request.specifier.into(),
+                import_kind: request.import_kind.into(),
+                dependencies: request.dependencies.to_vec(),
             })
         }
         None => None,
@@ -446,6 +468,22 @@ pub(crate) struct ReportedResolution {
     pub(crate) import_kind: String,
     pub(crate) esm: String,
     pub(crate) require: String,
+    /// One entry per dependency specifier the session asked about, in the order
+    /// it asked. Absent when it asked about none, which keeps an older worker's
+    /// frame decodable and is why the launcher requires the *count* it asked
+    /// for rather than trusting what came back.
+    #[serde(default)]
+    pub(crate) dependencies: Vec<ReportedDependencyResolution>,
+}
+
+/// What the worker resolved for one declared dependency specifier, before it
+/// imported the recipe. Transport data, like [`ReportedResolution`].
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ReportedDependencyResolution {
+    pub(crate) specifier: String,
+    pub(crate) esm: String,
+    pub(crate) require: String,
 }
 
 /// Decodes one worker's run frame. Every field stays transport data: the
@@ -461,6 +499,18 @@ pub(crate) fn decode_probe_run(bytes: &[u8]) -> Result<DecodedProbeRun, RuntimeP
                 (&resolution.require, "probe CommonJS resolution"),
             ] {
                 validate_transport_string(value, field)?;
+            }
+            for dependency in &resolution.dependencies {
+                for (value, field) in [
+                    (
+                        &dependency.specifier,
+                        "probe dependency resolution specifier",
+                    ),
+                    (&dependency.esm, "probe dependency ESM resolution"),
+                    (&dependency.require, "probe dependency CommonJS resolution"),
+                ] {
+                    validate_transport_string(value, field)?;
+                }
             }
             Some(resolution)
         }

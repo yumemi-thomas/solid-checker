@@ -187,6 +187,31 @@ export SOLID_CHECKER_EXPECT_PROBE_PINS
 PROBE_NODE="$probe_node"
 export PROBE_NODE
 
+# The product-owned corpus carries exact checker expectations and per-finding
+# TypeScript ownership for every retained former parity case.
+#
+# Ahead of `test-workspace`, not after it, because the tree it installs is also
+# `SOLID_CHECKER_RC3_ARCHIVE_ROOT` below. It is idempotent — `provision`
+# short-circuits on a tree that already passes the version check — so the move
+# costs nothing on a warm build root.
+step oracle-provision
+bun scripts/tsc-oracle.mjs provision --dialect all
+
+# The rc.3 archives the 2.0 negative table's implementation-audited rows quote.
+#
+# Those rows cite byte ranges of `@solidjs/signals@2.0.0-rc.3`'s own runtime
+# files, and the ranges are checked into
+# `rust/crates/solid-dialect/audited-slices/` so the digests are verified with
+# no install at all. This variable arms the *stronger* half: it re-reads the
+# real archive and asserts the checked-in slice is still exactly
+# `bytes[start..end]` of the pinned file — the one thing a checked-in copy
+# cannot establish about itself. Absent the variable that arm skips, so
+# `SOLID_CHECKER_EXPECT_PROBE_PINS=1` (set above) makes the skip a loud failure
+# and this export is what keeps `make verify` from tripping it. The oracle tree
+# is version-verified by `provision`, which refuses a substituted prerelease.
+SOLID_CHECKER_RC3_ARCHIVE_ROOT="$PWD/rust/target/tsc-oracle/v2/node_modules"
+export SOLID_CHECKER_RC3_ARCHIVE_ROOT
+
 step test-workspace
 TYPEFACTS_TEST_BIN="$PWD/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
   run_rust_tests --manifest-path "$rust_manifest" --workspace
@@ -198,11 +223,6 @@ cargo +1.97 build --profile "$cargo_profile" --manifest-path "$rust_manifest" \
 step coverage
 SOLID_CHECKER_BIN="$checker_bin" \
   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/coverage.mjs
-
-# The product-owned corpus carries exact checker expectations and per-finding
-# TypeScript ownership for every retained former parity case.
-step oracle-provision
-bun scripts/tsc-oracle.mjs provision --dialect all
 
 step ownership-gate
 SOLID_CHECKER_BIN="$checker_bin" \

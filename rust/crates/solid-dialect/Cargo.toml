@@ -11,3 +11,7 @@ serde.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+# Only for the negative table's citation test: an `AuditedCitation::Implementation`
+# pins a runtime file's digest and its cited slice's digest, and both are
+# re-derived from bytes rather than trusted.
+sha2.workspace = true

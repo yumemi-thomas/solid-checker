@@ -6,6 +6,7 @@
 //! refusals are exercised on a development build too.
 
 use super::*;
+use crate::runtime_probe_wire::ReportedDependencyResolution;
 
 struct Scratch(PathBuf);
 
@@ -287,6 +288,7 @@ fn load_recipes(directory: &Path) -> Result<Vec<CorpusRecipe>, ProbeHarnessError
             bytes: module_bytes,
             construction,
             import_kind: entry.import_kind,
+            dependency_specifiers: entry.dependency_specifiers,
             scenario: entry.scenario.into(),
             expected_event: ProbeEventMatch {
                 marker: entry.expected_event.marker,
@@ -518,14 +520,25 @@ fn every_ancestor_package_json_is_watched_even_though_a_private_scope_shadows_it
 
 const NODE_STAND_IN: &[u8] = b"#!/bin/sh\nexit 0\n";
 
-/// A workspace shaped like the real one: the private `node_modules`, both
-/// `HOME`-relative global folders, one ancestor `node_modules` candidate, and
-/// the Node executable with its pinned digest.
+/// The one authenticated dependency `watched_workspace` places beside the
+/// analyzed package's copy.
+const WATCHED_DEPENDENCY: &str = "fixture-dependency";
+
+/// A workspace shaped like the real one: the private `node_modules` with the
+/// analyzed package's copy and one authenticated dependency copy beside it,
+/// both `HOME`-relative global folders, one ancestor `node_modules` candidate,
+/// and the Node executable with its pinned digest.
 fn watched_workspace(scratch: &Scratch) -> PrivateProbeWorkspace {
     let modules = scratch.path().join("node_modules");
     let snapshot = modules.join("fixture");
     fs::create_dir_all(&snapshot).expect("snapshot copy");
     fs::write(snapshot.join("index.js"), b"export const value = 1;\n").expect("snapshot member");
+    // The dependency copy, watched under its own label as well as by the
+    // whole-tree `private-node-modules` census.
+    let dependency = modules.join(WATCHED_DEPENDENCY);
+    fs::create_dir_all(&dependency).expect("dependency copy");
+    fs::write(dependency.join("index.js"), b"export const origin = 1;\n")
+        .expect("dependency member");
     let node = scratch.write("node", NODE_STAND_IN);
     let ancestor_modules = scratch.path().join("workspace-parent/node_modules");
     let mut workspace = PrivateProbeWorkspace {
@@ -533,11 +546,16 @@ fn watched_workspace(scratch: &Scratch) -> PrivateProbeWorkspace {
         worker: scratch.path().join("harness/contract-probe-worker.mjs"),
         recipes: BTreeMap::new(),
         runtime_target: snapshot.join("index.js"),
+        dependency_roots: BTreeMap::from([(WATCHED_DEPENDENCY.to_owned(), dependency.clone())]),
         condition_flags: vec!["--conditions=import".into()],
         watched: vec![
             (
                 "private-node-modules".into(),
                 WatchedInput::Contents(modules),
+            ),
+            (
+                format!("private-dependency:{WATCHED_DEPENDENCY}"),
+                WatchedInput::Contents(dependency),
             ),
             (
                 "home-node-modules".into(),
@@ -675,6 +693,153 @@ fn a_sibling_package_appearing_in_the_private_node_modules_refuses_the_gate() {
         Err(ProbeHarnessError::IsolationViolation(_))
     ));
     std::mem::forget(workspace);
+}
+
+#[test]
+fn an_altered_dependency_copy_refuses_the_gate_by_name() {
+    // The authenticated dependency closure is watched exactly as the analyzed
+    // package's copy is, and under its own label: a dependency file changing
+    // between launches or before the final census refuses the gate, and the
+    // refusal says *which* dependency rather than reporting an anonymous change
+    // somewhere under `node_modules`.
+    let scratch = Scratch::new("isolation-dependency");
+    let workspace = watched_workspace(&scratch);
+    workspace.verify_unchanged().expect("nothing changed yet");
+    assert!(
+        workspace
+            .before
+            .contains_key(&format!("private-dependency:{WATCHED_DEPENDENCY}")),
+        "each dependency copy is censused before the first launch: {:?}",
+        workspace.before.keys().collect::<Vec<_>>()
+    );
+
+    fs::write(
+        scratch
+            .path()
+            .join(format!("node_modules/{WATCHED_DEPENDENCY}/index.js")),
+        b"export const origin = 2;\n",
+    )
+    .expect("simulate a probe write into the dependency copy");
+    let error = workspace
+        .verify_unchanged()
+        .expect_err("a changed dependency copy must refuse");
+    assert!(
+        matches!(&error, ProbeHarnessError::IsolationViolation(message)
+            if message.contains(&format!("private-dependency:{WATCHED_DEPENDENCY} changed"))),
+        "unexpected error: {error}"
+    );
+    // A new file inside the dependency copy is a change too — a run that
+    // planted a module there would otherwise answer a deep specifier of that
+    // dependency with bytes nothing authenticated.
+    let scratch = Scratch::new("isolation-dependency-new-file");
+    let workspace = watched_workspace(&scratch);
+    fs::write(
+        scratch
+            .path()
+            .join(format!("node_modules/{WATCHED_DEPENDENCY}/extra.js")),
+        b"// added by a probe\n",
+    )
+    .expect("plant a module inside the dependency copy");
+    assert!(matches!(
+        workspace.verify_unchanged(),
+        Err(ProbeHarnessError::IsolationViolation(_))
+    ));
+    std::mem::forget(workspace);
+}
+
+#[test]
+fn a_declared_dependency_resolution_outside_the_authenticated_copy_refuses_the_gate() {
+    // The echoed answer for a declared dependency specifier has to name a file
+    // *inside* that dependency's authenticated private copy. Four refusals, and
+    // the failure direction of each is a refused gate rather than a probe
+    // against bytes this transaction never authenticated: a specifier no copy
+    // was placed for, an answer that resolved nowhere, an answer outside the
+    // copy, and a frame whose entry count or order is not the one asked for.
+    let scratch = Scratch::new("declared-dependency");
+    let inside = scratch.path().join("node_modules/dep");
+    fs::create_dir_all(&inside).expect("dependency copy");
+    let member = inside.join("index.mjs");
+    fs::write(&member, b"export const origin = 1;\n").expect("dependency member");
+    let elsewhere = scratch.write("elsewhere/index.mjs", b"export const origin = 2;\n");
+    let roots = BTreeMap::from([("dep".to_owned(), inside.clone())]);
+    let declared = ["dep".to_owned()];
+    let url = |path: &Path| format!("file://{}", path.display());
+    let dependency = |specifier: &str, esm: &str| ReportedDependencyResolution {
+        specifier: specifier.to_owned(),
+        esm: esm.to_owned(),
+        require: esm.to_owned(),
+    };
+    let report = |entries: Vec<ReportedDependencyResolution>| ReportedResolution {
+        specifier: "pkg".to_owned(),
+        import_kind: "esm".to_owned(),
+        esm: url(&member),
+        require: member.display().to_string(),
+        dependencies: entries,
+    };
+
+    // The accepting direction first, so none of the refusals below is vacuous.
+    verify_reported_dependency_resolutions(
+        &report(vec![dependency("dep", &url(&member))]),
+        ProbeImportKind::Esm,
+        &declared,
+        &roots,
+    )
+    .expect("an answer inside the authenticated copy must be accepted");
+
+    for (entries, fragment) in [
+        (
+            Vec::new(),
+            "declared dependency specifier(s) and it reported",
+        ),
+        (
+            vec![
+                dependency("dep", &url(&member)),
+                dependency("dep", &url(&member)),
+            ],
+            "declared dependency specifier(s) and it reported",
+        ),
+        (
+            vec![dependency("other", &url(&member))],
+            "where this launch asked for",
+        ),
+        (
+            vec![dependency("dep", "unresolved:ERR_MODULE_NOT_FOUND")],
+            "not a local file",
+        ),
+        (
+            vec![dependency("dep", &url(&elsewhere))],
+            "not inside the authenticated private copy",
+        ),
+    ] {
+        let error = verify_reported_dependency_resolutions(
+            &report(entries),
+            ProbeImportKind::Esm,
+            &declared,
+            &roots,
+        )
+        .expect_err("an unusable dependency resolution must refuse");
+        assert!(
+            matches!(&error, ProbeHarnessError::ConditionMismatch(message)
+                if message.contains(fragment)),
+            "unexpected error for {fragment:?}: {error}"
+        );
+    }
+
+    // A declared specifier with no placed copy at all: the workspace never
+    // authenticated it, so there is nothing to compare against and the gate
+    // refuses by name rather than accepting whatever the worker resolved.
+    let error = verify_reported_dependency_resolutions(
+        &report(vec![dependency("dep", &url(&member))]),
+        ProbeImportKind::Esm,
+        &declared,
+        &BTreeMap::new(),
+    )
+    .expect_err("a declared specifier with no authenticated copy must refuse");
+    assert!(
+        matches!(&error, ProbeHarnessError::ConditionMismatch(message)
+            if message.contains("placed no authenticated copy")),
+        "unexpected error: {error}"
+    );
 }
 
 #[test]
@@ -937,12 +1102,15 @@ fn the_sandbox_policy_digest_names_what_is_not_denied() {
     // receipt reader can see would all have passed. The literal below is the
     // second copy on purpose — a change has to be made twice, and the diff
     // says which field moved.
-    const EXPECTED: [&str; 37] = [
-        "scheme-version:5",
+    const EXPECTED: [&str; 42] = [
+        "scheme-version:6",
         "enforcement:detect-and-refuse",
         "private-directory-mode:0700",
         "snapshot:private-copy-per-transaction",
-        "snapshot:analyzed-package-only",
+        "snapshot:analyzed-package-plus-authenticated-dependency-closure",
+        "snapshot:dependency-closure-from-transaction-authenticated-snapshots-only",
+        "snapshot:one-version-per-dependency-name-or-refuse",
+        "snapshot:unauthenticated-package-dependency-refuses-by-name",
         "cwd:private-directory",
         "environment:allowlisted-not-inherited",
         "argv:worker-path-plus-requested-conditions-only",
@@ -957,12 +1125,14 @@ fn the_sandbox_policy_digest_names_what_is_not_denied() {
         "resolution:requested-conditions-passed-as-interpreter-flags",
         "resolution:conditions-observed-from-pinned-interpreter",
         "resolution:declared-import-kind-per-recipe",
+        "resolution:declared-dependency-specifiers-per-recipe",
         "resolution:artifact-case-runtime-target-reproduced-or-refused",
         "report:dedicated-descriptor-3,exactly-one-run-frame",
         "report:resolution-echoed-and-compared-to-artifact-case",
+        "report:declared-dependency-resolutions-echoed-and-required-inside-the-authenticated-copy",
         "startup-frame:protocol+nonce+node-version+platform+architecture",
         "process-group:own-group-killed-on-every-exit",
-        "watched:private-directory-entries,private-node-modules,harness-image,recipe-modules,private-package-scopes,home-node-modules,home-node-libraries,node-prefix-lib-node,ancestor-node-modules,ancestor-package-json,node-executable,type-facts-image,verifier-image",
+        "watched:private-directory-entries,private-node-modules,private-dependency-copies,harness-image,recipe-modules,private-package-scopes,home-node-modules,home-node-libraries,node-prefix-lib-node,ancestor-node-modules,ancestor-package-json,node-executable,type-facts-image,verifier-image",
         "watched-when:before-first-launch,between-launches,every-exit-path",
         "watched-node-executable:reasserted-against-build-pin",
         "network:not-denied",
@@ -1022,6 +1192,7 @@ fn a_repeated_watched_label_refuses_rather_than_being_merged() {
         worker: workspace.worker.clone(),
         recipes: BTreeMap::new(),
         runtime_target: workspace.runtime_target.clone(),
+        dependency_roots: BTreeMap::new(),
         condition_flags: workspace.condition_flags.clone(),
         watched: workspace.watched.clone(),
         pinned: workspace.pinned.clone(),
@@ -1249,6 +1420,137 @@ fn an_ancestor_package_self_reference_cannot_answer_a_private_bare_specifier() {
     assert_eq!(escaped.package_imports, "ancestor-stub");
 }
 
+const RESOLUTION_DEPENDENCY: &str = "fixture-probe-dependency";
+
+/// The production layout with the analyzed package's copy *and* one
+/// authenticated dependency copy beside it, where the package's own top level
+/// imports that dependency by bare specifier.
+///
+/// This is the shape a real consumer row has: a recipe cannot import the
+/// package under test at all unless the package's own
+/// `import "<dependency>"` resolves as soon as the module evaluates.
+fn dependency_resolution_workspace(scratch: &Scratch) -> (PathBuf, PathBuf) {
+    let private = scratch.path().join("workspace");
+    fs::create_dir(&private).expect("private directory");
+    let layout = create_private_layout(&private).expect("the production private layout");
+
+    let package = layout.modules.join(RESOLUTION_PACKAGE);
+    fs::create_dir_all(&package).expect("private snapshot copy");
+    fs::write(
+        package.join("package.json"),
+        format!(
+            "{{\"name\":\"{RESOLUTION_PACKAGE}\",\"version\":\"1.0.0\",\"exports\":{{\".\":\
+             \"./index.mjs\"}}}}\n"
+        ),
+    )
+    .expect("private manifest");
+    // The package's own bare dependency import, at module top level: it runs
+    // the moment a recipe imports this package.
+    fs::write(
+        package.join("index.mjs"),
+        format!(
+            "import {{ origin }} from \"{RESOLUTION_DEPENDENCY}\";\n\
+             export const dependencyOrigin = origin;\n"
+        ),
+    )
+    .expect("private ESM member");
+
+    let dependency = layout.modules.join(RESOLUTION_DEPENDENCY);
+    fs::create_dir_all(&dependency).expect("private dependency copy");
+    // Its *own* authenticated manifest, with its own `exports` map: this module
+    // writes no package scope into a dependency copy, because that map is what
+    // answers its specifiers.
+    fs::write(
+        dependency.join("package.json"),
+        format!(
+            "{{\"name\":\"{RESOLUTION_DEPENDENCY}\",\"version\":\"1.0.0\",\"exports\":{{\".\":\
+             \"./main.mjs\"}}}}\n"
+        ),
+    )
+    .expect("dependency manifest");
+    fs::write(
+        dependency.join("main.mjs"),
+        b"export const origin = \"private-dependency\";\n",
+    )
+    .expect("dependency member");
+
+    fs::write(
+        layout.recipes.join("resolve.mjs"),
+        format!(
+            "const pkg = await import(\"{RESOLUTION_PACKAGE}\");\n\
+             console.log(`esm:${{pkg.dependencyOrigin}}`);\n\
+             console.log(`imports:${{import.meta.resolve(\"{RESOLUTION_DEPENDENCY}\")}}`);\n\
+             const {{ createRequire }} = await import(\"node:module\");\n\
+             console.log(`cjs:${{createRequire(import.meta.url).resolve(\"{RESOLUTION_DEPENDENCY}\")}}`);\n"
+        ),
+    )
+    .expect("resolver module");
+    (private, dependency)
+}
+
+#[test]
+fn a_recipe_imports_the_package_and_its_dependency_resolves_inside_the_private_copy() {
+    // The whole point of the dependency closure, against a real interpreter:
+    // a recipe imports the package under test by bare specifier, the package's
+    // own top-level `import "<dependency>"` runs, and it lands inside the
+    // authenticated private copy — which is exactly what
+    // `verify_reported_dependency_resolutions` requires of the echo a launch
+    // reports.
+    let Some(node) = resolution_node() else {
+        eprintln!("dependency-closure resolution test skipped: no node runtime");
+        return;
+    };
+    let scratch = Scratch::new("dependency-closure");
+    let (private, dependency_root) = dependency_resolution_workspace(&scratch);
+
+    let contained = resolve_from_private_recipes(&node, &private);
+    assert_eq!(
+        contained.esm, "private-dependency",
+        "the package under test must be importable, which needs its own dependency import to \
+         resolve inside the private workspace"
+    );
+    for (label, observed) in [
+        ("import.meta.resolve", contained.package_imports.as_str()),
+        ("createRequire", contained.common_js.as_str()),
+    ] {
+        let resolved = match observed.strip_prefix("file://") {
+            Some(_) => decode_file_url(observed),
+            None => Some(PathBuf::from(observed)),
+        }
+        .unwrap_or_else(|| panic!("{label} reported {observed:?}, which is not a local path"));
+        assert!(
+            path_is_inside(&resolved, &dependency_root),
+            "{label} resolved the dependency to {observed:?}, which is not inside the \
+             authenticated copy at {}",
+            dependency_root.display()
+        );
+    }
+
+    // The other half, so the test cannot go vacuous: remove the dependency copy
+    // and the package is no longer importable at all. That is the pre-change
+    // behaviour — `ERR_MODULE_NOT_FOUND`, a failed run, a refused gate — and it
+    // is what made every consumer closure candidate unprobeable.
+    remove_private_tree(&dependency_root).expect("remove the dependency copy");
+    let mut command = Command::new(&node);
+    command
+        .arg(private.join("recipes/resolve.mjs"))
+        .current_dir(&private)
+        .env_clear()
+        .env("HOME", &private)
+        .env("TMPDIR", &private)
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .env("NODE_OPTIONS", "");
+    let output = command.output().expect("run the resolver");
+    assert!(
+        !output.status.success()
+            && String::from_utf8_lossy(&output.stderr).contains("ERR_MODULE_NOT_FOUND"),
+        "without the dependency copy the package must not be importable — if it is, this test \
+         has stopped pinning what the closure buys: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 #[test]
 fn the_private_package_scope_can_answer_nothing() {
     // The manifest is the *nearest* scope for the harness image and every
@@ -1401,10 +1703,17 @@ fn resolve_condition_rows(
         .collect()
 }
 
+/// No dependency copies: the condition rows below predate declared dependency
+/// specifiers and assert nothing about them.
+fn no_dependency_roots() -> BTreeMap<String, PathBuf> {
+    BTreeMap::new()
+}
+
 fn subject(specifier: &str, import_kind: ProbeImportKind) -> ResolutionSubject<'_> {
     ResolutionSubject {
         specifier,
         import_kind,
+        dependencies: &[],
     }
 }
 
@@ -1414,6 +1723,7 @@ fn reported(specifier: &str, import_kind: &str, esm: &str, require: &str) -> Rep
         import_kind: import_kind.to_owned(),
         esm: esm.to_owned(),
         require: require.to_owned(),
+        dependencies: Vec::new(),
     }
 }
 
@@ -1564,6 +1874,7 @@ fn the_pinned_interpreter_can_select_a_target_the_artifact_case_did_not() {
             Some(&reported("dual-sync", "esm", &sync_esm, &sync_require)),
             subject("dual-sync", ProbeImportKind::Esm),
             &modules.join("dual-sync/import.mjs"),
+            &no_dependency_roots(),
         )
         .expect_err("a probe that ran against another target must refuse the gate");
         assert!(
@@ -1584,6 +1895,7 @@ fn the_pinned_interpreter_can_select_a_target_the_artifact_case_did_not() {
         )),
         subject("dual-plain", ProbeImportKind::Require),
         &modules.join("dual-plain/import.mjs"),
+        &no_dependency_roots(),
     )
     .expect_err("a require that landed elsewhere must refuse the gate");
     assert!(
@@ -1596,6 +1908,7 @@ fn the_pinned_interpreter_can_select_a_target_the_artifact_case_did_not() {
         Some(&reported("dual-plain", "esm", &plain_esm, &plain_require)),
         subject("dual-plain", ProbeImportKind::Esm),
         &modules.join("dual-plain/import.mjs"),
+        &no_dependency_roots(),
     )
     .expect("the target the interpreter actually selected must be accepted");
     verify_reported_resolution(
@@ -1607,12 +1920,14 @@ fn the_pinned_interpreter_can_select_a_target_the_artifact_case_did_not() {
         )),
         subject("dual-plain", ProbeImportKind::Require),
         &modules.join("dual-plain/require.cjs"),
+        &no_dependency_roots(),
     )
     .expect("the CommonJS target the interpreter actually selected must be accepted");
     verify_reported_resolution(
         Some(&reported("flagged", "esm", &flagged_esm, &flagged_require)),
         subject("flagged", ProbeImportKind::Esm),
         &modules.join("flagged/development.mjs"),
+        &no_dependency_roots(),
     )
     .expect("a passed condition's target must be accepted");
 }
@@ -1666,6 +1981,7 @@ fn a_run_frame_that_reports_no_resolution_refuses_the_gate() {
             report.as_ref(),
             subject("pkg", ProbeImportKind::Esm),
             expected,
+            &no_dependency_roots(),
         )
         .expect_err("an unusable resolution report must refuse");
         assert!(

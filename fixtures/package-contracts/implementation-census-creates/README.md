@@ -77,11 +77,47 @@ refusal.
 - **A certified row does not mean the veto observed anything.** The probe gate
   only declines to contradict the claim; the census is what proves it.
 
+## `dependency-consumer/` — the authenticated dependency closure
+
+A nested package whose module top level does `import { record } from "solid-js"`,
+which is the shape every real consumer row has and the one no probe could reach
+until the private probe workspace carried the transaction's authenticated
+dependency closure (`docs/adr/0006-probe-harness-binding.md` § "The
+authenticated dependency closure"). Its own `node_modules/solid-js` stub is the
+authenticated snapshot that gets copied into the workspace and, unlike the
+`primitive-consumer/` stub in `closed-domain-probe-gate`, is genuinely **run**
+there.
+
+Two exports, and the split is load-bearing:
+
+- `plainConsumer` is the census subject. Its one call is parameter-rooted, so
+  the implementation census proves `creates: []` and the mandatory veto
+  actually runs — the only way the workspace mechanism gets exercised end to
+  end. It must **not** call `record`: a callee resolving into a dependency
+  archive is refused by name, the gate would never be reached, and the fixture
+  would prove nothing about the workspace.
+- `callsDependency` is never demanded closed. `probe-recipes/dependency-consumer.mjs`
+  calls it and throws unless the answer is the stub's own `recorded:probe` —
+  because resolving is not running, and a specifier that resolved *somewhere*
+  while the bytes were not the authenticated ones has to fail the run.
+
+The recipe declares `dependencySpecifiers: ["solid-js"]`, so Rust additionally
+requires the worker's echoed resolution for that specifier to name a file
+inside the authenticated private copy. The negative arm is the same package,
+the same recipe, the same accepted dependency edge and **no** authenticated
+snapshot: the gate refuses by name
+(`a_dependency_with_no_authenticated_snapshot_refuses_the_probe_gate_by_name`).
+
+It lives in its own package rather than beside `plain` because those exports'
+recipes must keep proving the *no-dependency* path: a top-level
+`import "solid-js"` in this fixture's own `index.js` would make every one of
+them depend on the closure this nested package exists to isolate.
+
 ## The recipes
 
 `probe-recipes/` holds the modules; the tests write `recipes.json` themselves,
 because claim ids are content digests of the normalized claim and are derived
-from the plan's own gate schedule. Each module imports the package by bare
+from the plan's own gate schedule. Each module imports its package by bare
 specifier — which resolves to the private copy inside the harness — calls one
 export with plain closures, and emits the `call` enter/exit pair that proves it
 ran. None hands `session` or `harness` to the package.
@@ -110,3 +146,11 @@ ran. None hands `session` or `harness` to the package.
 - **`reassignedHelper`'s `helper` must be a `function` declaration written by
   a later statement.** A `const` arrow would refuse as an anonymous callable
   before any write is consulted.
+- **`dependency-consumer/plainConsumer` must not call into `solid-js`.** The
+  gate has to be *reached* for that fixture to say anything about the
+  workspace, and a dependency callee refuses the census by name first.
+- **`dependency-consumer/node_modules/solid-js` must stay tracked and must
+  keep exporting a working `record`.** It is copied into the private workspace
+  and executed there; the recipe refuses the gate on any other answer, and an
+  untracked stub removes the only fixture that proves a consumer recipe can
+  import the package under test at all.

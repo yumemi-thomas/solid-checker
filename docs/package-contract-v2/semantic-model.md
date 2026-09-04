@@ -246,8 +246,10 @@ classify — a form absent from both the producer's classifier and this document
 is a refusal, never a silent pass. See the census predicate in
 `phase21/2026-09-03-implementation-census-plan.md` § 3.
 
-A sentence marked **[Decision 2026-09-03]** settles a question the existing
-documents left silent; the rest cite the document that already fixed it.
+A sentence marked **[Decision YYYY-MM-DD]** settles a question the existing
+documents left silent; the rest cite the document that already fixed it. A
+later decision may *apply* an earlier one to a case it did not name, and says so
+rather than restating it — § creates' 2026-09-04 paragraph is that shape.
 
 ### callbacks
 
@@ -355,6 +357,45 @@ open-ended, per the fourth shared rule, and in every case known today a
 compiler lowering inserting the registering call: a JSX element or `html`
 template that registers a row or component owner with the runtime, and a
 `"use server"` function whose transform yields a server-function reference.
+
+**[Decision 2026-09-04] Handing a value to a per-request render context that
+writes it into the response is a `create`.** The question was
+`solid-js@2.0.0-rc.3`'s server condition: `dist/server.js`'s `processResult`
+executes `ctx.serialize(id, deferred.promise, deferStream)`, where `ctx` is
+`sharedConfig.context` — the per-request context `@solidjs/web`'s
+`renderToStream` installs (`@solidjs/web/dist/server.js:1325`), whose
+`serialize` (`:1383-1397`) adds the promise to `blockingPromises` and chains
+`serializer.write` into the response stream. That **is** the one act this
+domain is about, on all four of the definition's terms: it is *the export's own
+act*, not a caller-supplied callable's; the registered thing is a version-1
+resource kind (the memo's pending result — an `async-computation` — landing in a
+`stream`/response); the registry is a runtime that acts on it, because the
+hydration serializer later writes the resolved value into the HTML the server
+sends; and it remains live after the call returns, reached by that runtime
+rather than through the tuple the call handed back. The 2026-09-03 sentence
+above is unchanged and this is its application, not an extension: a per-request
+render context is *not* the "package's own private module variable" that
+sentence excludes — a module-level binding nothing outside the invocation reads
+is still not a `create`, and the line between the two is whether some runtime
+outside the invocation acts on what was registered.
+
+**A guarded reach still counts, and a flat row must therefore withhold.** The
+reach above is conditional — the `node`/`worker`/`deno` condition, an `async`
+context, `options.ssrSource ∈ {server, hybrid}`, a thenable or async-iterable
+compute result, an owner with an id, and no `NoHydrate` ancestor — and a
+condition on *when* an operation happens has never made it absent: that is the
+"later execution is an operation, not an absence" rule, applied to a guard
+instead of to a schedule. A closure is over one artifact case under one guard,
+so a *document* can close `creates: []` for the browser case and publish the
+operation for the server case. A negative-authority row keyed only by
+`(package, export, domain)` cannot: it has nowhere to put the condition, so an
+export with any guarded reach must be **withheld** from such a table rather
+than qualified. Recorded consequence, 2026-09-04: this withdrew
+`solid-dialect`'s `(solid-js, createEffect, Creates)` row and withheld
+`(solid-js, createSignal, Creates)`, both for exactly that guard — see
+`docs/adr/0007-census-dialect-axiom-tier.md` and
+`docs/package-contract-v2/audits/2026-09-04-solid-2-rc3-core-primitives-creates.md`
+§ 7.4. Signed off by delegation, 2026-09-04.
 
 Three things are **not** `creates` items, and each has its own home:
 

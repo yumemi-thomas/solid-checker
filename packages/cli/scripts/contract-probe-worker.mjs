@@ -53,6 +53,8 @@ import { pathToFileURL } from "node:url";
 
 import {
   adoptFrameValue,
+  appendFrameItem,
+  createFrameList,
   createFrameRecord,
   createRuntimeProbeHarness,
   serializeFrame
@@ -156,23 +158,49 @@ const environment = adoptFrameValue(session.mode.environment);
 // and there is no public API to resolve from another module's URL; the two
 // directories carry identical package scopes and share one `node_modules`
 // ancestry, and both are watched trees.
+//
+// A session may also name the *dependency* specifiers its recipe declared it
+// needs. Each is resolved the same way and reported in the order asked, and
+// Rust requires every answer to name a file inside that dependency's
+// authenticated private copy — which is what makes "the package's own
+// `import "solid-js"` reached authenticated bytes" a checked property rather
+// than an assumption about the layout.
 const resolutionRequest = session.resolution;
 let resolution = null;
 if (resolutionRequest) {
   resolution = createFrameRecord();
   resolution.specifier = asString(resolutionRequest.specifier);
   resolution.importKind = asString(resolutionRequest.importKind);
-  try {
-    resolution.esm = asString(resolveModule(resolution.specifier));
-  } catch (error) {
-    resolution.esm = `unresolved:${asString(error?.code ?? "error")}`;
-  }
-  try {
-    resolution.require = asString(
-      requireFrom(toFileUrl(recipePath).href).resolve(resolution.specifier)
-    );
-  } catch (error) {
-    resolution.require = `unresolved:${asString(error?.code ?? "error")}`;
+  const resolveEsm = specifier => {
+    try {
+      return asString(resolveModule(specifier));
+    } catch (error) {
+      return `unresolved:${asString(error?.code ?? "error")}`;
+    }
+  };
+  const resolveRequire = specifier => {
+    try {
+      return asString(requireFrom(toFileUrl(recipePath).href).resolve(specifier));
+    } catch (error) {
+      return `unresolved:${asString(error?.code ?? "error")}`;
+    }
+  };
+  resolution.esm = resolveEsm(resolution.specifier);
+  resolution.require = resolveRequire(resolution.specifier);
+  // An index loop over own indices, not `for…of`: the container is whatever
+  // the parsed session carried, and a `Symbol.iterator` lookup is a name.
+  const requested = resolutionRequest.dependencies;
+  if (requested) {
+    const dependencies = createFrameList();
+    for (let index = 0; index < requested.length; index += 1) {
+      const specifier = asString(requested[index]);
+      const reported = createFrameRecord();
+      reported.specifier = specifier;
+      reported.esm = resolveEsm(specifier);
+      reported.require = resolveRequire(specifier);
+      appendFrameItem(dependencies, reported);
+    }
+    resolution.dependencies = dependencies;
   }
 }
 const isolation = createFrameRecord();

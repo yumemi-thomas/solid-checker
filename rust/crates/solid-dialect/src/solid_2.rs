@@ -131,8 +131,28 @@ const AUDITED_ARCHIVES: &[AuditedArchive] = &[
     },
 ];
 
+/// The hand implementation census over the exact published rc.3 bytes of five
+/// core `@solidjs/signals` primitives, and the source of every
+/// [`AuditedCitation::Implementation`] below.
+///
+/// Signed off by delegation, 2026-09-04.
+const RC3_CORE_PRIMITIVES_AUDIT: &str =
+    "docs/package-contract-v2/audits/2026-09-04-solid-2-rc3-core-primitives-creates.md";
+
 /// What the audited 2.0 documents **deny**, per archive, per canonical export,
 /// per call claim domain.
+///
+/// # Two kinds of authority, and they are not equally mechanical
+///
+/// Most rows cite a normalized contract document's summary object, and the
+/// citation test re-derives the closure out of the cited bytes: the bytes *are*
+/// the claim. Five rows — `@solidjs/signals`' `createRoot`, `createSignal`,
+/// `getOwner`, `onCleanup` and `untrack` — cite the archive's own runtime bytes
+/// instead, because `solidjs-signals.json` audits twelve exports and these are
+/// not among them. There the closure is a **human reading** recorded in
+/// [`RC3_CORE_PRIMITIVES_AUDIT`], and what the digests pin is the *subject* of
+/// that reading, not its conclusion; see [`AuditedCitation`] for the exact
+/// difference and ADR 0007 for why it is stated rather than smoothed over.
 ///
 /// # Only `creates`, and only for now
 ///
@@ -185,10 +205,38 @@ const AUDITED_ARCHIVES: &[AuditedArchive] = &[
 ///   `register-reference` and `transform-reference` in both server-function
 ///   conditions. It is also not a canonical primitive of this dialect, so it
 ///   could not be a row either way.
-/// - **Every export of `solid-js@2.0.0-rc.3` outside its audited document's
-///   ten**, and every `@solidjs/signals` export outside its twelve. The
-///   archive is audited; those exports are not. `createSignal`, `createRoot`,
-///   `untrack`, `onCleanup`, `createContext` and the rest have no row.
+/// - **`solid-js`'s own `createSignal`** — withheld, and the withholding is a
+///   *condition* finding rather than a missing audit.
+///   `solid-js/types/index.d.ts:8` re-**declares** `createSignal` (from
+///   `./client/hydration.js`) instead of re-exporting `@solidjs/signals`', so a
+///   `solid-js` import does not inherit the row above; and the archive's own
+///   implementation differs by condition. The browser bodies perform no
+///   `create` ([`RC3_CORE_PRIMITIVES_AUDIT`] § 7.3), but the
+///   `node`/`worker`/`deno` body's derived overload reaches
+///   `ctx.serialize(id, deferred.promise, deferStream)`
+///   (`dist/server.js:558`, `:699`, `:760`, `:797`), which
+///   `semantic-model.md` § creates' **[Decision 2026-09-04]** settles **is** a
+///   `create`. A `(package, export, domain)` row carries no condition, so the
+///   row must be withheld until the table is condition-aware.
+/// - **`solid-js`'s `createEffect`** — **withdrawn** 2026-09-04, for the same
+///   reason, and this is the one row the § creates decision cost.
+///   `solid-js.json` closes `creates: []` for it, but that document captures
+///   `browser/development` only: `dist/server.js:868-870` routes `createEffect`
+///   to `serverEffect`, which calls `processResult` whenever the caller passes
+///   `options.ssrSource`, and `processResult` reaches the same `ctx.serialize`.
+///   The reach is guarded — `node`/`worker`/`deno` ∧ `ctx.async` (a
+///   `renderToStream` context) ∧ `ssrSource ∈ {server, hybrid}` ∧ the compute
+///   returning a thenable or async-iterable ∧ the owner having an id ∧ not
+///   `NoHydrate` — and it is reachable *type-correctly*, because
+///   `solid-js/types/client/hydration.d.ts:42` augments `EffectOptions` with
+///   `ssrSource` and `:568` re-declares the export carrying it. A guarded reach
+///   is still a reach, and this row cannot say "except under that guard", so it
+///   is withheld rather than qualified. See the open item in ADR 0007.
+/// - **Every other export of `solid-js@2.0.0-rc.3` outside its audited
+///   document's ten**, and every `@solidjs/signals` export outside its twelve
+///   *and* outside the five [`RC3_CORE_PRIMITIVES_AUDIT`] censused by hand. The
+///   archive is audited; those exports are not. `createContext`,
+///   `createRenderEffect`, `runWithOwner` and the rest have no row.
 /// - **`isEqual`, `applyRef`, `renderToString`, `renderToStream`,
 ///   `httpHeader`/`httpStatus`' non-primitive siblings.** `isEqual`,
 ///   `applyRef`, `renderToString` and `renderToStream` close `creates: []`
@@ -208,12 +256,24 @@ const AUDITED_ARCHIVES: &[AuditedArchive] = &[
 /// *same* tarball receives the row on the strength of the captured ones. The
 /// identity gate binds the archive, not the condition, and closing that gap
 /// needs a per-condition audit — recorded in `docs/precision-backlog.md`.
+///
+/// The five implementation-audited rows do **not** carry that approximation:
+/// each cites all three `@solidjs/signals` bundles by name (`dist/prod/**`,
+/// `dist/dev.js`, `dist/node.cjs`), which is every runtime file the archive's
+/// `exports` map can select. They carry a different one, stated in
+/// [`RC3_CORE_PRIMITIVES_AUDIT`] § 1.4: a consumer importing these names from
+/// `solid-js` under the `node` condition runs `solid-js/dist/server.js`'s own
+/// bodies while its *declaration* resolves into `@solidjs/signals`, and the
+/// tier binds the declaration's archive. The audit read those server bodies
+/// too (§ 3.4, § 4.3, § 5.4, § 6.3) and reached the same verdict, which is what
+/// makes the rows sound on that path — but the tier cannot see the split, so
+/// the rows rest on the audit having read both.
 const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
     NegativeClaimRow {
         package: "@solidjs/signals",
         export: "action",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-c094d35ac3f70f84acaae0d933ed0c4c46071004615d4a1351a11a01bf987552",
             start_byte: 33507,
@@ -224,7 +284,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         package: "@solidjs/signals",
         export: "createMemo",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-6970e6d02d81c014fd7c2ef7aee46716c95cb9aac16a28e9f8adb95ece54eab1",
             start_byte: 12806,
@@ -235,7 +295,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         package: "@solidjs/signals",
         export: "createOptimistic",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-92071bb735b571320a76e500e8f0dc47db0f11df19201d2b3931d2da5d763e37",
             start_byte: 25043,
@@ -246,7 +306,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         package: "@solidjs/signals",
         export: "createOptimisticStore",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-034586f31ead4bb594c03ada1202fb3b439455294d049727cb6f898c65cf5283",
             start_byte: 6985,
@@ -257,18 +317,93 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         package: "@solidjs/signals",
         export: "createProjection",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-dc0413a1214db1eaf2875e7ee5b17addfef2043f8d01429f94081d9f41a673e5",
             start_byte: 38960,
             end_byte: 44103,
         }],
     },
+    // Implementation-audited, `2026-09-04-solid-2-rc3-core-primitives-creates`
+    // § 3. Three bundles cited because three conditions run three files; the
+    // `import` default and `require` bodies are byte-identical, which the two
+    // equal `slice_sha256` values state rather than imply.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "createRoot",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC3_CORE_PRIMITIVES_AUDIT,
+                section: "## 3. `createRoot` — archive `@solidjs/signals@2.0.0-rc.3`",
+                archive_path: "dist/prod/core/owner.js",
+                file_sha256: "d86a4959cd0eca34617b14d29514d653193d5fcd87d2857c783bf04ff4aaefe7",
+                start_byte: 10535,
+                end_byte: 10655,
+                slice_sha256: "eefc749ba75a19179e86ce86935623ba829da692628162c809267f812583bbe3",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_CORE_PRIMITIVES_AUDIT,
+                section: "## 3. `createRoot` — archive `@solidjs/signals@2.0.0-rc.3`",
+                archive_path: "dist/dev.js",
+                file_sha256: "cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79",
+                start_byte: 90641,
+                end_byte: 90783,
+                slice_sha256: "9a66667de7c1a48f5a90e9901d994ba532da603ac763dc460c16fb8e60496fa5",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_CORE_PRIMITIVES_AUDIT,
+                section: "## 3. `createRoot` — archive `@solidjs/signals@2.0.0-rc.3`",
+                archive_path: "dist/node.cjs",
+                file_sha256: "bc0e35d32add395dc1c4dc3d6cd0fb4ea4a19bd582d68de3b44c708bb4b75c1c",
+                start_byte: 58592,
+                end_byte: 58712,
+                slice_sha256: "eefc749ba75a19179e86ce86935623ba829da692628162c809267f812583bbe3",
+            },
+        ],
+    },
+    // Implementation-audited, § 7.2. `@solidjs/signals`' own `createSignal`
+    // only — `solid-js`' re-declaration is a different implementation and is
+    // withheld (§ 7.4, `IMPLEMENTATION_AUDITED`).
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "createSignal",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC3_CORE_PRIMITIVES_AUDIT,
+                section: "## 7. `createSignal` — two archives, two rows",
+                archive_path: "dist/prod/signals.js",
+                file_sha256: "b80dc49d83f80b37a572d0fa7245866c978428e450a5f673e6e83972f9db9e8a",
+                start_byte: 2517,
+                end_byte: 2797,
+                slice_sha256: "ce6ade13e9e77463067c7bac3727622e0ac32bd8e9bad801501a28365b9da388",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_CORE_PRIMITIVES_AUDIT,
+                section: "## 7. `createSignal` — two archives, two rows",
+                archive_path: "dist/dev.js",
+                file_sha256: "cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79",
+                start_byte: 232899,
+                end_byte: 233248,
+                slice_sha256: "d1292c1a9d7a916d932b8e2ae27b22c592daf612cc51ddf7848ecf64f63cd504",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_CORE_PRIMITIVES_AUDIT,
+                section: "## 7. `createSignal` — two archives, two rows",
+                archive_path: "dist/node.cjs",
+                file_sha256: "bc0e35d32add395dc1c4dc3d6cd0fb4ea4a19bd582d68de3b44c708bb4b75c1c",
+                start_byte: 175815,
+                end_byte: 176095,
+                slice_sha256: "d003a64c857bac064c4f1164874f761622a5dfd9406061757ea0fb00ff152fd3",
+            },
+        ],
+    },
     NegativeClaimRow {
         package: "@solidjs/signals",
         export: "createStore",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-7080e21f5c75fdb8ffd32ef595390c4164a07969282c6a843573230ed36de5f5",
             start_byte: 17396,
@@ -279,7 +414,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         package: "@solidjs/signals",
         export: "createTrackedEffect",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-aab0640db7c783a35e1c955cbf19c22197542f3eecb3f89b28433694eb07ff6a",
             start_byte: 29857,
@@ -290,18 +425,91 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         package: "@solidjs/signals",
         export: "flush",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-00fc668bf5acaf07e617a9118eb0ef43a7dc1ba6359be1ea580793a91a76efbe",
             start_byte: 2598,
             end_byte: 6903,
         }],
     },
+    // Implementation-audited, § 4. `getOwner` is `return context` in all three
+    // bundles; the call table has zero rows.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "getOwner",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC3_CORE_PRIMITIVES_AUDIT,
+                section: "## 4. `getOwner` — archive `@solidjs/signals@2.0.0-rc.3`",
+                archive_path: "dist/prod/core/owner.js",
+                file_sha256: "d86a4959cd0eca34617b14d29514d653193d5fcd87d2857c783bf04ff4aaefe7",
+                start_byte: 7691,
+                end_byte: 7739,
+                slice_sha256: "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_CORE_PRIMITIVES_AUDIT,
+                section: "## 4. `getOwner` — archive `@solidjs/signals@2.0.0-rc.3`",
+                archive_path: "dist/dev.js",
+                file_sha256: "cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79",
+                start_byte: 87147,
+                end_byte: 87189,
+                slice_sha256: "e8cb95b765807fa14a97032551f4bbced263cc3d7837fc1258f156ffc71ba8bb",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_CORE_PRIMITIVES_AUDIT,
+                section: "## 4. `getOwner` — archive `@solidjs/signals@2.0.0-rc.3`",
+                archive_path: "dist/node.cjs",
+                file_sha256: "bc0e35d32add395dc1c4dc3d6cd0fb4ea4a19bd582d68de3b44c708bb4b75c1c",
+                start_byte: 55747,
+                end_byte: 55795,
+                slice_sha256: "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2",
+            },
+        ],
+    },
+    // Implementation-audited, § 5. The dev slice is the whole guarded body,
+    // including the two dev-only diagnostic branches, because that is the
+    // definition the audit walked.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "onCleanup",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC3_CORE_PRIMITIVES_AUDIT,
+                section: "## 5. `onCleanup` — archive `@solidjs/signals@2.0.0-rc.3`",
+                archive_path: "dist/prod/signals.js",
+                file_sha256: "b80dc49d83f80b37a572d0fa7245866c978428e450a5f673e6e83972f9db9e8a",
+                start_byte: 2368,
+                end_byte: 2421,
+                slice_sha256: "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_CORE_PRIMITIVES_AUDIT,
+                section: "## 5. `onCleanup` — archive `@solidjs/signals@2.0.0-rc.3`",
+                archive_path: "dist/dev.js",
+                file_sha256: "cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79",
+                start_byte: 231953,
+                end_byte: 232799,
+                slice_sha256: "f20080340dc7598692247a9944e2f59a4d823a6b24df127a17b3658622521284",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_CORE_PRIMITIVES_AUDIT,
+                section: "## 5. `onCleanup` — archive `@solidjs/signals@2.0.0-rc.3`",
+                archive_path: "dist/node.cjs",
+                file_sha256: "bc0e35d32add395dc1c4dc3d6cd0fb4ea4a19bd582d68de3b44c708bb4b75c1c",
+                start_byte: 175666,
+                end_byte: 175719,
+                slice_sha256: "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b",
+            },
+        ],
+    },
     NegativeClaimRow {
         package: "@solidjs/signals",
         export: "onSettled",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-5a08fc896d6f18c5378c69bc27d5fc1ddaeb013364aff1421330341801111663",
             start_byte: 10107,
@@ -312,7 +520,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         package: "@solidjs/signals",
         export: "reconcile",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-97b25908bde1ce8220884836f97f37a42f6719bcf3b723d9de5746955fcc12dd",
             start_byte: 28049,
@@ -323,25 +531,62 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         package: "@solidjs/signals",
         export: "snapshot",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
             summary: "summary-8911cd9f25cc9dc4140432201dd677dbebfb3177847e315e1aa05b9c628dde30",
             start_byte: 23299,
             end_byte: 24961,
         }],
     },
+    // Implementation-audited, § 6. Prod and `node.cjs` are the same body under
+    // different mangled hook-slot names, so their slice digests differ where
+    // `createRoot`'s and `getOwner`'s do not.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "untrack",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: RC3_CORE_PRIMITIVES_AUDIT,
+                section: "## 6. `untrack` — archive `@solidjs/signals@2.0.0-rc.3`",
+                archive_path: "dist/prod/core/core.js",
+                file_sha256: "1726b40ebf79cf15b8d09ce2078a78a6a8ca71bf48e4b3ba12880736ae281a46",
+                start_byte: 24547,
+                end_byte: 24827,
+                slice_sha256: "520000b7e878116206ba2af96db7539d71ecbbba9e62b694d2a9cca18d5d6156",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_CORE_PRIMITIVES_AUDIT,
+                section: "## 6. `untrack` — archive `@solidjs/signals@2.0.0-rc.3`",
+                archive_path: "dist/dev.js",
+                file_sha256: "cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79",
+                start_byte: 155777,
+                end_byte: 156253,
+                slice_sha256: "2a929c2683ae93a3820bf2b4bf1a4455b41c6a928880eaa480a6820fe43a1852",
+            },
+            AuditedCitation::Implementation {
+                audit: RC3_CORE_PRIMITIVES_AUDIT,
+                section: "## 6. `untrack` — archive `@solidjs/signals@2.0.0-rc.3`",
+                archive_path: "dist/node.cjs",
+                file_sha256: "bc0e35d32add395dc1c4dc3d6cd0fb4ea4a19bd582d68de3b44c708bb4b75c1c",
+                start_byte: 112365,
+                end_byte: 112645,
+                slice_sha256: "0ac3b93214231630dc9351ba9e53339b9c2624a63848fd3c6c9e4d5f2cd209ac",
+            },
+        ],
+    },
     NegativeClaimRow {
         package: "@solidjs/web",
         export: "clientOnly",
         domain: CallClaimDomain::Creates,
         citations: &[
-            AuditedCitation {
+            AuditedCitation::Summary {
                 document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
                 summary: "summary-33b1f252bf40ccbf4afd30c2d3c9e9cc74f10c3ece12fee903d628e8da7c231e",
                 start_byte: 1987,
                 end_byte: 9470,
             },
-            AuditedCitation {
+            AuditedCitation::Summary {
                 document: "pkg/contracts/bundled/solid-v2/solidjs-web--web-node-server.json",
                 summary: "summary-483140acbc18aaa00d3db45337fdd8fd31997eceec74fb9a398e49abc7990ebf",
                 start_byte: 8958,
@@ -354,13 +599,13 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         export: "httpHeader",
         domain: CallClaimDomain::Creates,
         citations: &[
-            AuditedCitation {
+            AuditedCitation::Summary {
                 document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
                 summary: "summary-f9d972edede76e2b96c176a3b0f83f6b9ae4f5528398a134a88373baf12ad54f",
                 start_byte: 22024,
                 end_byte: 22535,
             },
-            AuditedCitation {
+            AuditedCitation::Summary {
                 document: "pkg/contracts/bundled/solid-v2/solidjs-web--web-node-server.json",
                 summary: "summary-0ffbf4d4d8bc911a206487e2fea11778b4de8be1ba653b20a75bc8148856ec37",
                 start_byte: 1875,
@@ -373,13 +618,13 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         export: "httpStatus",
         domain: CallClaimDomain::Creates,
         citations: &[
-            AuditedCitation {
+            AuditedCitation::Summary {
                 document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
                 summary: "summary-f9d972edede76e2b96c176a3b0f83f6b9ae4f5528398a134a88373baf12ad54f",
                 start_byte: 22024,
                 end_byte: 22535,
             },
-            AuditedCitation {
+            AuditedCitation::Summary {
                 document: "pkg/contracts/bundled/solid-v2/solidjs-web--web-node-server.json",
                 summary: "summary-0ffbf4d4d8bc911a206487e2fea11778b4de8be1ba653b20a75bc8148856ec37",
                 start_byte: 1875,
@@ -391,7 +636,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         package: "solid-js",
         export: "For",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
             start_byte: 6598,
@@ -402,7 +647,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         package: "solid-js",
         export: "Loading",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-7e8eaca8531ccab3121be0a039c44b383b80aa9d8c0fa51cca31884efc083149",
             start_byte: 12271,
@@ -413,7 +658,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         package: "solid-js",
         export: "Match",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
             start_byte: 6598,
@@ -424,7 +669,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         package: "solid-js",
         export: "Repeat",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
             start_byte: 6598,
@@ -435,7 +680,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         package: "solid-js",
         export: "Show",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
             start_byte: 6598,
@@ -446,7 +691,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         package: "solid-js",
         export: "affects",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-92efacc141c683cc0a3779fa9106ff29f624ed876f3f6d0e0635643dec1d46fd",
             start_byte: 22614,
@@ -455,20 +700,9 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
     },
     NegativeClaimRow {
         package: "solid-js",
-        export: "createEffect",
-        domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
-            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
-            summary: "summary-8ea1870d089429f8bbc554fcea620264e1952f06433f57c07e252b0885b5467d",
-            start_byte: 14480,
-            end_byte: 22532,
-        }],
-    },
-    NegativeClaimRow {
-        package: "solid-js",
         export: "isPending",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-d41bc9d7ea19dd2a6dae7d51199a8448e627d5b6ac99a2eeb20cb02c7799c724",
             start_byte: 24560,
@@ -479,7 +713,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         package: "solid-js",
         export: "latest",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-13d78920672aa68cb9fb09d4b51dafaf4281d67628d73e4ba93f06de39512c40",
             start_byte: 2366,
@@ -490,7 +724,7 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
         package: "solid-js",
         export: "refresh",
         domain: CallClaimDomain::Creates,
-        citations: &[AuditedCitation {
+        citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-49a501fb15bcd7c7961085bd54009503618b3729e6e49e8d299f0eb90ad9d322",
             start_byte: 4306,
@@ -553,8 +787,10 @@ impl Dialect for Solid2 {
         "solid-v2/solid-js.json"
     }
 
-    /// [`AUDITED_ARCHIVES`] and [`NEGATIVE_ROWS`] — 24 `creates` denials read
-    /// out of the audited rc.3 documents, with the withholdings named there.
+    /// [`AUDITED_ARCHIVES`] and [`NEGATIVE_ROWS`] — 28 `creates` denials, 23
+    /// read out of the audited rc.3 contract documents and five out of the
+    /// archive's own runtime bytes by hand ([`RC3_CORE_PRIMITIVES_AUDIT`]),
+    /// with the withholdings named there.
     fn negative_claim_authority(&self) -> &'static DialectNegativeAuthority {
         &NEGATIVE_AUTHORITY
     }
@@ -1736,24 +1972,197 @@ mod tests {
         items.is_some_and(|items| items.is_empty()) && closed
     }
 
-    /// The rows this table deliberately does not carry even though the audited
-    /// documents close the domain for them. Each entry's reason is in
+    /// The rows this table deliberately does not carry even though some audited
+    /// source supports deriving them. Each entry's reason is in
     /// [`NEGATIVE_ROWS`]' doc comment; this list exists so the completeness
     /// test below cannot be satisfied by an accidental omission.
-    const WITHHELD: &[(&str, &str, CallClaimDomain)] =
-        &[("@solidjs/web", "hydrate", CallClaimDomain::Creates)];
+    ///
+    /// A withholding must be *derivable* from somewhere — otherwise it is a
+    /// note about nothing — so every entry here is either closed by an audited
+    /// contract document or listed in [`IMPLEMENTATION_AUDITED`].
+    const WITHHELD: &[(&str, &str, CallClaimDomain)] = &[
+        ("@solidjs/web", "hydrate", CallClaimDomain::Creates),
+        ("solid-js", "createEffect", CallClaimDomain::Creates),
+        ("solid-js", "createSignal", CallClaimDomain::Creates),
+    ];
+
+    /// What a hand implementation census concluded, per row.
+    ///
+    /// A second **source** for the derivation below, beside the audited JSON
+    /// documents — not a second kind of row. `Closed` makes a row derivable
+    /// exactly as a document's closure does; `Withheld` makes a withholding
+    /// legitimate without making a row derivable, so the "neither shipped nor
+    /// withheld" omission check keeps working for an export no document
+    /// mentions.
+    ///
+    /// The JSON half of the derivation stays exactly as strict as it was: an
+    /// entry here can only *add* to what is derivable, and adding one is a
+    /// deliberate edit that names its audit document and section.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum ImplementationVerdict {
+        Closed,
+        Withheld(&'static str),
+    }
+
+    const IMPLEMENTATION_AUDITED: &[(
+        &str,
+        &str,
+        CallClaimDomain,
+        &str,
+        &str,
+        ImplementationVerdict,
+    )] = &[
+        // R1-R5 of RC3_CORE_PRIMITIVES_AUDIT § 0. Each was censused in all
+        // three `@solidjs/signals` bundles, and — because the tier binds the
+        // declaration's archive while a `solid-js` import under the `node`
+        // condition runs `solid-js/dist/server.js`'s own bodies (§ 1.4) —
+        // those server bodies were read too and reach the same verdict:
+        // `getOwner` `dist/server.js:91-93`, `onCleanup` `:97-102`,
+        // `createRoot` `:175-178`, `untrack` `:1392-1394` (file digest
+        // `63269da7…`). `createSignal`'s server body is the exception, and it
+        // is why the `solid-js` row below is withheld rather than granted.
+        (
+            "@solidjs/signals",
+            "createRoot",
+            CallClaimDomain::Creates,
+            RC3_CORE_PRIMITIVES_AUDIT,
+            "## 3. `createRoot` — archive `@solidjs/signals@2.0.0-rc.3`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            "createSignal",
+            CallClaimDomain::Creates,
+            RC3_CORE_PRIMITIVES_AUDIT,
+            "## 7. `createSignal` — two archives, two rows",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            "getOwner",
+            CallClaimDomain::Creates,
+            RC3_CORE_PRIMITIVES_AUDIT,
+            "## 4. `getOwner` — archive `@solidjs/signals@2.0.0-rc.3`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            "onCleanup",
+            CallClaimDomain::Creates,
+            RC3_CORE_PRIMITIVES_AUDIT,
+            "## 5. `onCleanup` — archive `@solidjs/signals@2.0.0-rc.3`",
+            ImplementationVerdict::Closed,
+        ),
+        (
+            "@solidjs/signals",
+            "untrack",
+            CallClaimDomain::Creates,
+            RC3_CORE_PRIMITIVES_AUDIT,
+            "## 6. `untrack` — archive `@solidjs/signals@2.0.0-rc.3`",
+            ImplementationVerdict::Closed,
+        ),
+        // R6 of § 0, and the C1 consistency flag it forced. Both are the same
+        // finding: `semantic-model.md` § creates' [Decision 2026-09-04] makes
+        // `ctx.serialize(id, deferred.promise, deferStream)` a `create`, and a
+        // flat `(package, export, domain)` row cannot say "except under the
+        // browser conditions".
+        (
+            "solid-js",
+            "createSignal",
+            CallClaimDomain::Creates,
+            RC3_CORE_PRIMITIVES_AUDIT,
+            "## 7. `createSignal` — two archives, two rows",
+            ImplementationVerdict::Withheld(
+                "browser conditions perform no create (§ 7.3); the \
+                 node/worker/deno condition's derived overload reaches \
+                 ctx.serialize(id, deferred.promise, deferStream) \
+                 (dist/server.js:558, :699, :760, :797), which \
+                 semantic-model.md § creates' [Decision 2026-09-04] settles is \
+                 a create. solid-js re-declares the export \
+                 (types/client/hydration.d.ts:246-253) so the \
+                 @solidjs/signals row does not cover this import path",
+            ),
+        ),
+        (
+            "solid-js",
+            "createEffect",
+            CallClaimDomain::Creates,
+            RC3_CORE_PRIMITIVES_AUDIT,
+            "## 7. `createSignal` — two archives, two rows",
+            ImplementationVerdict::Withheld(
+                "withdrawn 2026-09-04: solid-js.json closes creates: [] from \
+                 the browser/development case only, and dist/server.js:868-870 \
+                 routes createEffect to serverEffect, which calls \
+                 processResult — and so ctx.serialize — whenever the caller \
+                 passes options.ssrSource (§ 7.4 C1). The reach is guarded \
+                 (node/worker/deno ∧ ctx.async ∧ ssrSource ∈ {server, hybrid} \
+                 ∧ a thenable or async-iterable compute result ∧ owner.id ∧ \
+                 not NoHydrate) and type-correctly reachable \
+                 (types/client/hydration.d.ts:42 augments EffectOptions, :568 \
+                 re-declares the export). A flat row carries no guard, so it \
+                 is withheld until the table is condition-aware",
+            ),
+        ),
+    ];
+
+    /// The directory under `benchmarks/package-contract-v2/phase0/rc3/` that
+    /// carries an archive's pinned per-file manifest.
+    ///
+    /// Deliberately a total match with no fallback: an archive nobody pinned
+    /// cannot carry an [`AuditedCitation::Implementation`] at all, because
+    /// there would be nothing to check the cited file's digest against.
+    fn phase0_archive_directory(package: &str) -> &'static str {
+        match package {
+            "@solidjs/signals" => "solidjs-signals",
+            "@solidjs/web" => "solidjs-web",
+            "solid-js" => "solid-js",
+            other => panic!("no pinned phase0 manifest directory for {other}"),
+        }
+    }
+
+    fn sha256_hex(bytes: &[u8]) -> String {
+        use sha2::{Digest, Sha256};
+        format!("{:x}", Sha256::digest(bytes))
+    }
+
+    /// The checked-in copy of one `Implementation` citation's byte range, as a
+    /// repository-relative path derived from the citation's own fields.
+    ///
+    /// Derived rather than stored, so a row and its slice file cannot disagree
+    /// about which bytes they are: there is no second field to get wrong.
+    fn audited_slice_path(
+        package: &str,
+        archive_path: &str,
+        start_byte: usize,
+        end_byte: usize,
+    ) -> String {
+        format!(
+            "rust/crates/solid-dialect/audited-slices/solid-v2/{}/{archive_path}.{start_byte}-{end_byte}.slice",
+            phase0_archive_directory(package)
+        )
+    }
 
     /// Every row cites bytes that say what the row says.
     ///
-    /// This is the test that keeps the table from drifting: it re-reads the
-    /// cited byte range out of the cited document, parses *that slice* as the
-    /// summary object, and re-derives the closure. A row whose citation moved,
-    /// whose document changed, or whose domain is no longer closed there fails
-    /// here rather than in a certification months later.
+    /// This is the test that keeps the table from drifting, and it does two
+    /// materially different things depending on the citation kind:
+    ///
+    /// - [`AuditedCitation::Summary`]: re-reads the cited byte range out of the
+    ///   cited document, parses *that slice* as the summary object, and
+    ///   **re-derives the closure**. A row whose citation moved, whose document
+    ///   changed, or whose domain is no longer closed there fails here rather
+    ///   than in a certification months later.
+    /// - [`AuditedCitation::Implementation`]: re-establishes the **subject** of
+    ///   a human reading — the audit document and its section still exist, the
+    ///   cited file is still the pinned file at the pinned digest, the range is
+    ///   inside it, and the range's bytes still hash to what the row claims.
+    ///   Nothing here re-derives closure from a JavaScript body, and nothing
+    ///   here pretends to.
     #[test]
     fn every_negative_row_citation_resolves_to_the_bytes_it_claims() {
         let root = repository_root();
         assert!(!NEGATIVE_ROWS.is_empty());
+        let mut implementation_citations = 0usize;
         for row in NEGATIVE_ROWS {
             assert!(
                 !row.citations.is_empty(),
@@ -1762,30 +2171,186 @@ mod tests {
                 row.export
             );
             for citation in row.citations {
-                let bytes = std::fs::read(root.join(citation.document)).unwrap();
-                assert!(
-                    citation.start_byte < citation.end_byte && citation.end_byte <= bytes.len(),
-                    "{}:{} cites a range outside {}",
-                    row.package,
-                    row.export,
-                    citation.document
-                );
-                let summary: serde_json::Value =
-                    serde_json::from_slice(&bytes[citation.start_byte..citation.end_byte])
-                        .unwrap_or_else(|error| {
+                let &AuditedCitation::Summary {
+                    document,
+                    summary: summary_id,
+                    start_byte,
+                    end_byte,
+                } = citation
+                else {
+                    let &AuditedCitation::Implementation {
+                        audit,
+                        section,
+                        archive_path,
+                        file_sha256,
+                        start_byte,
+                        end_byte,
+                        slice_sha256,
+                    } = citation
+                    else {
+                        unreachable!()
+                    };
+                    implementation_citations += 1;
+
+                    // 1. The audit document, and the exact section heading that
+                    //    decides this row. The reasoning is only reviewable if
+                    //    a reader can find it.
+                    let audit_text =
+                        std::fs::read_to_string(root.join(audit)).unwrap_or_else(|error| {
                             panic!(
-                                "{}:{} cites bytes that are not a summary object in {}: {error}",
-                                row.package, row.export, citation.document
+                                "{}:{} cites audit {audit}, which cannot be read: {error}",
+                                row.package, row.export
                             )
                         });
+                    assert!(
+                        audit_text.lines().any(|line| line == section),
+                        "{}:{} cites section {section:?}, which {audit} does not contain verbatim",
+                        row.package,
+                        row.export
+                    );
+
+                    // 2. The cited runtime file is the pinned one, at the
+                    //    pinned digest, and the range fits inside it. This is
+                    //    the same pinned manifest the registry-integrity gate
+                    //    already trusts; the citation adds no new authority.
+                    let manifest_path = format!(
+                        "benchmarks/package-contract-v2/phase0/rc3/{}/files.json",
+                        phase0_archive_directory(row.package)
+                    );
+                    let manifest: serde_json::Value =
+                        serde_json::from_slice(&std::fs::read(root.join(&manifest_path)).unwrap())
+                            .unwrap();
+                    let entry = manifest
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .find(|entry| entry["path"].as_str() == Some(archive_path))
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "{}:{} cites {archive_path}, which {manifest_path} does not pin",
+                                row.package, row.export
+                            )
+                        });
+                    assert_eq!(
+                        entry["sha256"].as_str(),
+                        Some(file_sha256),
+                        "{}:{} cites a digest for {archive_path} that {manifest_path} disagrees with",
+                        row.package,
+                        row.export
+                    );
+                    let file_bytes = entry["bytes"].as_u64().unwrap() as usize;
+                    assert!(
+                        start_byte < end_byte && end_byte <= file_bytes,
+                        "{}:{} cites {start_byte}..{end_byte} of {archive_path}, which is {file_bytes} bytes",
+                        row.package,
+                        row.export
+                    );
+
+                    // 3. The cited bytes themselves, unconditionally, from the
+                    //    checked-in slice. Without this the slice digest would
+                    //    only ever be checked where the archive happened to be
+                    //    installed, and "green" would mean "skipped".
+                    let slice_path =
+                        audited_slice_path(row.package, archive_path, start_byte, end_byte);
+                    let slice = std::fs::read(root.join(&slice_path)).unwrap_or_else(|error| {
+                        panic!(
+                            "{}:{} cites bytes with no checked-in slice at {slice_path}: {error}",
+                            row.package, row.export
+                        )
+                    });
+                    assert_eq!(
+                        slice.len(),
+                        end_byte - start_byte,
+                        "{slice_path} is not {start_byte}..{end_byte} long"
+                    );
+                    assert_eq!(
+                        sha256_hex(&slice),
+                        slice_sha256,
+                        "{}:{}'s checked-in slice {slice_path} does not hash to the cited digest",
+                        row.package,
+                        row.export
+                    );
+
+                    // The slice must be the *export's own* definition, not an
+                    // arbitrary range that happens to hash correctly. The
+                    // minified bundles carry the tail of the preceding doc
+                    // comment on the definition's first line, so a leading
+                    // `*/ ` is expected there and nowhere else.
+                    let text = String::from_utf8(slice.clone()).unwrap();
+                    let body = text.strip_prefix(" */ ").unwrap_or(&text);
+                    assert!(
+                        body.starts_with(&format!("function {}(", row.export))
+                            || body.starts_with(&format!("const {} = ", row.export)),
+                        "{slice_path} does not begin with {}'s definition: {:?}",
+                        row.export,
+                        &body[..body.len().min(60)]
+                    );
+
+                    // 4. And, when the archive is on disk, that those bytes are
+                    //    still the archive's bytes at the cited offsets — the
+                    //    one check the checked-in slice cannot make. Skipping
+                    //    is allowed, silently skipping under a verification run
+                    //    is not.
+                    match std::env::var("SOLID_CHECKER_RC3_ARCHIVE_ROOT") {
+                        Ok(archive_root) if !archive_root.is_empty() => {
+                            let file = std::path::Path::new(&archive_root)
+                                .join(row.package)
+                                .join(archive_path);
+                            let bytes = std::fs::read(&file).unwrap_or_else(|error| {
+                                panic!(
+                                    "SOLID_CHECKER_RC3_ARCHIVE_ROOT is set, but {}: {error}",
+                                    file.display()
+                                )
+                            });
+                            assert_eq!(
+                                sha256_hex(&bytes),
+                                file_sha256,
+                                "{} is not the pinned {archive_path}",
+                                file.display()
+                            );
+                            assert_eq!(
+                                bytes[start_byte..end_byte],
+                                slice[..],
+                                "{}:{}'s checked-in slice is not {start_byte}..{end_byte} of {}",
+                                row.package,
+                                row.export,
+                                file.display()
+                            );
+                        }
+                        _ => assert_ne!(
+                            std::env::var("SOLID_CHECKER_EXPECT_PROBE_PINS").as_deref(),
+                            Ok("1"),
+                            "SOLID_CHECKER_EXPECT_PROBE_PINS=1, but \
+                             SOLID_CHECKER_RC3_ARCHIVE_ROOT is unset: the cited \
+                             ranges would only be checked against the \
+                             checked-in slices, never against the archive they \
+                             claim to quote. scripts/verify.sh exports it from \
+                             the tsc-oracle install."
+                        ),
+                    }
+                    continue;
+                };
+                let bytes = std::fs::read(root.join(document)).unwrap();
+                assert!(
+                    start_byte < end_byte && end_byte <= bytes.len(),
+                    "{}:{} cites a range outside {document}",
+                    row.package,
+                    row.export
+                );
+                let summary: serde_json::Value = serde_json::from_slice(
+                    &bytes[start_byte..end_byte],
+                )
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "{}:{} cites bytes that are not a summary object in {document}: {error}",
+                        row.package, row.export
+                    )
+                });
                 assert!(
                     closes_domain_empty(&summary["call"], row.domain),
-                    "{}:{} cites {} {}..{}, which does not close {} empty",
+                    "{}:{} cites {document} {start_byte}..{end_byte}, which does not close {} empty",
                     row.package,
                     row.export,
-                    citation.document,
-                    citation.start_byte,
-                    citation.end_byte,
                     row.domain.wire_name()
                 );
 
@@ -1793,34 +2358,42 @@ mod tests {
                 // export to, in the document the citation names. A range that
                 // parses and closes the domain is not enough: it has to be
                 // *this export's* summary.
-                let document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
                 assert_eq!(
-                    document["package"]["name"].as_str(),
+                    parsed["package"]["name"].as_str(),
                     Some(row.package),
                     "{}:{} cites a document about another package",
                     row.package,
                     row.export
                 );
                 let mut bound = false;
-                for entrypoint in document["entrypoints"].as_object().unwrap().values() {
+                for entrypoint in parsed["entrypoints"].as_object().unwrap().values() {
                     for artifact_case in entrypoint["cases"].as_array().into_iter().flatten() {
-                        if artifact_case["exports"][row.export].as_str() == Some(citation.summary) {
+                        if artifact_case["exports"][row.export].as_str() == Some(summary_id) {
                             bound = true;
                         }
                     }
                 }
                 assert!(
                     bound,
-                    "{} in {} does not map {} to {}",
-                    row.package, citation.document, row.export, citation.summary
+                    "{} in {document} does not map {} to {summary_id}",
+                    row.package, row.export
                 );
                 assert_eq!(
-                    document["summaries"][citation.summary], summary,
-                    "{}:{}'s cited byte range is not summary {}",
-                    row.package, row.export, citation.summary
+                    parsed["summaries"][summary_id], summary,
+                    "{}:{}'s cited byte range is not summary {summary_id}",
+                    row.package, row.export
                 );
             }
         }
+
+        // The Implementation arm is new and easy to lose: a refactor that
+        // stopped reaching it would leave every check above passing over the
+        // 23 summary citations alone. Five rows, three bundles each.
+        assert_eq!(
+            implementation_citations, 15,
+            "the Implementation citation arm did not run over the rows that need it"
+        );
     }
 
     /// The table is exactly what the audited documents support, minus the named
@@ -1883,11 +2456,77 @@ mod tests {
             "a new domain was added to the table without widening this comparison"
         );
 
-        let derivable: BTreeSet<(String, String, CallClaimDomain)> = observed
+        let from_json: BTreeSet<(String, String, CallClaimDomain)> = observed
             .into_iter()
             .filter(|((_, _, domain), closed)| *closed && admitted.contains(domain))
             .map(|(key, _)| key)
             .collect();
+
+        // The second source. Every entry names an audit document and a section
+        // heading, and both must exist — a hand census that cannot be found is
+        // not authority, it is an assertion.
+        let root = repository_root();
+        let mut implementation_closed = BTreeSet::new();
+        let mut implementation_withheld = BTreeSet::new();
+        for (package, export, domain, audit, section, verdict) in IMPLEMENTATION_AUDITED {
+            assert!(
+                admitted.contains(domain),
+                "{package}:{export} is implementation-audited for a domain the table does not admit"
+            );
+            assert_eq!(
+                Solid2
+                    .primitive(export)
+                    .and_then(|primitive| Solid2.name_of(primitive)),
+                Some(*export),
+                "{package}:{export} is not a canonical 2.0 primitive spelling"
+            );
+            assert!(
+                AUDITED_ARCHIVES
+                    .iter()
+                    .any(|archive| archive.name == *package),
+                "{package}:{export} names an archive with no audited tuple"
+            );
+            let text = std::fs::read_to_string(root.join(audit)).unwrap_or_else(|error| {
+                panic!("{package}:{export} names audit {audit}, which cannot be read: {error}")
+            });
+            assert!(
+                text.lines().any(|line| line == *section),
+                "{package}:{export} names section {section:?}, which {audit} does not contain \
+                 verbatim"
+            );
+            let key = ((*package).to_owned(), (*export).to_owned(), *domain);
+            match verdict {
+                ImplementationVerdict::Closed => {
+                    assert!(
+                        implementation_closed.insert(key),
+                        "{package}:{export} twice"
+                    )
+                }
+                ImplementationVerdict::Withheld(reason) => {
+                    assert!(
+                        !reason.is_empty(),
+                        "{package}:{export} withheld with no reason"
+                    );
+                    assert!(
+                        implementation_withheld.insert(key),
+                        "{package}:{export} twice"
+                    )
+                }
+            };
+        }
+        assert!(
+            implementation_closed.is_disjoint(&implementation_withheld),
+            "an implementation audit both closed and withheld one row"
+        );
+
+        // A row may be shipped from either source; a withholding may name
+        // anything either source *examined*, including an export a hand census
+        // read and refused. Without that second half, withholding
+        // `(solid-js, createSignal)` — which no audited document mentions at
+        // all — would be unrepresentable, and the omission check below would
+        // have to be loosened instead.
+        let derivable: BTreeSet<_> = from_json.union(&implementation_closed).cloned().collect();
+        let supported: BTreeSet<_> = derivable.union(&implementation_withheld).cloned().collect();
         let shipped: BTreeSet<(String, String, CallClaimDomain)> = NEGATIVE_ROWS
             .iter()
             .map(|row| (row.package.to_owned(), row.export.to_owned(), row.domain))
@@ -1902,16 +2541,47 @@ mod tests {
             "a row is both shipped and withheld"
         );
         assert!(
-            withheld.is_subset(&derivable),
-            "a withholding names a row the documents do not support: {:?}",
-            withheld.difference(&derivable).collect::<Vec<_>>()
+            withheld.is_subset(&supported),
+            "a withholding names a row no audited source examined: {:?}",
+            withheld.difference(&supported).collect::<Vec<_>>()
         );
         let expected: BTreeSet<_> = derivable.difference(&withheld).cloned().collect();
         assert_eq!(
             shipped, expected,
             "the shipped table is not the derivable table minus the withholdings"
         );
-        assert_eq!(shipped.len(), 24);
+
+        // 23 from the audited contract documents (25 closures, minus `hydrate`
+        // and `createEffect`, both withheld) plus the 5 the hand implementation
+        // census closed.
+        assert_eq!(from_json.len(), 25);
+        assert_eq!(implementation_closed.len(), 5);
+        assert_eq!(shipped.len(), 28);
+
+        // The two authorities must not be confusable from the row alone: a row
+        // the hand census closed cites runtime bytes, and every other row cites
+        // a summary. Otherwise an Implementation citation could ship with no
+        // entry above, escaping every check in the loop.
+        for row in NEGATIVE_ROWS {
+            let key = (row.package.to_owned(), row.export.to_owned(), row.domain);
+            let cites_implementation = row
+                .citations
+                .iter()
+                .any(|citation| matches!(citation, AuditedCitation::Implementation { .. }));
+            let cites_summary = row
+                .citations
+                .iter()
+                .any(|citation| matches!(citation, AuditedCitation::Summary { .. }));
+            assert_eq!(
+                cites_implementation,
+                implementation_closed.contains(&key),
+                "{key:?}'s citation kind disagrees with IMPLEMENTATION_AUDITED"
+            );
+            assert!(
+                cites_implementation != cites_summary,
+                "{key:?} mixes citation kinds; a row has one authority"
+            );
+        }
     }
 
     /// `render` publishes a `create`, so it has no row — and neither does any
@@ -1936,6 +2606,34 @@ mod tests {
             CallClaimDomain::Creates
         ));
 
+        // The two `solid-js` server-condition withholdings, pinned by answer
+        // and not only by list membership. `createEffect` is the row this
+        // dialect *withdrew* on 2026-09-04: its audited document closes
+        // `creates: []`, and the answer here must still be silence.
+        let authority = Solid2.negative_claim_authority();
+        assert!(!authority.denies("solid-js", "createEffect", CallClaimDomain::Creates));
+        assert!(!authority.denies("solid-js", "createSignal", CallClaimDomain::Creates));
+
+        // And the five the hand implementation census closed, which are keyed
+        // to `@solidjs/signals` — the archive the declaration resolves into —
+        // not to `solid-js`.
+        for export in [
+            "createRoot",
+            "createSignal",
+            "getOwner",
+            "onCleanup",
+            "untrack",
+        ] {
+            assert!(
+                authority.denies("@solidjs/signals", export, CallClaimDomain::Creates),
+                "@solidjs/signals:{export} lost its implementation-audited row"
+            );
+            assert!(
+                !authority.denies("solid-js", export, CallClaimDomain::Creates),
+                "solid-js:{export} answered from @solidjs/signals' row; the row is archive-keyed"
+            );
+        }
+
         // `render`'s summary really does publish the operation, so the silence
         // above is the audit's answer and not a missing row.
         let root = repository_root();
@@ -1959,9 +2657,14 @@ mod tests {
     #[test]
     fn unaudited_and_non_canonical_exports_answer_nothing() {
         let authority = Solid2.negative_claim_authority();
-        // Audited archive, real 2.0 export, no summary in the document.
-        assert!(!authority.denies("solid-js", "createSignal", CallClaimDomain::Creates));
-        assert!(!authority.denies("@solidjs/signals", "createSignal", CallClaimDomain::Creates));
+        // Audited archive, real 2.0 export, no summary in the document and no
+        // hand census either.
+        assert!(!authority.denies(
+            "@solidjs/signals",
+            "createContext",
+            CallClaimDomain::Creates
+        ));
+        assert!(!authority.denies("solid-js", "createRenderEffect", CallClaimDomain::Creates));
         // Audited archive, closed in the document, not a canonical primitive.
         assert!(!authority.denies("@solidjs/signals", "isEqual", CallClaimDomain::Creates));
         assert!(!authority.denies("@solidjs/web", "applyRef", CallClaimDomain::Creates));

@@ -16145,8 +16145,11 @@ mod tests {
             // closes `creates: []` — but no dialect models the name, so the
             // census has no primitive identity to terminate on.
             ("a non-canonical export the audit closes", "isEqual"),
-            // A canonical primitive of the archive with no audited summary.
-            ("an export outside the audited document", "createSignal"),
+            // A canonical primitive of the archive with neither an audited
+            // summary nor a hand implementation census. `createSignal` used to
+            // stand here and no longer can: the 2026-09-04 census closed it,
+            // along with `createRoot`, `getOwner`, `onCleanup` and `untrack`.
+            ("an export outside the audited document", "createContext"),
             ("an export of no dialect at all", "notAPrimitive"),
         ] {
             assert!(
