@@ -45,6 +45,12 @@ read that can only gate a proposal), and any callee bound to an accepted
 dependency contract that does not close `creates` empty. A dialect-defining
 archive keeps `Unknown`, as before.
 
+The three unresolved-callee shapes the corpus ranking measured as the walk
+being *stricter than the certifier it feeds* were investigated and **left
+declining**; each one aligned would have proposed a candidate this census
+refuses. See "The walk is not stricter than this census" below, and the
+per-shape evidence under "What still refuses".
+
 `normalize_knowledge` weakens the empty `Complete` into a closure **candidate**.
 A proposal is a claim to be proven, not a proof: the generator's word certifies
 nothing, and the census below may refuse what it proposed. Silence — an
@@ -350,6 +356,43 @@ predicates (`props[key]()` is computed *and* parameter-rooted):
 the classifier does not model stays visible in the ranking instead of being
 folded into a neighbour.
 
+#### The walk is not stricter than this census
+
+The corpus-wide shape ranking measured 765 of 885 blocked consumer exports on
+three shapes this census looked able to decide — `parameter-rooted` (384
+exports, 123 rows), `member-property-unresolved` (381 / 96) and
+`expression-callee` (52 / 30) — and concluded that the generator's pre-check
+was stricter than the certifier it feeds, so closing the asymmetry would return
+candidates. **The conclusion does not hold, and the mechanism is worth stating
+because it moves the blocker somewhere else entirely.**
+
+A member callee reaches the walk's unresolved branch exactly when the compiler
+resolves **no symbol for the property**. That is the same condition under which
+the producer records the same property access as an **uncensused invoking
+form** — `property-access-unknown-accessor`
+(`apps/solid-typefacts/internal/typefacts/tsgo/uncensused_invoking_forms.go`,
+`accessorFormLocked`): with no symbol there are no declarations to inspect, a
+`.d.ts` `read(): unknown` may perfectly well describe a `.js` getter, and
+absence is not evidence of a plain data property. Item 2 above refuses **every**
+uncensused form the floor admits, by kind and location. So for such an export
+the census does not reach its dispositions at all:
+
+- `parameter-rooted` *would* decide the call — the producer states
+  `calleeParameter` (parameter index and property path) for
+  `source.read()` — and the export is refused before that, on the form.
+- `member-property-unresolved` is the same condition without the parameter
+  root.
+- `expression-callee` is refused for its own reason (below).
+
+The walk's declines on those shapes are therefore **exactly the calls this
+census refuses**, not calls it disposes, and aligning the walk would have
+planned candidates that refuse at witness acquisition — turning certified rows
+into refused ones. `implementation-census-creates`'s `memberParameterRooted`
+and `iife` pin both refusals, and the shape declines stay
+(`creates-decline-records`). What the ranking really located is a
+**producer-side** gap: an untyped receiver in shipped JavaScript, which is what
+the analyzed runtime artifact of an ecosystem package is.
+
 **There is no `unaccepted-import` shape, and that is a measurement, not an
 omission.** It was implemented first and it cannot fire: an import of an
 unresolvable bare specifier, a deep subpath, or a missing default still gives
@@ -408,12 +451,16 @@ primitive blocks, with the row count beside it; that script is the answer to
 gate's `auditedCases`, so a decline cannot appear, change kind, or vanish
 unreviewed — the same discipline the other three arrays get. The cost is real
 and accepted: a record carries byte offsets, so editing a fixture's source
-moves its decline snapshot, and 20 corpus fixtures now carry one (81 records:
-30 `dialect-silent`, 33 `unresolved-callee`, 18 `refusing-callee-fixpoint`),
+moves its decline snapshot, and 20 corpus fixtures now carry one (83 records:
+30 `dialect-silent`, 35 `unresolved-callee`, 18 `refusing-callee-fixpoint`),
 each `unresolved-callee` one also pinning its shape and spelling.
 That churn is
 the yield made visible: adding an audit row is *supposed* to move every
-snapshot whose exports it unblocks.
+snapshot whose exports it unblocks. It also measures a *refused* alignment:
+excusing the `parameter-rooted` shape retired 12 of those fixtures'
+`expected-refusals.json` and returned 19 `creates` candidates across 13
+fixtures — every one of them an export this census then refuses on the
+uncensused-form premise, which is exactly why the alignment was not kept.
 
 **Why this is not a weakening.** Nothing that could certify closed before is
 lost: a candidate with a recipe is planned, censused, vetoed, and certified
@@ -429,6 +476,44 @@ refuses by name at witness acquisition, before any gate is consulted.
 
 ## What still refuses
 
+- **The generator's walk still declines a default-library member it resolved
+  no declaration for, and there is no fact that would let it stop.** The
+  census's `standard-library` disposition reads
+  `ResolvedDeclaration::standard_library` on the callee's resolved declaration.
+  The walk only ever declines a callee for which
+  `SemanticLookup::callee_symbol` (`indexes.rs`) answered nothing, and for a
+  member callee that answer *is* `resolved_declaration_symbol` — the resolved
+  declaration's own symbol — which the producer sets for every declaration node
+  it resolves (`resolved_calls.go`'s `resolvedDeclaration`). So a
+  default-library callee that resolves is already proposed and always was
+  (`implementation-census-creates`'s `Array.from(items)` and
+  `values.map(callback)` are not declines), and one that declines carries no
+  `standard_library` flag to read. Measured rather than argued: over a 40-row
+  ecosystem sample carrying 16,522 `unresolved-callee` records, **141 declining
+  call sites had any resolved declaration at all, and none of those declarations
+  was standard-library**. What is left is the property's spelling, which names no
+  declaration — so this stays refused rather than guessed. The
+  `member-property-unresolved` mass is a *resolver* gap (an untyped receiver in
+  shipped JavaScript), not a missing disposition.
+- **An export whose callee reads a property the compiler resolves no symbol
+  for**, which is every `parameter-rooted`, `member-property-unresolved`,
+  `member-receiver-unresolved` and `computed-member` decline the generator's
+  walk records: the same access is an uncensused invoking form
+  (`property-access-unknown-accessor`) and item 2 refuses it before any
+  disposition is tried. The `parameter-rooted` disposition would have decided
+  the call itself — the producer does state `calleeParameter` for
+  `source.read()` — which is why this is stated here rather than left implicit:
+  the walk and the census agree, and the blocker is the producer's inability to
+  tell an accessor from a data property on an untyped receiver. Pinned by
+  `memberParameterRooted`.
+- **An immediately-invoked function expression**, which the generator's walk
+  keeps declining as `expression-callee` although its body is lexically inside
+  the export's own walked span. The census refuses the row by name: the producer
+  resolves its callee to nothing at all, so there is no declaration, no
+  parameter root, and no disposition. Excusing it in the walk would propose a
+  candidate the census refuses, turning a certified row into a refused one.
+  Pinned both ways: `iife` in the census fixture, `expressionCallee` in the
+  decline fixture.
 - **The actual next blocker on real rows: no Solid 2.0 negative row for
   `createSignal`, `onCleanup`, `untrack`, `getOwner`, or `createRoot`**
   (`rust/crates/solid-dialect/src/solid_2.rs`: the `creates` rows are `action`,
@@ -526,8 +611,14 @@ is proven end to end.
   (`forEach(work)`, refused as an unseen callable), `reflectApply` (refused by
   qualified name), `reassignedHelper` (refused as a written binding) — all
   refused by name — and `noRecipe` (withheld; certifies with `creates` open and
-  the empty gate root of the gated plan). Its generator snapshots pin the
-  proposals: every export but `unresolved` proposes. Its nested
+  the empty gate root of the gated plan). Two more pin why the generator's walk
+  keeps declining the shapes the corpus ranking called decidable:
+  `memberParameterRooted` (`source.read()` — refused on the
+  `property-access-unknown-accessor` form, although its `calleeParameter` would
+  have given the `parameter-rooted` disposition) and `iife` (refused as an
+  unresolved callee of its own). Its generator snapshots pin the
+  proposals: every export but `unresolved`, `memberParameterRooted` and
+  `iife` proposes. Its nested
   `dependency-consumer/` pins the probe workspace's authenticated dependency
   closure: `plainConsumer` is censused and vetoed while the package's own
   top-level `import "solid-js"` resolves inside the authenticated private copy,
@@ -563,7 +654,12 @@ is proven end to end.
   `createEffect`, `viaSilentHelper` declines twice —
   `refusing-callee-fixpoint` at the call plus the helper's own
   `dialect-silent` at its own location — and `unresolvedCallee` declines
-  `unresolved-callee` with the call's location. The control lives in its own
+  `unresolved-callee` with the call's location. `parameterRooted`
+  (`source.read()`) is the second control: it declines *nothing* and proposes,
+  because the census disposes that call itself, while `parameterAliasRooted`
+  (one binding alias away) and `nestedParameterRooted` (a parameter of a nested
+  arrow) keep recording the `parameter-rooted` shape — the two sub-cases the
+  producer's `calleeParameter` does not answer. The control lives in its own
   entrypoint deliberately: `index.js`'s top-level `import "solid-js"` is an
   `UnacceptedExternalDependency` closure hazard that opens every domain of
   that artifact case whatever the walk found, so a control beside the declines

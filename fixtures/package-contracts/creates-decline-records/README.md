@@ -46,6 +46,31 @@ appended columns.
 | `.` | `expressionCallee` | `expression-callee` | `function-expression` |
 | `.` | `otherSyntax` | `other` | `await-expression` |
 
+## Why `parameterRooted` still declines, though the census has that disposition
+
+The census's `parameter-rooted` disposition would decide this exact *call*
+(`source.read()` gives the producer a `calleeParameter` of parameter 0, path
+`["read"]`), which made this shape look like the generator being stricter than
+the certifier it feeds — 384 blocked consumer exports on the measured corpus.
+It is not, and aligning the walk here would have been a regression:
+**the same property access is an uncensused invoking form**,
+`property-access-unknown-accessor`, recorded by the producer exactly when the
+compiler resolves no symbol for the property
+(`apps/solid-typefacts/internal/typefacts/tsgo/uncensused_invoking_forms.go`,
+`accessorFormLocked`) — which is the same condition that brings the callee to
+this walk's unresolved branch. The census refuses every uncensused form at the
+`MayExecute` floor, so an export whose callee reads an unresolved property
+cannot close `creates` at all: a `.d.ts` `read(): unknown` may perfectly well
+describe a `.js` getter, and absence of a symbol is not evidence of a plain data
+property. Pinned from the other side by
+`../implementation-census-creates`'s `memberParameterRooted`, which the census
+refuses on that form.
+
+So all three of `parameterRooted`, `parameterAliasRooted` (an alias the
+producer's tracer does not follow) and `computedMember` keep declining, and the
+blocker the `parameter-rooted` shape names is producer-side, not a missing
+disposition here.
+
 Nothing about the shapes is pinned by unit test alone. What the unit tests in
 `creates_walk.rs` do cover, and this fixture cannot, is the shape *vocabulary*
 itself — every shape's wire name, its one carried spelling, and that the kind's

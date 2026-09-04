@@ -1,6 +1,5 @@
 # Precision backlog
 
-
 ### Measured on all 418 rows: the ranking, and it inverts the plan
 
 `make ecosystem-benchmark` with the decline records compiled in (report SHA-256
@@ -78,6 +77,161 @@ closing that asymmetry is worth more than any audit on the dialect-silent list.
 `computed-member` is the only genuinely undecidable shape here, 68 exports, and
 its producer fact is already specified in
 `docs/typefacts/adr/0025-v1-callee-value-provenance.md`.
+
+## The generator's `creates` walk is **not** stricter than the census it feeds; the shape ranking's premise was wrong, and the blocker is the producer's accessor census (2026-09-04)
+
+The corpus-wide shape ranking (the addendum at the top of this file) measured
+**765 of 885 blocked consumer exports** on three unresolved-callee shapes the
+implementation census looked able to decide — `parameter-rooted` (384 exports,
+5,218 sites, 123 rows), `member-property-unresolved` (381 / 14,733 / 96),
+`expression-callee` (52 / 136 / 30) — and concluded that the generator's
+pre-check was refusing candidates the certifier could prove. This slice set out
+to align the walk with the census for all three. **All three turned out to be
+refusals on the census's side too, and none of the alignments was kept**: each
+one would have proposed a candidate refused at witness acquisition, turning a
+certified row into a refused one. What changed is the documentation, two
+fixtures that pin the refusals, and the knowledge of where the blocker actually
+is.
+
+### `parameter-rooted` — the census refuses the export before it disposes the call
+
+The census *does* have the disposition, and the producer *does* state
+`calleeParameter` for `source.read()` (parameter index plus the property path,
+`parameterValueSourceLocked` in
+`apps/solid-typefacts/internal/typefacts/tsgo/export_value_transcripts.go`). An
+excusal was implemented against exactly that fact — mirrored, region by region,
+with no alias hop and no computed segment, so it was a strict subset of the
+disposition — and the census refused it anyway, on the premise **before** the
+dispositions:
+
+```
+creates census refuses an uncensused invoking form:
+property-access-unknown-accessor (PropertyAccessExpression) at …/index.js:7453..7464, reach reachable
+```
+
+`accessorFormLocked`
+(`apps/solid-typefacts/internal/typefacts/tsgo/uncensused_invoking_forms.go:438-465`)
+records a property access as `property-access-unknown-accessor` exactly when
+`GetSymbolAtLocation` answers no symbol for the property — with no symbol there
+are no declarations to inspect, a `.d.ts` `read(): unknown` may perfectly well
+describe a `.js` getter, and absence is not evidence of a plain data property.
+**That is the same condition that brings a member callee to the walk's
+unresolved branch.** ADR 0008 item 2 refuses every such form at the `MayExecute`
+floor, so the export cannot close `creates` at all.
+
+The two sides therefore already agree, and the correspondence is exact rather
+than incidental: `parameter-rooted`, `member-property-unresolved`,
+`member-receiver-unresolved` and `computed-member` are all "the property
+resolved to no symbol", and all of them refuse the census. The 384 blocked
+exports are a **producer-side** gap — an untyped receiver in the shipped
+JavaScript that is an ecosystem package's runtime artifact — not a generator
+gap. The walk keeps declining them.
+
+### `standard-library` — there is no fact to read, so it stays refused rather than guessed
+
+The census reads `ResolvedDeclaration::standard_library` on the callee's
+resolved declaration. The walk only declines a callee
+`SemanticLookup::callee_symbol`
+(`rust/crates/solid-reactive-ir/src/indexes.rs:1082`) answered nothing for, and
+for a member callee that answer *is* the resolved declaration's own symbol
+(`resolved_declaration_symbol`, `indexes.rs:1702`), which the producer sets for
+every declaration node it resolves
+(`apps/solid-typefacts/internal/typefacts/tsgo/resolved_calls.go:146-157`). So a
+default-library callee that resolves already proposes and always did
+(`implementation-census-creates`'s `Array.from(items)` and
+`values.map(callback)` are not declines), and a declining one carries no flag to
+read. Measured with one temporary instrumentation pass over a 40-row ecosystem
+sample (removed immediately): of 16,522 `unresolved-callee` records, **141
+declining call sites carried any resolved declaration at all, and not one of
+those declarations was standard-library** — the rest resolve to nothing, and
+those that do resolve are a dependency's `.d.ts` declarations (`solid-js/web/types/client.d.ts`'s
+`insert`, `spread`, `effect`) or anonymous callables. Verdict 1 of the
+shape-ranking section, which said these "resolve to no *project* symbol because
+`lib.dom.d.ts` is not a project file", was wrong about the mechanism: nothing
+resolves at all.
+
+### `expression-callee` — not spurious; the census refuses it by name
+
+An IIFE's body is lexically inside the export and already walked, so the walk
+has no counterexample to name. The census refuses the row anyway: the producer
+resolves its callee to nothing, so there is no declaration, no parameter root,
+and no disposition (`creates census refuses an unresolved callee at … `(function
+() { return value; })()``). Note this is *not* the `local-recursion` /
+"no binding identifier" refusal one would predict from the walk's own
+`resolved_callee_call`, which does answer a declaration there — the transcript
+row's resolution is the producer's, and it answers nothing. Either way the
+export refuses.
+
+### What shipped
+
+- **`rust/crates/solid-reactive-ir/src/creates_walk.rs`: documentation only.**
+  A new module section, "Why the unresolved-member declines are *not* the census
+  being laxer", states the correspondence per shape and names the pins. No
+  behavior changed; `roots_in_caller_parameter`'s doc now says explicitly that
+  it is a *shape* question, looser than the census's disposition on purpose.
+- **`fixtures/package-contracts/implementation-census-creates`** gained
+  `memberParameterRooted` (refused on the uncensused form) and `iife` (refused
+  as an unresolved callee), with
+  `the_probe_gate_tracer_census_refuses_a_parameter_rooted_member_callee` and
+  `the_probe_gate_tracer_census_refuses_an_immediately_invoked_function` pinning
+  the reason text. Corpus: +2 decline records (83 over 20 fixtures: 30
+  `dialect-silent`, 35 `unresolved-callee`, 18 `refusing-callee-fixpoint`), +6
+  proof candidates (822), and its `expected.json` gained the two exports. No
+  other fixture moved.
+- **ADR 0008** gained "The walk is not stricter than this census" and two "What
+  still refuses" entries; the fixture READMEs carry the same reasoning where a
+  reader of the fixture will meet it.
+
+### The measurement that would have been the yield, and what it showed instead
+
+The alignment was implemented and measured before being reverted, because the
+numbers are the argument for not keeping it. A 40-row ecosystem sample — every
+row the shape ranking named (both `@kobalte/core` rows, both `@kobalte/utils`,
+`@solidjs/router` 1.x and 2.0, `solid-recharts`, the `@solid-devtools` family)
+plus the six naming no dialect-silent blocker — run with the fresh debug binary
+and `--attempt-certification`, reports written outside the repository:
+
+- **Every row's `outcome`, `class` and certification status unchanged**, with
+  `withheldClosures` 0 on all 34 rows that attempt certification.
+- `declinedClosures` 37,204 → 34,190; the `parameter-rooted` shape 242 → 160
+  blocked exports and 4,286 → 2,357 call sites; `dialect-silent` unchanged at
+  7,645.
+- **`creates` closure candidates appearing where there were none: 0. Withheld
+  for want of a recipe: 0.** No `domain-exhaustiveness` demand appeared on any
+  row.
+
+Zero, on rows whose declines went to *zero*
+(`@solid-primitives/controlled-signal` 29 → 0, `@solid-devtools/shared` 24 → 1,
+`@solid-primitives/gestures` 22 → 4), because of a blocker upstream of the
+candidate: those rows emit every domain of every export unknown with
+`positiveOperations: 0`, the exact signature of `creates-decline-records`'s own
+`.` entrypoint. A top-level import that resolves to no *accepted* dependency is
+an `UnacceptedExternalDependency` closure hazard, and it opens every domain of
+that artifact case at closure replay whatever the walk found. In the corpus the
+same alignment did return 19 `creates` candidates across 13 fixtures — whose
+entrypoints import nothing — and every one of those exports is an export this
+census refuses on the uncensused form. That is the clearest possible statement
+of the asymmetry running the *other* way.
+
+### Still open, in the order the measurement puts them
+
+1. **The producer cannot tell an accessor from a data property on an untyped
+   receiver**, and every `creates` census over a shipped-JavaScript artifact
+   refuses on it. This is now the top blocker for `exportsProven`, ahead of both
+   the dialect audits and the resolver. A fact that separated "the compiler
+   resolved no symbol" from "the value may carry a getter" — or a narrower
+   uncensused-form kind the census could admit for a *call* position — is the
+   producer slice this points to.
+2. **The closure hazard is the other blocker on real rows**: no candidate can
+   exist for an export whose artifact case imports an unaccepted dependency,
+   which is most of the corpus.
+3. **`member-property-unresolved`'s project-local half** may still answer to
+   `callee_symbols`'s richer `member_value_symbols` /
+   `structural_parameter_member_symbols` paths — but even resolved, item 1 above
+   refuses the export, so the yield is bounded by that.
+4. **`computed-member` (68 exports) stays undecidable here**;
+   `docs/typefacts/adr/0025-v1-callee-value-provenance.md` is the fact for it.
+
 ## `unresolved-callee` names its shape, and half the corpus's declines turn out to be two things the census already decides (2026-09-04)
 
 `unresolved-callee` was **20,450 of 41,957** declined `creates` proposals on the
@@ -247,7 +401,14 @@ and the ownership gate at 289 cases.
 ### Still open
 
 - **The walk is stricter than the census it gates**, for `standard-library` and
-  `parameter-rooted` callees. Named here, not fixed here.
+  `parameter-rooted` callees. Named here, not fixed here. **Refuted the same
+  day**, in the section above this one: the census refuses those exports too —
+  a member callee reaches this walk's unresolved branch exactly when the
+  producer records the same access as a `property-access-unknown-accessor`
+  invoking form — no declining callee carries a resolved declaration to read a
+  `standard_library` flag from, and `expression-callee`, which this section
+  called spurious, is refused by the census by name. Verdicts 1-3 of this
+  section are wrong about the mechanism; the blocker is producer-side.
 - **`parameterAliasRooted` gets no positive `read` operation** where
   `parameterRooted` does, in the same fixture: the read model does not follow
   the binding-initializer alias the shape classifier does. An asymmetry worth

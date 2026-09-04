@@ -9086,9 +9086,11 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 13] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 15] = [
         "cycle",
         "deep",
+        "iife",
+        "memberParameterRooted",
         "noRecipe",
         "plain",
         "reassignedHelper",
@@ -9970,6 +9972,48 @@ export const value = phantom;
             "reassignedHelper",
             &["local declaration `helper`", "written at"],
         );
+    }
+
+    /// (n) `memberParameterRooted`: **why the generator's walk does not align
+    /// its `parameter-rooted` declines with this census.**
+    ///
+    /// The corpus shape ranking measured 384 blocked consumer exports on a
+    /// callee rooted at a parameter and read that as the generator being
+    /// stricter than the certifier it feeds: the producer does state
+    /// `calleeParameter` for `source.read()`, so the `parameter-rooted`
+    /// disposition decides that one call. The export refuses anyway, on the
+    /// premise before the dispositions — reading `.read` off a value whose type
+    /// is unknown is an **uncensused invoking form**
+    /// (`property-access-unknown-accessor`, `uncensused_invoking_forms.go`'s
+    /// `accessorFormLocked`), recorded exactly when the compiler resolves no
+    /// symbol for the property, which is the same condition that brings the
+    /// callee to the walk's unresolved branch.
+    ///
+    /// So the two sides agree, and this test is what keeps them agreeing: a
+    /// walk that excused such a callee would propose a candidate refused here,
+    /// at witness acquisition, and a row that certifies today would refuse.
+    #[test]
+    fn the_probe_gate_tracer_census_refuses_a_parameter_rooted_member_callee() {
+        assert_census_refuses(
+            "memberParameterRooted",
+            &[
+                "uncensused invoking form: property-access-unknown-accessor",
+                "PropertyAccessExpression",
+            ],
+        );
+    }
+
+    /// (o) `iife`: an immediately-invoked function expression, lexically walked
+    /// by the generator and still refused here.
+    ///
+    /// The generator has no counterexample to name — the IIFE's body is inside
+    /// the export's own span and every call in it is already walked, which is
+    /// why the shape ranking called `expression-callee` spurious. The census
+    /// refuses the row by name: the producer resolves its callee to nothing at
+    /// all, so there is no declaration, no parameter root, and no disposition.
+    #[test]
+    fn the_probe_gate_tracer_census_refuses_an_immediately_invoked_function() {
+        assert_census_refuses("iife", &["refuses an unresolved callee", "function ()"]);
     }
 
     /// (h) `noRecipe`: byte-for-byte `plain`'s body, and no recipe for its

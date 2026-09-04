@@ -14,3 +14,8 @@ export declare function whileBreak(el: unknown): void;
 export declare function stdlibRefInvoker(items: Iterable<unknown>): void;
 export declare function reflectApply(args: unknown[]): unknown;
 export declare function reassignedHelper(el: unknown): unknown;
+// The two exports that pin why the generator's walk keeps declining an
+// unresolved member callee and an immediately-invoked function: this census
+// refuses both.
+export declare function memberParameterRooted(source: { read(): unknown }): unknown;
+export declare function iife(value: number): number;

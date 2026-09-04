@@ -34,6 +34,52 @@
 //! inside a nested closure counts too: it may run, and a closed domain asserts
 //! a zero upper bound.
 //!
+//! # Why the unresolved-member declines are *not* the census being laxer
+//!
+//! The corpus-wide shape ranking measured 765 of 885 blocked consumer exports
+//! on three shapes the implementation census looked able to decide —
+//! `parameter-rooted`, `member-property-unresolved`, `expression-callee` — and
+//! read that as the generator's pre-check being stricter than the certifier it
+//! feeds. **It is not**, and the three were investigated and refused; each one
+//! aligned would have proposed a candidate the census refuses at witness
+//! acquisition, which turns a certified row into a refused one. The evidence is
+//! in `docs/precision-backlog.md` (2026-09-04) and, per shape, in ADR 0008's
+//! "What still refuses":
+//!
+//! * **A member callee rooted at a parameter** (`source.read()`) *is* the
+//!   census's `parameter-rooted` disposition as far as that one call goes — but
+//!   the same property access is also an **uncensused invoking form** on the
+//!   producer's side, `property-access-unknown-accessor`, recorded exactly when
+//!   the compiler resolves no symbol for the property
+//!   (`uncensused_invoking_forms.go`, `accessorFormLocked`). That is the same
+//!   question this walk asks: a member callee reaches the unresolved branch
+//!   below precisely when its property resolves to no symbol. The census refuses
+//!   every uncensused form at the `MayExecute` floor, so such an export cannot
+//!   close `creates` at all — a `.d.ts` `read(): unknown` may perfectly well
+//!   describe a `.js` getter, and the producer will not read absence as a plain
+//!   data property. Pinned by
+//!   `the_probe_gate_tracer_census_refuses_a_parameter_rooted_member_callee`.
+//! * **A default-library member.** The census's `standard-library` disposition
+//!   reads [`typefacts::ResolvedDeclaration::standard_library`] on the callee's
+//!   *resolved declaration*. This walk only ever declines a callee it resolved
+//!   **no declaration** for at all — [`crate::indexes::SemanticLookup::callee_symbol`]
+//!   answers that declaration's symbol first, and the producer emits a symbol
+//!   for every declaration node it resolves — so on a declining call there is
+//!   no `standard_library` flag to read, and the only thing left would be the
+//!   property's spelling, which names no declaration and would be a guess. A
+//!   default-library callee that *does* resolve already proposes and always
+//!   did, which is why `implementation-census-creates`'s `Array.from(items)`
+//!   and `values.map(callback)` are not declines.
+//! * **An immediately-invoked function expression.** Its body is lexically
+//!   inside the export's span and every call in it is already walked, so the
+//!   IIFE's own unresolved callee adds no counterexample the walk has not
+//!   considered — but the census *refuses* it by name, as an unresolved callee
+//!   of its own: the producer resolves the transcript row's callee to nothing
+//!   there. Pinned by
+//!   `the_probe_gate_tracer_census_refuses_an_immediately_invoked_function`.
+//!
+//! So the shapes stay declines, and the blocker they name is producer-side.
+//!
 //! A **module-local helper** is followed, to a fixpoint: a call whose callee
 //! resolves to a project function whose own span contains a refusing call is
 //! itself a refusing call. Without that step the gate would be purely lexical —
@@ -611,6 +657,12 @@ fn is_identifier(file: &solid_facts::FileFacts, span: Span) -> bool {
 /// function keeps the record from claiming a scope it did not check. Both
 /// ordinary and rest parameter names count; a destructured parameter's every
 /// bound name counts, because each is a caller-supplied value.
+///
+/// This is a **shape** question and nothing more. It is deliberately looser
+/// than the census's `parameter-rooted` disposition, which reads the producer's
+/// `calleeParameter` — no alias hop, no nested callable's parameter, nothing
+/// across a computed segment — and the module documentation says why the walk
+/// does not excuse a callee on the strength of either answer.
 fn roots_in_caller_parameter<'a>(
     ctx: &AnalysisContext<'a>,
     file: &'a solid_facts::FileFacts,
@@ -935,7 +987,11 @@ fn creates_proposal_decline<'a>(
     let Some(symbol) = ctx.semantic_lookup.callee_symbol(file, callee) else {
         // No identity to name -- that is the refusal -- but the callee
         // expression's shape is observable, and it is what tells a resolver gap
-        // from a genuinely undecidable call.
+        // from a genuinely undecidable call. A member callee is here exactly
+        // when its property resolved to no symbol -- which is also when the
+        // producer records the same property access as an uncensused invoking
+        // form, so the census refuses such an export rather than disposing it;
+        // see the module documentation.
         return Some(CreatesDeclineKind::UnresolvedCallee {
             shape: unresolved_callee_shape(ctx, file, callee, shape_facts),
         });

@@ -207,3 +207,36 @@ helper = (el) => mount(el);
 export function reassignedHelper(el) {
   return helper(el);
 }
+
+// The two exports below are why the generator's `creates` walk does **not**
+// align its unresolved-member declines with this census, though the corpus
+// shape ranking made it look as if it could. Each is a shape the ranking called
+// decidable or spurious, and each is refused here — so a walk that proposed
+// them would plan a candidate this census refuses at witness acquisition,
+// turning a certified row into a refused one.
+
+// A member of *this export's own parameter*: the producer does state
+// `calleeParameter` (parameter 0, path `["read"]`), so the `parameter-rooted`
+// disposition would decide this call. The export still refuses, and on a
+// different premise — reading `.read` off a value whose type is unknown is an
+// **uncensused invoking form** (`property-access-unknown-accessor`), recorded
+// exactly when the compiler resolves no symbol for the property, which is the
+// same condition that makes the generator's walk decline the callee. A `.d.ts`
+// `read(): unknown` may perfectly well describe a `.js` getter, so absence of a
+// symbol is not evidence of a plain data property. This is the pin that keeps
+// the generator's walk from proposing it.
+export function memberParameterRooted(source) {
+  return source.read();
+}
+
+// An immediately-invoked function expression. Its body is lexically inside this
+// export and every call in it is already walked, so the generator has no
+// counterexample to name — and the census still **refuses** it, by name, as an
+// unresolved callee: the producer resolves the transcript row's callee to
+// nothing. That is why the walk keeps declining `expression-callee` rather than
+// treating it as spurious.
+export function iife(value) {
+  return (function () {
+    return value;
+  })();
+}
