@@ -8,6 +8,7 @@ export declare function deep(): void;
 export declare function unresolved(value: number): number;
 export declare function taggedTemplate(): string;
 export declare function spreadArgs(first: number, second: number): number[];
+export declare function spreadUntyped(items: Iterable<number>): number[];
 export declare function noRecipe<T, U>(items: Iterable<T>, callback: (value: T) => U): U[];
 export declare function loopCall(el: unknown): void;
 export declare function switchBreak(kind: string, el: unknown): void;

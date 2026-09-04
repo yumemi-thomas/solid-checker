@@ -253,8 +253,12 @@ every other implementation-reading family):
    `Construct` calls follow the same dispositions; an absent call kind refuses.
 
    Arguments and spreads do not matter for `creates`: a call is dispositioned by
-   its **callee**. A spread refuses anyway, because it is an invoking form of
-   its own (item 2), not because it is an argument.
+   its **callee**. A spread is an invoking form of its own (item 2), not an
+   argument — and since 2026-09-04 it refuses only when the *operand's type*
+   does not prove the iterator is the engine's, so `joinAll(...args)` over a
+   rest parameter clears while the byte-identical `joinAll(...items)` over an
+   `any` operand still refuses. Both are pinned in
+   `implementation-census-creates` as `spreadArgs` and `spreadUntyped`.
 
 4. **Local recursion** mirrors `require_composed_operation_chain`: identity by
    symbol + source file + exact span, never by name; a visited set seeded with
@@ -577,6 +581,19 @@ refuses by name at witness acquisition, before any gate is consulted.
   declaration — so this stays refused rather than guessed. The
   `member-property-unresolved` mass is a *resolver* gap (an untyped receiver in
   shipped JavaScript), not a missing disposition.
+- **An iteration whose operand's type does not name a reviewed engine
+  container** — narrowed on 2026-09-04 and now much smaller than it was. Item 2
+  used to refuse every `for…of`, spread, array binding pattern and `yield*` by
+  syntax; the producer now asks the operand's type and records the form only
+  when it cannot prove that both the `[Symbol.iterator]` reached *and* the
+  iterator it returns are engine code (ADR 0026's iteration limit). Measured on
+  a seven-row ecosystem sample: of 209 iteration sites the producer classified,
+  **183 clear and 26 still record** — an untyped operand in shipped JavaScript,
+  a structural `Iterable`/`Generator`, a union with one unproven constituent,
+  and every `for await…of`. This bought no new certified real row, because on
+  the population that was blocked by it the *first* refusal was already
+  `property-access-unknown-accessor` on an object spread; it removes a whole
+  class of over-refusal standing behind that one.
 - **An export whose callee reads a property the compiler resolves no symbol
   for**, which is every `parameter-rooted`, `member-property-unresolved`,
   `member-receiver-unresolved` and `computed-member` decline the generator's

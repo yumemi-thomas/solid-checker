@@ -1,5 +1,97 @@
 # Precision backlog
 
+## The iteration protocol is classified by the operand's type, not by syntax (2026-09-04)
+
+`for…of`, a spread element, an array binding pattern and `yield*` were recorded
+as `iteration-protocol` uncensused invoking forms **whatever the operand's
+type**. The classifier did not consult it there as `await-then` and `coercion`
+do, so a function iterating a plain array was refused by the `creates`
+implementation census even though `Array.prototype[Symbol.iterator]` and the
+array iterator it returns are both engine code and can reach no user callable.
+That was the last item on the previous entry's "Still open" list that named a
+producer over-refusal rather than a real gap.
+
+**The rule.** The form is recorded unless *every* constituent of the iterated
+value's type carries a non-optional `[Symbol.iterator]` whose declarations all
+sit in the default library **and** whose declaring interface is one of a
+reviewed set: `Array`, `ReadonlyArray`, `String`, `IArguments`, `Set`,
+`ReadonlySet`, `Map`, `ReadonlyMap`, and the typed arrays. Both halves are the
+claim — the factory named by the declaration is the engine's, *and* the value is
+an object the engine created, so the iterator that factory returns is engine
+code too. `Iterable`, `IterableIterator`, `IteratorObject`, `Generator`,
+`ArrayIterator` and the rest of the protocol interfaces are declared in `lib`
+and deliberately absent: each is a structural contract a user object satisfies,
+and a `Generator`'s `next` runs a user function body. The forty-odd DOM
+collections are absent as unreviewed. `for await…of` and an array *assignment*
+pattern still record unconditionally, the first because `Symbol.asyncIterator`
+has no engine-owned case and the sync fallback `await`s each result, the second
+because the literal's type is the pattern's shape rather than the source's. The
+quantifier is per constituent and a nil lookup **refuses**: `any`, an
+unconstrained type parameter and an index-signature type all enumerate no
+iterator, and "the checker could not find it" is never "iterating this reaches
+no user code". Full statement in `docs/typefacts/adr/0026-…`, "The iteration
+limit".
+
+**No protocol and no schema move.** The field's meaning is unchanged and no
+shape changed, so `TYPE_FACTS_HANDSHAKE_PROTOCOL` stays 15 and
+`TYPE_FACTS_SCHEMA_SHA256` stays put. What separates a narrowed producer from an
+unnarrowed one is producer identity — the source manifest moved to
+`ffae17a24f91a70daba0ce3c27438a18a408d4107b2e0636927ffc48ab9fb37e` — which the
+handshake already compares field-for-field. A bump would assert a wire break
+that did not happen.
+
+**Measured: the form's occurrences fall by 87.6%, and no corpus row moves.**
+Temporary instrumentation in the producer (added, measured, removed; the source
+manifest is byte-identical before and after it) counted every iteration site the
+classifier decided over a seven-row certification sample: **209 sites, 183
+cleared, 26 still recorded**. What still records is an untyped operand in
+shipped JavaScript, a structural `Iterable`/`Generator`, a union with one
+unproven constituent, and every `for await…of`.
+
+`make ecosystem-benchmark` (report SHA-256
+`1399dcf1196fb7f021d3130240b5a7a00d419874ef8fb68115774fbe12cf4c30`): **357
+verified / 40 refused / 21 not attempted, `withheldClosures` 43 on the same
+three rows, `exportsProven` 0** — every verdict, demand digest, refusal class
+and decline count byte-identical on all 418 rows. The only diffs are stage
+timings and the `dependencyPlan` node identities, which digest the per-run
+scratch directory.
+
+**That the corpus does not move is the expected result, not a disappointment.**
+The previous entry already established that on the two probeable
+`@solid-primitives/i18n` claims the *first* refusal is
+`property-access-unknown-accessor` on `const flat_dict = { ...dict }` — a
+correct refusal — with the `for…of` a second, independent one behind it. Removing
+the second refusal cannot certify a row whose first one stands. What the slice
+buys is that a whole class of over-refusal is gone from behind every such
+premise, and the pin that proves it is a fixture pair rather than a corpus
+number: `implementation-census-creates`'s `spreadArgs` and `spreadUntyped` have
+**byte-identical bodies** and differ only in the operand's type — a rest
+parameter (`any[]`, an array) versus an ordinary unannotated one (`any`) — and
+the census now closes `creates` over the first and refuses the second by name.
+The first of those failed on the pre-change producer.
+
+### Still open on this line
+
+- **`exportsProven` stays 0 corpus-wide.** Unchanged by this slice, and the
+  blocker is the one named above: the producer's accessor census over untyped
+  receivers in shipped JavaScript.
+- **A `.ts` artifact case is still unprobeable**, so 40 of the 43 candidates
+  remain behind the private-workspace decision.
+- **A subclass that overrides `[Symbol.iterator]` is invisible** when the static
+  type names the base declaration, and a constrained type parameter clears
+  through its constraint's apparent type. Both are the declaration-versus-runtime
+  limit every premise in this census carries — the `await-then` arm has had the
+  same one since it was written — and both are recorded rather than closed.
+- **The DOM and web-worker iterables stay open.** `NodeList`,
+  `URLSearchParams`, `Headers` and some forty others declare `[Symbol.iterator]`
+  in `lib.dom.d.ts` and their iterators really are engine code, but they were not
+  reviewed and "the browser probably owns it" is not a premise. Adding them is an
+  act of review, exactly as `defaultLibraryMemberInvokers` requires.
+- **An array *assignment* pattern still records unconditionally.** Deriving the
+  iterated value from the assignment's right-hand side — and from the enclosing
+  `for…of`'s element type inside `for ([a] of pairs)` — is its own premise and is
+  not taken here.
+
 
 ### Re-measured with the protocol-15 producer: identical, and the constraint is now named
 
@@ -144,7 +236,10 @@ catch parameter at the clause's own reachability.
   `Symbol.iterator` is the engine's own, and the classifier does not consult the
   type here as `await-then` and `coercion` do. Narrowing it would be an
   ADR 0026 change with its own premise to state, and it is the next thing worth
-  measuring on this population.
+  measuring on this population. **Done 2026-09-04** — see the entry at the top
+  of this file; the narrowing landed, cleared 183 of 209 measured iteration
+  sites, and moved no corpus row, because the object-spread refusal in front of
+  it stands.
 - **`AstFacts::jump_statements` now has no consumer.** It existed only for the
   frame scan this slice deleted. Retained (two pushes, a faithful syntactic
   fact, and removal would move the serialized `AstFacts` shape for every source

@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "7660e61774b3139c3405758918fabcd57952e4d9a707ef3476e4ba0463405d99",
+            "closureSha256": "c66c26ab26158acfacf1000d0218ce188afc34f832026740a92f274c021d773f",
             "path": "./index.js",
-            "sha256": "afcfe655843d4ef1da9c77c25040aa51768bffb07a770c86b54078ece7d7cc71"
+            "sha256": "702e9e07e568e1a71b0574011320d2ee3505270e9486deefb0593f5536e54c1d"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "0a41db53818156b6afbe32e1ef757ca1113fe8ffc241d957588d575d16f634ae"
+            "sha256": "ea59464f27031d2c0678bce2a3010f544b7e001139ce735eaf23c86e916009a8"
           },
           "exports": {
             "cycle": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -24,6 +24,7 @@
             "reassignedHelper": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "reflectApply": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "spreadArgs": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "spreadUntyped": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "stdlibRefInvoker": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "switchBreak": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "taggedTemplate": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",

@@ -28,8 +28,10 @@
 //   cycle              `cycleA` ↔ `cycleB`
 //   depth              `deep` → nine hops, past the depth-8 bound
 //   unresolved callee  `externalGlobal(...)`, an identifier no declaration binds
-//   uncensused form    a tagged template, and a spread argument (which drives
-//                      the iteration protocol)
+//   uncensused form    a tagged template, and `spreadUntyped`'s spread of an
+//                      `any` operand (which drives the iteration protocol over
+//                      a type that enumerates no iterator); `spreadArgs` is
+//                      its cleared pair
 //   unaccounted flow   `labelledBreak` — `break outer` out of a plain labelled
 //                      block, which no enclosing construct of the frame owns,
 //                      so the control-flow census classifies it
@@ -139,6 +141,18 @@ function joinAll(first, second) {
 
 export function spreadArgs(...args) {
   return joinAll(...args);
+}
+
+// The same spread, one line apart, over an operand whose type the producer
+// cannot decompose. `items` is an ordinary unannotated parameter, so it is
+// `any`, and `any` enumerates no members at all: "the checker could not find
+// `[Symbol.iterator]`" is never "iterating this reaches no user code", so the
+// producer records the form and the census refuses. `spreadArgs` above is the
+// pair, and the *only* difference is the parameter's own type — a rest
+// parameter is `any[]`, an array, whose iterator is the engine's however its
+// elements are typed.
+export function spreadUntyped(items) {
+  return joinAll(...items);
 }
 
 // Byte-for-byte the body of `plain`, under another name: the census proves it

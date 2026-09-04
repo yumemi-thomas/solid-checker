@@ -70,7 +70,7 @@ export function forOfForm(values: Iterable<number>): number {
 	return total;
 }
 
-export function arrayPatternForm(values: readonly number[]): number | undefined {
+export function arrayPatternForm(values: Iterable<number>): number | undefined {
 	const [first] = values;
 	return first;
 }
@@ -282,6 +282,134 @@ export function declaredMemberForm(): number {
 
 export function standardLibraryMemberForm(values: readonly number[]): number {
 	return values.length;
+}
+
+interface Countdown {
+	[Symbol.iterator](): Iterator<number>;
+}
+
+export function iterateArrayForm(values: number[]): void {
+	for (const value of values) {
+		void value;
+	}
+}
+
+export function iterateReadonlyArrayForm(values: readonly number[]): void {
+	for (const value of values) {
+		void value;
+	}
+}
+
+export function iterateTupleForm(values: [number, string]): void {
+	for (const value of values) {
+		void value;
+	}
+}
+
+export function iterateStringForm(text: string): void {
+	for (const character of text) {
+		void character;
+	}
+}
+
+export function iterateSetForm(values: Set<number>): void {
+	for (const value of values) {
+		void value;
+	}
+}
+
+export function iterateMapForm(values: Map<string, number>): void {
+	for (const entry of values) {
+		void entry;
+	}
+}
+
+export function iterateTypedArrayForm(values: Uint8Array): void {
+	for (const value of values) {
+		void value;
+	}
+}
+
+export function iterateUserIterableForm(values: Countdown): void {
+	for (const value of values) {
+		void value;
+	}
+}
+
+export function iterateGeneratorForm(values: Generator<number>): void {
+	for (const value of values) {
+		void value;
+	}
+}
+
+export function iterateUnionForm(values: number[] | Countdown): void {
+	for (const value of values) {
+		void value;
+	}
+}
+
+export function iterateAnyForm(values: any): void {
+	for (const value of values) {
+		void value;
+	}
+}
+
+export function iterateTypeParameterForm<T>(values: Iterable<T>): void {
+	for (const value of values) {
+		void value;
+	}
+}
+
+export function iterateConstrainedTypeParameterForm<T extends number[]>(values: T): void {
+	for (const value of values) {
+		void value;
+	}
+}
+
+export function spreadArrayForm(values: number[]): number[] {
+	return [...values];
+}
+
+export function spreadStringForm(text: string): string[] {
+	return [...text];
+}
+
+export function spreadArgumentForm(values: number[], sink: (...parts: number[]) => void): void {
+	sink(...values);
+}
+
+export function arrayPatternArrayForm(values: number[]): number | undefined {
+	const [first] = values;
+	return first;
+}
+
+export function arrayPatternTupleForm(values: [number, string]): string {
+	const [, second] = values;
+	return second;
+}
+
+export function arrayPatternRestForm(values: number[]): number[] {
+	const [, ...rest] = values;
+	return rest;
+}
+
+export function yieldStarArrayForm(values: number[]): Generator<number> {
+	function* inner(): Generator<number> {
+		yield* values;
+	}
+	return inner();
+}
+
+export async function forAwaitArrayForm(values: number[]): Promise<void> {
+	for await (const value of values) {
+		void value;
+	}
+}
+
+export async function forAwaitAsyncGeneratorForm(values: AsyncGenerator<number>): Promise<void> {
+	for await (const value of values) {
+		void value;
+	}
 }
 `
 
@@ -591,6 +719,121 @@ func TestUncensusedInvokingFormClassifierBranches(t *testing.T) {
 			export: "standardLibraryMemberForm",
 			want:   nil,
 			why:    "the default library is the one admissible exception: lib.d.ts describes the engine, which is not user code, so no lib-declared member can reach a user callable",
+		},
+		// The iteration protocol, whose classification is decided by the
+		// operand's type the way `await`'s is. What the reviewed container
+		// table claims is narrow and has two halves: the `[Symbol.iterator]`
+		// named by the declaration is the engine's factory, *and* the value is
+		// an object the engine created, so the iterator that factory returns —
+		// and its `next` and `return` — is engine code too. Everything the
+		// table does not name stays recorded.
+		{
+			export: "iterateArrayForm",
+			want:   nil,
+			why:    "Array's `[Symbol.iterator]` is the engine's, and the array iterator it returns is the engine's %ArrayIteratorPrototype% — nothing in the loop's own iteration reaches user code",
+		},
+		{
+			export: "iterateReadonlyArrayForm",
+			want:   nil,
+			why:    "`readonly number[]` reaches the same method through ReadonlyArray",
+		},
+		{
+			export: "iterateTupleForm",
+			want:   nil,
+			why:    "a tuple resolves the member through its Array base, so a fixed-slot type answers like the array it is",
+		},
+		{
+			export: "iterateStringForm",
+			want:   nil,
+			why:    "a primitive string is not skipped as a non-object the way a coerced primitive is — it is iterable, and it clears because the member resolves through String's apparent type",
+		},
+		{export: "iterateSetForm", want: nil, why: "Set is a reviewed engine container"},
+		{
+			export: "iterateMapForm",
+			want:   nil,
+			why:    "and so is Map; the entry pair it yields is destructured nowhere here, so the loop adds no second row",
+		},
+		{
+			export: "iterateTypedArrayForm",
+			want:   nil,
+			why:    "the typed arrays declare their own identically-shaped iteration in lib.es2015.iterable.d.ts and are reviewed here — unlike defaultLibraryMemberInvokers' array-iteration row, whose claim is about a callback slot rather than about the protocol",
+		},
+		{
+			export: "iterateUserIterableForm",
+			want: []typefacts.UncensusedInvokingFormKind{
+				typefacts.UncensusedIterationProtocol,
+			},
+			why: "a user-declared `[Symbol.iterator]` is a user callable, and its declaration is not in a default-library file",
+		},
+		{
+			export: "iterateGeneratorForm",
+			want: []typefacts.UncensusedInvokingFormKind{
+				typefacts.UncensusedIterationProtocol,
+			},
+			why: "the sharpest case in the table, and the one that proves the container allowlist does work rather than the file check alone: Generator declares `[Symbol.iterator]` *in* lib.es2015.generator.d.ts, and a generator's `next` runs a user function body",
+		},
+		{
+			export: "iterateUnionForm",
+			want: []typefacts.UncensusedInvokingFormKind{
+				typefacts.UncensusedIterationProtocol,
+			},
+			why: "the quantifier is per constituent: that one of them is an array proves nothing about this iteration",
+		},
+		{
+			export: "iterateAnyForm",
+			want: []typefacts.UncensusedInvokingFormKind{
+				typefacts.UncensusedIterationProtocol,
+			},
+			why: "`any` enumerates no members, and \"the checker could not find `[Symbol.iterator]`\" must never read as \"iterating this reaches no user code\"",
+		},
+		{
+			export: "iterateTypeParameterForm",
+			want: []typefacts.UncensusedInvokingFormKind{
+				typefacts.UncensusedIterationProtocol,
+			},
+			why: "an `Iterable<T>` constraint is the structural protocol, so the factory named by the declaration is not the factory that runs",
+		},
+		{
+			export: "iterateConstrainedTypeParameterForm",
+			want:   nil,
+			why:    "a type parameter constrained to an array clears through its constraint's apparent type, exactly as `await value` does when `T extends Promise<number>` — the same declaration-versus-runtime limit, recorded rather than closed",
+		},
+		{export: "spreadArrayForm", want: nil, why: "array spread drives the same protocol as for-of"},
+		{export: "spreadStringForm", want: nil, why: "and so does spreading a string"},
+		{
+			export: "spreadArgumentForm",
+			want:   nil,
+			why:    "a spread argument is the same node kind in a call position; `sink(...)` itself is the call census's row, not this census's",
+		},
+		{
+			export: "arrayPatternArrayForm",
+			want:   nil,
+			why:    "a binding pattern has no operand expression, so the iterated value comes from the declaration's own type — which is the initializer's",
+		},
+		{export: "arrayPatternTupleForm", want: nil, why: "an elision iterates no differently"},
+		{
+			export: "arrayPatternRestForm",
+			want:   nil,
+			why:    "an array rest element drains the same engine iterator; unlike an *object* rest element it names no property, so nothing here reads an unknown accessor",
+		},
+		{
+			export: "yieldStarArrayForm",
+			want:   nil,
+			why:    "`yield*` drives the operand's iterator, so it narrows on the operand's type like for-of; that the enclosing generator's own body is user code is the transcript's question, not this row's",
+		},
+		{
+			export: "forAwaitArrayForm",
+			want: []typefacts.UncensusedInvokingFormKind{
+				typefacts.UncensusedIterationProtocol,
+			},
+			why: "`for await…of` is the one arm that asks no type question: it resolves `Symbol.asyncIterator` first — declared in the default library only by structural contracts whose `next` is a user body — and falls back to the sync protocol while awaiting each result, invoking whatever `then` those values carry",
+		},
+		{
+			export: "forAwaitAsyncGeneratorForm",
+			want: []typefacts.UncensusedInvokingFormKind{
+				typefacts.UncensusedIterationProtocol,
+			},
+			why: "and an async generator's `next` is a user function body",
 		},
 	} {
 		transcript := implementationTranscriptFor(t, analyzer, path, branchSource, testCase.export)

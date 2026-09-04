@@ -52,6 +52,20 @@ const (
 //go:linkname Checker_getIterationTypeOfIterable github.com/microsoft/typescript-go/internal/checker.(*Checker).getIterationTypeOfIterable
 func Checker_getIterationTypeOfIterable(recv *checker.Checker, use checker.IterationUse, typeKind checker.IterationTypeKind, inputType *checker.Type, errorNode *ast.Node) *checker.Type
 
+// Checker_getPropertyNameForKnownSymbolName answers the property-key string
+// under which the binder stored a well-known-symbol member — `[Symbol.iterator]`
+// and its siblings. It is linknamed rather than reimplemented because the name
+// is not a constant: when the program's lib declares `SymbolConstructor`, the
+// compiler derives the key from that declaration's unique-symbol type, and only
+// without it does it fall back to the `__@iterator` spelling. Passing anything
+// else to GetPropertyOfType silently finds nothing, which for a fail-closed
+// census reads as a refusal rather than an error — so the lookup has to use the
+// compiler's own key. The compiler's own iterable resolver calls it exactly this
+// way (checker.getIterationTypesOfIterableSlow).
+//
+//go:linkname Checker_getPropertyNameForKnownSymbolName github.com/microsoft/typescript-go/internal/checker.(*Checker).getPropertyNameForKnownSymbolName
+func Checker_getPropertyNameForKnownSymbolName(recv *checker.Checker, symbolName string) string
+
 //go:linkname Checker_isTypeIdenticalTo github.com/microsoft/typescript-go/internal/checker.(*Checker).isTypeIdenticalTo
 func Checker_isTypeIdenticalTo(recv *checker.Checker, source *checker.Type, target *checker.Type) bool
 

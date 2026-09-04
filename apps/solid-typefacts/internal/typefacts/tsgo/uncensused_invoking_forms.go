@@ -350,12 +350,12 @@ func (p *project) classifyInvokingFormLocked(
 		// All three drive `Symbol.iterator` (or `Symbol.asyncIterator`, for
 		// `for await…of`, which is a ForOfStatement carrying an await
 		// modifier) and then the iterator's own `next` and `return`.
-		return typefacts.UncensusedIterationProtocol, true
+		return p.iterationFormLocked(node)
 	case "YieldExpression":
 		if yield := node.AsYieldExpression(); yield != nil && yield.AsteriskToken != nil {
 			// `yield*` drives the delegate's iterator exactly as `for…of`
-			// does.
-			return typefacts.UncensusedIterationProtocol, true
+			// does, over the operand's own type.
+			return p.iterationProtocolFormLocked(yield.Expression)
 		}
 		// A plain `yield` suspends; it invokes nothing. Whether a generator's
 		// body runs at all is a reachability question about the caller's `next`
@@ -375,6 +375,16 @@ func (p *project) classifyInvokingFormLocked(
 		// same question the parameter-use census asks — and it walks up through
 		// nested patterns, parentheses, and non-null assertions, so
 		// `[{ a }] = src` and `for ([a] of pairs)` are both answered here.
+		//
+		// Unlike the three kinds above, this arm asks no type question and
+		// records unconditionally. It has no operand to ask about: the iterated
+		// value is the assignment's right-hand side, or — inside
+		// `for ([a] of pairs)` — the element type of a *different* node's
+		// iteration, and GetTypeAtLocation on the literal answers with the
+		// shape of the pattern rather than of the source, which is the same
+		// trap objectAssignmentPatternMemberFormLocked documents. Deriving the
+		// source here is its own premise, so the form stands until one is
+		// written.
 		if ast.GetAssignmentTarget(node) != nil {
 			return typefacts.UncensusedIterationProtocol, true
 		}
@@ -641,6 +651,160 @@ func (p *project) declarationCarriesRuntimeBytesLocked(declaration *ast.Node) bo
 		return true
 	}
 	return !sourceFile.IsDeclarationFile && p.isCurrentSourceFile(sourceFile)
+}
+
+// engineOwnedIterableContainers is the reviewed list of default-library
+// interfaces whose declaration of `[Symbol.iterator]` is the engine's own
+// iterator factory *and* whose values are objects the engine itself created, so
+// that the iterator the factory returns — and therefore that iterator's `next`
+// and `return` — is engine code as well. Nothing here can reach a user
+// callable however the engine implements it, which is the same premise
+// accessorKindForSymbolLocked states for `lib`-declared members.
+//
+// The two halves of that premise are why the *protocol* interfaces are
+// deliberately absent, and their absence is the whole precision of this table:
+// `Iterable`, `IterableIterator`, `IteratorObject`, `Iterator`, `ArrayIterator`,
+// `MapIterator`, `SetIterator`, `StringIterator`, `RegExpStringIterator`,
+// `SegmentIterator` and `Segments` all declare `[Symbol.iterator]` in the
+// default library, but every one of them is a structural contract a user object
+// satisfies — so the factory named by the declaration is not the factory that
+// runs. `Generator` is the sharpest case and the reason to state this rather
+// than infer it: a generator's `next` runs a user function body. This is
+// exactly the `Promise` versus `PromiseLike` split that
+// provablyEngineOwnedThenLocked draws, for the same reason.
+//
+// Every DOM and web-worker collection is absent too — `NodeList`,
+// `URLSearchParams`, `Headers`, `FormData` and some forty others. Their
+// iterators are engine code in fact, but they were not reviewed here, and "the
+// browser probably owns it" is not a premise; defaultLibraryMemberInvokers
+// keeps the same rule about growing a table.
+//
+// Two limits remain, and they are the ones every declaration-based premise in
+// this file carries. A value whose static type is `Array<T>` while the runtime
+// object is a subclass overriding `[Symbol.iterator]` answers from the base
+// declaration, and a Proxy is outside every producer census. A constrained type
+// parameter clears through its constraint's apparent type for the same reason
+// `await value` does when `T extends Promise<number>`.
+var engineOwnedIterableContainers = containerSet(
+	// lib.es2015.iterable.d.ts.
+	"Array", "ReadonlyArray", "String", "IArguments",
+	"Set", "ReadonlySet", "Map", "ReadonlyMap",
+	"Int8Array", "Uint8Array", "Uint8ClampedArray",
+	"Int16Array", "Uint16Array", "Int32Array", "Uint32Array",
+	"Float32Array", "Float64Array",
+	// lib.es2020.bigint.d.ts and lib.es2025.float16.d.ts. A project whose lib
+	// omits either declares no such global, and the name simply never resolves.
+	"BigInt64Array", "BigUint64Array", "Float16Array",
+)
+
+// iterationFormLocked classifies one of the three syntaxes that drive the
+// iteration protocol by what the checker knows about the value being iterated.
+//
+// `for await…of` is *always* recorded and is the one arm here that asks no type
+// question. It resolves `Symbol.asyncIterator` first — declared in the default
+// library only by `AsyncIterable`, `AsyncIterableIterator`, `AsyncGenerator`
+// and `AsyncIteratorObject`, every one of them a structural contract whose
+// `next` is a user function body — and when the value carries none of them it
+// falls back to the sync protocol and `await`s each result, invoking whatever
+// `then` those values carry. Neither half has an engine-owned case worth a
+// table row, so the form stands.
+func (p *project) iterationFormLocked(
+	node *ast.Node,
+) (typefacts.UncensusedInvokingFormKind, bool) {
+	switch nodeKindName(node) {
+	case "ForOfStatement":
+		if statement := node.AsForInOrOfStatement(); statement == nil ||
+			statement.AwaitModifier != nil {
+			return typefacts.UncensusedIterationProtocol, true
+		}
+		return p.iterationProtocolFormLocked(node.Expression())
+	case "SpreadElement":
+		return p.iterationProtocolFormLocked(node.Expression())
+	case "ArrayBindingPattern":
+		// A binding pattern has no operand expression: the iterated value is
+		// the declaration's initializer or the parameter's declared type, and
+		// GetTypeAtLocation on the pattern answers with exactly that — the
+		// same question bindingElementAccessorFormLocked asks of an object
+		// pattern to resolve the property it reads. An *assignment* pattern is
+		// spelled ArrayLiteralExpression, not this kind, and is answered in
+		// classifyInvokingFormLocked without a type question.
+		return p.iterationProtocolClearedLocked(p.checker.GetTypeAtLocation(node))
+	}
+	return typefacts.UncensusedIterationProtocol, true
+}
+
+// iterationProtocolFormLocked records the iteration protocol unless the
+// operand's type is provably one whose iterator is the engine's.
+func (p *project) iterationProtocolFormLocked(
+	operand *ast.Node,
+) (typefacts.UncensusedInvokingFormKind, bool) {
+	if operand == nil {
+		return typefacts.UncensusedIterationProtocol, true
+	}
+	return p.iterationProtocolClearedLocked(p.checker.GetTypeAtLocation(operand))
+}
+
+func (p *project) iterationProtocolClearedLocked(
+	iterated *checker.Type,
+) (typefacts.UncensusedInvokingFormKind, bool) {
+	if p.provablyEngineOwnedIteratorLocked(iterated) {
+		return "", false
+	}
+	return typefacts.UncensusedIterationProtocol, true
+}
+
+// provablyEngineOwnedIteratorLocked answers whether *every* constituent of a
+// type carries a `[Symbol.iterator]` that engineOwnedIterableContainers vouches
+// for.
+//
+// The quantifier is the whole of it, for the reason
+// provablyEngineOwnedThenLocked's is: a union missing the member in one
+// constituent carries it in another, `any` and `unknown` and an unconstrained
+// type parameter enumerate no members at all, and an index-signature type such
+// as `Record<string, unknown>` declares no iterator while permitting one at
+// runtime. "The checker could not find `[Symbol.iterator]`" must never read as
+// "iterating this reaches no user code" — which is why a nil lookup refuses
+// here instead of clearing. That direction also means a non-iterable operand
+// records a form it cannot actually reach; iterating a number is a `tsc` error
+// and a runtime TypeError, and this census does not trade a fail-closed
+// quantifier for silence on code that does not run.
+//
+// The key is asked of the compiler rather than spelled: a well-known-symbol
+// member is stored under a name derived from the program's own
+// `SymbolConstructor` declaration when it has one. See
+// Checker_getPropertyNameForKnownSymbolName.
+//
+// An *optional* `[Symbol.iterator]?` refuses, matching the compiler's own
+// iterable resolver, which requires the member to be non-optional before it
+// will read the protocol off it.
+func (p *project) provablyEngineOwnedIteratorLocked(iterated *checker.Type) bool {
+	if iterated == nil {
+		return false
+	}
+	constituents := iterated.Distributed()
+	if len(constituents) == 0 {
+		return false
+	}
+	key := checker.Checker_getPropertyNameForKnownSymbolName(p.checker, "iterator")
+	if key == "" {
+		return false
+	}
+	for _, constituent := range constituents {
+		if constituent == nil {
+			return false
+		}
+		if constituent.Flags()&(checker.TypeFlagsAny|checker.TypeFlagsUnknown) != 0 {
+			return false
+		}
+		iterator := p.checker.GetPropertyOfType(constituent, key)
+		if iterator == nil || iterator.Flags&ast.SymbolFlagsOptional != 0 {
+			return false
+		}
+		if !p.isDefaultLibraryMemberLocked(iterator, key, engineOwnedIterableContainers) {
+			return false
+		}
+	}
+	return true
 }
 
 // awaitFormLocked records an `await` unless *every* constituent of the awaited

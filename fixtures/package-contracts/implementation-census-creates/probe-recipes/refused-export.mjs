@@ -1,5 +1,5 @@
 // A recipe for an export whose `creates: []` claim the census REFUSES: `cycle`,
-// `deep`, `unresolved`, `taggedTemplate`, `spreadArgs`, `labelledBreak`,
+// `deep`, `unresolved`, `taggedTemplate`, `spreadUntyped`, `labelledBreak`,
 // `stdlibRefInvoker`, `reflectApply`, and `reassignedHelper`.
 //
 // It exists to make the refusal tests honest rather than accidental. Without a

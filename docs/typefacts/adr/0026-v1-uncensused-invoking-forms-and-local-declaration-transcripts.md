@@ -56,7 +56,7 @@ every *other* field of those rows in play.
 | `set-accessor` | the same, with a set-accessor declaration, in an assignment target position |
 | `property-access-unknown-accessor` | a member that resolves to **no symbol** — an `any` receiver, a computed key, an index signature — or to declarations that are not the snapshot's runtime bytes; plus object spread, JSX prop spread, and an object rest element, which read every own enumerable property of a value whose shape is not statically known |
 | `decorator` | a `Decorator` application |
-| `iteration-protocol` | `for…of`, `for await…of`, a spread element, an array binding pattern, an array *assignment* pattern (`[a, b] = src`), `yield*` |
+| `iteration-protocol` | `for…of`, a spread element, an array binding pattern and `yield*` whose operand's type does not prove the iterator is the engine's; `for await…of` and an array *assignment* pattern (`[a, b] = src`) unconditionally |
 | `using-dispose` | a `using` or `await using` declaration list; scope exit reaches `Symbol.dispose`/`Symbol.asyncDispose` |
 | `instanceof` | reaches `Symbol.hasInstance` on the right operand when that operand defines it |
 | `await-then` | an `await` some constituent of whose operand type is neither a primitive nor a default-library `Promise` |
@@ -195,6 +195,90 @@ unconstrained type parameter has no members the checker can enumerate, and an
 index-signature type such as `Record<string, unknown>` declares no `then` while
 permitting one at runtime, whose `Get` would reach a getter and whose value
 `await` would call.
+
+### The iteration limit, and the two halves of the container table
+
+`iteration-protocol` names the syntaxes that drive `Symbol.iterator` and then
+the iterator's own `next` and `return`. It is recorded unless **every**
+constituent of the iterated value's type carries a `[Symbol.iterator]` that a
+reviewed table of default-library interfaces vouches for — the same
+per-constituent quantifier `await-then` uses, for the same reasons: a union
+missing the member in one constituent carries it in another, `any` and
+`unknown` and an unconstrained type parameter enumerate no members at all, and
+an index-signature type declares no iterator while permitting one at runtime. A
+nil `[Symbol.iterator]` lookup therefore **refuses**; "the checker could not
+find it" is never "iterating this reaches no user code". One consequence is
+worth naming: a non-iterable operand records a form it cannot actually reach,
+because iterating a number is a `tsc` error and a runtime `TypeError`, and this
+census does not trade a fail-closed quantifier for silence on code that does not
+run.
+
+**What a table row claims has two halves, and both are needed.** The
+`[Symbol.iterator]` named by the declaration is the engine's own factory,
+*and* the value is an object the engine itself created — so the iterator that
+factory returns, and therefore that iterator's `next` and `return`, is engine
+code too. The reviewed set is `Array`, `ReadonlyArray`, `String`, `IArguments`,
+`Set`, `ReadonlySet`, `Map`, `ReadonlyMap` and the typed arrays. A tuple
+resolves through its `Array` base and answers the same; a primitive string
+clears through `String`'s apparent type, which is why the primitive shortcut
+`coercion` uses is *not* reused here — a string is a primitive and is iterable.
+
+**The absent rows are the whole precision of it.** `Iterable`,
+`IterableIterator`, `IteratorObject`, `Iterator`, `ArrayIterator`,
+`MapIterator`, `SetIterator`, `StringIterator`, `RegExpStringIterator`,
+`SegmentIterator` and `Segments` all declare `[Symbol.iterator]` in the default
+library and none of them is on the table: every one is a structural contract a
+user object satisfies, so the factory named by the declaration is not the
+factory that runs. `Generator` is the sharpest case and the reason to state this
+rather than infer it from "declared in `lib`" — a generator's `next` runs a user
+function body. This is exactly the `Promise` versus `PromiseLike` split
+`await-then` draws. The forty-odd DOM and web-worker collections — `NodeList`,
+`URLSearchParams`, `Headers`, `FormData` — are absent too: their iterators are
+engine code in fact, but they were not reviewed, and "the browser probably owns
+it" is not a premise.
+
+**Two arms ask no type question.** `for await…of` resolves
+`Symbol.asyncIterator` first — declared in the default library only by
+`AsyncIterable`, `AsyncIterableIterator`, `AsyncGenerator` and
+`AsyncIteratorObject`, every one a structural contract whose `next` is a user
+body — and when the value carries none of them it falls back to the sync
+protocol and `await`s each result, invoking whatever `then` those values carry.
+Neither half has an engine-owned case worth a row. An array *assignment*
+pattern has no operand to ask about: the iterated value is the assignment's
+right-hand side, or, inside `for ([a] of pairs)`, the element type of another
+node's iteration, and `GetTypeAtLocation` on the literal answers with the shape
+of the *pattern* rather than of the source — the same trap the object
+assignment-pattern arm documents. Deriving the source there is its own premise
+and is not taken.
+
+**The limits are the ones every declaration-based premise in this census
+carries**, and they are recorded rather than closed. A value whose static type
+is `Array<T>` while the runtime object is a subclass overriding
+`[Symbol.iterator]` answers from the base declaration; a constrained type
+parameter clears through its constraint's apparent type exactly as
+`await value` does when `T extends Promise<number>`; and a `Proxy` is outside
+every producer census for the reason stated above.
+
+**The lookup key comes from the compiler, not from a spelling.** A
+well-known-symbol member is stored under a name the compiler derives from the
+program's own `SymbolConstructor` declaration when it has one, falling back to
+`__@iterator` only without it, so the key is asked of
+`getPropertyNameForKnownSymbolName` — the same call the compiler's own iterable
+resolver makes. Spelling it would silently find nothing, which in a fail-closed
+census reads as a refusal rather than as an error. An **optional**
+`[Symbol.iterator]?` refuses, matching that resolver, which requires the member
+to be non-optional before reading the protocol off it.
+
+**This narrowing moves no field and no protocol.** The field's meaning is
+unchanged — a producer at or above the protocol that introduced it classified
+every form it walked — and no schema shape changed, so
+`TYPE_FACTS_HANDSHAKE_PROTOCOL` stays at 15 and the schema digest stays put.
+What discriminates a narrowed producer from an unnarrowed one is producer
+*identity*: the source-manifest digest and the build id, which the handshake
+compares field-for-field and which move on their own. A protocol bump here
+would assert a wire break that did not happen and would force every pinned
+consumer and fixture to migrate for nothing. The protocol number could not
+protect against a wrong premise anyway; the premise is what the tests pin.
 
 ## Absence is not a guarantee — and how a consumer tells
 

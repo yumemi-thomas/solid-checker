@@ -9122,7 +9122,7 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 17] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 18] = [
         "cycle",
         "deep",
         "iife",
@@ -9134,6 +9134,7 @@ export const value = phantom;
         "reassignedHelper",
         "reflectApply",
         "spreadArgs",
+        "spreadUntyped",
         "stdlibRefInvoker",
         "switchBreak",
         "taggedTemplate",
@@ -9775,6 +9776,7 @@ export const value = phantom;
             "reassignedHelper",
             "reflectApply",
             "spreadArgs",
+            "spreadUntyped",
             "stdlibRefInvoker",
             "switchBreak",
             "taggedTemplate",
@@ -9898,6 +9900,7 @@ export const value = phantom;
                 "reassignedHelper",
                 "reflectApply",
                 "spreadArgs",
+                "spreadUntyped",
                 "stdlibRefInvoker",
                 "switchBreak",
                 "taggedTemplate",
@@ -10162,15 +10165,42 @@ export const value = phantom;
         );
     }
 
-    /// (g) `spreadArgs`: a spread argument drives the iteration protocol, and
-    /// the producer records it as an invoking form (ADR 0026). Arguments do not
+    /// (g) `spreadUntyped`: a spread drives the iteration protocol, and the
+    /// producer records it as an invoking form when the operand's type does not
+    /// prove the iterator is the engine's (ADR 0026). Arguments do not
     /// otherwise matter for `creates`; a spread is not an argument but a form.
+    /// Here the operand is an unannotated ordinary parameter — `any`, which
+    /// enumerates no members — and a nil `[Symbol.iterator]` lookup refuses
+    /// rather than clears.
     #[test]
-    fn the_probe_gate_tracer_census_refuses_a_spread_argument_as_an_iteration_form() {
+    fn the_probe_gate_tracer_census_refuses_a_spread_of_an_unknown_operand() {
         assert_census_refuses(
-            "spreadArgs",
+            "spreadUntyped",
             &["uncensused invoking form: iteration-protocol"],
         );
+    }
+
+    /// The pair, and the whole precision of the iteration arm: `spreadArgs`
+    /// spreads a *rest* parameter, whose own type is `any[]` however its
+    /// elements are typed, so the protocol it drives is
+    /// `Array.prototype[Symbol.iterator]` and the array iterator that returns.
+    /// Both are engine code, so the producer records no form and the census
+    /// closes `creates` over a body byte-identical to `spreadUntyped`'s.
+    ///
+    /// This is what a census that classified iteration by *syntax* could not
+    /// do, and it is the reason ADR 0026's iteration arm asks the operand's
+    /// type at all.
+    #[test]
+    fn the_probe_gate_tracer_census_closes_a_spread_of_a_rest_parameter() {
+        let Some((_, outcome)) = census_certify("spreadArgs", Some("spread-args.mjs")) else {
+            return;
+        };
+        let finalized =
+            outcome.expect("spreadArgs spreads an array: the census must close creates");
+        assert!(creates_is_closed_in(
+            finalized.canonical_main(),
+            "spreadArgs"
+        ));
     }
 
     /// (i) `loopCall`, `switchBreak` and `whileBreak`: a construct whose
