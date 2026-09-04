@@ -9052,15 +9052,22 @@ export const value = phantom;
     /// to contradict, and the receipt binds a nonempty gate root. Before the
     /// census existed this pair refused by name for want of a premise; the
     /// refusal was never about a behavioral difference between the two.
+    ///
+    /// `runCreatingOwner` is the second export **again** since the producer
+    /// stopped withholding call rows. Its `try … finally` puts a
+    /// `tryReachability` marker in the control-flow census, and the census used
+    /// to refuse any marker at all, because a marker was the only trace a
+    /// withheld row left. The marker is now classified
+    /// `reachability-lower-bound` — the construct is walked in full, every call
+    /// inside it is on the wire — and the census admits it and disposes the same
+    /// one call. This pair is therefore the pin for ADR 0008 item 0 being
+    /// discharged, not merely narrowed: nothing about either body changed.
     #[test]
     fn the_probe_gate_tracer_certifies_a_parameter_rooted_creates_census() {
         let Some(pin) = pinned_producer_for_test() else {
             return;
         };
-        // `run` alone: `runCreatingOwner` shares the call but refuses on its
-        // `try` marker, pinned by the test below.
-        let export = "run";
-        {
+        for export in ["run", "runCreatingOwner"] {
             let scratch = TracerScratch::new(&format!("creates-{export}"));
             let plan = tracer_creates_closure_plan(export);
             let schedule = plan.probe_gate_schedule().unwrap();
@@ -9093,45 +9100,6 @@ export const value = phantom;
         }
     }
 
-    /// `runCreatingOwner` has the same one parameter-rooted call as `run`, and
-    /// refuses anyway: its `try … finally` puts a `tryReachability` marker in
-    /// the producer's control-flow census, and the census takes no
-    /// `controlFlowUnsupported` relaxation at any depth, because the producer
-    /// withholds every call row a `break`/`continue` makes non-universal and
-    /// the marker is the only trace such a withheld row leaves. A `try` withholds
-    /// nothing itself; this is the over-refusal ADR 0008 records, and the
-    /// producer-side fix is what lifts it.
-    #[test]
-    fn the_probe_gate_tracer_census_refuses_an_export_with_unsupported_control_flow() {
-        let Some(pin) = pinned_producer_for_test() else {
-            return;
-        };
-        let export = "runCreatingOwner";
-        let scratch = TracerScratch::new(&format!("creates-{export}"));
-        let plan = tracer_creates_closure_plan(export);
-        let claim_id = plan.probe_gate_schedule().unwrap().gates()[0]
-            .semantic_claim_id()
-            .to_owned();
-        let Some(configuration) = tracer_configuration(
-            scratch.path(),
-            &format!("creates-{export}"),
-            &[(claim_id.as_str(), "calls-only.mjs")],
-        ) else {
-            return;
-        };
-        let Err(error) = tracer_certify(&plan, &pin, &configuration) else {
-            panic!("{export}: a try statement puts a marker the census refuses on");
-        };
-        let rendered = error.to_string();
-        assert!(
-            matches!(&error, super::Policy2FinalizationError::TypeFacts(_))
-                && rendered.contains("is unsupported")
-                && rendered.contains("control-flow census is unsupported")
-                && rendered.contains("tryReachability"),
-            "{export}: the refusal must name the marker: {rendered}"
-        );
-    }
-
     /// Whether the canonical main a receipt binds closes `creates` for
     /// `export` in its one artifact case.
     fn creates_is_closed_in(canonical_main: &[u8], export: &str) -> bool {
@@ -9154,10 +9122,12 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 15] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 17] = [
         "cycle",
         "deep",
         "iife",
+        "labelledBreak",
+        "loopCall",
         "memberParameterRooted",
         "noRecipe",
         "plain",
@@ -9798,6 +9768,8 @@ export const value = phantom;
         let proposing = [
             "cycle",
             "deep",
+            "labelledBreak",
+            "loopCall",
             "noRecipe",
             "plain",
             "reassignedHelper",
@@ -9871,7 +9843,7 @@ export const value = phantom;
     /// The census, on a candidate that came out of the generator.
     ///
     /// One recipe is supplied, for `plain` alone, so recipe gating withholds
-    /// the other eleven candidates and the census runs on exactly one — which
+    /// the other thirteen candidates and the census runs on exactly one — which
     /// is also how a real row reaches its first proven closure. Everything
     /// this asserts about `plain` is what the synthesized-candidate test
     /// asserts; what is new is where the candidate came from.
@@ -9920,6 +9892,8 @@ export const value = phantom;
             [
                 "cycle",
                 "deep",
+                "labelledBreak",
+                "loopCall",
                 "noRecipe",
                 "reassignedHelper",
                 "reflectApply",
@@ -10199,32 +10173,89 @@ export const value = phantom;
         );
     }
 
-    /// (i) `switchBreak`: `mount(el); break;` inside a `switch` case. The
-    /// producer withholds the `mount(el)` row — it lies in the region the
-    /// `break` makes non-universal — and leaves only the `switchReachability`
-    /// marker, which the census refuses on. Without that refusal the transcript
-    /// would carry zero rows and the domain would close over a call that runs.
+    /// (i) `loopCall`, `switchBreak` and `whileBreak`: a construct whose
+    /// reachability **lower bound** alone the producer cannot give, which the
+    /// census admits — and which all three certify through.
+    ///
+    /// `loopCall` is a bare `while` with no jump in it: the marker
+    /// (`iterationReachability`) is there because control may not enter the
+    /// body, and nothing at all is withheld. This is the shape ADR 0008 item 0
+    /// over-refused on real code, `@solid-primitives/i18n`'s `flatten` and
+    /// `chainedTranslator` among them.
+    ///
+    /// `switchBreak` and `whileBreak` are the shapes where a row really was
+    /// withheld: the `break`'s target is the construct it sits in, the producer
+    /// covers that construct as the region the jump makes non-universal, and
+    /// `mount(el)` used to be **dropped** there. A dropped `CallExpression`
+    /// leaves no uncensused-form row either, so the marker was the only trace
+    /// and the census had to refuse it or close `creates` over a call that runs.
+    /// The row now arrives with `reach: unknown`, which the `MayExecute` floor
+    /// admits, and `mount` is dispositioned by local recursion — so what
+    /// certifies these is a disposition, never a relaxed marker.
     #[test]
-    fn the_probe_gate_tracer_census_refuses_a_switch_whose_break_withholds_a_call() {
-        assert_census_refuses(
-            "switchBreak",
-            &[
-                "control-flow census is unsupported",
-                "switchReachability",
-                "withholds every call row",
-            ],
-        );
+    fn the_probe_gate_tracer_census_certifies_through_a_lower_bound_only_construct() {
+        for export in ["loopCall", "switchBreak", "whileBreak"] {
+            let Some((plan, outcome)) = census_certify(export, Some("jump-region.mjs")) else {
+                return;
+            };
+            let finalized = outcome.unwrap_or_else(|error| {
+                panic!("{export}: a lower-bound-only construct must certify: {error}")
+            });
+            assert!(finalized.withheld_closures().is_empty());
+            assert_ne!(
+                finalized.bindings().probe_gate_root,
+                super::finalization::empty_probe_gate_root(&plan),
+                "{export}: the veto ran"
+            );
+            assert!(
+                creates_is_closed_in(finalized.canonical_main(), export),
+                "{export}: the certified contract closes creates"
+            );
+
+            // The disposition is what carries it, and the call the jump used to
+            // hide is the one witnessed.
+            let pin = pinned_producer_for_test().expect("checked by census_certify");
+            let evidence = plan
+                .acquire_and_verify_export_value_type_facts(&pin)
+                .expect("the same evidence the transaction acquired");
+            let demands = creates_demand_ids(&plan, export);
+            let [demand] = demands.as_slice() else {
+                panic!("{export}: one creates demand");
+            };
+            let sites = evidence
+                .witness_bindings()
+                .iter()
+                .find(|binding| binding.demand_id() == demand)
+                .expect("the creates demand has a witness")
+                .site_ids()
+                .to_vec();
+            assert!(
+                sites.iter().any(|site| site.starts_with("census-call:")
+                    && site.ends_with(":unknown:local-recursion")),
+                "{export}: the row inside the construct is dispositioned at unknown reach: \
+                 {sites:?}"
+            );
+        }
     }
 
-    /// (j) `whileBreak`: the same withholding inside a loop, and the same
-    /// refusal by marker.
+    /// (j) `labelledBreak`: `break outer` out of a plain labelled block. No
+    /// enclosing loop or `switch` of the frame owns that target, and the target
+    /// is what bounds every region-based repair either census applies to a jump,
+    /// so the producer classifies the marker `flow-unaccounted` rather than
+    /// lower-bound-only. The census refuses it by marker and location.
+    ///
+    /// This is the arm that keeps the relaxation above from being a blanket one.
+    /// `mount(el)` is on the wire here too, so the refusal is not about a
+    /// missing row: it is about a frame whose control flow the producer does not
+    /// claim to have modelled.
     #[test]
-    fn the_probe_gate_tracer_census_refuses_a_loop_whose_break_withholds_a_call() {
+    fn the_probe_gate_tracer_census_refuses_a_construct_whose_flow_is_unaccounted() {
         assert_census_refuses(
-            "whileBreak",
+            "labelledBreak",
             &[
-                "control-flow census is unsupported",
-                "iterationReachability",
+                "cannot account for a construct",
+                "jumpReachability",
+                "flow-unaccounted",
             ],
         );
     }

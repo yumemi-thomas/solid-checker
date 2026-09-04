@@ -756,11 +756,75 @@ type BranchSite struct {
 	Partitions []FinitePartition `cbor:"partitions,omitempty" json:"partitions,omitempty"`
 }
 
+// ControlFlowIncompletenessClass says *which* of two different things a
+// control-flow marker means. The distinction is the whole point of the field:
+// `unsupported` used to absorb both, and a consumer reading it could only
+// refuse everything.
+//
+// The enum is closed. A consumer that receives a string outside it must reject
+// the whole transcript rather than treat the row as unknown, exactly as for
+// UncensusedInvokingFormKind: a producer that invented a class is a producer
+// this vocabulary does not describe, and reading an unknown class as either arm
+// picks the unsound one half the time.
+type ControlFlowIncompletenessClass string
+
+const (
+	// ControlFlowReachabilityLowerBound is a construct this census walked in
+	// full, and whose every enclosed site the shared body walk therefore
+	// records — what is missing is only the *lower bound*: a loop body may
+	// never run, a `catch` may never be entered, a `switch` clause may not be
+	// selected. Every site inside such a construct carries reach `unknown`,
+	// and no site is called `unreachable` on the strength of it.
+	//
+	// So a consumer asking a **may-execute** question — "is every callable
+	// this body can reach enumerated here?" — is answered. A consumer asking a
+	// *guarantee* question is not, which is why the marker still opens the
+	// transcript.
+	ControlFlowReachabilityLowerBound ControlFlowIncompletenessClass = "reachability-lower-bound"
+	// ControlFlowUnaccounted is a construct whose flow this census cannot
+	// account for at all: the reach rows around it may be wrong in either
+	// direction, so neither a may-execute nor a guarantee question is
+	// answered. Nothing a consumer can do with it but refuse.
+	//
+	// It is also the classifier's default. A marker with no reviewed class
+	// arrives here, so a construct a future revision marks unsupported without
+	// classifying refuses on arrival rather than passing as the admissible arm.
+	ControlFlowUnaccounted ControlFlowIncompletenessClass = "flow-unaccounted"
+)
+
+// ControlFlowIncompleteness names one construct this control-flow census does
+// not fully model, at its exact location, and classifies what is missing.
+//
+// One row per construct, so a body with two loops carries two rows; Unsupported
+// stays one deduplicated marker string per *kind* for the consumers that
+// already read it.
+type ControlFlowIncompleteness struct {
+	// Marker is the same string Unsupported carries for this construct, so a
+	// consumer can join the two.
+	Marker   string                         `cbor:"marker" json:"marker"`
+	Class    ControlFlowIncompletenessClass `cbor:"class" json:"class"`
+	Location Location                       `cbor:"location" json:"location"`
+}
+
 type ControlFlowCensus struct {
-	Returns     []ReturnSite `cbor:"returns,omitempty" json:"returns,omitempty"`
-	Throws      []ThrowSite  `cbor:"throws,omitempty" json:"throws,omitempty"`
-	Branches    []BranchSite `cbor:"branches,omitempty" json:"branches,omitempty"`
-	Unsupported []string     `cbor:"unsupported,omitempty" json:"unsupported,omitempty"`
+	Returns  []ReturnSite `cbor:"returns,omitempty" json:"returns,omitempty"`
+	Throws   []ThrowSite  `cbor:"throws,omitempty" json:"throws,omitempty"`
+	Branches []BranchSite `cbor:"branches,omitempty" json:"branches,omitempty"`
+	// Unsupported is the deduplicated set of marker strings, unchanged: any
+	// entry still means this census is incomplete and still appends
+	// `controlFlowUnsupported` to the transcript's open reasons.
+	Unsupported []string `cbor:"unsupported,omitempty" json:"unsupported,omitempty"`
+	// Incompleteness is Unsupported with the two facts the marker string never
+	// carried: *where* the construct is, and *which* of the two classes above
+	// the incompleteness belongs to. Every marker in Unsupported has at least
+	// one row here and every row's marker is in Unsupported; the client
+	// enforces both, so a producer cannot state an unclassified marker.
+	//
+	// An *absent* list beside a nonempty Unsupported is a producer with no
+	// classification at all, which a consumer must refuse. No decoder can
+	// separate that from a present empty one, so the handshake protocol is the
+	// discriminator — see TypeFactsHandshakeProtocol.
+	Incompleteness []ControlFlowIncompleteness `cbor:"incompleteness,omitempty" json:"incompleteness,omitempty"`
 }
 
 type InvocationTranscript struct {

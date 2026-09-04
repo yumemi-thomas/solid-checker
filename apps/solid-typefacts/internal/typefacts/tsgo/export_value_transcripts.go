@@ -565,9 +565,44 @@ func (p *project) implementationCallCensusLocked(
 			if flowOwner == nil {
 				flowOwner = implementation
 			}
+			// A call inside a region a `break` or `continue` makes
+			// non-universal is recorded with Reach `unknown`.
+			//
+			// **`unknown` is the sound value here, and the row's presence is
+			// what makes it so.** Reachability is ordered by the strength of
+			// the positive claim it licenses: `reachable` says invoking this
+			// implementation runs the call on every path, `unknown` says it may
+			// run it, `unreachable` says it cannot. A jump falsifies only the
+			// first, so `unknown` is exactly what the producer still knows —
+			// and it is the weakest non-negative value, so no consumer can read
+			// more out of it than the jump left standing. A consumer needing a
+			// guarantee refuses it; one at the may-execute floor admits it,
+			// which is the only floor a claim about *which* callables a body can
+			// reach could ever be built on.
+			//
+			// The row used to be **dropped** here, and the reason was sound as
+			// far as it went: it kept an over-optimistic `reachable` off the
+			// wire, and for a claim that some behavior *happens* a missing row
+			// is the safe direction, because absence lends authority to nothing.
+			// For a claim that some behavior is *absent* it is the exact failure
+			// mode. A dropped call is a `CallExpression`, so it leaves no
+			// uncensused-form row either: `switch (kind) { case "mount":
+			// render(App, el); break; }` published nothing about `render` at all
+			// beyond the enclosing construct's `switchReachability` marker, and
+			// a consumer that relaxed that marker would have closed a call
+			// domain over a call that runs. Dropping is now needed for neither
+			// direction — `unknown` is strictly weaker than the row that was
+			// withheld, so nothing sound became unsound, and the enumeration a
+			// negative census needs is on the wire.
+			//
+			// An already-`unreachable` row is left alone. It was not the jump
+			// that decided it, and downgrading it would discard a proof for
+			// nothing; unsafeJumpRegionsLocked covers the whole frame whenever
+			// a jump's target cannot be bound, so no `unreachable` row survives
+			// a jump this census could not account for.
 			if reach != typefacts.Unreachable &&
 				locationWithheldByJump(unsafeJumps[flowOwner], nodeLocation(node)) {
-				return
+				reach = typefacts.ReachUnknown
 			}
 			kind := typefacts.CallKindCall
 			if construct {

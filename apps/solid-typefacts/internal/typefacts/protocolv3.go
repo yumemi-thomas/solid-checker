@@ -4,9 +4,42 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 14 because the producer now carries the two
-// facts an implementation census needs and neither the call census nor
-// Complete could carry.
+// TypeFactsHandshakeProtocol is 15 because the producer stopped answering a
+// question about a jump region with silence.
+//
+// Two coordinated changes, and the field is only half of it. The
+// implementation call census used to **drop** every row that lies in a region a
+// `break` or `continue` makes non-universal, so as to keep an over-optimistic
+// `reachable` off the wire. It now emits the row with Reach `unknown` instead —
+// the weakest non-negative value, strictly weaker than the withheld row, and
+// therefore unable to make any positive claim it could not already make. What
+// dropping cost was a claim in the other direction: a dropped call is a
+// `CallExpression`, so it leaves no uncensused-form row either, and
+// `switch (kind) { case "mount": render(App, el); break; }` published nothing
+// whatever about `render`.
+//
+// ControlFlowCensus.Incompleteness then says which of two different things each
+// `unsupported` marker means. ControlFlowReachabilityLowerBound is a construct
+// walked in full — a loop, a `switch`, a `try` — whose enclosed sites are all
+// recorded and none of which is called `unreachable` on its account, so only
+// the *guarantee* is unmodelled and a may-execute enumeration of the callables
+// inside it stands. ControlFlowUnaccounted is a construct whose flow this
+// census cannot account for in either direction, and it is also the
+// classifier's default, so a marker nobody classified refuses on arrival rather
+// than passing as the admissible arm. Unsupported keeps its exact meaning and
+// its consumers.
+//
+// The number moves rather than the field being additive for the same reason as
+// 14: an absent Incompleteness beside a nonempty Unsupported is a producer with
+// no classification at all, a present empty one is the claim that nothing is
+// unmodelled, and no decoder can separate them. A protocol-14 producer's
+// silence would read to a protocol-15 consumer as the admissible arm, which is
+// the unsound direction, so the handshake is the discriminator. In the other
+// direction a protocol-14 consumer rejects a protocol-15 census outright:
+// ControlFlowCensus denies unknown fields.
+//
+// Protocol 14 carried the two facts an implementation census needs and neither
+// the call census nor Complete could carry.
 //
 // UncensusedInvokingForms on ExportImplementationTranscript names, per form,
 // every syntactic position that can invoke user code and that Calls does not
@@ -62,8 +95,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // Protocol 11 separated the members a value declares from the members it
 // carries only through the compiler's apparent-type augmentation.
 const (
-	TypeFactsHandshakeProtocol uint64 = 14
-	TypeFactsSchemaSHA256             = "sha256:0d246a6cf7682e3f756df3ce54569cfca2dfeb57006a3198dabad51e43f96fc4"
+	TypeFactsHandshakeProtocol uint64 = 15
+	TypeFactsSchemaSHA256             = "sha256:319b22f36abf190c43ed4889bd2e5b43a93c5c1c182be8f86316c0424b73a8bc"
 )
 
 type ServiceHandshake struct {

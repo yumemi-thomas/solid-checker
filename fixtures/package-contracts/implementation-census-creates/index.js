@@ -19,15 +19,21 @@
 //                      this module, censused through their own transcripts
 //   unreachable        `never()` after an unconditional `return`
 //
+// And the constructs whose *lower bound* alone the producer cannot model —
+// `loopCall`, `switchBreak`, `whileBreak` — which certify: every call inside
+// them is on the wire with `reach: unknown`, which the `MayExecute` floor
+// admits.
+//
 // Refusals exercised, each named by the census:
 //   cycle              `cycleA` ↔ `cycleB`
 //   depth              `deep` → nine hops, past the depth-8 bound
 //   unresolved callee  `externalGlobal(...)`, an identifier no declaration binds
 //   uncensused form    a tagged template, and a spread argument (which drives
 //                      the iteration protocol)
-//   withheld rows      `switchBreak`, `whileBreak` — a `break` makes the
-//                      producer drop the `mount(el)` call row and leave only a
-//                      control-flow marker, which the census refuses on
+//   unaccounted flow   `labelledBreak` — `break outer` out of a plain labelled
+//                      block, which no enclosing construct of the frame owns,
+//                      so the control-flow census classifies it
+//                      `flow-unaccounted` and the census refuses it
 //   unseen callable    `stdlibRefInvoker` hands a module-local function
 //                      *reference* to `forEach`; `reflectApply` transfers
 //                      control through `Reflect.apply`
@@ -150,12 +156,31 @@ function mount(el) {
   return el;
 }
 
-// The producer drops every `calls` row inside the region a `break` makes
-// non-universal — here the whole `switch` — so `mount(el)` leaves **no row**.
-// The dropped call is a `CallExpression`, so the uncensused-form census records
-// nothing either; the only trace is the `switchReachability` marker in the
-// control-flow census. A census that relaxed that marker would close `creates`
-// over a call that runs. This must refuse.
+// A loop with no jump in it at all. The producer cannot give a *lower* bound on
+// reachability inside a loop body — control may not enter it — so the
+// control-flow census reports `iterationReachability`, classified
+// `reachability-lower-bound`: the construct is walked in full and `mount(el)` is
+// on the wire with `reach: unknown`. That is everything a census of the
+// callables this body can reach needs, so it **certifies**.
+//
+// This export is the direct measurement of ADR 0008 item 0. Before the producer
+// classified its markers, a body shaped exactly like this — `flatten` and
+// `chainedTranslator` in `@solid-primitives/i18n` — refused for a marker left by
+// a loop that withheld nothing.
+export function loopCall(el) {
+  while (el) {
+    mount(el);
+  }
+}
+
+// The `break` is owned by the `switch` it sits in, which is what makes its
+// target resolvable: the producer covers the whole `switch` as the region the
+// jump makes non-universal, reduces `mount(el)`'s reach to `unknown` there, and
+// **states the row**. It used to *drop* it — and since a dropped
+// `CallExpression` leaves no uncensused-form row either, the only trace was the
+// `switchReachability` marker, so the census had to refuse every marker or
+// close `creates` over a call that runs. Now the row is what the census reads,
+// and this export certifies with `mount` dispositioned by local recursion.
 export function switchBreak(kind, el) {
   switch (kind) {
     case "mount":
@@ -164,12 +189,28 @@ export function switchBreak(kind, el) {
   }
 }
 
-// The same withholding inside a loop: the `break` drops the `mount(el)` row and
-// leaves the `iterationReachability` marker. This must refuse.
+// The same, inside a loop: the `break` is owned by the `while`, the row is
+// stated at `unknown`, and the export certifies.
 export function whileBreak(el) {
   while (el) {
     mount(el);
     break;
+  }
+}
+
+// A construct whose flow the producer genuinely cannot account for. `break
+// outer` leaves a plain labelled *block*, and no enclosing loop or `switch` of
+// this frame owns that target — which is what bounds every region-based repair
+// the two censuses apply to a jump, and what
+// `constructCompletesNormallyLocked` reasons about. So the marker is
+// `jumpReachability`, classified `flow-unaccounted`, and the census refuses by
+// marker and location. This is the arm that keeps the relaxation above from
+// being a blanket one: `mount(el)` is on the wire here too, and the refusal is
+// not about a missing row but about a frame whose control flow nobody modelled.
+export function labelledBreak(el) {
+  outer: {
+    mount(el);
+    break outer;
   }
 }
 

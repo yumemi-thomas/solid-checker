@@ -164,12 +164,21 @@ pub struct AstFacts {
     pub if_regions: Vec<IfRegionFact>,
     /// Every `break` and `continue` statement, by span, sorted.
     ///
-    /// A jump makes the positive execution rows of its target region
-    /// non-universal, and a producer that withholds such rows rather than
-    /// over-claiming leaves a *silence* behind. A consumer proving a zero upper
-    /// bound over a span (the `creates` implementation census) reads this table
-    /// to refuse a span that contains one, because the absence of a row inside
-    /// it is not the absence of a call.
+    /// **No consumer reads this today.** It was added for the `creates`
+    /// implementation census, which refused any declaration node containing a
+    /// jump: the Type Facts producer *withheld* every call row inside the
+    /// region a jump makes non-universal, and for a claim of the absence of
+    /// behavior a withheld row is a silence indistinguishable from the absence
+    /// of the call. Since handshake protocol 15 the producer states such a row
+    /// with `reach: unknown` and classifies the enclosing construct, so the
+    /// census reads the row instead — a producer fact in place of a syntactic
+    /// approximation that could see the jump but never which rows it touched
+    /// (`docs/typefacts/adr/0026-…` amendment).
+    ///
+    /// Retained rather than removed because it is a faithful syntactic fact and
+    /// its extraction is two pushes; its removal is recorded as a candidate in
+    /// `docs/precision-backlog.md`. Any new consumer must state its own premise:
+    /// a jump in a span says nothing about what any other fact domain withheld.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub jump_statements: Vec<Span>,
     /// The left side of every `for (target in …)` / `for (target of …)` whose

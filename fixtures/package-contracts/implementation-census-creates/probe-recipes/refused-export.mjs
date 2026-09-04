@@ -1,6 +1,6 @@
 // A recipe for an export whose `creates: []` claim the census REFUSES: `cycle`,
-// `deep`, `unresolved`, `taggedTemplate`, `spreadArgs`, `switchBreak`,
-// `whileBreak`, `stdlibRefInvoker`, `reflectApply`, and `reassignedHelper`.
+// `deep`, `unresolved`, `taggedTemplate`, `spreadArgs`, `labelledBreak`,
+// `stdlibRefInvoker`, `reflectApply`, and `reassignedHelper`.
 //
 // It exists to make the refusal tests honest rather than accidental. Without a
 // recipe in the corpus the certifier withholds the candidate by name before

@@ -4,18 +4,20 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "a236e796c407946f7305272f1f24d8042065b391f3d1ff0a392dad03438334cc",
+            "closureSha256": "7660e61774b3139c3405758918fabcd57952e4d9a707ef3476e4ba0463405d99",
             "path": "./index.js",
-            "sha256": "d795ee11734ce0da16b18cb1c80cd9f585083ebda89a0587909e09730a5af074"
+            "sha256": "afcfe655843d4ef1da9c77c25040aa51768bffb07a770c86b54078ece7d7cc71"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "6023b241f50ceb740acce9d6db6cf1c539e4f7365e857486efed5e605bf75815"
+            "sha256": "0a41db53818156b6afbe32e1ef757ca1113fe8ffc241d957588d575d16f634ae"
           },
           "exports": {
             "cycle": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "deep": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "iife": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "labelledBreak": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "loopCall": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "memberParameterRooted": "summary-dbf6fb3f94a549294e571240112f7733f56a4897c440709c324a03a678c472c6",
             "noRecipe": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
             "plain": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",

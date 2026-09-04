@@ -2251,6 +2251,96 @@ fn export_value_transcripts_carry_the_uncensused_invoking_form_census() {
     session.close().unwrap();
 }
 
+/// The classified control-flow incompleteness over the real wire, and the call
+/// row a jump region used to remove from it.
+///
+/// Two exports, one per class. A `switch` whose `break` it owns is
+/// `reachability-lower-bound`: the construct is walked in full, and the
+/// `callback()` inside it arrives with `reach: unknown` — it used to be
+/// **dropped**, which is what made a consumer proving the absence of behavior
+/// unable to see it at all. A `break` out of a plain labelled block is
+/// `flow-unaccounted`: no enclosing construct of the frame owns the target, and
+/// the producer does not claim to know where control goes.
+///
+/// The Go tests classify both in process; what they cannot show is that the
+/// rows survive CBOR, the closed class enum, and the client's own check that
+/// the two lists name the same markers.
+#[test]
+fn export_value_transcripts_classify_control_flow_incompleteness() {
+    let project = uncensused_forms_project();
+    let source_path = project.parent().unwrap().join("forms.ts");
+    let source = fs::read_to_string(&source_path).unwrap();
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+
+    let lower_bound = identifier_location(&source_path, &source, "jumpRegionForm");
+    let unaccounted = identifier_location(&source_path, &source, "unaccountedJumpForm");
+    let answer = session
+        .export_values(&[
+            typefacts::ExportValueDemand {
+                location: lower_bound.clone(),
+                implementation_location: Some(lower_bound),
+                local_declaration_location: None,
+                callable_depth: 0,
+            },
+            typefacts::ExportValueDemand {
+                location: unaccounted.clone(),
+                implementation_location: Some(unaccounted),
+                local_declaration_location: None,
+                callable_depth: 0,
+            },
+        ])
+        .unwrap();
+
+    let owned_break = answer.transcripts[0].implementation.as_ref().unwrap();
+    let flow = owned_break.control_flow.as_ref().unwrap();
+    assert_eq!(
+        flow.unsupported
+            .iter()
+            .map(AsRef::as_ref)
+            .collect::<Vec<_>>(),
+        vec!["switchReachability"]
+    );
+    assert_eq!(flow.incompleteness.len(), 1);
+    assert_eq!(&*flow.incompleteness[0].marker, "switchReachability");
+    assert_eq!(
+        flow.incompleteness[0].class,
+        typefacts::ControlFlowIncompletenessClass::ReachabilityLowerBound
+    );
+    // The `callback()` the region covers is on the wire, at the weakest
+    // non-negative reach. Its absence was ADR 0008 item 0.
+    let callback = source.find("      callback();").unwrap() + 6;
+    let row = owned_break
+        .calls
+        .iter()
+        .find(|call| call.location.start_byte == callback as u64)
+        .expect("the call inside the jump region is stated");
+    assert_eq!(row.reach, typefacts::Reachability::Unknown);
+    assert!(owned_break.uncensused_invoking_forms.is_empty());
+
+    let labelled = answer.transcripts[1].implementation.as_ref().unwrap();
+    let flow = labelled.control_flow.as_ref().unwrap();
+    assert_eq!(
+        flow.unsupported
+            .iter()
+            .map(AsRef::as_ref)
+            .collect::<Vec<_>>(),
+        vec!["jumpReachability"]
+    );
+    assert_eq!(flow.incompleteness.len(), 1);
+    assert_eq!(&*flow.incompleteness[0].marker, "jumpReachability");
+    assert_eq!(
+        flow.incompleteness[0].class,
+        typefacts::ControlFlowIncompletenessClass::FlowUnaccounted
+    );
+
+    session.close().unwrap();
+}
+
 /// A transcript for a module-local declaration, and the identity binding that
 /// stops one helper's transcript from answering a demand about another.
 ///

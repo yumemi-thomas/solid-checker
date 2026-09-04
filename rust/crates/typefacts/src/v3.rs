@@ -36,8 +36,41 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:0d246a6cf7682e3f756df3ce54569cfca2dfeb57006a3198dabad51e43f96fc4";
-/// 14 adds the two facts an implementation census needs and neither the call
+    "sha256:319b22f36abf190c43ed4889bd2e5b43a93c5c1c182be8f86316c0424b73a8bc";
+/// 15 stops the producer answering a question about a jump region with silence,
+/// and says which of two different things a control-flow marker means.
+///
+/// The implementation call census used to **drop** every row lying in a region
+/// a `break` or `continue` makes non-universal, so as to keep an
+/// over-optimistic `reachable` off the wire. It now emits the row with
+/// `reach: unknown` — the weakest non-negative value, strictly weaker than the
+/// row that was withheld, so no positive claim gains anything. What dropping
+/// cost was the claim in the other direction: a dropped call is a
+/// `CallExpression`, so it leaves no `uncensusedInvokingForms` row either, and
+/// `switch (kind) { case "mount": render(App, el); break; }` published nothing
+/// at all about `render`.
+///
+/// [`crate::ControlFlowCensus::incompleteness`] then classifies each
+/// `unsupported` marker, per construct and at its location.
+/// `reachability-lower-bound` is a construct walked in full — a loop, a
+/// `switch`, a `try` — whose every enclosed site is recorded and none of which
+/// is called `unreachable` on its account, so only the *guarantee* is
+/// unmodelled and a may-execute enumeration of the callables inside stands.
+/// `flow-unaccounted` is a construct whose flow the census cannot account for
+/// in either direction, and it is the producer's classifier default, so a
+/// marker nobody classified refuses on arrival rather than passing as the
+/// admissible arm. `unsupported` keeps its exact meaning and its consumers.
+///
+/// **The number moves for the same reason as 14.** An absent `incompleteness`
+/// beside a nonempty `unsupported` is a producer with no classification, a
+/// present empty one is the claim that nothing is unmodelled, and serde cannot
+/// separate them. A protocol-14 producer's silence would read to a protocol-15
+/// consumer as the admissible arm, which is the unsound direction, so the
+/// handshake is the discriminator. In the other direction a protocol-14
+/// consumer rejects a protocol-15 census outright: `ControlFlowCensus` denies
+/// unknown fields.
+///
+/// 14 added the two facts an implementation census needs and neither the call
 /// census nor `complete` could carry.
 ///
 /// `uncensusedInvokingForms` on
@@ -96,7 +129,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 14;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 15;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

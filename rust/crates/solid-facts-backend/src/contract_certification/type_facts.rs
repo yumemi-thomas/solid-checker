@@ -7253,6 +7253,20 @@ impl CensusDisposition {
 /// the conclusion-from-silence this census exists to prevent.
 const CENSUS_UNCENSUSED_FORMS_PROTOCOL: u64 = 14;
 
+/// The handshake protocol at which the producer stopped **dropping** the `calls`
+/// rows a `break`/`continue` region covers, and began classifying each
+/// control-flow `unsupported` marker into
+/// [`typefacts::ControlFlowIncompletenessClass`].
+///
+/// Both halves are premises of [`census_transcript_is_censusable`], and neither
+/// can be established from the transcript's own bytes. A protocol-14 producer
+/// silently withholds a row whose absence this census cannot detect — the whole
+/// of ADR 0008 item 0 — and its `incompleteness` list decodes as empty, which is
+/// indistinguishable from "nothing about this body is unmodelled". Reading
+/// either as the admissible arm is the unsound direction, so an older producer's
+/// transcript refuses **here**, by protocol number, before any marker is read.
+const CENSUS_CONTROL_FLOW_CLASSES_PROTOCOL: u64 = 15;
+
 /// One local declaration's own implementation transcript, keyed by the exact
 /// span it was demanded at.
 #[derive(Clone, Debug)]
@@ -7473,6 +7487,16 @@ fn census_creates_domain(
             typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
         )));
     }
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_CONTROL_FLOW_CLASSES_PROTOCOL {
+        return Err(refuse(format!(
+            "implementation-census premise required: unwithheld call rows and classified \
+             control-flow incompleteness arrived at handshake protocol \
+             {CENSUS_CONTROL_FLOW_CLASSES_PROTOCOL} and this build speaks {}, so an empty \
+             incompleteness list would be an absence read as an admissible construct while rows \
+             a jump region covers were still being dropped",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
     // The census derives its own enumeration of this export's `create`
     // operations and requires the proposal's to *be* it, exactly as
     // `require_export_value_enumeration_matches_census` does for root choice
@@ -7570,11 +7594,9 @@ fn census_transcript(
     run.deepest = run.deepest.max(depth);
     census_transcript_is_censusable(implementation, depth)?;
     // The declaration node this transcript describes, bound from the
-    // authenticated bytes, and the two premises the producer's own transcript
-    // cannot state about it: that the bytes are this artifact's runtime source
-    // at all, and that no `break`/`continue` inside the node — its nested
-    // callables included, whose control flow the producer's census never
-    // enters — made the producer withhold a call row.
+    // authenticated bytes, and the one premise the producer's own transcript
+    // cannot state about it: that those bytes are this artifact's runtime
+    // source at all.
     let frame = census_transcript_frame(run, implementation, depth)?;
     let previous_frame = run.frame.replace(frame);
     let step = census_transcript_calls(run, implementation, depth);
@@ -7626,36 +7648,74 @@ fn census_transcript_calls(
     Ok(step)
 }
 
-/// The transcript-level premise, **without** the `controlFlowUnsupported`
-/// relaxation the demanded export gets from
-/// [`require_named_export_implementation`] for the positive families.
+/// The transcript-level premise, applied to every transcript the census reads,
+/// the demanded export's own included: a local declaration arrives through a
+/// second acquisition that no scheduled demand checked, so its completeness is
+/// this function's obligation.
 ///
-/// Applied to every transcript the census reads, the export's own included: a
-/// local declaration arrives through a second acquisition that no scheduled
-/// demand checked, so its completeness is this function's obligation.
+/// # The incompleteness rule, and why it is sound
 ///
-/// # Why this census cannot take the relaxation
+/// A negative call domain asserts a **zero upper bound**, so the premise this
+/// census needs from a transcript is not that the producer modelled the body's
+/// control flow but that the transcript *enumerates every callable the body can
+/// reach* and never calls one of them `unreachable` when it can run. Those are
+/// different requirements, and until protocol 15 the producer's wire form could
+/// not tell them apart:
 ///
-/// The producer's call census drops every `calls` row that lies in a region a
-/// `break` or `continue` makes non-universal — the whole target subtree of a
-/// `break` in a loop or `switch`, the body of a loop a `continue` sits in
-/// (`unsafeJumpRegionsLocked`, `locationWithheldByJump`). For the positive
-/// families that withholding is the safe direction: a row that is not there
-/// cannot lend an over-optimistic reach to anything. For a census proving a
-/// **zero upper bound** it is the exact failure mode: `switch (kind) { case
-/// "mount": render(App, el); break; }` produces no row for `render`, the
-/// dropped call is a `CallExpression` so the uncensused-form census records
-/// nothing either, and the only trace left is the `switchReachability` marker
-/// in the control-flow census. So the marker is load-bearing here, and a
-/// transcript carrying any unsupported control-flow marker — loop, switch,
-/// try, or jump — refuses at every depth of the recursion. This over-refuses
-/// every export with a loop, a `switch` or a `try` whose rows were *not*
-/// withheld; the proper fix is producer-side (a withheld row emitted with
-/// `reach: unknown`, or as an uncensused form) and is recorded in
-/// `docs/adr/0008-implementation-census-for-creates.md`. The marker is also
-/// only as wide as the frame the producer's control-flow census walks — it
-/// never enters a nested callable — which is why [`census_transcript_frame`]
-/// additionally refuses a node containing a jump anywhere inside it.
+/// - It **dropped** every `calls` row lying in a region a `break` or `continue`
+///   makes non-universal, to keep an over-optimistic `reachable` off the wire.
+///   For the positive families that is the safe direction — an absent row lends
+///   authority to nothing — but for a zero upper bound it is the exact failure
+///   mode. The dropped call is a `CallExpression`, so no uncensused-form row
+///   appeared either, and `switch (kind) { case "mount": render(App, el);
+///   break; }` published nothing about `render` beyond a marker.
+/// - And `unsupported` absorbed three different situations under four marker
+///   strings: a construct whose *reachability* the census does not model, a jump
+///   whose target it cannot resolve, and — because the first of those covers
+///   every loop, `switch` and `try` — essentially every real function body.
+///
+/// So this function refused any nonempty `unsupported` at any depth, which
+/// refused almost every export that had a body worth censusing.
+///
+/// **The rule now.** Rows are no longer dropped: a call in a jump region
+/// arrives with `reach: unknown`, which the `MayExecute` floor admits and which
+/// cannot make a negative claim over-optimistic. What remains is to separate the
+/// two meanings of "incomplete", and the producer states it per construct:
+///
+/// - [`typefacts::ControlFlowIncompletenessClass::ReachabilityLowerBound`] — a
+///   construct the producer walked in full. Every site inside it is recorded by
+///   the shared body walk, and no site is called `unreachable` on its account;
+///   what is missing is the *lower* bound, because control may not enter a loop
+///   body, a `catch`, or a selected clause. **This census admits it**, and that
+///   is sound precisely because the census only ever reads reach to ask "may
+///   this run?": it disposes every row the floor admits and refuses on the
+///   first it cannot, so an unmodelled guarantee costs it nothing while a
+///   missing row would cost it everything.
+/// - [`typefacts::ControlFlowIncompletenessClass::FlowUnaccounted`] — a
+///   construct whose flow the producer cannot account for in either direction.
+///   **This census refuses it**, by marker and location. It is also the
+///   producer's classifier default, so a construct a future revision marks
+///   unsupported without classifying refuses on arrival rather than passing as
+///   the admissible arm.
+///
+/// A body containing an ordinary `for…of`, or a `switch` whose `break` the
+/// enclosing construct owns, therefore carries lower-bound rows only and is
+/// censusable; a labelled jump whose target no enclosing construct of the frame
+/// owns is `flow-unaccounted` and still refuses.
+///
+/// Two further premises make the marker set trustworthy rather than merely
+/// readable. `validate_control_flow_incompleteness` (in the client) refuses a
+/// transcript whose two lists name different markers, so a classified row can
+/// never be missing for a stated marker. And
+/// [`CENSUS_CONTROL_FLOW_CLASSES_PROTOCOL`] is checked before any of this, in
+/// [`census_creates_domain`], because an older producer both withholds rows and
+/// decodes as an empty `incompleteness` list — an absence that would read
+/// exactly like the admissible arm.
+///
+/// The `controlFlowUnsupported` open reason is admitted for the same reason the
+/// positive families admit it, and only that one: it is the producer's seventh
+/// completeness gate and says nothing this function has not just decided for
+/// itself. Every other open reason still refuses.
 fn census_transcript_is_censusable(
     implementation: &typefacts::ExportImplementationTranscript,
     depth: usize,
@@ -7668,29 +7728,61 @@ fn census_transcript_is_censusable(
             implementation.location.end_byte
         )
     };
-    // The marker first, so a transcript the producer left open for that one
-    // reason (`controlFlowUnsupported` is its seventh completeness gate) is
-    // refused by the marker it carries rather than by a bare "incomplete".
-    if let Some(control_flow) = implementation.control_flow.as_ref()
-        && !control_flow.unsupported.is_empty()
+    let Some(control_flow) = implementation.control_flow.as_ref() else {
+        return Err(format!(
+            "creates census refuses an implementation transcript with no control-flow census at \
+             depth {depth} for {}",
+            at()
+        ));
+    };
+    // The classification first, so a transcript the producer left open for the
+    // one relaxable reason is refused by the construct it could not account for
+    // rather than by a bare "incomplete".
+    if let Some(row) = control_flow
+        .incompleteness
+        .iter()
+        .find(|row| row.class != typefacts::ControlFlowIncompletenessClass::ReachabilityLowerBound)
     {
         return Err(format!(
-            "creates census refuses an implementation transcript whose control-flow census is \
-             unsupported ({}) at depth {depth} for {}: the producer withholds every call row \
-             inside a region a `break` or `continue` makes non-universal, so a row's absence \
-             there is not a call's absence",
-            control_flow
-                .unsupported
-                .iter()
-                .map(AsRef::as_ref)
-                .collect::<Vec<_>>()
-                .join(", "),
+            "creates census refuses an implementation transcript whose control-flow census cannot \
+             account for a construct ({}, {}) at {}:{}..{}, at depth {depth} for {}: only a \
+             construct whose reachability lower bound alone is unmodelled leaves every call this \
+             body can reach on the wire",
+            row.marker,
+            control_flow_incompleteness_class_name(row.class),
+            row.location.path,
+            row.location.start_byte,
+            row.location.end_byte,
+            at()
+        ));
+    }
+    // Belt beside the client's own check: a stated marker with no classified
+    // construct is an unclassified incompleteness, and reading it as the
+    // admissible arm is what the class exists to prevent.
+    if let Some(marker) = control_flow.unsupported.iter().find(|marker| {
+        !control_flow
+            .incompleteness
+            .iter()
+            .any(|row| row.marker == **marker)
+    }) {
+        return Err(format!(
+            "creates census refuses an implementation transcript reporting {marker} unsupported \
+             with no classified construct for it, at depth {depth} for {}",
+            at()
+        ));
+    }
+    if implementation.declaration.is_none() {
+        return Err(format!(
+            "creates census refuses an implementation transcript with no resolved declaration at \
+             depth {depth} for {}",
             at()
         ));
     }
     if !implementation.complete
-        || !implementation.open_reasons.is_empty()
-        || implementation.declaration.is_none()
+        && implementation
+            .open_reasons
+            .iter()
+            .any(|reason| reason.as_ref() != "controlFlowUnsupported")
     {
         return Err(format!(
             "creates census refuses an incomplete implementation transcript at depth {depth} for \
@@ -7699,26 +7791,56 @@ fn census_transcript_is_censusable(
             implementation.open_reasons
         ));
     }
-    if implementation.control_flow.is_none() {
+    // An open transcript whose only reason is the relaxable one must actually
+    // carry the construct that produced it. Without this, a producer that
+    // appended `controlFlowUnsupported` for something else entirely would pass.
+    if !implementation.complete && control_flow.incompleteness.is_empty() {
         return Err(format!(
-            "creates census refuses an implementation transcript with no control-flow census at \
-             depth {depth} for {}",
+            "creates census refuses a transcript open on controlFlowUnsupported that classifies \
+             no construct, at depth {depth} for {}",
             at()
         ));
     }
     Ok(())
 }
 
+/// The wire spelling of an incompleteness class, for a refusal reason.
+fn control_flow_incompleteness_class_name(
+    class: typefacts::ControlFlowIncompletenessClass,
+) -> &'static str {
+    match class {
+        typefacts::ControlFlowIncompletenessClass::ReachabilityLowerBound => {
+            "reachability-lower-bound"
+        }
+        typefacts::ControlFlowIncompletenessClass::FlowUnaccounted => "flow-unaccounted",
+    }
+}
+
 /// The declaration node a transcript describes, as a producer-side location,
-/// bound from the authenticated runtime bytes — and refused when those bytes
-/// contain a `break` or `continue` anywhere inside the node.
+/// bound from the authenticated runtime bytes.
 ///
 /// The node, not the identifier: the producer resolves a named function to its
-/// identifier and a `const helper = () => …` to the arrow itself, and the jump
-/// premise is about the whole body including every nested callable, whose
-/// control flow the producer's census never enters. A jump inside a nested
-/// callable therefore leaves no `unsupported` marker on this transcript while
-/// still withholding the rows of the region it targets.
+/// identifier and a `const helper = () => …` to the arrow itself.
+///
+/// # The jump premise moved to the producer, which is where it belongs
+///
+/// This function used to additionally refuse a node containing a `break` or
+/// `continue` anywhere inside it, nested callables included, using the
+/// verifier's own Oxc parse. That check existed for one reason: the producer's
+/// control-flow census never enters a nested callable, so a jump *there* left no
+/// `unsupported` marker on this transcript while still making the producer
+/// withhold the rows of the region it targeted — an invisible withholding the
+/// marker premise could not catch.
+///
+/// It is gone because both halves of its reason are gone. The producer no longer
+/// withholds a row at all (it states `reach: unknown`), and its jump regions are
+/// keyed by *flow owner*, so a jump inside a nested callable reduces the rows of
+/// that callable and covers the whole of it whenever the jump's target cannot be
+/// bound to an enclosing construct. The producer's own facts now answer the
+/// question the syntactic scan was approximating, which is strictly better:
+/// `AstFacts::jump_statements` could see the jump but never which rows it
+/// touched, and it refused every `break` in the frame including the ones that
+/// withheld nothing.
 fn census_transcript_frame(
     run: &mut CensusRun<'_>,
     implementation: &typefacts::ExportImplementationTranscript,
@@ -7739,27 +7861,7 @@ fn census_transcript_frame(
             declaration.location.end_byte
         ));
     };
-    let node = census_local_declaration_node(run, &relative, declaration)?;
-    let source = census_source(run, &relative)?;
-    if let Some(jump) = source
-        .facts
-        .jump_statements
-        .iter()
-        .find(|jump| census_span_contains_span(node.start_byte, node.end_byte, **jump))
-    {
-        return Err(format!(
-            "creates census refuses the declaration {:?} at {}:{}..{}: it contains a `break` or \
-             `continue` at {}..{}, and the producer withholds every call row inside the region \
-             such a jump makes non-universal, so a row's absence there is not a call's absence",
-            declaration.name, node.path, node.start_byte, node.end_byte, jump.start, jump.end
-        ));
-    }
-    Ok(node)
-}
-
-/// Whether `inner` lies inside `start..end`, inclusive of its bounds.
-fn census_span_contains_span(start: u64, end: u64, inner: solid_facts::core::Span) -> bool {
-    start <= u64::from(inner.start) && u64::from(inner.end) <= end
+    census_local_declaration_node(run, &relative, declaration)
 }
 
 /// The parsed facts of one runtime source of the artifact under certification,
@@ -16865,46 +16967,192 @@ mod tests {
         signals_call(name, base)
     }
 
-    /// The `controlFlowUnsupported` relaxation the positive families take is
-    /// not available here, at any depth: the producer withholds every call row
-    /// a jump makes non-universal, and the marker is the only trace left.
+    /// The incompleteness rule, at every depth: a construct whose *lower
+    /// bound* alone is unmodelled is admitted, a construct the producer cannot
+    /// account for refuses by marker and location, and a marker with no
+    /// classified construct refuses as an unclassified incompleteness.
+    ///
+    /// This is the load-bearing relaxation of ADR 0008 item 0, and what makes
+    /// it sound is not stated here but in the producer: the `mount(el)` row
+    /// below is on the wire with `unknown` reach, so the census disposes the
+    /// call rather than reading a marker as a proxy for an absent row.
     #[test]
-    fn creates_census_refuses_unsupported_control_flow_at_every_depth() {
+    fn creates_census_admits_only_a_lower_bound_control_flow_incompleteness() {
         let source = "export function useThing(kind, el) {\n  switch (kind) {\n    case \"mount\":\n      mount(el);\n      break;\n  }\n}\nfunction mount(el) {\n  return el;\n}\n";
-        let (certified, mut export) = census_source_case(source, "useThing", vec![]);
-        let roots = vec![consumer_root(&certified)];
-        // The producer's own shape: complete, with the switch named as
-        // unsupported and the `mount(el)` row withheld.
-        export.control_flow = Some(
-            serde_json::from_value(json!({"unsupported": ["switchReachability"]}))
-                .expect("a control-flow census"),
-        );
-        let refusal = census_transcript(&mut census_run(&certified, &roots), &export, 0)
-            .expect_err("an unsupported control-flow census refuses");
-        assert!(
-            refusal.contains("control-flow census is unsupported (switchReachability)")
-                && refusal.contains("withholds every call row"),
-            "{refusal}"
-        );
-
-        // The former relaxation — `complete: false` with `controlFlowUnsupported`
-        // as the only open reason — refuses too.
-        export.control_flow = Some(serde_json::from_value(json!({})).unwrap());
-        export.complete = false;
-        export.open_reasons = vec!["controlFlowUnsupported".into()];
-        let refusal = census_transcript(&mut census_run(&certified, &roots), &export, 0)
-            .expect_err("a control-flow-only open transcript refuses");
-        assert!(
-            refusal.contains("incomplete implementation transcript at depth 0"),
-            "{refusal}"
-        );
-
-        // A local declaration's transcript is held to the same premise, at its
-        // own depth: the export is clean and recurses into `mount`, whose
-        // transcript carries a loop marker.
-        let source = "export function useThing(el) {\n  return mount(el);\n}\nfunction mount(el) {\n  for (const item of el) {\n    item();\n  }\n}\n";
         let source_path = "/project/node_modules/consumer/dist/index.js";
         let at = |needle: &str| u64::try_from(source.find(needle).unwrap()).unwrap();
+        let switch_span = (at("switch (kind)"), at("}\n}\nfunction") + 1);
+        let mount_name = (at("function mount") + 9, at("function mount") + 14);
+        let mount_node = (
+            at("function mount"),
+            u64::try_from(source.trim_end().len()).unwrap(),
+        );
+        // The producer's own shape now: the `mount(el)` row is stated with
+        // `unknown` reach, and the `switch` is classified rather than merely
+        // named.
+        let call = signals_call(
+            "mount",
+            json!({
+                "reach": "unknown",
+                "location": {"path": source_path, "startByte": at("mount(el)"), "endByte": at("mount(el)") + 9},
+                "targetModule": "",
+                "declaration": {
+                    "symbol": "symbol:mount",
+                    "name": "mount",
+                    "kind": "FunctionDeclaration",
+                    "sourceFile": source_path,
+                    "location": {"path": source_path, "startByte": mount_name.0, "endByte": mount_name.1},
+                },
+            }),
+        );
+        let incompleteness = |marker: &str, class: &str, span: (u64, u64)| {
+            json!({
+                "unsupported": [marker],
+                "incompleteness": [{
+                    "marker": marker,
+                    "class": class,
+                    "location": {"path": source_path, "startByte": span.0, "endByte": span.1},
+                }],
+            })
+        };
+        let (certified, mut export) = census_source_case(source, "useThing", vec![call]);
+        let roots = vec![consumer_root(&certified)];
+        let mut mount = census_transcript_with(vec![], json!([]));
+        mount.location = typefacts::Location {
+            path: source_path.into(),
+            start_byte: mount_node.0,
+            end_byte: mount_node.1,
+        };
+        mount.query_name = "mount".into();
+        mount.declaration = Some(
+            serde_json::from_value(json!({
+                "symbol": "symbol:mount",
+                "name": "mount",
+                "kind": "FunctionDeclaration",
+                "sourceFile": source_path,
+                "location": {"path": source_path, "startByte": mount_name.0, "endByte": mount_name.1},
+            }))
+            .unwrap(),
+        );
+        let locals = vec![LocalDeclarationTranscript {
+            location: mount.location.clone(),
+            transcript: mount.clone(),
+        }];
+        let decide = |export: &typefacts::ExportImplementationTranscript,
+                      locals: &[LocalDeclarationTranscript]| {
+            let mut run = census_run(&certified, &roots);
+            run.evidence = CensusEvidence {
+                roots: &roots,
+                locals,
+            };
+            census_transcript(&mut run, export, 0)
+        };
+
+        // A `switch` whose `break` the construct itself owns: the lower bound
+        // is unmodelled, every call inside is on the wire, and the domain is
+        // decided by disposing `mount(el)` — not by relaxing a marker.
+        export.control_flow = Some(
+            serde_json::from_value(incompleteness(
+                "switchReachability",
+                "reachability-lower-bound",
+                switch_span,
+            ))
+            .expect("a control-flow census"),
+        );
+        export.complete = false;
+        export.open_reasons = vec!["controlFlowUnsupported".into()];
+        assert_eq!(decide(&export, &locals), Ok(CensusStep::Decided));
+
+        // The same construct classified `flow-unaccounted` refuses, by marker
+        // and location. That is the class a labelled jump whose target no
+        // enclosing construct of the frame owns arrives under.
+        let mut unaccounted = export.clone();
+        unaccounted.control_flow = Some(
+            serde_json::from_value(incompleteness(
+                "jumpReachability",
+                "flow-unaccounted",
+                switch_span,
+            ))
+            .unwrap(),
+        );
+        let refusal = decide(&unaccounted, &locals).expect_err("an unaccounted construct refuses");
+        assert!(
+            refusal.contains("cannot account for a construct (jumpReachability, flow-unaccounted)")
+                && refusal.contains(&format!("{}..{}", switch_span.0, switch_span.1)),
+            "{refusal}"
+        );
+
+        // A marker with no classified construct is an unclassified
+        // incompleteness — the shape a protocol-14 producer's transcript
+        // decodes to — and refuses.
+        let mut unclassified = export.clone();
+        unclassified.control_flow =
+            Some(serde_json::from_value(json!({"unsupported": ["switchReachability"]})).unwrap());
+        let refusal = decide(&unclassified, &locals).expect_err("an unclassified marker refuses");
+        assert!(
+            refusal.contains(
+                "reporting switchReachability unsupported with no classified \
+                              construct"
+            ),
+            "{refusal}"
+        );
+
+        // And `controlFlowUnsupported` is the *only* open reason the census
+        // relaxes: an open transcript that classifies nothing refuses too,
+        // because the reason then describes something this census never saw.
+        let mut open_for_nothing = export.clone();
+        open_for_nothing.control_flow = Some(serde_json::from_value(json!({})).unwrap());
+        let refusal = decide(&open_for_nothing, &locals)
+            .expect_err("an open transcript classifying no construct refuses");
+        assert!(refusal.contains("classifies no construct"), "{refusal}");
+
+        // Every premise applies at each depth of the recursion, not only at the
+        // demanded export: a local declaration arrives through a second
+        // acquisition no scheduled demand checked.
+        let mut deep_export = export.clone();
+        deep_export.control_flow = Some(serde_json::from_value(json!({})).unwrap());
+        deep_export.complete = true;
+        deep_export.open_reasons = Vec::new();
+        let mut unaccounted_local = mount;
+        unaccounted_local.control_flow = Some(
+            serde_json::from_value(incompleteness(
+                "jumpReachability",
+                "flow-unaccounted",
+                mount_node,
+            ))
+            .unwrap(),
+        );
+        unaccounted_local.complete = false;
+        unaccounted_local.open_reasons = vec!["controlFlowUnsupported".into()];
+        let deep_locals = vec![LocalDeclarationTranscript {
+            location: unaccounted_local.location.clone(),
+            transcript: unaccounted_local,
+        }];
+        let refusal = decide(&deep_export, &deep_locals)
+            .expect_err("an unaccounted construct one hop down refuses");
+        assert!(
+            refusal.contains("flow-unaccounted") && refusal.contains("at depth 1"),
+            "{refusal}"
+        );
+    }
+
+    /// A jump inside a *nested* callable leaves no `unsupported` marker on the
+    /// transcript — the producer's control-flow census never enters one — and it
+    /// no longer needs to.
+    ///
+    /// The verifier used to answer this with its own Oxc parse, refusing any
+    /// node containing a `break` or `continue` anywhere inside it. That check is
+    /// gone because both halves of its reason are: the producer withholds no
+    /// row, and its jump regions are keyed by flow owner, so the rows of the
+    /// nested callable are stated with `unknown` reach. What the census reads is
+    /// therefore the row, and a body whose only jump is a nested one is decided
+    /// by disposing the call the jump used to hide.
+    #[test]
+    fn creates_census_decides_a_frame_whose_nested_callable_carries_a_jump() {
+        let source = "export function useThing(kind, el) {\n  return () => {\n    while (el) {\n      mount(el);\n      break;\n    }\n  };\n}\nfunction mount(el) {\n  return el;\n}\n";
+        let source_path = "/project/node_modules/consumer/dist/index.js";
+        let at = |needle: &str| u64::try_from(source.find(needle).unwrap()).unwrap();
+        let arrow = (at("() =>"), at("};\n}") + 1);
         let mount_name = (at("function mount") + 9, at("function mount") + 14);
         let mount_node = (
             at("function mount"),
@@ -16913,6 +17161,9 @@ mod tests {
         let call = signals_call(
             "mount",
             json!({
+                "reach": "unknown",
+                "captured": true,
+                "enclosingCallable": {"path": source_path, "startByte": arrow.0, "endByte": arrow.1},
                 "location": {"path": source_path, "startByte": at("mount(el)"), "endByte": at("mount(el)") + 9},
                 "targetModule": "",
                 "declaration": {
@@ -16943,9 +17194,6 @@ mod tests {
             }))
             .unwrap(),
         );
-        mount.control_flow = Some(
-            serde_json::from_value(json!({"unsupported": ["iterationReachability"]})).unwrap(),
-        );
         let locals = vec![LocalDeclarationTranscript {
             location: mount.location.clone(),
             transcript: mount,
@@ -16955,40 +17203,8 @@ mod tests {
             roots: &roots,
             locals: &locals,
         };
-        let refusal = census_transcript(&mut run, &export, 0)
-            .expect_err("a local declaration with unsupported control flow refuses");
-        assert!(
-            refusal.contains("iterationReachability") && refusal.contains("at depth 1"),
-            "{refusal}"
-        );
-    }
-
-    /// The producer's control-flow census never enters a nested callable, so a
-    /// jump inside one leaves no `unsupported` marker on the transcript while
-    /// still withholding the rows of the region it targets. The verifier's own
-    /// parse of the authenticated bytes refuses the node instead.
-    #[test]
-    fn creates_census_refuses_a_frame_containing_a_jump_in_a_nested_callable() {
-        let source = "export function useThing(kind, el) {\n  return () => {\n    while (el) {\n      mount(el);\n      break;\n    }\n  };\n}\nfunction mount(el) {\n  return el;\n}\n";
-        // The producer's honest transcript: complete, no unsupported marker (the
-        // `while` is inside the arrow), and no row for `mount(el)`.
-        let (certified, export) = census_source_case(source, "useThing", vec![]);
-        let roots = vec![consumer_root(&certified)];
-        let refusal = census_transcript(&mut census_run(&certified, &roots), &export, 0)
-            .expect_err("a jump inside the frame refuses");
-        let jump = source.find("break;").unwrap();
-        assert!(
-            refusal.contains("contains a `break` or `continue`")
-                && refusal.contains(&format!("{jump}..{}", jump + 6)),
-            "{refusal}"
-        );
-
-        // The same body with the jump gone is walked.
-        let source = "export function useThing(kind, el) {\n  return () => {\n    mount(el);\n  };\n}\nfunction mount(el) {\n  return el;\n}\n";
-        let (certified, export) = census_source_case(source, "useThing", vec![]);
-        let roots = vec![consumer_root(&certified)];
         assert_eq!(
-            census_transcript(&mut census_run(&certified, &roots), &export, 0),
+            census_transcript(&mut run, &export, 0),
             Ok(CensusStep::Decided)
         );
     }

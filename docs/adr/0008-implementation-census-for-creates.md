@@ -108,33 +108,75 @@ predicate is the plan's § 3, stated as the negation the census establishes:
 > enumerated and resolved, and no resolved target performs a `create`
 > operation.
 
-Concretely, for the demanded export's `ExportImplementationTranscript`
-(present and **complete, with an empty control-flow `unsupported` list** — no
-`controlFlowUnsupported` relaxation, see item 0 — with its authenticated runtime
-binding checked by `require_export_implementation` like every other
-implementation-reading family):
+Concretely, for the demanded export's `ExportImplementationTranscript` (present,
+and complete or open on `controlFlowUnsupported` alone — see item 0 — with its
+authenticated runtime binding checked by `require_export_implementation` like
+every other implementation-reading family):
 
-0. **No withheld row can hide in the transcript.** The producer drops every
-   `calls` row that lies in a region a `break` or `continue` makes
-   non-universal — the whole target subtree of a `break` in a loop or `switch`,
-   the body of a loop a `continue` sits in (`unsafeJumpRegionsLocked`,
-   `locationWithheldByJump`). For the positive families that is the safe
-   direction; for a zero upper bound it is the failure mode: `switch (kind) {
-   case "mount": render(App, el); break; }` yields no row for `render`, the
-   dropped call is a `CallExpression` so the uncensused-form census is silent
-   too, and the only trace is the `switchReachability` marker. So
-   `census_transcript_is_censusable` requires `complete` with an empty
-   `control_flow.unsupported` at **every** depth of the recursion, and
-   `census_transcript_frame` binds each transcript to its declaration node in
-   the verifier's own Oxc parse of the authenticated bytes and refuses a node
-   containing any `break`/`continue` — nested callables included, because the
-   producer's control-flow census never enters one, so a jump there leaves no
-   marker while still withholding rows. **This over-refuses every export whose
-   frame has a loop, a `switch`, or a `try`** even where nothing was withheld
-   (`closed-domain-probe-gate`'s `runCreatingOwner`, whose `try … finally`
-   withholds nothing, now refuses on `tryReachability`). The proper fix is
-   producer-side — emit a withheld row with `reach: unknown`, or as an
-   uncensused form — and is the next producer slice; it is not taken here.
+0. **No withheld row can hide in the transcript, and the producer now says so
+   per construct.** *Rewritten 2026-09-04; the original text and the
+   over-refusal it recorded are preserved below.*
+
+   The producer used to **drop** every `calls` row lying in a region a `break`
+   or `continue` makes non-universal — the whole target subtree of a `break` in
+   a loop or `switch`, the body of a loop a `continue` sits in
+   (`unsafeJumpRegionsLocked`, `locationWithheldByJump`). For the positive
+   families that was the safe direction; for a zero upper bound it was the
+   failure mode. `switch (kind) { case "mount": render(App, el); break; }`
+   yielded **no row** for `render`; the dropped call is a `CallExpression`, so
+   the uncensused-form census was silent too, and the only trace was the
+   enclosing construct's `switchReachability` marker. This census therefore had
+   to refuse **any** nonempty `control_flow.unsupported` at every depth, plus —
+   via `census_transcript_frame`'s own Oxc parse — any declaration node
+   containing a `break`/`continue` at all, nested callables included, since the
+   producer's control-flow census never enters one. Because the marker covers
+   every loop, `switch` and `try`, that **refused essentially every real
+   function body**: measured, `@solid-primitives/i18n`'s `flatten` and
+   `chainedTranslator` refused on an `iterationReachability` marker left by a
+   `for…of` containing no jump at all.
+
+   **The producer states it instead** (`docs/typefacts/adr/0026-…` amendment,
+   handshake protocol 15). A row in a jump region reaches the wire with
+   `reach: unknown` — the weakest non-negative value, which the `MayExecute`
+   floor admits and which cannot make a negative claim over-optimistic — and
+   `controlFlowCensus.incompleteness` classifies each construct into a closed
+   two-value enum. So this census's premise, per transcript at **every** depth:
+
+   - every `incompleteness` row is `reachability-lower-bound`: the construct was
+     walked in full, every site inside it is recorded, and none is called
+     `unreachable` on its account, so only the *guarantee* of execution is
+     unmodelled;
+   - a `flow-unaccounted` row refuses by marker and location — today
+     `jumpReachability`, emitted when no enclosing construct of the frame owns
+     the jump's target, **and the producer's classifier default**, so a marker a
+     future revision adds without a reviewed class refuses on arrival;
+   - every marker in `unsupported` has a classified construct (belt beside the
+     client's own set comparison): an unclassified marker is what a
+     protocol-14 producer's transcript decodes to, and reading it as the
+     admissible arm is the exact absence-as-evidence this census exists to
+     prevent;
+   - `complete` may be false only when `controlFlowUnsupported` is its **sole**
+     open reason *and* a construct is actually classified.
+
+   **Why admitting the lower-bound class is sound, stated as the rule.** This
+   census reads reach only to ask "may this run?" — it disposes every row the
+   floor admits and refuses on the first it cannot. An unmodelled *guarantee*
+   therefore costs it nothing, while a missing *row* costs it everything. The
+   class is exactly that distinction, so what certifies a body with a loop is a
+   disposition of the call inside the loop, never a relaxed marker.
+
+   **`census_transcript_frame`'s Oxc jump scan is gone**, and its reason with
+   it: the producer withholds no row, and its jump regions are keyed by flow
+   owner, so a jump inside a nested callable reduces that callable's own rows
+   and needs no marker to be visible. `AstFacts::jump_statements` could see the
+   jump but never which rows it touched, and it refused every `break` in the
+   frame including the ones that withheld nothing. A producer fact replaced a
+   syntactic approximation, which is the better direction.
+
+   `CENSUS_CONTROL_FLOW_CLASSES_PROTOCOL` (15) is checked in
+   `census_creates_domain` beside `CENSUS_UNCENSUSED_FORMS_PROTOCOL` (14),
+   because an older producer both withholds rows and decodes as an empty
+   `incompleteness` list.
 
 1. **Handshake protocol ≥ 14**, or refuse. Serde cannot separate an absent
    `uncensusedInvokingForms` from a present empty one, so the protocol is the
@@ -567,10 +609,13 @@ refuses by name at witness acquisition, before any gate is consulted.
   each one blocks. (The five have since moved — the 2026-09-04 audit added
   rows for all of them and withdrew `createEffect`'s — which is exactly why
   the ranking, and not a list in this ADR, is the durable answer.)
-- **Every export whose frame carries a control-flow marker** — a loop, a
-  `switch`, or a `try` at any depth of the recursion, and any `break`/`continue`
-  inside the bound declaration node, nested callables included — refuses even
-  where no row was withheld (item 0). Producer-side fix pending.
+- **A construct whose flow the producer cannot account for**: today a `break` or
+  `continue` whose target no enclosing loop or `switch` of the frame owns
+  (`jumpReachability`, classified `flow-unaccounted`), and any marker a future
+  producer revision leaves unclassified. A loop, a `switch` or a `try` whose
+  reachability *lower bound* alone is unmodelled is now **admitted** — item 0,
+  rewritten — because every call inside it reaches the wire with
+  `reach: unknown` and is dispositioned like any other.
 - **A standard-library member handed a callable the census cannot see**, and
   the by-reference members (`Function.*`, `CallableFunction.*`,
   `NewableFunction.*`, `Reflect.apply`/`construct`, `eval`, `Function`) —
@@ -602,8 +647,9 @@ refuses by name at witness acquisition, before any gate is consulted.
   whose table lacks them) — unchanged from ADR 0007.
 - **An uncensused form at the floor**, including a spread argument.
 - **A callee the verifier cannot bind to a declaration node**, and a local
-  declaration whose transcript is incomplete or open — the `controlFlowUnsupported`
-  relaxation the positive families take is not available at any depth here.
+  declaration whose transcript is incomplete or open for any reason other than
+  `controlFlowUnsupported` — that one relaxation is now taken at every depth, and
+  only when a construct is classified and every class is the admissible one.
 - **A transcript whose declaration is not in the artifact's own runtime
   source**, the demanded export's included: the census walks authenticated
   runtime bytes and nothing else.
@@ -660,12 +706,16 @@ generator rather than out of a test helper.
   **unreachable** — certifies with a nonempty gate root, every call witnessed,
   `census-total:5:1`), `viaHelperChain` (three hops; `census-total:4:3`),
   `cycle`, `deep` (nine hops), `unresolved`, `taggedTemplate`, `spreadArgs`,
-  `switchBreak` and `whileBreak` (withheld rows, refused on the
-  `switchReachability` / `iterationReachability` marker), `stdlibRefInvoker`
+  `stdlibRefInvoker`
   (`forEach(work)`, refused as an unseen callable), `reflectApply` (refused by
-  qualified name), `reassignedHelper` (refused as a written binding) — all
-  refused by name — and `noRecipe` (withheld; certifies with `creates` open and
-  the empty gate root of the gated plan). Two more pin why the generator's walk
+  qualified name), `reassignedHelper` (refused as a written binding),
+  `labelledBreak` (`break outer` out of a plain labelled block, refused on the
+  `flow-unaccounted` class) — all
+  refused by name — `loopCall`, `switchBreak` and `whileBreak` (**certify**
+  through a `reachability-lower-bound` construct: `loopCall`'s `while` withholds
+  nothing, the other two really did have a row withheld, and all three
+  disposition `mount` by local recursion), and `noRecipe` (withheld; certifies
+  with `creates` open and the empty gate root of the gated plan). Two more pin why the generator's walk
   keeps declining the shapes the corpus ranking called decidable:
   `memberParameterRooted` (`source.read()` — refused on the
   `property-access-unknown-accessor` form, although its `calleeParameter` would
@@ -679,9 +729,11 @@ generator rather than out of a test helper.
   and the same row with no authenticated snapshot for that dependency refuses
   the gate by name.
 - `fixtures/package-contracts/closed-domain-probe-gate`: `run` **certifies**
-  `creates: []` through the census (parameter-rooted); `runCreatingOwner`, which
-  does the same thing inside `try … finally`, **refuses** on the
-  `tryReachability` marker (item 0's over-refusal, pinned as such);
+  `creates: []` through the census (parameter-rooted), and so does
+  `runCreatingOwner`, which does the same thing inside `try … finally` — its
+  `tryReachability` marker is `reachability-lower-bound`. That pair is the pin
+  for item 0 being *discharged* rather than narrowed: nothing about either body
+  changed, and before the rewrite the second refused on the marker alone.
   `primitive-consumer/`'s `runAfterSettle` calls `onSettled` and is refused by
   name as an unresolved callee — planned with its stub as an accepted dependency
   edge so the candidate survives closure replay, and refused because the private
@@ -691,8 +743,11 @@ generator rather than out of a test helper.
 - Unit tests in `type_facts::tests` pin each disposition (a `Construct`
   disposition included), the dialect disposition against a synthesized root
   matching the audited `@solidjs/signals@2.0.0-rc.3` tuple, the refusals, the
-  node binding, the cycle, the unsupported-marker refusal at depth 0 and depth
-  1, the nested-callable jump refusal, the standard-library slot proofs and
+  node binding, the cycle, the incompleteness rule at depth 0 and depth 1 (the
+  lower-bound class admitted, `flow-unaccounted` refused by marker and location,
+  an unclassified marker refused, an open transcript classifying nothing
+  refused), a frame whose nested callable carries a jump being *decided* now
+  that the row is on the wire, the standard-library slot proofs and
   denylist, the written / redeclared / anonymous binding refusals, and the
   byte-order-mark offset; `contract_certification::tests` pins recipe-gated
   planning without a producer, gated-dependency composition without a producer

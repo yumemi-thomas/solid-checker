@@ -758,6 +758,14 @@ Strictly ordered. Each step's output is the next step's premise.
 at handshake protocol 14 (schema digest
 `sha256:0d246a6cf7682e3f756df3ce54569cfca2dfeb57006a3198dabad51e43f96fc4`), and
 the third bullet — the `complete` rename — was **deliberately not taken**.
+
+**A second producer slice (2026-09-04) took the withholding itself**, at
+handshake protocol 15 (schema digest
+`sha256:319b22f36abf190c43ed4889bd2e5b43a93c5c1c182be8f86316c0424b73a8bc`): a
+`calls` row in a jump region is stated with `reach: unknown` instead of being
+dropped, and `controlFlowCensus.incompleteness` classifies each unmodelled
+construct as `reachability-lower-bound` or `flow-unaccounted`. That is ADR 0008
+item 0, and the amendment at the end of ADR 0026 carries the decision.
 `docs/typefacts/adr/0026-v1-uncensused-invoking-forms-and-local-declaration-transcripts.md`
 carries the decision, the kind vocabulary, and the limits; the dated entry in
 `docs/precision-backlog.md` carries the precision status. Per bullet:
@@ -968,14 +976,22 @@ exists, against § 3:
   from `require_census_decides_closure`'s new `ClosureCensus::Implementation`
   arm for `ClaimPath::Call(ClaimDomain::Creates)` **only**; every other call
   domain keeps refusing by name (§ 4.4-4.5).
-- § 3 item 1: the demanded export's `ExportImplementationTranscript`, complete
-  with an **empty control-flow `unsupported` list at every depth** and no
-  `break`/`continue` inside the bound declaration node — no
-  `controlFlowUnsupported` relaxation, because the producer withholds call rows
-  a jump makes non-universal and the marker is their only trace (ADR 0008 item
-  0; over-refuses loop/switch/try frames until the producer emits withheld
-  rows) — at handshake protocol 14 so a present-and-empty
-  `uncensusedInvokingForms` is the producer's positive claim;
+- § 3 item 1: the demanded export's `ExportImplementationTranscript`, at every
+  depth **complete, or open on `controlFlowUnsupported` alone with every
+  unmodelled construct classified `reachability-lower-bound`** — a construct
+  walked in full whose enclosed calls are all on the wire, so only the execution
+  *guarantee* is missing; a `flow-unaccounted` construct (today
+  `jumpReachability`, and the producer's classifier default) still refuses by
+  marker and location. *Updated 2026-09-04: this originally read "an empty
+  `unsupported` list at every depth and no `break`/`continue` inside the bound
+  declaration node", because the producer withheld the call rows a jump makes
+  non-universal and the marker was their only trace. That over-refused every
+  loop/switch/try frame and is ADR 0008 item 0, now discharged producer-side —
+  the row is stated with `reach: unknown` and the frame's Oxc jump scan is
+  gone.* — at handshake protocol 14 so a present-and-empty
+  `uncensusedInvokingForms` is the producer's positive claim, and protocol 15 so
+  a present-and-empty `incompleteness` is its positive claim too and no `calls`
+  row is withheld;
   item 4: any uncensused form the `MayExecute` floor admits refuses by kind and
   location; item 2: every `calls` row at the floor (Unknown reach in) gets
   exactly one of the five § 3.1 terminators — `unreachable`,

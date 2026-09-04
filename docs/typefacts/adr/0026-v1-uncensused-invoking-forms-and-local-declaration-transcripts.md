@@ -252,7 +252,7 @@ distinction where a consumer will meet it. The plan's item is therefore
 partially discharged: the guarantee has its own field, and `complete` has not
 been renamed.
 
-## Reachability, and the one place this census differs from the call census
+## Reachability, and the one place this census differed from the call census
 
 Rows come from `walkImplementationBodyLocked`, the same walk the call census and
 the parameter-use census share, so the three never disagree about which callable
@@ -261,12 +261,17 @@ inside a nested callable carries `enclosingCallable` and `captured`, with the
 same discipline and for the same reason: lexical containment in a returned
 closure is not execution.
 
-What this census does **not** share is the call census's jump withholding. There,
-a call inside a region a `break` makes non-universal is dropped so an
-over-optimistic positive `Reach` never reaches the wire. Here a dropped row is
+What this census did **not** share was the call census's jump withholding. There,
+a call inside a region a `break` makes non-universal was dropped so an
+over-optimistic positive `Reach` never reached the wire. Here a dropped row is
 **silence**, which is the exact failure this field exists to prevent, and an
 over-optimistic `Reach` on a marker can only make a consumer refuse a form that
 might not have run. Over-refusal is the safe direction; silence is not.
+
+**Amended 2026-09-04, protocol 15: the call census no longer withholds either,
+and for exactly the reason stated above.** See the amendment at the end of this
+document. The asymmetry that remains is only in the parameter-use census, which
+still drops those rows.
 
 ## The local-declaration demand
 
@@ -379,3 +384,188 @@ selection is being claimed.
 - `docs/package-contract-v2/phase19/proof-demand-authority-audit.json` gains
   the row § 6 of the census plan drafted, and
   `scripts/package-contract-phase19.test.mjs`'s counts move with it.
+
+---
+
+# Amendment, protocol 15 (2026-09-04): the call census states what a jump region hides, and control-flow incompleteness carries a class
+
+Handshake protocol moves 14 → 15 and the schema digest moves with it, from
+`sha256:0d246a6cf7682e3f756df3ce54569cfca2dfeb57006a3198dabad51e43f96fc4` to
+`sha256:319b22f36abf190c43ed4889bd2e5b43a93c5c1c182be8f86316c0424b73a8bc`.
+
+## Why this is the same decision as the one above
+
+The section "Reachability, and the one place this census differs from the call
+census" drew the distinction and then left the call census alone: *there* a
+dropped row was called the safe direction, *here* it was called the exact
+failure. The two claims cannot both be right for the same consumer. A closed
+behavioral call domain asserts a **zero upper bound** on the operations one
+invocation gives rise to, and for that claim a `calls` row's absence is
+indistinguishable from the call's absence — the same silence
+`uncensusedInvokingForms` exists to prevent, arriving through the other census.
+
+Measured: `switch (kind) { case "mount": render(App, el); break; }` published
+**nothing** about `render`. The row was dropped because it lay in the region the
+`break` makes non-universal, and because the dropped call is a `CallExpression`
+the uncensused-form classifier records it nowhere either. The only trace was the
+enclosing construct's `switchReachability` marker in the control-flow census,
+which is why the consumer census had to refuse every such marker — and therefore
+refused essentially every real function body, since the marker covers every
+loop, `switch` and `try` (`docs/adr/0008-implementation-census-for-creates.md`
+item 0).
+
+## Decision 1: a row in a jump region is stated with `reach: unknown`
+
+`implementationCallCensusLocked` no longer returns early for a location
+`locationWithheldByJump` covers. It emits the row and sets `Reach` to `unknown`.
+
+**Why `unknown` is the sound value.** Reachability here is ordered by the
+strength of the positive claim it licenses: `reachable` says invoking the
+implementation runs the call on every path through the frame, `unknown` says it
+may run it, `unreachable` says it cannot. A jump falsifies only the **first** of
+those. So `unknown` is exactly what the producer still knows, and it is the
+weakest non-negative value — no consumer can read more out of it than the jump
+left standing. A consumer needing a guarantee refuses it; a consumer at the
+may-execute floor admits it, and a may-execute floor is the only thing a claim
+about *which* callables a body can reach could ever be built on.
+
+**Why the old drop was chosen, and why it is no longer needed.** Dropping kept
+the same over-optimistic `reachable` off the wire, and for a claim that some
+behavior *happens* a missing row is the safe direction: absence lends authority
+to nothing. That reasoning is intact and the drop is still unnecessary, because
+stating `unknown` is *strictly weaker* than stating the row that was withheld.
+Nothing that was sound became unsound; what changed is that the enumeration a
+negative census needs is now on the wire.
+
+An already-`unreachable` row is left alone. The walk did not decide it from the
+jump — its `unreachable` claims come only from sequential abrupt completion, a
+literal-condition branch, or an unreachable enclosing construct, none of which a
+labelled jump falsifies — and downgrading it would discard a proof for nothing.
+
+Regions are keyed by **flow owner**, which is what makes this cover a jump
+inside a nested callable: `controlFlowCensusLocked` never enters one and so
+leaves no marker there, while `walkImplementationBodyLocked` does, and reduces
+that callable's own rows. A jump whose target is not inside the frame at all has
+no boundary to narrow to, so its region is the whole flow owner.
+
+**The parameter-use census still drops the same positions**, and that asymmetry
+is deliberate rather than an oversight: a use census answers positive escape
+questions, where absence is no claim, and no consumer builds a negative claim on
+it. Pinned in `invoking_positions_test.go`, which now asserts the call row's
+presence and the use row's absence side by side.
+
+## Decision 2: `controlFlowCensus.incompleteness` classifies each construct
+
+`unsupported` absorbed three different situations under four marker strings: a
+construct whose *reachability* the census does not model, a jump whose target it
+cannot resolve, and — because the first covers every loop, `switch` and `try` —
+essentially every real body. A consumer could only refuse all of them.
+
+The new field is one row per construct, carrying the same `marker`, the
+construct's `location`, and a `class` from a **closed** two-value enum. An
+unrecognized string fails deserialization and rejects the whole transcript,
+exactly as for `UncensusedInvokingFormKind`; reading an unknown class as either
+arm picks the unsound one half the time.
+
+| class | what it claims | produced by |
+| --- | --- | --- |
+| `reachability-lower-bound` | The construct was walked in full. Every site inside it is recorded by the shared body walk, and none is called `unreachable` on its account. What is missing is only the **lower** bound: control may not enter a loop body, a `catch` clause, or a selected clause. | `iterationReachability`, `switchReachability`, `tryReachability` |
+| `flow-unaccounted` | The census cannot account for the construct's flow in either direction, so neither a may-execute nor a guarantee question is answered. | `jumpReachability`, **and the classifier's default** |
+
+`unsupported` keeps its exact meaning and its consumers: any entry still opens
+the transcript with `controlFlowUnsupported`.
+
+**Why `jumpReachability` is the unaccounted class rather than the lower-bound
+one.** It is emitted exactly when `jumpHandledByFallthroughConstruct` is false —
+a labelled jump past an enclosing construct, a jump across a `try`, a `break` to
+a plain labelled block. The **target** is what bounds every repair either census
+applies to a jump: the region `implementationCallCensusLocked` reduces to
+`unknown`, and the fallthrough question `constructCompletesNormallyLocked`
+answers. With no target an enclosing construct of the frame owns, the producer is
+not claiming to know where control goes, and it says so rather than offering a
+class a consumer would admit. Over-refusal is the safe direction, and the two
+shapes real code is made of — a `break` inside the `switch` or the loop that owns
+it — resolve their targets and leave the construct's own lower-bound marker
+alone.
+
+**The default is the refusing arm**, which is the same discipline
+`unclassified-invoking-form` follows: a marker a future revision adds without a
+reviewed class arrives as `flow-unaccounted`, so it refuses on arrival instead of
+passing as the admissible one.
+
+## Why the protocol moves rather than the fields being additive
+
+An **absent** `incompleteness` beside a nonempty `unsupported` is a producer with
+no classification at all; a **present empty** one is the claim that nothing is
+unmodelled. Serde cannot separate them, because the field defaults to empty, and
+a nil Go slice and an empty one are the same bytes. A protocol-14 producer's
+silence would read to a protocol-15 consumer as the admissible arm — the unsound
+direction — and that same producer is *also* still dropping rows, which the
+consumer cannot detect at all. So the handshake is the discriminator, and it is
+the discriminator for both halves of this change at once.
+
+**How the client tells the two apart, exactly.** It does not inspect the
+transcript. `Session::open` refuses any producer whose handshake protocol,
+schema digest, or build id differs from the client's own
+(`TYPE_FACTS_HANDSHAKE_PROTOCOL`, `TYPE_FACTS_SCHEMA_SHA256`,
+`TYPE_FACTS_BUILD_ID`), and certification's identity check compares all three
+field-for-field before a transcript is read. On top of that, the census names its
+own dependency as a constant — `CENSUS_CONTROL_FLOW_CLASSES_PROTOCOL = 15`,
+beside the existing `CENSUS_UNCENSUSED_FORMS_PROTOCOL = 14` — and refuses the
+demand by name when the build speaks less, so the premise is stated where it is
+relied on rather than left to the handshake. In the other direction a
+protocol-14 consumer rejects a protocol-15 census outright: `ControlFlowCensus`
+denies unknown fields.
+
+## One invariant the client checks itself
+
+`validate_control_flow_incompleteness` refuses a response whose two lists name
+different markers: a marker in `unsupported` with no classified construct is an
+*unclassified* incompleteness — the thing the class exists to make impossible —
+and a classified row for a marker the census does not report is the same
+disagreement from the other side. The comparison is over **sets**, because one
+marker legitimately has many rows (two loops are one marker and two constructs).
+It says nothing about which class is admissible; that is each consumer's
+decision, and it depends on what the consumer is asking.
+
+## One gap this closed on the way
+
+Admitting `tryReachability` made a pre-existing hole reachable:
+`walkImplementationBodyLocked` visited a `try`'s catch clause **block** and not
+its variable declaration, so a call in a destructuring catch default —
+`catch ({ message = describe() })` — sat in no census at all, neither a `calls`
+row nor an uncensused form. It went unnoticed because the one census that needs a
+total enumeration refused every `try` outright. The walk now visits the catch
+parameter first, at the clause's own reachability.
+
+## What is pinned where
+
+- Each class against the compiler, with its construct's exact location, and the
+  call row inside it, in
+  `apps/solid-typefacts/internal/typefacts/tsgo/export_value_transcripts_test.go`
+  (`TestControlFlowIncompletenessClassifiesEachConstruct`). A body with two
+  loops and a `switch` pins that the two lists agree as *sets* and that the rows
+  are in source order
+  (`TestEveryUnsupportedMarkerCarriesAClassifiedConstruct`). The catch-parameter
+  gap has its own test.
+- The stated row and the still-dropped use row, for all seven jump shapes the
+  older tests covered, in `invoking_positions_test.go`.
+- The wire round trip through the real producer — CBOR, the closed class enum,
+  the client's set comparison, and the `unknown` reach of a row a jump region
+  covers — in `rust/crates/typefacts/tests/session_process.rs`
+  (`export_value_transcripts_classify_control_flow_incompleteness`), against two
+  new exports of the `uncensused-invoking-forms` testdata project. The client's
+  own check needs no producer and is a unit test in `session.rs`.
+- The consumer half, and what it does with each class, in
+  `docs/adr/0008-implementation-census-for-creates.md` item 0 and
+  `fixtures/package-contracts/implementation-census-creates`.
+
+## Consequences
+
+- Coverage stayed at 94 projects and 546 findings; the ownership gate stayed at
+  289 cases and 465 ledger rows. One contract-corpus fixture's snapshots moved,
+  and only because the fixture's own bytes changed.
+- ADR 0008 item 0 is discharged for the reason it was recorded: the census's
+  premise is now a row it can disposition rather than a marker it must refuse.
+  What it is *not* is a general relaxation — `flow-unaccounted` still refuses,
+  and the fixture carries a negative control for it.

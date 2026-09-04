@@ -26,7 +26,7 @@ Two pairs of exports, each pair indistinguishable to TypeScript.
 | `entry` | `(() => void) \| undefined` | a callable | root `ChoiceAlternatives` closed — **certifies** |
 | `driftedEntry` | `(() => void) \| undefined` | `42` | the same claim — **vetoed** |
 | `run` | `(callback: () => void) => void` | calls its callback | `creates: []` — **certifies**, by the implementation census |
-| `runCreatingOwner` | `(callback: () => void) => void` | parks an object literal in a module variable, calls its callback inside `try … finally` | `creates: []` — refused by name: the `try` puts a `tryReachability` marker in the control-flow census, which the census takes no relaxation on |
+| `runCreatingOwner` | `(callback: () => void) => void` | parks an object literal in a module variable, calls its callback inside `try … finally` | `creates: []` — **certified** through the census, on the same parameter-rooted call as `run`. Its `try` puts a `tryReachability` marker in the control-flow census, now classified `reachability-lower-bound`; the census used to refuse every marker, which was ADR 0008 item 0 |
 | `primitive-consumer/`'s `runAfterSettle` | `(callback: () => void \| (() => void)) => void` | calls Solid's `onSettled` | `creates: []` — refused by name: the callee resolves into no authenticated archive |
 
 ### The pair that certifies
@@ -105,21 +105,26 @@ vetoed by `probe-recipes/calls-only.mjs`, which observes nothing to the
 contrary. `the_probe_gate_tracer_certifies_a_parameter_rooted_creates_census`
 drives that row.
 
-`runCreatingOwner` **refuses**, and the reason is worth stating exactly because
-it is not behavioral. Its `try … finally` puts a `tryReachability` marker in the
-producer's control-flow census. The census requires every transcript it reads to
-carry an empty `unsupported` list — it takes no `controlFlowUnsupported`
-relaxation at any depth — because the producer *withholds* every call row inside
-a region a `break` or `continue` makes non-universal, and such a marker is the
-only trace a withheld row leaves; a census that relaxed it would close a domain
-over a call the transcript never mentioned. A `try` withholds nothing itself, so
-this is an over-refusal, recorded in ADR 0008 with its producer-side fix (emit
-the withheld row with `reach: unknown`, or as an uncensused form).
-`the_probe_gate_tracer_census_refuses_an_export_with_unsupported_control_flow`
-pins the refusal and the marker it names. Before the census existed both rows
-refused as `UnsupportedDemand` at witness acquisition; that refusal was
-domain-by-name for want of a premise, and never a behavioral difference between
-the two exports.
+`runCreatingOwner` **certifies too**, and its history is the point of the pair.
+Its `try … finally` puts a `tryReachability` marker in the producer's
+control-flow census, and the census used to require an empty `unsupported` list
+at every depth — because the producer *withheld* every call row inside a region
+a `break` or `continue` makes non-universal, and such a marker was the only
+trace a withheld row left, so a census that relaxed it would close a domain over
+a call the transcript never mentioned. A `try` withholds nothing itself, which
+made that an over-refusal and ADR 0008's item 0.
+
+The producer now states the row (`reach: unknown`) instead of dropping it, and
+classifies each marker: `tryReachability` is `reachability-lower-bound` — the
+construct is walked in full, every call inside it is on the wire, and only the
+*guarantee* of execution is unmodelled, which a may-execute census does not
+need. So the census admits the marker and disposes the same single
+`parameter-rooted` call. `the_probe_gate_tracer_certifies_a_parameter_rooted_creates_census`
+drives both exports, and this pair is the pin for that item being discharged
+rather than narrowed: nothing about either body changed. Before the census
+existed both rows refused as `UnsupportedDemand` at witness acquisition; that
+refusal was domain-by-name for want of a premise, and never a behavioral
+difference between the two exports.
 
 ### The sibling the census refuses
 
@@ -335,6 +340,10 @@ constant.
   `runCreatingOwner` must keep parking its object literal.** The pair exists to
   show that a module-private variable is not a registration into a runtime;
   give either export a `render` call and it becomes the sibling's case instead.
+* **`runCreatingOwner` must keep its `try … finally`.** It is the only `try` in
+  the corpus a census decides through, so it is the pin for a
+  `reachability-lower-bound` marker being admitted at all. Flattening it would
+  make the two exports differ in nothing and prove nothing.
 * **`primitive-consumer/`'s stub must stay a stub.** Its `onSettled` signature
   is byte-faithful to the audited declaration so `tsc` sees what a consumer
   sees; its tuple must not be the audited one, or the fixture would be

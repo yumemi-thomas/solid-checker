@@ -1649,6 +1649,23 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 		})
 		return census
 	}
+	// markIncomplete is the single writer of both incompleteness records. The
+	// marker set a consumer already reads and the classified rows can never
+	// disagree, because there is nowhere to append to one of them alone: the
+	// client refuses a transcript whose two lists name different markers, and a
+	// second append site is exactly how that drift starts.
+	markIncomplete := func(
+		marker string,
+		class typefacts.ControlFlowIncompletenessClass,
+		node *ast.Node,
+	) {
+		census.Unsupported = append(census.Unsupported, marker)
+		census.Incompleteness = append(census.Incompleteness, typefacts.ControlFlowIncompleteness{
+			Marker:   marker,
+			Class:    class,
+			Location: nodeLocation(node),
+		})
+	}
 	// ReturnSite.Reach deliberately retains the producer's historical,
 	// optimistic reachability. carryReach is a separate lower-bound premise for
 	// a value-carry edge: entering either arm of an undecidable branch makes the
@@ -1771,7 +1788,13 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 			} else if ast.IsIterationStatement(node, true) {
 				marker = "iterationReachability"
 			}
-			census.Unsupported = append(census.Unsupported, marker)
+			// The construct is walked in full below — every child is scanned,
+			// and the shared body walk records every call and invoking form
+			// inside it — so what is missing is only the lower bound: control
+			// may not enter a loop body, a catch clause, or a selected clause.
+			// That is ControlFlowReachabilityLowerBound, and it is what lets a
+			// consumer asking a may-execute question read this transcript.
+			markIncomplete(marker, typefacts.ControlFlowReachabilityLowerBound, node)
 			if ast.IsSwitchStatement(node) {
 				expression := node.Expression()
 				partitions := p.invocationValueFactLocked(p.checker.GetTypeAtLocation(expression)).Partitions
@@ -1810,8 +1833,21 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 			// labelled break can bypass a later return without changing the legacy
 			// optimistic Reach row. Mark the whole census unsupported so no
 			// callable-return edge can acquire lower-bound authority from it.
+			//
+			// This is ControlFlowUnaccounted rather than the lower-bound class,
+			// and the reason is what the *target* buys: every repair either
+			// census applies to a jump is bounded by the construct that owns
+			// the target — the region implementationCallCensusLocked reduces to
+			// `unknown`, and the fallthrough question
+			// constructCompletesNormallyLocked answers. A jump this predicate
+			// declines is one whose target no enclosing construct of this frame
+			// owns, so there is no region to bound and the census is not
+			// claiming to know where control goes. Over-refusal is the safe
+			// direction; the two shapes real code is made of — a `break` inside
+			// the `switch` or loop that owns it — are handled and leave the
+			// construct's own lower-bound marker alone.
 			if !jumpHandledByFallthroughConstruct(node, implementation) {
-				census.Unsupported = append(census.Unsupported, "jumpReachability")
+				markIncomplete("jumpReachability", typefacts.ControlFlowUnaccounted, node)
 			}
 			return flowState{reach: typefacts.Unreachable, carryReach: typefacts.Unreachable}
 		}
@@ -1825,6 +1861,7 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 	scan(body, flowState{reach: typefacts.Reachable, carryReach: typefacts.Reachable})
 	sort.Strings(census.Unsupported)
 	census.Unsupported = compactStrings(census.Unsupported)
+	census.Incompleteness = sortedControlFlowIncompleteness(census.Incompleteness)
 	if stringListContains(census.Unsupported, "jumpReachability") {
 		// The optimistic ReturnSite reach rows remain useful to their historical
 		// consumers, but partial control flow is never enough to authorize a
@@ -1838,13 +1875,56 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 	return census
 }
 
-// unsafeJumpRegionsLocked records the exact target-owned region whose positive
-// execution rows a jump makes non-universal. Source byte order is insufficient:
-// a `for` update is written before its body break, and sibling branch order says
-// nothing about execution. A break therefore withholds its whole target
-// subtree. A continue withholds only the loop body; the update/condition remain
-// valid may-execute evidence. The target boundary restores authority and no
-// region crosses a callable identity.
+// sortedControlFlowIncompleteness puts the classified rows in a deterministic
+// order and removes exact duplicates. One row per construct is the invariant, so
+// a duplicate can only come from two records of the same construct.
+func sortedControlFlowIncompleteness(
+	rows []typefacts.ControlFlowIncompleteness,
+) []typefacts.ControlFlowIncompleteness {
+	if len(rows) == 0 {
+		return nil
+	}
+	sort.SliceStable(rows, func(left, right int) bool {
+		first, second := rows[left], rows[right]
+		if first.Location.Path != second.Location.Path {
+			return first.Location.Path < second.Location.Path
+		}
+		if first.Location.StartByte != second.Location.StartByte {
+			return first.Location.StartByte < second.Location.StartByte
+		}
+		if first.Location.EndByte != second.Location.EndByte {
+			return first.Location.EndByte < second.Location.EndByte
+		}
+		if first.Marker != second.Marker {
+			return first.Marker < second.Marker
+		}
+		return first.Class < second.Class
+	})
+	unique := rows[:1]
+	for _, row := range rows[1:] {
+		if row != unique[len(unique)-1] {
+			unique = append(unique, row)
+		}
+	}
+	return unique
+}
+
+// unsafeJumpRegionsLocked records the exact target-owned region in which a jump
+// makes the shared body walk's positive execution rows non-universal. Source
+// byte order is insufficient: a `for` update is written before its body break,
+// and sibling branch order says nothing about execution. A break therefore
+// covers its whole target subtree. A continue covers only the loop body; the
+// update/condition remain valid may-execute evidence. The target boundary
+// restores authority and no region crosses a callable identity.
+//
+// A jump whose target is not inside the frame at all has no such boundary, so
+// its region is the **whole flow owner**. Regions are keyed by flow owner, which
+// is what makes this walk cover a jump inside a *nested* callable: the
+// control-flow census never enters one and so leaves no marker there, while
+// this walk does and reduces that callable's own rows.
+//
+// What a caller does with a region is reduce the row's Reach to `unknown`, not
+// drop the row — see implementationCallCensusLocked.
 func (p *project) unsafeJumpRegionsLocked(
 	implementation *ast.Node,
 ) map[*ast.Node][]typefacts.Location {
@@ -1871,9 +1951,15 @@ func (p *project) unsafeJumpRegionsLocked(
 					}
 				}
 			}
-			if region != nil {
-				regions[owner] = append(regions[owner], nodeLocation(region))
+			// A narrowing step that lands on nothing leaves the jump with no
+			// region at all, which would be a jump whose rows nothing repairs.
+			// Nothing in the grammar is known to produce it; the fallback is
+			// the frame, so the failure mode is over-refusal rather than an
+			// unrepaired row.
+			if region == nil {
+				region = owner
 			}
+			regions[owner] = append(regions[owner], nodeLocation(region))
 		},
 	)
 	return regions
@@ -2008,7 +2094,19 @@ func (p *project) walkImplementationBodyLocked(
 			tryReach := visit(statement.TryBlock, nested, reach)
 			catchReach := typefacts.Unreachable
 			if statement.CatchClause != nil {
-				catchReach = visit(statement.CatchClause.AsCatchClause().Block, nested, reach)
+				clause := statement.CatchClause.AsCatchClause()
+				// The catch *parameter*, before the block. A destructuring
+				// catch binding may carry a default — `catch ({ message =
+				// describe() })` — and that call is reached exactly when the
+				// clause is. Visiting the block alone left it in no census at
+				// all, which is the one thing this walk may not do: the
+				// enumeration a negative call domain rests on is over every
+				// node of the frame. It went unnoticed while the only census
+				// that asks for that enumeration refused every `try` outright.
+				if clause.VariableDeclaration != nil {
+					visit(clause.VariableDeclaration, nested, reach)
+				}
+				catchReach = visit(clause.Block, nested, reach)
 			}
 			completes := mergeReachability(tryReach, catchReach)
 			if statement.FinallyBlock != nil {

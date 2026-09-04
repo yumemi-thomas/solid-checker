@@ -34,11 +34,11 @@ Two of those tests plan from **this fixture's own `expected.json`** rather than
 from a synthesized closed candidate, which is the only way the
 generate-then-certify path is exercised anywhere in the repository:
 `the_generated_census_fixture_carries_every_creates_candidate_into_planning`
-(no producer; asserts the twelve candidates survive into planning, each with
-its veto and its `DomainExhaustiveness` demand, and that all twelve are
+(no producer; asserts the fourteen candidates survive into planning, each with
+its veto and its `DomainExhaustiveness` demand, and that all fourteen are
 withheld by name when no corpus is supplied) and
 `the_census_certifies_a_generated_creates_candidate_and_withholds_its_siblings`
-(one recipe, for `plain`, so recipe gating withholds the other eleven and the
+(one recipe, for `plain`, so recipe gating withholds the other thirteen and the
 census decides `plain`). They rebind exactly one field of the document, the
 package integrity token, because the corpus generates `fixture:sha256:…` and a
 certification transaction requires the published archive's own integrity.
@@ -49,11 +49,11 @@ certification transaction requires the published archive's own integrity.
 census, taken at the `MayExecute` reachability floor, is enumerated and
 resolved, and no resolved target performs a `create` operation
 (`phase21/2026-09-03-implementation-census-plan.md` § 3). Every transcript the
-census reads must be complete with an empty control-flow `unsupported` list —
-the producer withholds every call row inside the region a `break` or `continue`
-makes non-universal, and the marker is the only trace such a row leaves — and
-must contain no `break`/`continue` anywhere in its declaration node, nested
-callables included. Every call the export reaches is then given exactly one
+census reads must classify every construct whose control flow the producer did
+not fully model as `reachability-lower-bound` — the construct is walked in full,
+every call inside it is on the wire, and only the *guarantee* is missing, which
+a may-execute census does not need. A `flow-unaccounted` construct refuses by
+marker and location. Every call the export reaches is then given exactly one
 disposition, and the first call with none refuses the domain by name:
 
 | disposition | what it names |
@@ -76,15 +76,17 @@ disposition, and the first call with none refuses the domain by name:
 | `taggedTemplate` | refuses: uncensused form | a `TaggedTemplateExpression` invokes its tag and appears in no `calls` row; the producer records it as `tagged-template` and the census refuses on it |
 | `spreadArgs` | refuses: uncensused form | `joinAll(...args)` drives the iteration protocol on `args`; the producer records the `SpreadElement` as `iteration-protocol` (`docs/typefacts/adr/0026-…`), and the census refuses on it. **Arguments do not otherwise matter for `creates`** — a call is dispositioned by its callee — but a spread is an invoking form of its own, not an argument |
 | `noRecipe` | **withheld** | byte-for-byte `plain`'s body; the corpus supplied to the transaction carries no recipe for *this* export's claim, so recipe-gated planning withholds the candidate by name, the domain stays open, and the row certifies with an empty probe-gate schedule |
-| `switchBreak` | refuses: withheld rows | `mount(el); break;` inside a `switch` case. The producer drops the `mount(el)` row (it lies in the region the `break` makes non-universal) and leaves only the `switchReachability` marker; the census refuses on the marker. Zero rows and a closed domain would otherwise have coincided |
-| `whileBreak` | refuses: withheld rows | the same withholding inside a `while`, refused on `iterationReachability` |
+| `loopCall` | **certifies** with a recipe | a bare `while` with no jump in it. The producer cannot give a reachability *lower* bound inside a loop body, so it reports `iterationReachability` — classified `reachability-lower-bound` — and `mount(el)` is on the wire at `reach: unknown`, which the `MayExecute` floor admits. This is the shape ADR 0008 item 0 over-refused on real code (`@solid-primitives/i18n`'s `flatten` and `chainedTranslator`) |
+| `switchBreak` | **certifies** with a recipe | `mount(el); break;` inside a `switch` case. The `break`'s target is the `switch` that owns it, so the producer covers that construct as the region the jump makes non-universal and reduces the row's reach to `unknown` — it used to **drop** the row, and since a dropped `CallExpression` leaves no uncensused-form row either, the marker was the only trace. `mount` is now dispositioned by local recursion, which is what certifies it: never a relaxed marker |
+| `whileBreak` | **certifies** with a recipe | the same, with the `break` owned by a `while` |
+| `labelledBreak` | refuses: unaccounted flow | `break outer` out of a plain labelled *block*. No enclosing loop or `switch` of the frame owns that target, and the target is what bounds every region-based repair either census applies to a jump, so the marker is `jumpReachability`, classified `flow-unaccounted`. `mount(el)` is on the wire here too — the refusal is not about a missing row but about a frame nobody modelled, and it is what keeps the relaxation above from being a blanket one |
 | `stdlibRefInvoker` | refuses: unseen callable | `Array.from(items).forEach(work)`: `forEach` invokes its slot 0 (reviewed invoker table) and `work` is a module-local function reference — neither a parameter nor a callable literal inside the transcript — so the standard-library disposition refuses the call by name |
 | `reflectApply` | refuses: by-reference member | `Reflect.apply(work, undefined, args)` transfers control to its first slot; the member refuses by qualified name whatever the slots prove |
 | `reassignedHelper` | refuses: written binding | `function helper` is reassigned at module level; the producer still resolves `helper(el)` to the declaration, and the verifier's own parse of the authenticated bytes finds the write and refuses to walk a declaration not proven to be the code that runs |
 | `memberParameterRooted` | refuses: uncensused form | `source.read()` — the shape the corpus ranking called the generator's own strictness, and the pin that says otherwise. The producer *does* state `calleeParameter` (parameter 0, path `["read"]`), so the `parameter-rooted` disposition would decide the call; the export is refused before that, because reading `.read` off a value whose type is unknown is an uncensused invoking form (`property-access-unknown-accessor`) — recorded exactly when the compiler resolves no symbol for the property, which is the same condition that makes the generator's walk decline the callee |
 | `iife` | refuses: unresolved callee | an immediately-invoked function expression. Its body is lexically inside the export and already walked, so the generator has no counterexample to name — and the census refuses the row by name: the producer resolves its callee to nothing at all. Which is why the walk keeps declining `expression-callee` rather than treating it as spurious |
 
-The `unresolved`, `taggedTemplate`, `spreadArgs`, `switchBreak`, `whileBreak`,
+The `unresolved`, `taggedTemplate`, `spreadArgs`, `labelledBreak`,
 `stdlibRefInvoker`, `reflectApply`, `reassignedHelper`,
 `memberParameterRooted` and `iife` refusals arrive
 before any recipe matters, at witness acquisition. Their tests still supply a recipe
@@ -164,9 +166,15 @@ ran. None hands `session` or `harness` to the package.
   no accepted dependency is an `UnacceptedExternalDependency` closure hazard
   that opens every domain at closure replay, and no candidate ever reaches the
   census.
-- **`switchBreak` and `whileBreak` must keep their `break`.** Without it the
-  `mount(el)` row is emitted and the exports would certify; the refusal they
-  pin is the census refusing on the marker a withheld row leaves behind.
+- **`switchBreak` and `whileBreak` must keep their `break`, and `loopCall`
+  must have none.** The pair with a `break` is where a row really was
+  withheld — the region the jump covers — and `loopCall` is where nothing was:
+  together they pin that the census reads the *row* rather than the marker.
+  Dropping either loses half of that.
+- **`labelledBreak` must keep a `break` to a plain labelled block.** A `break`
+  the enclosing loop or `switch` owns is the admissible case above; only a
+  target no construct of the frame owns produces the `flow-unaccounted` class,
+  and without that arm the relaxation has no negative control.
 - **`stdlibRefInvoker` must hand `forEach` a function *declaration*.** A
   `const work = () => …` is followed by the producer's argument tracer and
   would refuse for a different reason (a callable outside the transcript);

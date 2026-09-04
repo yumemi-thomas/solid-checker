@@ -2219,6 +2219,50 @@ fn validate_implementation_transcript(
             )));
         }
     }
+    if let Some(flow) = transcript.control_flow.as_ref() {
+        validate_control_flow_incompleteness(flow)?;
+    }
+    Ok(())
+}
+
+/// The two lists of a control-flow census's incompleteness must name the same
+/// markers.
+///
+/// `unsupported` is the older, deduplicated marker set every existing consumer
+/// reads; `incompleteness` is the classified per-construct form. A producer that
+/// stated a marker in one and not the other would be handing a consumer either
+/// an unclassified incompleteness — which is the thing the class exists to make
+/// impossible — or a classified row for an incompleteness the transcript does
+/// not admit to. Neither is a state this client will read, and both are cheap to
+/// detect, so both refuse the response.
+///
+/// This says nothing about *which* class is admissible. That is each consumer's
+/// own decision, because the answer depends on what the consumer is asking.
+pub(crate) fn validate_control_flow_incompleteness(
+    flow: &crate::ControlFlowCensus,
+) -> Result<(), SessionError> {
+    for row in &flow.incompleteness {
+        if row.marker.is_empty() {
+            return Err(SessionError::InvalidResponse(
+                "control-flow incompleteness row names no marker".into(),
+            ));
+        }
+        if !flow.unsupported.contains(&row.marker) {
+            return Err(SessionError::InvalidResponse(format!(
+                "control-flow incompleteness row {} at {}:{}..{} names a marker the census does \
+                 not report unsupported",
+                row.marker, row.location.path, row.location.start_byte, row.location.end_byte
+            )));
+        }
+    }
+    for marker in &flow.unsupported {
+        if !flow.incompleteness.iter().any(|row| row.marker == *marker) {
+            return Err(SessionError::InvalidResponse(format!(
+                "control-flow census reports {marker} unsupported and classifies no construct \
+                 for it"
+            )));
+        }
+    }
     Ok(())
 }
 
@@ -2450,6 +2494,9 @@ fn validate_invocation_transcript(
         return Err(SessionError::InvalidResponse(
             "control-flow census is closed while absent or unsupported".into(),
         ));
+    }
+    if let Some(flow) = transcript.control_flow.as_ref() {
+        validate_control_flow_incompleteness(flow)?;
     }
     Ok(())
 }
@@ -3726,6 +3773,59 @@ mod tests {
         let mut anonymous = transcript;
         anonymous.uncensused_invoking_forms[0].node_kind = "".into();
         assert!(validate_implementation_transcript(&anonymous).is_err());
+    }
+
+    /// The two lists of control-flow incompleteness must name the same markers.
+    ///
+    /// A marker with no classified construct is an *unclassified*
+    /// incompleteness, which is exactly what the class exists to make
+    /// impossible: a consumer that admits one class and refuses the other would
+    /// have to guess. A classified row for a marker the census does not report
+    /// is the same disagreement from the other side. Both are cheap to detect
+    /// here and neither is a state any consumer should have to reason about.
+    #[test]
+    fn control_flow_incompleteness_must_classify_exactly_the_reported_markers() {
+        let row = |marker: &str, class| crate::ControlFlowIncompleteness {
+            marker: marker.into(),
+            class,
+            location: span("/p/a.ts", 10, 20),
+        };
+        let mut flow = crate::ControlFlowCensus::default();
+        validate_control_flow_incompleteness(&flow).expect("a census with nothing unmodelled");
+
+        flow.unsupported = vec!["iterationReachability".into()];
+        assert!(
+            validate_control_flow_incompleteness(&flow).is_err(),
+            "a marker with no classified construct must refuse"
+        );
+
+        flow.incompleteness = vec![row(
+            "iterationReachability",
+            crate::ControlFlowIncompletenessClass::ReachabilityLowerBound,
+        )];
+        validate_control_flow_incompleteness(&flow).expect("marker sets agree");
+
+        // Two constructs of the same kind are one marker and two rows, which is
+        // why the comparison is over *sets* rather than lengths.
+        flow.incompleteness.push(crate::ControlFlowIncompleteness {
+            location: span("/p/a.ts", 30, 40),
+            ..flow.incompleteness[0].clone()
+        });
+        validate_control_flow_incompleteness(&flow).expect("one marker, two constructs");
+
+        let mut unreported = flow.clone();
+        unreported.incompleteness.push(row(
+            "jumpReachability",
+            crate::ControlFlowIncompletenessClass::FlowUnaccounted,
+        ));
+        assert!(
+            validate_control_flow_incompleteness(&unreported).is_err(),
+            "a classified row for an unreported marker must refuse"
+        );
+
+        let mut anonymous = flow;
+        anonymous.incompleteness[0].marker = "".into();
+        assert!(validate_control_flow_incompleteness(&anonymous).is_err());
     }
 
     /// Presence has to agree with the demand in both directions, and the

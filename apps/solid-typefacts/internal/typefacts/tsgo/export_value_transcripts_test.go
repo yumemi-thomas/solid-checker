@@ -1454,3 +1454,212 @@ void make;
 		t.Fatalf("census = %#v, want one traced callee", traced.Calls)
 	}
 }
+
+// TestControlFlowIncompletenessClassifiesEachConstruct pins the split that lets
+// a consumer read a transcript whose control flow is not fully modelled.
+//
+// `unsupported` used to absorb three different situations under four marker
+// strings, and a consumer whose claim was the *absence* of behavior could only
+// refuse all of them — which meant refusing essentially every real function
+// body, because the first situation covers every loop, `switch` and `try`.
+//
+// Each row asserts the class *and* the location, because both are what the
+// marker string never carried: a consumer that admits the lower-bound class has
+// to be able to say which construct it admitted.
+func TestControlFlowIncompletenessClassifiesEachConstruct(t *testing.T) {
+	cases := []struct {
+		name      string
+		body      string
+		marker    string
+		class     typefacts.ControlFlowIncompletenessClass
+		anchor    string
+		inside    string
+		wantReach typefacts.Reachability
+	}{{
+		// A loop, a `switch` and a `try` are walked in full: every call inside
+		// is a row, and none is called unreachable on the construct's account.
+		// Only the *guarantee* is missing, so a may-execute enumeration stands.
+		name:      "loop",
+		body:      "while (flag) { sink(1); }",
+		marker:    "iterationReachability",
+		class:     typefacts.ControlFlowReachabilityLowerBound,
+		anchor:    "while (flag)",
+		inside:    "sink(1)",
+		wantReach: typefacts.ReachUnknown,
+	}, {
+		name:      "switchWithAnOwnedBreak",
+		body:      "switch (value) { case 1: sink(1); break; }",
+		marker:    "switchReachability",
+		class:     typefacts.ControlFlowReachabilityLowerBound,
+		anchor:    "switch (value)",
+		inside:    "sink(1)",
+		wantReach: typefacts.ReachUnknown,
+	}, {
+		// A `try` block is entered on every path, so its own rows stay
+		// `reachable`. The marker is about the `catch` and about what follows,
+		// and it is the lower-bound class for the same reason as a loop: every
+		// site inside is recorded.
+		name:      "tryFinally",
+		body:      "try { sink(1); } finally { }",
+		marker:    "tryReachability",
+		class:     typefacts.ControlFlowReachabilityLowerBound,
+		anchor:    "try {",
+		inside:    "sink(1)",
+		wantReach: typefacts.Reachable,
+	}, {
+		// A labelled `break` out of a plain block: no enclosing loop or
+		// `switch` of this frame owns the target, so the census is not claiming
+		// to know where control goes. That is `flow-unaccounted`, and it is the
+		// class a consumer must refuse.
+		name:      "labelledBreakOutOfAPlainBlock",
+		body:      "outer: { sink(1); break outer; }",
+		marker:    "jumpReachability",
+		class:     typefacts.ControlFlowUnaccounted,
+		anchor:    "break outer",
+		inside:    "sink(1)",
+		wantReach: typefacts.ReachUnknown,
+	}}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			source := `declare function sink(value: unknown): void;
+declare const flag: boolean;
+declare const value: number;
+export function make() {
+  ` + testCase.body + `
+}
+void make;
+`
+			implementation := exportImplementationForMake(t, source)
+			flow := implementation.ControlFlow
+			if flow == nil {
+				t.Fatal("no control-flow census")
+			}
+			if len(flow.Unsupported) != 1 || flow.Unsupported[0] != testCase.marker {
+				t.Fatalf("unsupported = %#v, want exactly %q", flow.Unsupported, testCase.marker)
+			}
+			anchor := strings.Index(source, testCase.anchor)
+			if len(flow.Incompleteness) != 1 {
+				t.Fatalf("incompleteness = %#v, want one classified construct", flow.Incompleteness)
+			}
+			row := flow.Incompleteness[0]
+			if row.Marker != testCase.marker || row.Class != testCase.class ||
+				row.Location.StartByte != anchor {
+				t.Fatalf(
+					"incompleteness row = %#v, want %q/%q at byte %d",
+					row, testCase.marker, testCase.class, anchor,
+				)
+			}
+			// And the call inside is on the wire, whatever the class. A dropped
+			// row is silence, and silence is what a negative claim cannot read.
+			call := callAt(t, implementation, source, testCase.inside)
+			if call.Reach != testCase.wantReach {
+				t.Fatalf(
+					"call inside the construct = %#v, want reach %q",
+					call, testCase.wantReach,
+				)
+			}
+		})
+	}
+}
+
+// TestEveryUnsupportedMarkerCarriesAClassifiedConstruct is the invariant the
+// client refuses a transcript for: the deduplicated marker set and the
+// per-construct rows must name the same markers. A body with two loops and a
+// `switch` is the case where the two lists have different *lengths*, which is
+// exactly where a set comparison is the only correct one.
+func TestEveryUnsupportedMarkerCarriesAClassifiedConstruct(t *testing.T) {
+	source := `declare function sink(value: unknown): void;
+declare const flag: boolean;
+declare const value: number;
+export function make() {
+  while (flag) { sink(1); }
+  while (flag) { sink(2); }
+  switch (value) { default: sink(3); }
+}
+void make;
+`
+	flow := exportImplementationForMake(t, source).ControlFlow
+	if flow == nil {
+		t.Fatal("no control-flow census")
+	}
+	if len(flow.Unsupported) != 2 {
+		t.Fatalf("unsupported = %#v, want the two deduplicated markers", flow.Unsupported)
+	}
+	if len(flow.Incompleteness) != 3 {
+		t.Fatalf("incompleteness = %#v, want one row per construct", flow.Incompleteness)
+	}
+	for _, marker := range flow.Unsupported {
+		found := false
+		for _, row := range flow.Incompleteness {
+			if row.Marker == marker {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("marker %q classifies no construct: %#v", marker, flow.Incompleteness)
+		}
+	}
+	for _, row := range flow.Incompleteness {
+		if row.Class != typefacts.ControlFlowReachabilityLowerBound {
+			t.Fatalf("row = %#v, want every loop and switch on the lower-bound class", row)
+		}
+		found := false
+		for _, marker := range flow.Unsupported {
+			if marker == row.Marker {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("row %#v names a marker the census does not report", row)
+		}
+	}
+	// The rows are ordered by location, so a consumer's diff of two runs over
+	// the same bytes is stable.
+	for index := 1; index < len(flow.Incompleteness); index++ {
+		if flow.Incompleteness[index-1].Location.StartByte >
+			flow.Incompleteness[index].Location.StartByte {
+			t.Fatalf("incompleteness rows are not in source order: %#v", flow.Incompleteness)
+		}
+	}
+}
+
+// TestCatchParameterDefaultsAreCensused closes the gap admitting `try` opened.
+//
+// A destructuring `catch` binding may carry a default, and that call is reached
+// exactly when the clause is. The shared body walk visited the clause's *block*
+// only, so the call sat in no census at all — neither a `calls` row nor an
+// uncensused form. It went unnoticed while the one census that needs a total
+// enumeration refused every `try` outright, and admitting the lower-bound class
+// is what makes it reachable.
+func TestCatchParameterDefaultsAreCensused(t *testing.T) {
+	source := `declare function sink(value: unknown): void;
+declare function describe(): string;
+export function make() {
+  try {
+    sink(1);
+  } catch ({ message = describe() }) {
+    sink(2);
+  }
+}
+void make;
+`
+	implementation := exportImplementationForMake(t, source)
+	// The needle has to be the one inside the `catch` head; the same spelling
+	// appears in the declaration above it.
+	start := strings.Index(source, "message = describe()") + len("message = ")
+	var found *typefacts.ImplementationCall
+	for index := range implementation.Calls {
+		if implementation.Calls[index].Location.StartByte == start {
+			found = &implementation.Calls[index]
+		}
+	}
+	if found == nil {
+		t.Fatalf(
+			"catch-parameter default call at byte %d is absent from the census: %#v",
+			start, implementation.Calls,
+		)
+	}
+	if found.Reach == typefacts.Unreachable {
+		t.Fatalf("catch-parameter default call = %#v, want a reachable-or-unknown row", found)
+	}
+}

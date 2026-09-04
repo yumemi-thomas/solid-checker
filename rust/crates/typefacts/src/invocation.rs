@@ -1055,6 +1055,48 @@ pub struct BranchSite {
     pub partitions: Vec<FinitePartition>,
 }
 
+/// Which of two different things a control-flow `unsupported` marker means.
+///
+/// The enum is **closed**: it carries no `#[serde(other)]` arm, so an
+/// unrecognized string fails deserialization and rejects the whole transcript,
+/// exactly as for [`crate::UncensusedInvokingFormKind`]. Reading an unknown
+/// class as either arm picks the unsound one half the time.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ControlFlowIncompletenessClass {
+    /// A construct the census walked in full: every site inside it is recorded
+    /// by the shared body walk, and no site is called `unreachable` on its
+    /// account — the sites inside carry `unknown`. What is missing is only the
+    /// *lower* bound: control may not enter a loop body, a `catch` clause, or
+    /// a selected `switch` clause.
+    ///
+    /// A consumer asking a **may-execute** question — "is every callable this
+    /// body can reach enumerated here?" — is therefore answered. One asking for
+    /// a guarantee is not, which is why the marker still opens the transcript.
+    ReachabilityLowerBound,
+    /// A construct whose flow the census cannot account for in either
+    /// direction, so neither a may-execute nor a guarantee question is
+    /// answered. It is also the producer's classifier default, so a marker
+    /// nobody classified arrives here rather than as the admissible arm.
+    FlowUnaccounted,
+}
+
+/// One construct whose flow a control-flow census does not fully model, at its
+/// exact location, and what is missing.
+///
+/// One row per construct, so a body with two loops carries two rows.
+/// [`ControlFlowCensus::unsupported`] stays one deduplicated marker string per
+/// *kind*, for the consumers that already read it.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ControlFlowIncompleteness {
+    /// The same string `unsupported` carries for this construct, so the two
+    /// lists can be joined.
+    pub marker: Arc<str>,
+    pub class: ControlFlowIncompletenessClass,
+    pub location: Location,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ControlFlowCensus {
@@ -1064,8 +1106,25 @@ pub struct ControlFlowCensus {
     pub throws: Vec<ThrowSite>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub branches: Vec<BranchSite>,
+    /// The deduplicated marker set, unchanged in meaning: any entry means this
+    /// census is incomplete, and the producer appends `controlFlowUnsupported`
+    /// to the transcript's open reasons.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unsupported: Vec<Arc<str>>,
+    /// `unsupported` with the two facts a marker string never carried: where
+    /// the construct is, and which class the incompleteness belongs to.
+    ///
+    /// Every marker in `unsupported` has at least one row here and every row's
+    /// marker is in `unsupported`;
+    /// [`crate::session::validate_control_flow_incompleteness`] enforces both,
+    /// so a producer cannot state an unclassified marker.
+    ///
+    /// An **absent** list beside a nonempty `unsupported` is a producer with no
+    /// classification, which a consumer must refuse — and serde cannot separate
+    /// it from a present empty one, so
+    /// [`crate::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL`] is the discriminator.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub incompleteness: Vec<ControlFlowIncompleteness>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -1,5 +1,162 @@
 # Precision backlog
 
+
+### Re-measured with the protocol-15 producer: identical, and the constraint is now named
+
+`make ecosystem-benchmark` (report SHA-256 `fa0e28ae04e2df59e4575a1e30f424bf840069529824fca337e3914558efec21`).
+357 verified / 40 refused / 21 not attempted, every verdict and demand digest
+identical, `withheldClosures` 43 on the same three rows, `exportsProven` 0.
+Discharging the control-flow over-refusal moved no corpus row, which is the
+honest result: it advanced the two probeable `@solid-primitives/i18n` claims
+from the first premise to the second, where they refuse correctly on an object
+spread over a value whose shape is not statically known.
+
+So the binding constraint on the probeable population is the accessor census
+over untyped receivers in shipped JavaScript -- an object spread and a `for…of`
+both being uncensused invoking forms -- and no longer control flow. The other
+40 of 43 candidates remain unprobeable for a different reason entirely: their
+artifact case is a TypeScript source entrypoint the private workspace cannot
+load.
+## The producer states what a jump region hides; ADR 0008 item 0 is discharged, and the i18n refusal moves one premise later (2026-09-04)
+
+The census's largest over-refusal is gone, and it went by making the **producer**
+answer instead of by relaxing the consumer. Protocol 14 → 15; schema digest
+`sha256:0d246a6c…` → `sha256:319b22f3…`. Full decision:
+`docs/typefacts/adr/0026-…` (amendment) and `docs/adr/0008-…` item 0, rewritten.
+
+**What was wrong.** `implementationCallCensusLocked` **dropped** every `calls`
+row lying in a region a `break` or `continue` makes non-universal, so as to keep
+an over-optimistic `reachable` off the wire. For a positive claim that is the
+safe direction; for a claim about the *absence* of behavior it is the failure
+mode, because a dropped call is a `CallExpression` and so leaves no
+uncensused-form row either. `switch (kind) { case "mount": render(App, el);
+break; }` published **nothing** about `render` beyond the enclosing construct's
+`switchReachability` marker — so the census had to refuse every such marker, and
+since the marker covers every loop, `switch` and `try`, it refused essentially
+every real function body.
+
+**The rule that replaced it.** A row in a jump region now reaches the wire with
+`reach: unknown` — the weakest non-negative value, so it withholds exactly what
+the jump falsified (the *guarantee*) and states the rest. And
+`controlFlowCensus.incompleteness` classifies each unmodelled construct, at its
+exact location, into a closed two-value enum:
+
+| class | claim | markers |
+| --- | --- | --- |
+| `reachability-lower-bound` | walked in full; every enclosed site recorded; none called `unreachable` on its account; only the *guarantee* missing | `iterationReachability`, `switchReachability`, `tryReachability` |
+| `flow-unaccounted` | flow not accounted for in either direction | `jumpReachability`, **and the classifier default** |
+
+The census admits the first and refuses the second by marker and location. That
+is sound for the specific reason that it reads reach only to ask "may this run?":
+an unmodelled guarantee costs it nothing, a missing row costs it everything. So
+what certifies a body with a loop is a **disposition of the call inside the
+loop**, never a relaxed marker. `jumpReachability` is the unaccounted class
+because the jump's *target* is what bounds every region-based repair either
+census applies, and that marker is emitted exactly when no enclosing construct
+of the frame owns it.
+
+`census_transcript_frame`'s Oxc `jump_statements` scan was **deleted**: it
+existed only because the producer's control-flow census never enters a nested
+callable, and the producer's jump regions are keyed by flow owner, so a nested
+jump now reduces that callable's own rows and needs no marker to be visible. A
+producer fact replaced a syntactic approximation that could see the jump but
+never which rows it touched.
+
+**Measured: the i18n refusal moves one premise later, and the row still
+refuses.** Targeted rerun, `--attempt-certification` with a single-recipe corpus
+per claim so each export's own premise fires:
+
+| export | before | after |
+| --- | --- | --- |
+| `flatten` | `iterationReachability` at depth 0, `dist/index.js:939..946` | uncensused form `property-access-unknown-accessor (SpreadAssignment)` at `dist/index.js:979..986` |
+| `chainedTranslator` | `iterationReachability` at depth 0, `dist/index.js:3397..3414` | the same form at `dist/index.js:3471..3483` |
+| `scopedTranslator` | `coercion (TemplateExpression)` at `3349..3367` | unchanged |
+
+Both bodies begin `const flat_dict = { ...dict };`, and an object spread reads
+every own enumerable property of a value whose shape is not statically known —
+`property-access-unknown-accessor` under ADR 0026's premise, and a **correct**
+refusal rather than a new over-refusal. Their `for…of` is a second, independent
+refusal behind it (`iteration-protocol`), so neither export would have certified
+even without the spread. `exportsProven` is 0 of 9 before and after.
+
+**So item 0 is discharged and it bought no new certified real row.** That is
+worth stating precisely, because the previous entry's framing —
+"item 0's loop over-refusal is what stops the only probeable row" — turns out to
+have been true of the *first* premise only. The blocker on this population is now
+the producer's inability to say anything about an untyped receiver's properties in
+shipped JavaScript, which is the same producer gap the shape ranking located from
+the other direction.
+
+**12-row sample** (`--attempt-certification`, the full
+`scripts/ecosystem-benchmark/probe-recipes` corpus), against the 418-row
+`benchmarks/ecosystem/report.json`. `outcome`, `class` and `declinedClosures`
+are **byte-identical on all 12**; the two `status` differences are the recipe
+corpus, not this change, and are exactly what the 2026-09-04 entry above already
+recorded for a corpus-supplied run:
+
+| row | verdict | declines | domain-exhaustiveness demands | withheld | status |
+| --- | --- | ---: | ---: | ---: | --- |
+| `@kobalte/utils@0.9.2\|solid1\|only` | partial-success (=) | 16 (=) | 1 | 0 | refused: `IncompleteGate sha256:a9c9b71f…` — `noop`'s census still passes and the `.ts` workspace blocker still stops the gate |
+| `@kobalte/utils@2.0.0-alpha.0\|solid2\|only` | success (=) | 48 (=) | 0 | 7 (=) | certified |
+| `@solid-primitives/i18n@2.2.1\|solid1\|only` | success (=) | 2 (=) | 3 | 0 | refused on the spread form above |
+| `@solid-devtools/debugger@0.28.1\|solid1\|only` | partial-success (=) | 1393 (=) | — | 0 | not attempted |
+| `solid-recharts@1.0.1\|solid1\|only` | success (=) | 1308 (=) | 0 | 0 | certified |
+| `@solidjs/router@1.0.0\|solid1\|only` | success (=) | 751 (=) | 0 | 0 | certified |
+| `@solidjs/vite-plugin@3.0.0-next.34\|solid2\|floor` | partial-success (=) | 485 (=) | — | 0 | not attempted |
+| `@solidjs/router@2.0.0-next.18\|solid2\|only` | success (=) | 363 (=) | 0 | 0 | refused: `recursive-value-shape` on `defineRoutes`, as before |
+| `@solid-devtools/logger@0.9.11\|solid1\|only` | success (=) | 246 (=) | 0 | 0 | certified |
+| `@kobalte/solidbase@0.6.13\|solid1\|only` | partial-success (=) | 166 (=) | — | 0 | not attempted |
+| `@solid-primitives/interaction@1.0.0-next.4\|solid2\|floor` | success (=) | 104 (=) | 0 | 0 | certified |
+| `@solid-primitives/filesystem@1.3.4\|solid1\|only` | success (=) | 71 (=) | 0 | 0 | certified |
+
+No row's `exportsProven` moved; every one is still 0.
+
+**One pre-existing hole closed on the way.** Admitting `tryReachability` made it
+reachable: `walkImplementationBodyLocked` visited a `try`'s catch clause *block*
+and not its variable declaration, so a call in a destructuring catch default —
+`catch ({ message = describe() })` — sat in **no** census at all, neither a
+`calls` row nor an uncensused form. It was invisible while the only census
+needing a total enumeration refused every `try` outright. The walk now visits the
+catch parameter at the clause's own reachability.
+
+### Deliberately unchanged
+
+- **The parameter-use census still drops the rows a jump region covers.** A use
+  census answers positive escape questions, where absence is no claim, and no
+  consumer builds a negative claim on it. `invoking_positions_test.go` now
+  asserts the call row's presence and the use row's absence side by side, so the
+  asymmetry is a pinned decision rather than an omission.
+- **`callableReturnCensusesLocked` still omits a nested callable whose own
+  control flow carries any marker**, without consulting the class. Carry
+  authority is a *lower-bound* premise, which is exactly what the admissible
+  class does not supply, so admitting it there would be unsound in a way it is
+  not here.
+
+### Still open
+
+- **`exportsProven` stays 0 corpus-wide**, and the i18n row's blocker is now the
+  producer's accessor census over untyped receivers in shipped JavaScript, not
+  control flow.
+- **A `.ts` artifact case is still unprobeable**, so 40 of the 43 candidates are
+  still behind the workspace decision. Unaffected by this slice.
+- **A `for…of` is always an `iteration-protocol` uncensused form**, whatever the
+  operand's type. `Object.entries(dict)` returns a default-library array whose
+  `Symbol.iterator` is the engine's own, and the classifier does not consult the
+  type here as `await-then` and `coercion` do. Narrowing it would be an
+  ADR 0026 change with its own premise to state, and it is the next thing worth
+  measuring on this population.
+- **`AstFacts::jump_statements` now has no consumer.** It existed only for the
+  frame scan this slice deleted. Retained (two pushes, a faithful syntactic
+  fact, and removal would move the serialized `AstFacts` shape for every source
+  containing a jump), with its doc comment rewritten to say so; a removal slice
+  is a candidate, and any new consumer must state its own premise, because a
+  jump in a span says nothing about what another fact domain withheld.
+- **`flow-unaccounted` is coarser than it has to be.** A `break` across a `try`
+  and a labelled `break` past an enclosing construct both land there, and for the
+  first the call census's region repair really does cover the frame. Splitting it
+  would need a producer-side claim about the repair rather than about the target,
+  which is not taken here.
+
 ### Measured on all 418 rows: the ranking, and it inverts the plan
 
 `make ecosystem-benchmark` with the decline records compiled in (report SHA-256

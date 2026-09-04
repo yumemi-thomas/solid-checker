@@ -281,3 +281,47 @@ no reachable certified `creates: []` on a real row.
 * **The gate's refusal message names no launch cause.** `IncompleteGate` carries
   only the gate id, so diagnosing a failed run means rebuilding the workspace by
   hand. Worth a typed cause, not taken here.
+
+## Addendum, 2026-09-04: item 0 is discharged, and it did not unblock this row
+
+The producer slice this document called "whichever of those two blockers is
+cheaper" landed: `docs/typefacts/adr/0026-…` (amendment, handshake protocol 15)
+and `docs/adr/0008-…` item 0, rewritten. The call census no longer drops a row
+in a jump region — it states it with `reach: unknown` — and each control-flow
+`unsupported` marker now carries a class, so a construct whose *reachability
+lower bound* alone is unmodelled is admitted while one the producer cannot
+account for still refuses.
+
+**`flatten` and `chainedTranslator` pass the control-flow premise and refuse one
+premise later.** Re-measured with the same single-recipe corpora:
+
+| export | refusal after |
+| --- | --- |
+| `flatten` | uncensused invoking form `property-access-unknown-accessor (SpreadAssignment)` at `dist/index.js:979..986`, reach reachable |
+| `chainedTranslator` | the same form at `dist/index.js:3471..3483` |
+| `scopedTranslator` | unchanged: `coercion (TemplateExpression)` at `3349..3367` |
+
+Both bodies open with `const flat_dict = { ...dict };` (respectively
+`{ ...init_dict }`). An object spread reads every own enumerable property of a
+value whose shape is not statically known, which ADR 0026 records as
+`property-access-unknown-accessor` — a correct refusal, not a new
+over-refusal — and their `for…of` is a second, independent `iteration-protocol`
+refusal behind it. So neither export would have certified even with the spread
+gone, and the table above's "Item 0's loop over-refusal is what stops the only
+probeable row" was true of the *first* premise only.
+
+**Row-level numbers are unchanged.** `@solid-primitives/i18n@2.2.1|solid1|only`:
+`exportsProven` still 0 of 9, verdict `success`, `declinedClosures` still 2,
+three `domain-exhaustiveness` demands, and with the full corpus supplied the row
+still refuses at witness acquisition. `@kobalte/utils@0.9.2|solid1|only` still
+refuses at case-set finalization on the same gate id
+`sha256:a9c9b71f143168b06eca801102c156b52b0b0302faa47780db2daa51cf88f7bc` — so
+`noop`'s census verdict still holds and the `.ts` type-stripping blocker is
+untouched.
+
+**What that leaves as next.** Of the two blockers this document named, the
+cheaper one is done and bought no certified row; the expensive one (40 candidates
+on unprobeable `.ts` artifact cases) is unchanged. The binding constraint on the
+probeable population is now the producer's accessor census over untyped
+receivers in shipped JavaScript — an object spread and a `for…of`, both recorded
+in `docs/precision-backlog.md` as the next measurement.

@@ -19,15 +19,19 @@ export const driftedEntry = 42;
 // body is `callback()`, a callee rooted at a parameter, whose body is the
 // caller's behavior. `run` therefore certifies `creates: []` through the
 // implementation census (`docs/adr/0008-implementation-census-for-creates.md`).
-// `runCreatingOwner` does not — and not for what it does: its `try … finally`
-// puts a `tryReachability` marker in the producer's control-flow census, and
-// the census refuses every transcript carrying such a marker, because the
-// producer withholds call rows inside regions a `break`/`continue` makes
-// non-universal and the marker is the only trace a withheld row leaves. A
-// `try` withholds nothing itself; that over-refusal is recorded in ADR 0008 and
-// lifts with the producer-side fix. The declaration census alone could never
-// have decided either export, which is why the domain was refused by name
-// before the implementation census existed.
+// So does `runCreatingOwner`, and for the same disposition — but only since the
+// producer began classifying its control-flow markers. Its `try … finally` puts
+// a `tryReachability` marker in the control-flow census, and the census used to
+// refuse *every* marker, because the producer withheld call rows inside regions
+// a `break`/`continue` makes non-universal and a marker was the only trace such
+// a row left. A `try` withholds nothing itself, so that was an over-refusal
+// (ADR 0008 item 0). The marker is now classified `reachability-lower-bound` —
+// the construct is walked in full and every call inside it is on the wire — and
+// the census admits it and disposes the same one call. This pair is the pin for
+// that item being discharged: nothing about either body changed.
+//
+// The declaration census alone could never have decided either export, which is
+// why the domain was refused by name before the implementation census existed.
 let currentOwner = null;
 
 export function run(callback) {
