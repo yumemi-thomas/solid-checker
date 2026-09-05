@@ -1632,6 +1632,74 @@ func isCallableDeclaration(node *ast.Node) bool {
 		(ast.IsFunctionLikeDeclaration(node) || ast.IsClassStaticBlockDeclaration(node))
 }
 
+// returnedParameterIdentityLocked proves binding identity, not value shape.
+// Every excluded form remains open; symbol spelling is never positive evidence.
+func (p *project) returnedParameterIdentityLocked(implementation, expression *ast.Node) *typefacts.ParameterValueSource {
+	if implementation == nil || ast.HasSyntacticModifier(implementation, ast.ModifierFlagsAsync) {
+		return nil
+	}
+	switch {
+	case ast.IsFunctionDeclaration(implementation):
+		if implementation.AsFunctionDeclaration().AsteriskToken != nil {
+			return nil
+		}
+	case ast.IsFunctionExpression(implementation):
+		if implementation.AsFunctionExpression().AsteriskToken != nil {
+			return nil
+		}
+	case ast.IsArrowFunction(implementation):
+	default:
+		return nil
+	}
+	expression = identityPreservingUnwrap(expression)
+	if expression == nil || !ast.IsIdentifier(expression) {
+		return nil
+	}
+	symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(expression))
+	if symbol == nil || p.symbolIsAssignedLocked(symbol, implementation) {
+		return nil
+	}
+	// Direct eval and mapped arguments can mutate a binding without a visible
+	// assignment to its symbol. Refuse mentions rather than guessing strictness.
+	var dynamic bool
+	var scan func(*ast.Node)
+	scan = func(node *ast.Node) {
+		if node == nil || dynamic {
+			return
+		}
+		if ast.IsIdentifier(node) && (node.Text() == "eval" || node.Text() == "arguments") {
+			dynamic = true
+			return
+		}
+		node.ForEachChild(func(child *ast.Node) bool { scan(child); return dynamic })
+	}
+	scan(implementation)
+	if dynamic {
+		return nil
+	}
+	var result *typefacts.ParameterValueSource
+	names := make(map[string]bool)
+	for index, parameter := range implementation.Parameters() {
+		if name := parameter.Name(); name != nil && ast.IsIdentifier(name) {
+			if names[name.Text()] {
+				return nil
+			}
+			names[name.Text()] = true
+		}
+		if parameter.Name() == nil || !ast.IsIdentifier(parameter.Name()) ||
+			parameter.Initializer() != nil || parameter.AsParameterDeclaration().DotDotDotToken != nil {
+			continue
+		}
+		if p.canonicalSymbol(p.checker.GetSymbolAtLocation(parameter.Name())) == symbol {
+			if result != nil {
+				return nil
+			}
+			result = &typefacts.ParameterValueSource{ParameterIndex: index}
+		}
+	}
+	return result
+}
+
 func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.ControlFlowCensus {
 	census := &typefacts.ControlFlowCensus{}
 	body := implementation.Body()
@@ -1643,6 +1711,7 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 			Location:         nodeLocation(body),
 			Reach:            typefacts.Reachable,
 			Value:            &value,
+			Parameter:        p.returnedParameterIdentityLocked(implementation, body),
 			CarriedCallables: carried,
 			CarryReach:       &reachable,
 			Sources:          p.returnValueSourcesLocked(body),
@@ -1711,6 +1780,7 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 			}
 			census.Returns = append(census.Returns, typefacts.ReturnSite{
 				Location: nodeLocation(node), Reach: state.reach, Value: value,
+				Parameter:        p.returnedParameterIdentityLocked(implementation, node.Expression()),
 				CarriedCallables: carried, CarryReach: carryReach,
 				Sources: p.returnValueSourcesLocked(node.Expression()),
 			})

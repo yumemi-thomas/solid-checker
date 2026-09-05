@@ -707,6 +707,9 @@ type ReturnSite struct {
 	Location Location             `cbor:"location" json:"location"`
 	Reach    Reachability         `cbor:"reach" json:"reach"`
 	Value    *InvocationValueFact `cbor:"value,omitempty" json:"value,omitempty"`
+	// Parameter identifies an unchanged whole input binding, not its type.
+	// Absence carries no identity premise.
+	Parameter *ParameterValueSource `cbor:"parameter,omitempty" json:"parameter,omitempty"`
 	// CarriedCallables are the exact source ranges of the callables this
 	// returned value provably carries. A consumer asking whether a call inside
 	// a nested callable is reachable through the returned value answers it by

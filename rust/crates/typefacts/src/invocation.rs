@@ -997,6 +997,9 @@ pub struct ReturnSite {
     pub reach: Reachability,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<InvocationValueFact>,
+    /// Positive identity of an unchanged whole input binding. Absence is open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameter: Option<ParameterValueSource>,
     /// Exact source ranges of the callables this returned value provably
     /// carries. A call inside a nested callable is reachable through the
     /// returned value exactly when its location lies within one of these

@@ -898,6 +898,15 @@ func (p *project) binaryFormLocked(
 		// always recorded.
 		return typefacts.UncensusedInstanceOf, true
 	}
+	if (operator == "EqualsEqualsToken" || operator == "ExclamationEqualsToken") &&
+		(binary.Left.Kind == ast.KindNullKeyword || binary.Right.Kind == ast.KindNullKeyword) {
+		// IsLooselyEqual has a dedicated null/undefined arm. Comparing any
+		// value to the exact null literal does not apply ToPrimitive to that
+		// value (the browser's HTMLDDA special case does not invoke user code
+		// either). Children are still walked, so an access or call used to
+		// produce the other operand keeps its own row.
+		return "", false
+	}
 	if _, coercing := coercingBinaryOperators[operator]; !coercing {
 		return "", false
 	}

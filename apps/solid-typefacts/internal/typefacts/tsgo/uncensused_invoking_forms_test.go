@@ -203,6 +203,14 @@ export function binaryCoercionForm(text: string, bag: { toString(): string }): s
 	return text + bag;
 }
 
+export function looseNullEqualityForm(bag: { valueOf(): number }): boolean {
+	return bag != null;
+}
+
+export function looseEqualityCoercionForm(bag: { valueOf(): number }): boolean {
+	return bag != 1;
+}
+
 export function unaryPrefixForm(bag: any): number {
 	return -bag;
 }
@@ -635,6 +643,16 @@ func TestUncensusedInvokingFormClassifierBranches(t *testing.T) {
 			export: "binaryCoercionForm",
 			want:   []typefacts.UncensusedInvokingFormKind{typefacts.UncensusedCoercion},
 			why:    "`+` applies ToPrimitive to both operands; the object-typed one is enough",
+		},
+		{
+			export: "looseNullEqualityForm",
+			want:   nil,
+			why:    "loose equality against an exact null literal never applies ToPrimitive to the other operand",
+		},
+		{
+			export: "looseEqualityCoercionForm",
+			want:   []typefacts.UncensusedInvokingFormKind{typefacts.UncensusedCoercion},
+			why:    "other loose equalities can apply ToPrimitive to an object operand",
 		},
 		{
 			export: "unaryPrefixForm",

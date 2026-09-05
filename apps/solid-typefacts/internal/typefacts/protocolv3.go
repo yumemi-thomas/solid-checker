@@ -4,8 +4,13 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 15 because the producer stopped answering a
-// question about a jump region with silence.
+// TypeFactsHandshakeProtocol is 17: the uncensused-form census now states the
+// ECMAScript guarantee that loose equality against an exact null literal does
+// not invoke a coercion hook. An older producer's empty list does not carry
+// that reviewed classifier meaning, so the handshake moves even though the
+// wire shape does not. Protocol 16 added unchanged whole-parameter identity on
+// return sites; protocol 15 stopped answering a jump-region question with
+// silence.
 //
 // Two coordinated changes, and the field is only half of it. The
 // implementation call census used to **drop** every row that lies in a region a
@@ -95,8 +100,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // Protocol 11 separated the members a value declares from the members it
 // carries only through the compiler's apparent-type augmentation.
 const (
-	TypeFactsHandshakeProtocol uint64 = 15
-	TypeFactsSchemaSHA256             = "sha256:319b22f36abf190c43ed4889bd2e5b43a93c5c1c182be8f86316c0424b73a8bc"
+	TypeFactsHandshakeProtocol uint64 = 17
+	TypeFactsSchemaSHA256             = "sha256:730fbe96f0363181a88ad2a4a56bded9bdbc575f8d40ebef642be8b788e45d1b"
 )
 
 type ServiceHandshake struct {

@@ -36,7 +36,16 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:319b22f36abf190c43ed4889bd2e5b43a93c5c1c182be8f86316c0424b73a8bc";
+    "sha256:730fbe96f0363181a88ad2a4a56bded9bdbc575f8d40ebef642be8b788e45d1b";
+/// 17 says that an empty uncensused-form census includes the reviewed
+/// ECMAScript case `value == null` / `value != null`: an exact null literal
+/// takes the loose-equality nullish arm and does not invoke a coercion hook on
+/// the other operand. The wire shape is unchanged, so the handshake is the
+/// discriminator between producers with and without that classifier premise.
+///
+/// 16 adds an explicit unchanged whole-parameter identity on return sites.
+/// Missing identity is open, independently of concrete type completeness.
+///
 /// 15 stops the producer answering a question about a jump region with silence,
 /// and says which of two different things a control-flow marker means.
 ///
@@ -129,7 +138,9 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 15;
+// Protocol 17 includes exact-null loose equality in the positive
+// uncensused-form classifier. Protocol 16 added unchanged-parameter identity.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 17;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
