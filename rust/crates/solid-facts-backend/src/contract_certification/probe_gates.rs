@@ -286,6 +286,12 @@ pub struct VerifiedProbeGateBatch {
 }
 
 impl VerifiedProbeGateBatch {
+    pub(crate) fn requires_controlled_execution(&self) -> bool {
+        self.harness
+            .as_ref()
+            .is_some_and(BoundProbeHarnessIdentity::requires_controlled_execution)
+    }
+
     /// Refuses a batch verified for a different snapshot, demand graph, or veto
     /// set than the plan being finalized.
     ///

@@ -144,7 +144,7 @@ const SOURCE_OWNERS = [
   },
   {
     path: "rust/crates/solid-checker-wasm/src/lib.rs",
-    markers: ["accepted_contracts: Vec<HostAcceptedContract>", "load_accepted_contract_index("]
+    markers: ["accepted_contracts: Vec<HostAcceptedContract>", "load_external_contract_index("]
   },
   {
     path: "packages/cli/scripts/generate-package-contract.mjs",

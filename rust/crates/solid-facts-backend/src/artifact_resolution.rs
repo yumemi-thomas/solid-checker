@@ -709,23 +709,47 @@ pub(crate) fn resolved_external_export_targets(
     resolved: &ResolvedImport,
 ) -> Result<BTreeSet<(String, String)>, ContractFailure> {
     let mut targets = BTreeSet::new();
-    for target in resolved
-        .exports
-        .values()
-        .flat_map(|binding| [&binding.runtime, &binding.declarations])
-    {
+    let self_dependency = resolved.closure.dependencies.iter().any(|edge| {
+        edge.package_name == resolved.package_name
+            && (edge.specifier == resolved.package_name
+                || edge
+                    .specifier
+                    .starts_with(&format!("{}/", resolved.package_name)))
+    });
+    for (target, role, root) in resolved.exports.values().flat_map(|binding| {
+        [
+            (
+                &binding.runtime,
+                ClosureFileRole::Runtime,
+                &resolved.runtime,
+            ),
+            (
+                &binding.declarations,
+                ClosureFileRole::Declaration,
+                &resolved.declarations,
+            ),
+        ]
+    }) {
         let relative = package_relative_path(&target.module, resolved);
+        let digest = normalize_digest(&target.module.digest)
+            .map_err(|error| invalid_identity(error.to_string()))?;
         let nested_package = relative.as_deref().is_some_and(|path| {
             Path::new(path)
                 .components()
                 .any(|component| component.as_os_str() == "node_modules")
         });
-        if relative.is_none() || nested_package {
-            targets.insert((
-                target.module.path.clone(),
-                normalize_digest(&target.module.digest)
-                    .map_err(|error| invalid_identity(error.to_string()))?,
-            ));
+        // ADR 0012: a self-package semantic edge may own another entrypoint's
+        // target even though its file is inside this package directory. This
+        // is catalog rebinding, not native planning authority: discovery has
+        // already authenticated the exact resolved-import root, and private
+        // proposal projection cannot issue receipts.
+        let self_target = self_dependency
+            && relative.as_deref().is_some_and(|path| {
+                package_relative_path(root, resolved).as_deref() != Some(path)
+                    && !resolved.closure.contains(role, path, &digest)
+            });
+        if relative.is_none() || nested_package || self_target {
+            targets.insert((target.module.path.clone(), digest));
         }
     }
     Ok(targets)
@@ -1415,6 +1439,54 @@ mod tests {
             .unwrap()
             .normalize()
             .unwrap()
+    }
+
+    #[test]
+    fn self_package_dependency_targets_require_the_self_edge_and_keep_local_roots() {
+        let closure = ClosureManifest::new(vec![], vec![], vec![]).unwrap();
+        let mut resolved = resolved_import(closure);
+        resolved.exports.get_mut("value").unwrap().runtime.module = ResolvedFile {
+            path: "/project/node_modules/example/other/index.js".into(),
+            real_path: None,
+            digest: repeated_digest('e'),
+        };
+        assert!(
+            resolved_external_export_targets(&resolved)
+                .unwrap()
+                .is_empty()
+        );
+        for (package_name, specifier, expected) in [
+            ("foreign", "foreign", false),
+            ("example", "example-lookalike", false),
+            ("example", "example", true),
+            ("example", "example/other", true),
+        ] {
+            resolved.closure = ClosureManifest::new(
+                vec![],
+                vec![AcceptedDependencyEdge {
+                    specifier: specifier.into(),
+                    package_name: package_name.into(),
+                    artifact_case: "dependency-case".into(),
+                    accepted_contract_digest: repeated_digest('f'),
+                }],
+                vec![],
+            )
+            .unwrap();
+            let targets = resolved_external_export_targets(&resolved).unwrap();
+            assert_eq!(targets.len(), usize::from(expected));
+            let candidate = normalized_contract(&resolved);
+            // Even with the supplied edge, ordinary binding without planned
+            // targets still refuses. This helper grants no planning authority.
+            assert!(select_and_bind(&candidate, &resolved).is_err());
+            assert_eq!(
+                select_and_bind_with_external_targets(&candidate, &resolved, &targets).is_ok(),
+                expected
+            );
+            assert!(!targets.contains(&(
+                resolved.runtime.path.clone(),
+                resolved.runtime.digest.clone()
+            )));
+        }
     }
 
     #[test]

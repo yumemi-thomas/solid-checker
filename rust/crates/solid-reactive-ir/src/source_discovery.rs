@@ -26,16 +26,6 @@ use solid_facts::core::{SourceHash, SourcePath};
 use solid_facts::{FileFacts, ProjectFacts};
 use typefacts::{Declaration, Location, ResolvedCallValidity};
 
-/// The provenance stamped on facts read from a bundled contract:
-/// `bundled://<dialect label>#<primitive>`, carrying no span of its own.
-pub(crate) fn bundled_contract_location(dialect: &dyn Dialect, primitive: &str) -> Location {
-    Location {
-        path: format!("bundled://{}#{primitive}", dialect.bundled_contract_label()).into(),
-        start_byte: 0,
-        end_byte: 0,
-    }
-}
-
 pub(crate) fn source_discovery_identity(
     file: &FileFacts,
     indexes: &ProjectIndexes<'_>,
@@ -137,7 +127,6 @@ struct EffectiveReturnContext<'a> {
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolId>,
     resolved_contracts: &'a ResolvedContracts,
-    bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
     dialect: &'a dyn Dialect,
 }
 
@@ -246,12 +235,6 @@ fn effective_inner_call_return(
         context.symbol_names,
         context.dialect,
     );
-    if let Some(returned) = primitive
-        .as_deref()
-        .and_then(|primitive| context.bundled_returns.get(primitive))
-    {
-        return Some(returned.clone());
-    }
     let primitive = known_primitive(&primitive)?;
     let kind = if context.dialect.returns_store(primitive) {
         "store-path"
@@ -456,7 +439,7 @@ pub(crate) fn async_source_options(
 /// only a runtime error on the server path. Named imports prove that path;
 /// their absence leaves the rendering mode unresolved because the server
 /// entry may live outside the analyzed project. The export names come from
-/// the bundled `@solidjs/web` contract.
+/// the historical `@solidjs/web` audit; no contract is read during analysis.
 const SERVER_RENDER_IMPORTS: [&str; 6] = [
     "renderToStream",
     "renderToString",
@@ -621,7 +604,6 @@ pub(crate) fn discover_file_sources(
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     resolved_contracts: &ResolvedContracts,
-    bundled_returns: &HashMap<SymbolId, ContractReturn>,
 ) -> SourceDiscoveryContribution {
     let mut result = SourceDiscoveryContribution::default();
     for binding in &file.ast.bindings {
@@ -644,7 +626,6 @@ pub(crate) fn discover_file_sources(
                 entities,
                 symbol_names,
                 resolved_contracts,
-                bundled_returns,
                 dialect: lookup.dialect,
             };
             let effective_return = effective_call_return(contracted_return, call, &context, 16);
@@ -753,7 +734,6 @@ pub(crate) fn discover_file_sources(
             entities,
             symbol_names,
             resolved_contracts,
-            bundled_returns,
             dialect: lookup.dialect,
         };
         if let Some((returned, export_name, contract_location)) =
@@ -820,20 +800,13 @@ pub(crate) fn discover_file_sources(
         if !matches!(
             resolved,
             Some(primitive) if lookup.dialect.creates_reactive_source(primitive)
-        ) && !primitive
-            .as_deref()
-            .is_some_and(|primitive| bundled_returns.contains_key(primitive))
-        {
+        ) {
             continue;
         }
-        let source_kind = if primitive
-            .as_deref()
-            .and_then(|primitive| bundled_returns.get(primitive))
-            .is_some_and(|returned| returned.kind == "store-path")
-            || matches!(
-                resolved,
-                Some(primitive) if lookup.dialect.returns_store(primitive)
-            ) {
+        let source_kind = if matches!(
+            resolved,
+            Some(primitive) if lookup.dialect.returns_store(primitive)
+        ) {
             ReactiveSourceKind::Store
         } else {
             ReactiveSourceKind::Accessor
@@ -876,25 +849,6 @@ pub(crate) fn discover_file_sources(
                 if go_returned_source {
                     result.returned_source_symbols.push(symbol.clone());
                     result.summary_source_symbols.push(symbol.clone());
-                }
-                if binding.shape != solid_facts::ast::BindingShape::Array
-                    && primitive
-                        .as_deref()
-                        .is_some_and(|primitive| bundled_returns.contains_key(primitive))
-                {
-                    result.summary_source_symbols.push(symbol.clone());
-                }
-                if let Some(primitive) = primitive.as_deref()
-                    && let Some(returned) = bundled_returns.get(primitive)
-                {
-                    result.accessor_origins.push((
-                        symbol.clone(),
-                        (
-                            symbol_id(&returned.label),
-                            primitive.into(),
-                            bundled_contract_location(lookup.dialect, primitive),
-                        ),
-                    ));
                 }
                 result.source_kinds.push((symbol.clone(), source_kind));
                 if let Some(primitive) = primitive.as_deref() {
@@ -1023,16 +977,6 @@ pub(crate) fn discover_file_sources(
             result
                 .source_primitives
                 .push((symbol.clone(), primitive.into()));
-            if let Some(returned) = bundled_returns.get(primitive) {
-                result.accessor_origins.push((
-                    symbol.clone(),
-                    (
-                        symbol_id(&returned.label),
-                        primitive.into(),
-                        bundled_contract_location(lookup.dialect, primitive),
-                    ),
-                ));
-            }
         }
         if store_is_value_form(call, resolved) {
             result.value_form_stores.push(symbol.clone());
@@ -1305,7 +1249,6 @@ pub(crate) struct SourceDiscovery {
     /// `Reactive` everywhere) for dialects that keep the upstream
     /// over-approximation.
     pub(crate) props_reactivity: PropsReactivityIndex,
-    pub(crate) bundled_returns: HashMap<SymbolId, ContractReturn>,
     pub(crate) retained_source_paths: HashSet<String>,
     pub(crate) changed_source_symbols: HashSet<SymbolId>,
 }
@@ -1322,7 +1265,6 @@ pub(crate) struct StageContext<'a> {
     pub(crate) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) semantic_lookup: &'a SemanticLookup<'a>,
     pub(crate) resolved_contracts: &'a ResolvedContracts,
-    pub(crate) bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
     pub(crate) runtime: &'a crate::RuntimeEnvironment,
 }
 
@@ -1399,12 +1341,10 @@ pub(crate) fn discover_sources(
         symbol_names,
         semantic_lookup,
         resolved_contracts,
-        bundled_returns,
         runtime,
     } = *ctx;
     let mut clock = StageClock::new(emit_timings);
     let mut accessors = HashMap::<SymbolId, (SymbolId, Location)>::new();
-    let bundled_returns = bundled_returns.clone();
     let mut accessor_origins = HashMap::<SymbolId, (SymbolId, SymbolId, Location)>::new();
     let mut setters = HashMap::<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>::new();
     let mut actions = HashMap::<SymbolId, (SymbolId, Location)>::new();
@@ -1498,7 +1438,6 @@ pub(crate) fn discover_sources(
                     entities,
                     symbol_names,
                     resolved_contracts,
-                    &bundled_returns,
                 )
             });
             let mut aggregate = SourceDiscoveryAggregate::default();
@@ -1566,7 +1505,6 @@ pub(crate) fn discover_sources(
                         entities,
                         symbol_names,
                         resolved_contracts,
-                        &bundled_returns,
                     ),
                 )
             });
@@ -2142,7 +2080,6 @@ pub(crate) fn discover_sources(
         prop_sources,
         uncertain_prop_sources,
         props_reactivity,
-        bundled_returns,
         retained_source_paths,
         changed_source_symbols,
     }

@@ -22,6 +22,28 @@
         }
       ]
     },
+    "./default-export": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "5d998ec91969e634f5dc0e30136248f24229a4072b9a8376d4cb74d3fc87e8f6",
+            "path": "./default-export.js",
+            "sha256": "a8131243af5d8e2534084c96b4a26225e2f7bced954a7c4166133c29ebd60705"
+          },
+          "declarations": {
+            "path": "./default-export.js",
+            "sha256": "a8131243af5d8e2534084c96b4a26225e2f7bced954a7c4166133c29ebd60705"
+          },
+          "exports": {
+            "default": "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1default-export",
+            "typesBranch": "/exports/.~1default-export"
+          }
+        }
+      ]
+    },
     "./enum": {
       "cases": [
         {
@@ -81,6 +103,10 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
+    "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b": {
+      "call": {},
+      "shape": "unknown"
+    },
     "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
       "call": {},
       "shape": "plain"

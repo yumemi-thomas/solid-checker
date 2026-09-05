@@ -103,6 +103,10 @@ const encodeScalar = JSON.stringify;
 // list, and `Object.keys` never reports it.
 const FRAME_LIST = Symbol("solid-checker-probe-frame-list");
 
+// Shared by the worker and audit callers. Rust separately pins this protocol
+// and the complete interpreted image before a certification launch.
+export const PROBE_WORKER_PROTOCOL = "solid-checker-runtime-probe-v5";
+
 /// An empty frame object: own string keys, no prototype.
 export function createFrameRecord() {
   return createRecord(null);

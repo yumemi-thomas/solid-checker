@@ -36,6 +36,7 @@ const DECLARATION_MEMBER_SUFFIXES: [&str; 3] = [".d.ts", ".d.mts", ".d.cts"];
 
 #[cfg(feature = "dialect-v2")]
 mod compiler_facts;
+mod controlled_execution;
 mod dependencies;
 mod export_bindings;
 mod finalization;
@@ -51,6 +52,10 @@ mod witness_wire;
 pub use compiler_facts::{
     CompilerCertificationConfiguration, CompilerCertificationError, CompilerCertificationSchedule,
     LiveCompilerEvidenceBatch, VerifiedCompilerEvidence,
+};
+pub use controlled_execution::{
+    ControlledExecution, ControlledExecutionError, IMPORT_FREE_EXECUTION_PROFILE,
+    INERT_EXECUTION_PROFILE, RELATIVE_GRAPH_EXECUTION_PROFILE,
 };
 pub use dependencies::{
     CanonicalDependencyNodeIdentity, DependencyCompositionError, DependencyCompositionRequirement,
@@ -1195,6 +1200,7 @@ struct SelectedTarget {
 enum TargetSelectionError {
     InvalidTarget(String),
     Refusal(String),
+    DeclarationsNotFound(String),
     /// A conditional target selected no active condition. Split out from
     /// `Refusal` because it is the one outcome Node's PACKAGE_TARGET_RESOLVE
     /// backtracks over: an enclosing conditional object continues to its next
@@ -1208,6 +1214,7 @@ impl TargetSelectionError {
         let reason = match self {
             Self::InvalidTarget(reason)
             | Self::Refusal(reason)
+            | Self::DeclarationsNotFound(reason)
             | Self::ConditionsUnmatched(reason) => reason,
         };
         ArtifactSnapshotError::ResolutionMismatch(reason)
@@ -2070,9 +2077,10 @@ fn resolve_snapshot_export(
             } else {
                 active.remove("types");
             }
-            let mut selected = select_target(
+            let selected = select_target(
                 target,
                 snapshot,
+                axis,
                 entrypoint,
                 capture.as_deref(),
                 &active,
@@ -2083,15 +2091,7 @@ fn resolve_snapshot_export(
                 }],
             )
             .map_err(TargetSelectionError::into_snapshot_error)?;
-            if axis == ResolutionAxis::Declarations {
-                selected.path =
-                    declaration_candidate(snapshot, &selected.path).ok_or_else(|| {
-                        ArtifactSnapshotError::ResolutionMismatch(format!(
-                            "no declaration target exists for {:?}",
-                            selected.path
-                        ))
-                    })?;
-            } else if snapshot.read(&selected.path).is_none() {
+            if snapshot.read(&selected.path).is_none() {
                 return resolution_mismatch(format!(
                     "runtime target {:?} is not a snapshot file",
                     selected.path
@@ -2152,6 +2152,7 @@ fn select_subpath<'a>(
 fn select_target(
     target: &ExportTarget,
     snapshot: &ArtifactSnapshot,
+    axis: ResolutionAxis,
     entrypoint: &str,
     capture: Option<&str>,
     conditions: &BTreeSet<&str>,
@@ -2169,6 +2170,15 @@ fn select_target(
             };
             let path =
                 validate_target_string(&selected).map_err(TargetSelectionError::InvalidTarget)?;
+            let path = if axis == ResolutionAxis::Declarations {
+                declaration_candidate(snapshot, &path).ok_or_else(|| {
+                    TargetSelectionError::DeclarationsNotFound(format!(
+                        "no declaration target exists for {path:?}"
+                    ))
+                })?
+            } else {
+                path
+            };
             if snapshot.read(&path).is_none() {
                 return Err(TargetSelectionError::Refusal(format!(
                     "package target {selected:?} is not a snapshot file"
@@ -2198,6 +2208,7 @@ fn select_target(
                 match select_target(
                     item,
                     snapshot,
+                    axis,
                     entrypoint,
                     capture,
                     conditions,
@@ -2205,7 +2216,10 @@ fn select_target(
                     next_steps,
                 ) {
                     Ok(selected) => return Ok(selected),
-                    Err(error @ TargetSelectionError::InvalidTarget(_)) => last = Some(error),
+                    Err(
+                        error @ (TargetSelectionError::InvalidTarget(_)
+                        | TargetSelectionError::DeclarationsNotFound(_)),
+                    ) => last = Some(error),
                     Err(
                         error @ (TargetSelectionError::Refusal(_)
                         | TargetSelectionError::ConditionsUnmatched(_)),
@@ -2227,7 +2241,9 @@ fn select_target(
             // "./a.js"}, "default": "./index.js"}` under conditions ["vendor"]
             // resolves to ./index.js. Taking the first *matching* key and
             // refusing there instead would reject a package every real consumer
-            // resolves fine. Only `ConditionsUnmatched` backtracks; a null
+            // resolves fine. `ConditionsUnmatched` backtracks on either axis;
+            // `DeclarationsNotFound` additionally backtracks on declarations.
+            // A null
             // (blocked) target, a missing snapshot file, and an invalid target
             // are properties of the package and still refuse immediately.
             //
@@ -2237,6 +2253,7 @@ fn select_target(
             // mirrors `selectTarget` in packages/cli/scripts/artifact-resolution.mjs
             // step for step -- the generator and this replay must select the
             // same target and produce the same trace.
+            let mut missing_declaration = None;
             for (condition, nested) in fields {
                 if condition != "default" && !conditions.contains(condition.as_str()) {
                     continue;
@@ -2249,6 +2266,7 @@ fn select_target(
                 match select_target(
                     nested,
                     snapshot,
+                    axis,
                     entrypoint,
                     capture,
                     conditions,
@@ -2256,12 +2274,17 @@ fn select_target(
                     next_steps,
                 ) {
                     Err(TargetSelectionError::ConditionsUnmatched(_)) => continue,
+                    Err(error @ TargetSelectionError::DeclarationsNotFound(_)) => {
+                        missing_declaration = Some(error);
+                    }
                     other => return other,
                 }
             }
-            Err(TargetSelectionError::ConditionsUnmatched(format!(
-                "entrypoint {entrypoint:?} selects no active condition"
-            )))
+            Err(missing_declaration.unwrap_or_else(|| {
+                TargetSelectionError::ConditionsUnmatched(format!(
+                    "entrypoint {entrypoint:?} selects no active condition"
+                ))
+            }))
         }
         ExportTarget::Invalid => Err(TargetSelectionError::InvalidTarget(
             "package target is not a string, object, array, or null".into(),
@@ -2776,10 +2799,9 @@ mod tests {
         policy2_trust_configuration_for_issuer, resolve_snapshot_export,
     };
     use crate::artifact_resolution::{
-        AcceptedDependencyEdge, AffectedClaimDomain, ClosureEntry, ClosureFileRole, ClosureHazard,
-        ClosureHazardKind, ClosureManifest, ImportRequest, ResolutionAuthority, ResolutionTrace,
-        ResolutionTraceStep, ResolvedExportBinding, ResolvedExportTarget, ResolvedFile,
-        ResolvedImport,
+        AcceptedDependencyEdge, ClosureEntry, ClosureFileRole, ClosureHazardKind, ClosureManifest,
+        ImportRequest, ResolutionAuthority, ResolutionTrace, ResolutionTraceStep,
+        ResolvedExportBinding, ResolvedExportTarget, ResolvedFile, ResolvedImport,
     };
     use base64::{Engine as _, engine::general_purpose::STANDARD};
     use flate2::{Compression, write::GzEncoder};
@@ -3694,6 +3716,65 @@ mod tests {
         let rendered = format!("{refusal}");
         assert!(rendered.contains("widget.js"), "{rendered}");
         assert!(rendered.contains("function declaration"), "{rendered}");
+    }
+
+    #[test]
+    fn declaration_conditions_continue_only_after_missing_declarations() {
+        let manifest: SnapshotPackageManifest = serde_json::from_str(
+            r#"{
+          "name":"late-types","version":"1.0.0",
+          "exports":{".":{"import":"./index.mjs","types":"./index.d.ts"}}
+        }"#,
+        )
+        .unwrap();
+        let conditions = BTreeSet::from(["import"]);
+        for (runtime, sibling) in [(true, false), (true, true), (false, false)] {
+            let mut files = vec![(
+                "package/index.d.ts",
+                b"export declare const value: number;" as &[u8],
+            )];
+            if runtime {
+                files.push(("package/index.mjs", b"export const value = 1;"));
+            }
+            if sibling {
+                files.push((
+                    "package/index.d.mts",
+                    b"export declare const value: number;",
+                ));
+            }
+            let snapshot = declaration_snapshot(&files);
+            let selected = resolve_snapshot_export(
+                &snapshot,
+                &manifest,
+                ".",
+                &conditions,
+                ResolutionAxis::Declarations,
+            )
+            .unwrap();
+            assert_eq!(
+                selected.path,
+                if sibling { "index.d.mts" } else { "index.d.ts" }
+            );
+            assert_eq!(
+                selected.trace.branch,
+                if sibling {
+                    "/exports/./import"
+                } else {
+                    "/exports/./types"
+                }
+            );
+            assert_eq!(
+                resolve_snapshot_export(
+                    &snapshot,
+                    &manifest,
+                    ".",
+                    &conditions,
+                    ResolutionAxis::Runtime
+                )
+                .is_ok(),
+                runtime
+            );
+        }
     }
 
     #[test]
@@ -5968,6 +6049,44 @@ mod tests {
     }
 
     #[test]
+    fn module_closure_declaration_narrowing_retains_opaque_specifiers() {
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3"}"#;
+        let runtime = b"export function noop() {}";
+        let declarations = br##"import "#platform"; import "addon.node"; import "asset.wasm"; export declare function noop(): void;"##;
+        let archive = published_archive(&[
+            ("package/package.json", manifest),
+            ("package/index.js", runtime),
+            ("package/index.d.ts", declarations),
+        ]);
+        let snapshot =
+            ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+        let resolution = SnapshotVerifiedResolution {
+            snapshot_root: snapshot.root().into(),
+            provenance_root: snapshot.provenance_root().into(),
+            runtime_path: "index.js".into(),
+            declarations_path: "index.d.ts".into(),
+            evidence_root: format!("sha256:{:064x}", 0),
+        };
+        let replayed =
+            super::module_closure::replay_snapshot_closure(&snapshot, &resolution, &[]).unwrap();
+        let sources = replayed
+            .hazards
+            .iter()
+            .map(|h| h.source.as_str())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            sources,
+            [
+                "./index.d.ts:#platform",
+                "./index.d.ts:addon.node",
+                "./index.d.ts:asset.wasm"
+            ]
+            .into_iter()
+            .collect()
+        );
+    }
+
+    #[test]
     fn module_closure_resolves_extensionless_and_multi_dot_source_modules_on_both_axes() {
         let manifest = br#"{"name":"fixture-package","version":"1.2.3"}"#;
         let entry = b"export { first } from './array'; export { second } from './HeadContent.dev';";
@@ -7875,26 +7994,10 @@ export const value = phantom;
                 ),
             ],
             Vec::new(),
-            // The declaration import of `source-types` is an opaque frontier
-            // for the closure replay whether or not its bytes are supplied as
-            // evidence. Declaring it here is what a real resolver's manifest
-            // does; it is not what makes the type resolvable.
-            vec![ClosureHazard {
-                kind: ClosureHazardKind::UnacceptedExternalDependency,
-                source: "./types/index.d.ts:source-types".into(),
-                affected_exports: Vec::new(),
-                affected_domains: vec![
-                    AffectedClaimDomain::Callbacks,
-                    AffectedClaimDomain::Reads,
-                    AffectedClaimDomain::Writes,
-                    AffectedClaimDomain::Creates,
-                    AffectedClaimDomain::Invalidates,
-                    AffectedClaimDomain::Throws,
-                    AffectedClaimDomain::Returns,
-                    AffectedClaimDomain::Cleanups,
-                    AffectedClaimDomain::Disposals,
-                ],
-            }],
+            // ADR 0010: the declaration import is not executable. Whether its
+            // type can prove the demanded claim still depends on authenticated
+            // compiler sources, as the missing/wrong-lock tests below assert.
+            Vec::new(),
         )
         .unwrap();
         let import_request = ImportRequest {
@@ -9100,6 +9203,1090 @@ export const value = phantom;
         }
     }
 
+    /// ADR 0009: a census does not waive an unexecutable veto, and a published
+    /// JavaScript sibling keeps its ordinary certification path.
+    #[test]
+    fn the_probe_gate_tracer_keeps_typescript_source_incomplete_and_javascript_certifiable() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let pins = super::probe_harness::configured_pin_digests();
+        assert!(
+            pins.is_some()
+                || std::env::var("SOLID_CHECKER_EXPECT_PROBE_PINS").as_deref() != Ok("1"),
+            "run this tracer through make test-probe-harness with compiled-in pins"
+        );
+        let Some((_, node_pin)) = pins else {
+            return;
+        };
+        let Some((node, node_digest)) = tracer_node() else {
+            return;
+        };
+        assert_eq!(node_digest, node_pin, "the tracer must use the pinned Node");
+        let repository = repository_root();
+        let fixture = repository.join("fixtures/package-contracts/probe-source-disposition");
+        for (directory, name, runtime_name) in [
+            (
+                "typescript-only",
+                "probe-typescript-source-only",
+                "index.ts",
+            ),
+            ("javascript", "probe-published-javascript", "index.js"),
+        ] {
+            let package = fixture.join(directory);
+            let manifest = std::fs::read(package.join("package.json")).unwrap();
+            let runtime = std::fs::read(package.join(runtime_name)).unwrap();
+            let declarations = std::fs::read(package.join("index.d.ts")).unwrap();
+            let archive_runtime = format!("package/{runtime_name}");
+            let archive = published_archive_for(
+                name,
+                "1.0.0",
+                &[
+                    ("package/package.json", manifest.as_slice()),
+                    (&archive_runtime, runtime.as_slice()),
+                    ("package/index.d.ts", declarations.as_slice()),
+                ],
+            );
+            let root = format!("/project/node_modules/{name}");
+            let plan = plan_for_test_package_closing(
+                &archive,
+                name,
+                "1.0.0",
+                &root,
+                &manifest,
+                &["import"],
+                &[(
+                    "noop",
+                    (runtime_name, runtime.as_slice()),
+                    ("index.d.ts", declarations.as_slice()),
+                    root.as_str(),
+                )],
+                &[("noop", ClaimDomain::Creates)],
+                &|_| ValueShape::Callable,
+            );
+            assert_eq!(plan.verified_resolution.runtime_path(), runtime_name);
+            plan.acquire_and_verify_export_value_type_facts(&pin)
+                .unwrap_or_else(|error| panic!("{name}: the census must pass first: {error}"));
+            let schedule = plan.probe_gate_schedule().unwrap();
+            assert_eq!(schedule.gates().len(), 1);
+            let gate = &schedule.gates()[0];
+            let scratch = TracerScratch::new(directory);
+            let module = format!("{directory}.mjs");
+            let corpus = tracer_corpus_from(
+                &fixture,
+                scratch.path(),
+                directory,
+                &[(gate.semantic_claim_id(), &module)],
+            );
+            let configuration =
+                super::ProbeHarnessConfiguration::new(&repository, &node, corpus).unwrap();
+            if directory == "typescript-only" {
+                let (evaluation, _) = super::probe_harness::run_probe_gates(
+                    &plan,
+                    &schedule,
+                    &configuration,
+                    &pin,
+                    &[],
+                )
+                .expect("resolution and launch must succeed before the TS load refuses");
+                assert!(
+                    evaluation.claim_material().iter().any(|material| material
+                        .observations
+                        .iter()
+                        .any(|observation| matches!(
+                            observation.outcome,
+                            crate::ProbeOutcome::Error { .. }
+                        ))),
+                    "the TS import must produce an error, not a timeout or missing report"
+                );
+                let outcomes = schedule.outcomes_from_evaluation(&evaluation).unwrap();
+                assert!(
+                    matches!(schedule.inspect_outcomes(outcomes), Err(super::ProbeGateError::IncompleteGate(id)) if id == gate.id()),
+                    "the exact TS gate must remain incomplete"
+                );
+                let Err(error) = tracer_certify(&plan, &pin, &configuration) else {
+                    panic!("the TypeScript source gate must block certification");
+                };
+                assert!(
+                    matches!(&error, super::Policy2FinalizationError::Probe(super::ProbeGateError::IncompleteGate(id)) if id == gate.id()),
+                    "{name}: a passed census must not waive the gate: {error}"
+                );
+                let issuer =
+                    ConfiguredReceiptIssuer::persistent_local("controlled-inert-test", [23; 32])
+                        .unwrap();
+                let proposal = crate::contract_document::encode(
+                    &plan.selected_candidate,
+                    &crate::contract_document::SidecarDigests::default(),
+                    false,
+                )
+                .unwrap();
+                let result = plan.certify_and_execute(
+                    super::IMPORT_FREE_EXECUTION_PROFILE,
+                    &proposal,
+                    &pin,
+                    &issuer,
+                    &configuration,
+                )
+                .expect("TS-only reaches the import-free profile through census, veto, receipt and recipe replay");
+                let report = serde_json::to_value(&result).unwrap();
+                assert_eq!(report["profile"], super::IMPORT_FREE_EXECUTION_PROFILE);
+                assert_eq!(report["acceptedClosures"], 1);
+                assert_eq!(report["consumerOutcome"], "completed-replayed-recipe");
+                super::controlled_execution::assert_receipt_refusals(&result, &issuer);
+
+                let inert = super::controlled_execution::InertModule::from_plan(
+                    &plan,
+                    super::IMPORT_FREE_EXECUTION_PROFILE,
+                )
+                .unwrap();
+                for which in ["source", "output", "retained-output"] {
+                    let mut bad = inert.clone();
+                    match which {
+                        "source" => bad.source_digest = format!("sha256:{}", "0".repeat(64)),
+                        "output" => bad.output_digest = format!("sha256:{}", "0".repeat(64)),
+                        _ => bad.output.push(' '),
+                    }
+                    assert!(
+                        super::probe_harness::run_inert_gates(
+                            &plan,
+                            &schedule,
+                            &configuration,
+                            &pin,
+                            &bad,
+                            false
+                        )
+                        .is_err(),
+                        "{which} mismatch must refuse at gate time"
+                    );
+                }
+                let (harness_pin, _) = super::probe_harness::configured_pin_digests().unwrap();
+                let bad_transformer = super::ProbeHarnessConfiguration::with_test_pin(
+                    &repository,
+                    &node,
+                    configuration.recipe_corpus(),
+                    &harness_pin,
+                    &format!("sha256:{}", "0".repeat(64)),
+                )
+                .unwrap();
+                assert!(
+                    super::probe_harness::run_inert_gates(
+                        &plan,
+                        &schedule,
+                        &bad_transformer,
+                        &pin,
+                        &inert,
+                        false
+                    )
+                    .is_err(),
+                    "transformer pin mismatch refuses; never repins"
+                );
+
+                let veto_corpus = tracer_corpus_from(
+                    &repository.join("fixtures/package-contracts/restricted-type-erasure"),
+                    scratch.path(),
+                    "derived-veto",
+                    &[(gate.semantic_claim_id(), "derived-veto.mjs")],
+                );
+                let veto =
+                    super::ProbeHarnessConfiguration::new(&repository, &node, veto_corpus).unwrap();
+                let error = plan
+                    .certify_and_execute(
+                        super::IMPORT_FREE_EXECUTION_PROFILE,
+                        &proposal,
+                        &pin,
+                        &issuer,
+                        &veto,
+                    )
+                    .err()
+                    .expect("derived-byte contradiction vetoes closure");
+                assert!(
+                    matches!(
+                        error,
+                        super::ControlledExecutionError::Gate(
+                            super::ProbeGateError::Contradiction { .. }
+                        )
+                    ),
+                    "{error}"
+                );
+            } else {
+                let finalized = tracer_certify(&plan, &pin, &configuration)
+                    .expect("published JavaScript remains certifiable");
+                assert!(finalized.withheld_closures().is_empty());
+                assert!(creates_is_closed_in(finalized.canonical_main(), "noop"));
+                assert_ne!(
+                    finalized.bindings().probe_gate_root,
+                    super::finalization::empty_probe_gate_root(&plan)
+                );
+                assert_eq!(
+                    finalized.authenticated().bindings(),
+                    finalized.bindings(),
+                    "the receipt authenticates the nonempty gate root"
+                );
+            }
+        }
+    }
+
+    /// ADR 0030: extensionless relative TypeScript imports are replayed from
+    /// the authenticated native closure, never guessed by Node's resolver.
+    #[test]
+    fn the_probe_controlled_relative_typescript_graph_executes_only_its_exact_edge_map() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let Some((node, _)) = tracer_node() else {
+            return;
+        };
+        let repository = repository_root();
+        let name = "probe-typescript-source-only";
+        let manifest = br#"{
+          "name":"probe-typescript-source-only","version":"1.0.0","type":"module",
+          "exports":{".":{"types":"./index.d.ts","default":"./index.ts"}}
+        }"#;
+        let erasure_fixture = repository.join("fixtures/package-contracts/restricted-type-erasure");
+        let runtime = std::fs::read(erasure_fixture.join("relative-root.ts")).unwrap();
+        let dependency = std::fs::read(erasure_fixture.join("dependency.ts")).unwrap();
+        let declarations = br#"export declare function noop(input: number): number;
+"#;
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest),
+                ("package/index.ts", runtime.as_slice()),
+                ("package/dependency.ts", dependency.as_slice()),
+                ("package/index.d.ts", declarations),
+            ],
+        );
+        let root = format!("/project/node_modules/{name}");
+        let plan = plan_for_test_package_closing(
+            &archive,
+            name,
+            "1.0.0",
+            &root,
+            manifest,
+            &["import"],
+            &[(
+                "noop",
+                ("index.ts", runtime.as_slice()),
+                ("index.d.ts", declarations),
+                root.as_str(),
+            )],
+            &[("noop", ClaimDomain::Creates)],
+            &|_| ValueShape::Callable,
+        );
+        plan.acquire_and_verify_export_value_type_facts(&pin)
+            .expect("the implementation census closes before controlled execution");
+        let schedule = plan.probe_gate_schedule().unwrap();
+        let gate = &schedule.gates()[0];
+        let scratch = TracerScratch::new("relative-typescript-graph");
+        let fixture = repository.join("fixtures/package-contracts/probe-source-disposition");
+        let corpus = tracer_corpus_from(
+            &fixture,
+            scratch.path(),
+            "typescript-only",
+            &[(gate.semantic_claim_id(), "typescript-only.mjs")],
+        );
+        let configuration =
+            super::ProbeHarnessConfiguration::new(&repository, &node, corpus).unwrap();
+        assert!(
+            super::controlled_execution::InertModule::from_plan(
+                &plan,
+                super::IMPORT_FREE_EXECUTION_PROFILE,
+            )
+            .is_err(),
+            "the import-free profile must not absorb a relative graph"
+        );
+        let graph = super::controlled_execution::InertModule::from_plan(
+            &plan,
+            super::RELATIVE_GRAPH_EXECUTION_PROFILE,
+        )
+        .expect("the exact two-module graph is admissible");
+        assert_eq!(graph.modules.len(), 2);
+        assert_eq!(graph.edges.len(), 1);
+        assert_eq!(graph.edges[0].specifier, "./dependency");
+
+        let issuer =
+            ConfiguredReceiptIssuer::persistent_local("controlled-relative-graph-test", [29; 32])
+                .unwrap();
+        let proposal = crate::contract_document::encode(
+            &plan.selected_candidate,
+            &crate::contract_document::SidecarDigests::default(),
+            false,
+        )
+        .unwrap();
+        let result = plan
+            .certify_and_execute(
+                super::RELATIVE_GRAPH_EXECUTION_PROFILE,
+                &proposal,
+                &pin,
+                &issuer,
+                &configuration,
+            )
+            .expect("census, derived-byte veto and exact graph replay complete");
+        let report = serde_json::to_value(&result).unwrap();
+        assert_eq!(report["profile"], super::RELATIVE_GRAPH_EXECUTION_PROFILE);
+        assert_eq!(report["acceptedClosures"], 1);
+        assert_eq!(report["consumerOutcome"], "completed-replayed-recipe");
+        super::controlled_execution::assert_receipt_refusals(&result, &issuer);
+
+        for which in ["module-source", "module-output", "retained-output", "edge"] {
+            let mut bad = graph.clone();
+            match which {
+                "module-source" => {
+                    bad.modules[1].source_digest = format!("sha256:{}", "0".repeat(64));
+                }
+                "module-output" => {
+                    bad.modules[1].output_digest = format!("sha256:{}", "0".repeat(64));
+                }
+                "retained-output" => bad.modules[1].output.push(' '),
+                _ => bad.edges[0].specifier = "./unresolved".into(),
+            }
+            let attempted = super::probe_harness::run_inert_gates(
+                &plan,
+                &schedule,
+                &configuration,
+                &pin,
+                &bad,
+                false,
+            );
+            if which == "edge" {
+                let (evaluation, _) = attempted.expect("an unmapped import is a probe outcome");
+                let outcomes = schedule.outcomes_from_evaluation(&evaluation).unwrap();
+                assert!(
+                    matches!(
+                        schedule.inspect_outcomes(outcomes),
+                        Err(super::ProbeGateError::IncompleteGate(_))
+                    ),
+                    "an edge-map mismatch must refuse its mandatory gate"
+                );
+            } else {
+                assert!(
+                    attempted.is_err(),
+                    "{which} mismatch must refuse at gate time"
+                );
+            }
+        }
+
+        let veto_fixture = repository.join("fixtures/package-contracts/restricted-type-erasure");
+        let veto_corpus = tracer_corpus_from(
+            &veto_fixture,
+            scratch.path(),
+            "relative-derived-veto",
+            &[(gate.semantic_claim_id(), "relative-derived-veto.mjs")],
+        );
+        let veto = super::ProbeHarnessConfiguration::new(&repository, &node, veto_corpus).unwrap();
+        let error = plan
+            .certify_and_execute(
+                super::RELATIVE_GRAPH_EXECUTION_PROFILE,
+                &proposal,
+                &pin,
+                &issuer,
+                &veto,
+            )
+            .err()
+            .expect("a contradiction observed in the derived graph vetoes closure");
+        assert!(
+            matches!(
+                error,
+                super::ControlledExecutionError::Gate(super::ProbeGateError::Contradiction { .. })
+            ),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn the_probe_gate_tracer_separates_declaration_sources_from_runtime_imports() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let Some((node, _)) = tracer_node() else {
+            return;
+        };
+        let fixture =
+            repository_root().join("fixtures/package-contracts/declaration-import-closure");
+        for (directory, name) in [
+            ("declarations-only", "probe-declaration-only"),
+            ("runtime-import", "probe-runtime-import"),
+        ] {
+            let package = fixture.join(directory);
+            let manifest = std::fs::read(package.join("package.json")).unwrap();
+            let runtime = std::fs::read(package.join("index.js")).unwrap();
+            let declarations = std::fs::read(package.join("index.d.ts")).unwrap();
+            let archive = published_archive_for(
+                name,
+                "1.0.0",
+                &[
+                    ("package/package.json", &manifest),
+                    ("package/index.js", &runtime),
+                    ("package/index.d.ts", &declarations),
+                ],
+            );
+            let root = format!("/project/node_modules/{name}");
+            let mut plan = plan_for_test_package_closing(
+                &archive,
+                name,
+                "1.0.0",
+                &root,
+                &manifest,
+                &["import"],
+                &[(
+                    "noop",
+                    ("index.js", &runtime),
+                    ("index.d.ts", &declarations),
+                    &root,
+                )],
+                &[("noop", ClaimDomain::Creates)],
+                &|_| ValueShape::Callable,
+            );
+            if directory == "runtime-import" {
+                assert_eq!(plan.verified_closure.manifest().hazards.len(), 1);
+                assert_eq!(
+                    plan.verified_closure.manifest().hazards[0].source,
+                    "./index.js:source-types"
+                );
+                assert!(
+                    plan.probe_gate_schedule().unwrap().gates().is_empty(),
+                    "a runtime hazard opens the proposed closure"
+                );
+                let forged = ClosureManifest::new(
+                    plan.verified_closure.manifest().entries.clone(),
+                    vec![],
+                    vec![],
+                )
+                .unwrap();
+                assert!(
+                    super::module_closure::verify_snapshot_closure(
+                        &plan.snapshot,
+                        &plan.verified_resolution,
+                        &forged,
+                    )
+                    .is_err(),
+                    "caller cannot erase the runtime import"
+                );
+                continue;
+            }
+            assert!(plan.verified_closure.manifest().hazards.is_empty());
+            assert!(plan.verified_closure.manifest().dependencies.is_empty());
+            let empty_root = plan.certification_sources_root();
+            for wrong_lock in [true, false] {
+                let source = external_declaration_source(
+                    "3.0.0",
+                    b"export type Callback = () => void;\n",
+                    "/project/node_modules/source-types",
+                    wrong_lock.then_some(SUBSTITUTED_INTEGRITY),
+                );
+                let authenticated = super::dependencies::retain_authenticated_source_packages(
+                    &mut CertificationPlanningTransaction::new(),
+                    vec![source],
+                );
+                plan.certification_sources =
+                    super::type_facts::retain_collision_free_source_packages(&plan, authenticated);
+                if wrong_lock {
+                    assert_eq!(plan.certification_sources_root(), empty_root);
+                    let Err(error) = plan.acquire_and_verify_export_value_type_facts(&pin) else {
+                        panic!("a wrong-lock declaration cannot prove callability");
+                    };
+                    assert!(
+                        error
+                            .to_string()
+                            .contains("is not compiler-proved callable or constructable"),
+                        "{error}"
+                    );
+                    continue;
+                }
+                assert_ne!(plan.certification_sources_root(), empty_root);
+                let schedule = plan.probe_gate_schedule().unwrap();
+                assert_eq!(schedule.gates().len(), 1);
+                let scratch = TracerScratch::new("declaration-only-closure");
+                let corpus = tracer_corpus_from(
+                    &fixture,
+                    scratch.path(),
+                    "declarations-only",
+                    &[(
+                        schedule.gates()[0].semantic_claim_id(),
+                        "declarations-only.mjs",
+                    )],
+                );
+                let config =
+                    super::ProbeHarnessConfiguration::new(repository_root(), &node, corpus)
+                        .unwrap();
+                let finalized = tracer_certify(&plan, &pin, &config).unwrap();
+                assert!(creates_is_closed_in(finalized.canonical_main(), "noop"));
+                assert_ne!(
+                    finalized.bindings().probe_gate_root,
+                    super::finalization::empty_probe_gate_root(&plan)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_probe_gate_tracer_preserves_unknown_runtime_kind_beside_a_closed_sibling() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let Some((node, _)) = tracer_node() else {
+            return;
+        };
+        let fixture = repository_root().join("fixtures/package-contracts/open-runtime-kind");
+        let manifest = std::fs::read(fixture.join("package.json")).unwrap();
+        let runtime = std::fs::read(fixture.join("index.js")).unwrap();
+        let declarations = std::fs::read(fixture.join("index.d.ts")).unwrap();
+        let name = "probe-open-runtime-kind";
+        let root = "/project/node_modules/probe-open-runtime-kind";
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", &manifest),
+                ("package/index.js", &runtime),
+                ("package/index.d.ts", &declarations),
+            ],
+        );
+        let bindings = ["hiddenCallable", "hiddenObject", "noop"].map(|export| {
+            (
+                export,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        let plan = plan_for_test_package_closing(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[("noop", ClaimDomain::Creates)],
+            &|export| {
+                if export == "noop" {
+                    ValueShape::Callable
+                } else {
+                    ValueShape::Unknown
+                }
+            },
+        );
+        assert_eq!(plan.verified_exports.binding_count(), 3);
+        let schedule = plan.probe_gate_schedule().unwrap();
+        assert_eq!(schedule.gates().len(), 1);
+        let scratch = TracerScratch::new("open-runtime-kind");
+        let corpus = tracer_corpus_from(
+            &fixture,
+            scratch.path(),
+            "noop",
+            &[(schedule.gates()[0].semantic_claim_id(), "noop.mjs")],
+        );
+        let config =
+            super::ProbeHarnessConfiguration::new(repository_root(), &node, corpus).unwrap();
+        let finalized = tracer_certify(&plan, &pin, &config).unwrap();
+        assert!(creates_is_closed_in(finalized.canonical_main(), "noop"));
+        let main = crate::contract_document::decode(finalized.canonical_main())
+            .unwrap()
+            .normalize()
+            .unwrap();
+        for export in ["hiddenCallable", "hiddenObject"] {
+            let value = &main.artifact_cases()[0].exports[export];
+            assert_eq!(value.shape, ValueShape::Unknown);
+            for domain in ClaimDomain::ALL {
+                assert_eq!(
+                    value.claim_state(domain),
+                    solid_reactive_ir::contract_semantics::KnowledgeState::Unknown
+                );
+            }
+        }
+        for forged_plain in [true, false] {
+            let closed = if forged_plain {
+                vec![]
+            } else {
+                vec![("hiddenCallable", ClaimDomain::Creates)]
+            };
+            let forged = plan_for_test_package_closing(
+                &archive,
+                name,
+                "1.0.0",
+                root,
+                &manifest,
+                &["import"],
+                &bindings,
+                &closed,
+                &|export| {
+                    if export == "hiddenCallable" && forged_plain {
+                        ValueShape::Plain
+                    } else {
+                        ValueShape::Unknown
+                    }
+                },
+            );
+            assert!(
+                forged
+                    .acquire_and_verify_export_value_type_facts(&pin)
+                    .is_err(),
+                "unknown cannot become a negative claim"
+            );
+        }
+    }
+
+    #[test]
+    fn self_package_rebinding_keeps_native_dependency_and_target_verification() {
+        let fixture = repository_root().join("fixtures/package-contracts/self-package-rebinding");
+        let manifest = std::fs::read(fixture.join("package.json")).unwrap();
+        let runtime = std::fs::read(fixture.join("index.js")).unwrap();
+        let declarations = std::fs::read(fixture.join("index.d.ts")).unwrap();
+        let forward = std::fs::read(fixture.join("forward.js")).unwrap();
+        let forward_types = std::fs::read(fixture.join("forward.d.ts")).unwrap();
+        let name = "self-package-rebinding";
+        let root = "/project/node_modules/self-package-rebinding";
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", &manifest),
+                ("package/index.js", &runtime),
+                ("package/index.d.ts", &declarations),
+                ("package/forward.js", &forward),
+                ("package/forward.d.ts", &forward_types),
+            ],
+        );
+        let base = plan_for_test_package_closing(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &[(
+                "noop",
+                ("index.js", &runtime),
+                ("index.d.ts", &declarations),
+                root,
+            )],
+            &[],
+            &|_| ValueShape::Callable,
+        );
+        let mut request = base.import_request.clone();
+        request.specifier = format!("{name}/forward");
+        let mut resolved = base.resolved_import.clone();
+        resolved.specifier = request.specifier.clone();
+        resolved.requested_entrypoint = "./forward".into();
+        resolved.runtime = resolved_file(root, "forward.js", &forward);
+        resolved.declarations = resolved_file(root, "forward.d.ts", &forward_types);
+        let parsed: SnapshotPackageManifest = serde_json::from_slice(&manifest).unwrap();
+        for (axis, trace) in [
+            (ResolutionAxis::Runtime, &mut resolved.runtime_trace),
+            (
+                ResolutionAxis::Declarations,
+                &mut resolved.declaration_trace,
+            ),
+        ] {
+            *trace = resolve_snapshot_export(
+                &base.snapshot,
+                &parsed,
+                "./forward",
+                &BTreeSet::from(["import"]),
+                axis,
+            )
+            .unwrap()
+            .trace;
+        }
+        let mut resolution = base.verified_resolution.clone();
+        resolution.runtime_path = "forward.js".into();
+        resolution.declarations_path = "forward.d.ts".into();
+        resolved.closure = super::module_closure::replay_snapshot_closure(
+            &base.snapshot,
+            &resolution,
+            &[AcceptedDependencyEdge {
+                specifier: name.into(),
+                package_name: name.into(),
+                artifact_case: base.selected_artifact_case_id().into(),
+                accepted_contract_digest: format!("sha256:{:064x}", 1),
+            }],
+        )
+        .unwrap();
+        let (package, mut case) = crate::artifact_resolution::proposal_identity(&resolved).unwrap();
+        let mut export = base.selected_candidate.artifact_cases()[0].exports["noop"].clone();
+        export.identity.entrypoint = case.entrypoint.clone();
+        export.identity.runtime.module = case.runtime.clone();
+        export.identity.declarations.module = case.declarations.clone();
+        case.exports.insert("noop".into(), export);
+        let candidate = ContractProposal::new(package, vec![case])
+            .normalize()
+            .unwrap();
+        let planned = super::plan_certification_with_dependencies(
+            &mut CertificationPlanningTransaction::new(),
+            CertificationRequest::new(candidate.clone(), request.clone(), resolved.clone()),
+            UntrustedArtifactEnvelope::Published(archive.clone()),
+            &[&base],
+        )
+        .unwrap();
+        assert_eq!(planned.verified_exports.binding_count(), 1);
+        let targets =
+            crate::artifact_resolution::resolved_external_export_targets(&resolved).unwrap();
+        assert_eq!(targets.len(), 2);
+        assert!(
+            crate::artifact_resolution::select_and_bind_with_external_targets(
+                &candidate, &resolved, &targets
+            )
+            .is_ok()
+        );
+        assert!(
+            super::plan_certification_with_dependencies(
+                &mut CertificationPlanningTransaction::new(),
+                CertificationRequest::new(candidate.clone(), request.clone(), resolved.clone()),
+                UntrustedArtifactEnvelope::Published(archive.clone()),
+                &[],
+            )
+            .is_err(),
+            "a supplied self edge is not a planned dependency"
+        );
+        resolved
+            .exports
+            .get_mut("noop")
+            .unwrap()
+            .runtime
+            .module
+            .digest = format!("sha256:{:064x}", 7);
+        assert!(
+            super::plan_certification_with_dependencies(
+                &mut CertificationPlanningTransaction::new(),
+                CertificationRequest::new(candidate, request, resolved),
+                UntrustedArtifactEnvelope::Published(archive),
+                &[&base],
+            )
+            .is_err(),
+            "a planned self edge cannot authenticate forged target bytes"
+        );
+    }
+
+    #[test]
+    fn captured_parameter_member_reads_stay_open_and_forged_direct_reads_refuse() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../fixtures/package-contracts/captured-parameter-member-read");
+        let manifest = std::fs::read(fixture.join("package.json")).unwrap();
+        let runtime = std::fs::read(fixture.join("index.js")).unwrap();
+        let declarations = std::fs::read(fixture.join("index.d.ts")).unwrap();
+        let decoded = crate::contract_document::decode(
+            &std::fs::read(fixture.join("expected.json")).unwrap(),
+        )
+        .unwrap()
+        .normalize()
+        .unwrap();
+        let name = "captured-parameter-member-read";
+        let root = "/project/node_modules/captured-parameter-member-read";
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let snapshot =
+            ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+        let mut package = decoded.package().clone();
+        package.integrity = snapshot.package_integrity().into();
+        let bindings = ["captured", "direct", "mixed"].map(|name| {
+            (
+                name,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        for forged in [false, true] {
+            let mut cases = decoded.artifact_cases().to_vec();
+            for name in ["captured", "mixed"] {
+                assert!(
+                    !cases[0].exports[name]
+                        .operation_claim(ClaimDomain::Reads)
+                        .unwrap()
+                        .is_closed()
+                );
+            }
+            assert_eq!(
+                cases[0].exports["direct"]
+                    .operation_claim(ClaimDomain::Reads)
+                    .unwrap()
+                    .items()
+                    .len(),
+                1
+            );
+            if forged {
+                cases[0].exports.get_mut("captured").unwrap().call =
+                    cases[0].exports["direct"].call.clone();
+            }
+            let candidate = ContractProposal::new(package.clone(), cases)
+                .normalize()
+                .unwrap();
+            let plan = try_plan_supplied_candidate_for_test_package(
+                &archive,
+                name,
+                "1.0.0",
+                root,
+                &manifest,
+                &["import"],
+                &bindings,
+                candidate,
+            )
+            .unwrap();
+            let gated = plan.recipe_gated(None).unwrap();
+            let result = gated
+                .plan()
+                .acquire_and_verify_export_value_type_facts(&pin);
+            if forged {
+                let error = result
+                    .err()
+                    .expect("the never-executed read must still refuse");
+                assert!(
+                    error
+                        .to_string()
+                        .contains("parameter-rooted read has no exact implementation call or use"),
+                    "{error}"
+                );
+            } else {
+                result.expect("the direct read verifies while captured reads remain unknown");
+            }
+        }
+    }
+
+    #[test]
+    fn opaque_callback_chains_stay_open_and_forged_direct_callbacks_refuse() {
+        assert_unknown_callback_fixture(
+            "opaque-callback-chain",
+            &["Opaque", "Stored"],
+            &["Opaque", "Stored"],
+        );
+    }
+
+    #[test]
+    fn retained_values_do_not_prove_callback_invocation() {
+        assert_unknown_callback_fixture(
+            "retained-value-callback",
+            &["MapStore", "SetStore", "ArrayStore"],
+            &["MapStore", "SetStore", "ArrayStore"],
+        );
+    }
+
+    #[test]
+    fn returned_callback_descendants_need_execution_proof() {
+        assert_unknown_callback_fixture(
+            "returned-callback-descendant",
+            &["Dormant", "Invoked"],
+            &["Dormant"],
+        );
+    }
+
+    #[test]
+    fn returned_parameter_identity_verifies_without_a_concrete_generic_shape() {
+        use solid_reactive_ir::{
+            ContractClaim, ContractEntrypoint, ContractExport, ContractPackage, ContractReturn,
+            PackageContract,
+        };
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let name = "returned-parameter-identity";
+        let root = "/project/node_modules/returned-parameter-identity";
+        let fixture = repository_root()
+            .join("fixtures/package-contracts")
+            .join(name);
+        let manifest = std::fs::read(fixture.join("package.json")).unwrap();
+        let runtime = std::fs::read(fixture.join("index.js")).unwrap();
+        let declarations = std::fs::read(fixture.join("index.d.ts")).unwrap();
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let bindings = ["identity", "second", "mutated"].map(|name| {
+            (
+                name,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        let (_, resolved) = test_package_resolution(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[],
+            "/project/src/app.ts",
+        );
+        for forged in [None, Some("second"), Some("mutated")] {
+            let inferred = PackageContract {
+                package: ContractPackage {
+                    name: name.into(),
+                    version: "1.0.0".into(),
+                    integrity: String::new(),
+                },
+                entrypoints: std::collections::BTreeMap::from([(
+                    ".".into(),
+                    ContractEntrypoint {
+                        exports: ["identity", "second", "mutated"]
+                            .into_iter()
+                            .map(|export| {
+                                (
+                                    export.into(),
+                                    ContractExport {
+                                        kind: "function".into(),
+                                        returns: if export == "mutated" && forged != Some(export) {
+                                            ContractClaim::Open
+                                        } else {
+                                            ContractClaim::Known(Some(ContractReturn {
+                                                kind: "argument".into(),
+                                                parameter: Some(usize::from(
+                                                    export == "second" && forged != Some(export),
+                                                )),
+                                                ..ContractReturn::default()
+                                            }))
+                                        },
+                                        ..ContractExport::default()
+                                    },
+                                )
+                            })
+                            .collect(),
+                    },
+                )]),
+                source_path: String::new(),
+            };
+            let candidate =
+                crate::inferred_contract::normalize_inferred_contract(&inferred, &resolved)
+                    .unwrap();
+            let plan = try_plan_supplied_candidate_for_test_package(
+                &archive,
+                name,
+                "1.0.0",
+                root,
+                &manifest,
+                &["import"],
+                &bindings,
+                candidate,
+            )
+            .unwrap();
+            let gated = plan.recipe_gated(None).unwrap();
+            let result = gated
+                .plan()
+                .acquire_and_verify_export_value_type_facts(&pin);
+            if forged.is_some() {
+                assert!(
+                    result.is_err(),
+                    "a changed or different parameter cannot prove the original argument identity"
+                );
+            } else {
+                result.expect("the exact returned parameter does not need a concrete generic type");
+            }
+        }
+    }
+
+    fn assert_unknown_callback_fixture(name: &str, unknown: &[&str], forged_exports: &[&str]) {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let fixture = repository_root()
+            .join("fixtures/package-contracts")
+            .join(name);
+        let manifest = std::fs::read(fixture.join("package.json")).unwrap();
+        let runtime = std::fs::read(fixture.join("index.js")).unwrap();
+        let declarations = std::fs::read(fixture.join("index.d.ts")).unwrap();
+        let decoded = crate::contract_document::decode(
+            &std::fs::read(fixture.join("expected.json")).unwrap(),
+        )
+        .unwrap()
+        .normalize()
+        .unwrap();
+        let root = format!("/project/node_modules/{name}");
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let snapshot =
+            ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+        let mut package = decoded.package().clone();
+        package.integrity = snapshot.package_integrity().into();
+        let bindings = std::iter::once("Direct")
+            .chain(unknown.iter().copied())
+            .map(|name| {
+                (
+                    name,
+                    ("index.js", runtime.as_slice()),
+                    ("index.d.ts", declarations.as_slice()),
+                    root.as_str(),
+                )
+            })
+            .collect::<Vec<_>>();
+        for forged in std::iter::once(None).chain(forged_exports.iter().copied().map(Some)) {
+            let mut cases = decoded.artifact_cases().to_vec();
+            for name in unknown {
+                let callbacks = &cases[0].exports[*name].call.claims().callbacks;
+                assert!(!callbacks.is_closed());
+                assert!(callbacks.items().is_empty());
+            }
+            assert_eq!(
+                cases[0].exports["Direct"]
+                    .call
+                    .claims()
+                    .callbacks
+                    .items()
+                    .len(),
+                1
+            );
+            if let Some(name) = forged {
+                cases[0].exports.get_mut(name).unwrap().call =
+                    cases[0].exports["Direct"].call.clone();
+            }
+            let candidate = ContractProposal::new(package.clone(), cases)
+                .normalize()
+                .unwrap();
+            let plan = try_plan_supplied_candidate_for_test_package(
+                &archive,
+                name,
+                "1.0.0",
+                &root,
+                &manifest,
+                &["import"],
+                &bindings,
+                candidate,
+            )
+            .unwrap();
+            let gated = plan.recipe_gated(None).unwrap();
+            let result = gated
+                .plan()
+                .acquire_and_verify_export_value_type_facts(&pin);
+            if let Some(name) = forged {
+                let error = result
+                    .err()
+                    .unwrap_or_else(|| panic!("forged {name} callback must refuse"));
+                let reason = error.to_string();
+                assert!(
+                    reason.contains("callback parameter has no exact direct-call or resolved-argument flow")
+                    || reason.contains("callback parameter has neither an exact direct call nor an exact dialect callback flow"),
+                    "{name}: {error}"
+                );
+            } else {
+                result.expect("the direct callback verifies while opaque execution stays unknown");
+            }
+        }
+    }
+
     /// Whether the canonical main a receipt binds closes `creates` for
     /// `export` in its one artifact case.
     fn creates_is_closed_in(canonical_main: &[u8], export: &str) -> bool {
@@ -10032,6 +11219,27 @@ export const value = phantom;
         let evidence = plan
             .acquire_and_verify_export_value_type_facts(&pin)
             .expect("the same evidence the transaction acquired");
+        let claim = plan.probe_gate_schedule().unwrap().gates()[0]
+            .semantic_claim_id()
+            .to_owned();
+        assert!(evidence.independent_creates_census(&plan, &claim).is_some());
+        assert!(
+            evidence
+                .independent_creates_census(&plan, "claim:v1:sha256:missing")
+                .is_none()
+        );
+        let other_plan = census_fixture_plan("noRecipe");
+        assert!(
+            evidence
+                .independent_creates_census(&other_plan, &claim)
+                .is_none()
+        );
+        let opened = plan.recipe_gated(None).unwrap();
+        assert!(
+            evidence
+                .independent_creates_census(opened.plan(), &claim)
+                .is_none()
+        );
         let demands = creates_demand_ids(&plan, "plain");
         let [demand] = demands.as_slice() else {
             panic!("one creates demand");
@@ -10135,10 +11343,36 @@ export const value = phantom;
         );
     }
 
-    /// (c) `cycle`: refused by declaration identity.
+    /// (c) `cycle`: the exact stable revisit closes a finite graph; the
+    /// mandatory recipe executes a terminating sample of that graph.
     #[test]
-    fn the_probe_gate_tracer_census_refuses_a_cycle() {
-        assert_census_refuses("cycle", &["refuses a cycle"]);
+    fn the_probe_gate_tracer_census_certifies_a_local_recursion_cycle() {
+        let Some((plan, outcome)) = census_certify("cycle", Some("cycle.mjs")) else {
+            return;
+        };
+        let finalized = outcome.expect("an exact local-recursion cycle must certify");
+        assert!(creates_is_closed_in(finalized.canonical_main(), "cycle"));
+        let pin = pinned_producer_for_test().expect("checked above");
+        let evidence = plan
+            .acquire_and_verify_export_value_type_facts(&pin)
+            .expect("the same evidence the transaction acquired");
+        let demands = creates_demand_ids(&plan, "cycle");
+        let [demand] = demands.as_slice() else {
+            panic!("one creates demand");
+        };
+        let sites = evidence
+            .witness_bindings()
+            .iter()
+            .find(|binding| binding.demand_id() == demand)
+            .expect("the creates demand has a witness")
+            .site_ids();
+        assert!(sites.contains(&"census-total:3:2".to_owned()), "{sites:?}");
+        assert!(
+            sites
+                .iter()
+                .any(|site| site.ends_with(":local-recursion-backedge")),
+            "{sites:?}"
+        );
     }
 
     /// (d) `deep`: nine hops, one past the bound.
@@ -10606,6 +11840,113 @@ export const value = phantom;
                 .bindings()
                 .dependency_receipts_root
         );
+    }
+
+    #[test]
+    fn independent_census_graph_requires_complete_evidence_and_its_own_veto() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let fixture =
+            repository_root().join("fixtures/package-contracts/independent-census-composition");
+        let bytes = |file: &str| std::fs::read(fixture.join(file)).unwrap();
+        for (runtime, recipe) in [
+            ("root.js", "observe.mjs"),
+            ("root.js", "contradiction.mjs"),
+            ("unsafe.js", "observe.mjs"),
+        ] {
+            let (leaf, leaf_archive, leaf_integrity) = synthetic_graph_certification_request_shaped(
+                "leaf-package",
+                "2.0.0",
+                "/project/node_modules/root-package/node_modules/leaf-package",
+                "/project/node_modules/root-package/dist/index.js",
+                &bytes("leaf.js"),
+                &bytes("leaf.d.ts"),
+                vec![],
+                ValueShape::Callable,
+                CallClaims::default(),
+            );
+            let leaf_plan = plan_certification(
+                leaf.clone(),
+                UntrustedArtifactEnvelope::Published(leaf_archive.clone()),
+            )
+            .unwrap();
+            let edge = AcceptedDependencyEdge {
+                specifier: "leaf-package".into(),
+                package_name: "leaf-package".into(),
+                artifact_case: leaf_plan.selected_artifact_case_id().into(),
+                accepted_contract_digest: leaf_plan
+                    .demand_graph()
+                    .candidate_semantic_digest()
+                    .as_str()
+                    .into(),
+            };
+            let (root, root_archive, root_integrity) = synthetic_graph_certification_request_shaped(
+                "root-package",
+                "1.0.0",
+                "/project/node_modules/root-package",
+                "/project/src/app.ts",
+                &bytes(runtime),
+                &bytes("root.d.ts"),
+                vec![edge],
+                ValueShape::Callable,
+                CallClaims {
+                    creates: KnowledgeSet::complete(vec![]),
+                    ..CallClaims::default()
+                },
+            );
+            let graph = plan_published_contract_graph(
+                PublishedGraphNodeRequest::new(
+                    root,
+                    root_archive,
+                    graph_lock("root-package", "1.0.0", &root_integrity),
+                ),
+                [PublishedGraphNodeRequest::new(
+                    leaf,
+                    leaf_archive,
+                    graph_lock("leaf-package", "2.0.0", &leaf_integrity),
+                )],
+            )
+            .unwrap();
+            let root_plan = graph.plan(graph.root_identity()).unwrap();
+            let claim = root_plan.probe_gate_schedule().unwrap().gates()[0]
+                .semantic_claim_id()
+                .to_owned();
+            let scratch = TracerScratch::new("independent-census-graph");
+            let Some(probes) =
+                tracer_configuration_from(&fixture, scratch.path(), "root", &[(&claim, recipe)])
+            else {
+                return;
+            };
+            let issuer =
+                ConfiguredReceiptIssuer::persistent_local("independent-census", [43; 32]).unwrap();
+            let result = graph.certify_value_only(&pin, &issuer, 1, Some(&probes));
+            if runtime == "unsafe.js" {
+                let error = result
+                    .err()
+                    .expect("opaque imported execution must not acquire an independent census")
+                    .to_string();
+                assert!(error.contains("creates census"), "{error}");
+            } else if recipe == "contradiction.mjs" {
+                let error = result
+                    .err()
+                    .expect("the veto must still reject a contradiction")
+                    .to_string();
+                assert!(error.contains("contradict"), "{error}");
+            } else {
+                let finalized = result.expect(
+                    "independent census and completed veto compose with an open dependency",
+                );
+                assert!(creates_is_closed_in(
+                    finalized.root().canonical_main(),
+                    "value"
+                ));
+                assert_ne!(
+                    finalized.root().bindings().probe_gate_root,
+                    super::finalization::empty_probe_gate_root(root_plan)
+                );
+            }
+        }
     }
 
     /// A graph whose dependency node carried a `creates` closure candidate, run

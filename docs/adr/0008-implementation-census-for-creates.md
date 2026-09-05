@@ -562,6 +562,17 @@ refuses by name at witness acquisition, before any gate is consulted.
 
 ## What still refuses
 
+ADRs 0028–0030 add controlled import-free and exact-relative-graph execution
+consumers. Twenty of the original 40 TypeScript candidates now pass the
+independent production census and complete their mandatory veto and recipe
+replay: eighteen import-free and two with authenticated relative imports.
+Seventeen still refuse in the census; three more pass census but require the
+browser profile ADR 0031 withholds. Ordinary published-byte certification still
+refuses creates closure for all 40 source candidates. Controlled receipt v5
+cannot grant ordinary analyzer acceptance. This does not change any
+accessor-census disposition below; see
+`docs/2026-09-05-controlled-relative-type-erasure.md`.
+
 - **The generator's walk still declines a default-library member it resolved
   no declaration for, and there is no fact that would let it stop.** The
   census's `standard-library` disposition reads

@@ -457,6 +457,49 @@ pub(crate) fn encode_probe_session(
 pub(crate) struct DecodedProbeRun {
     pub(crate) run: ProbeRun,
     pub(crate) resolution: Option<ReportedResolution>,
+    pub(crate) execution: Option<ReportedExecution>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct InertExecutionRequest {
+    pub(crate) profile: String,
+    pub(crate) source_path: String,
+    pub(crate) derived_path: String,
+    pub(crate) source_digest: String,
+    pub(crate) output_digest: String,
+    pub(crate) export_name: String,
+    pub(crate) consumer: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) modules: Vec<DerivedExecutionModuleRequest>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) edges: Vec<DerivedExecutionEdgeRequest>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct DerivedExecutionModuleRequest {
+    pub(crate) source_path: String,
+    pub(crate) derived_path: String,
+    pub(crate) source_digest: String,
+    pub(crate) output_digest: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct DerivedExecutionEdgeRequest {
+    pub(crate) importer_path: String,
+    pub(crate) specifier: String,
+    pub(crate) target_path: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ReportedExecution {
+    pub(crate) binding: InertExecutionRequest,
+    pub(crate) loaded: bool,
+    pub(crate) consumer_completed: bool,
+    pub(crate) stage: String,
 }
 
 /// What the worker resolved, before it imported the recipe. Transport data:
@@ -517,6 +560,7 @@ pub(crate) fn decode_probe_run(bytes: &[u8]) -> Result<DecodedProbeRun, RuntimeP
         None => None,
     };
     Ok(DecodedProbeRun {
+        execution: wire.execution.clone(),
         run: probe_run(wire)?,
         resolution,
     })
@@ -544,6 +588,8 @@ struct WireRun {
     /// Absent on the audit path, whose sessions ask for no resolution.
     #[serde(default)]
     resolution: Option<ReportedResolution>,
+    #[serde(default)]
+    execution: Option<ReportedExecution>,
 }
 
 #[derive(Deserialize)]

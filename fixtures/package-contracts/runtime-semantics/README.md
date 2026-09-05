@@ -9,9 +9,9 @@ answers it has to keep apart:
   the call returns.
 - **`queued`**: the observer constructors (`ReportingObserver`,
   `IntersectionObserver`), `scheduler.postTask`, both geolocation callbacks
-  (`getCurrentPosition`, `watchPosition` -- two separate parameters), and the
-  container retentions (`Array#push`, `Set#add`, `Map#set`), where the value is
-  stored and may be reached later.
+  (`getCurrentPosition`, `watchPosition` -- two separate parameters).
+- **retained, invocation unknown**: `Array#push`, `Set#add` and `Map#set`
+  store the value without proving it will ever be called (ADR 0023).
 - **no claim at all**: the conversion functions (`Number`, `Boolean`, `BigInt`,
   `Symbol`, `Object`), `new Array`, and the collection constructors, which
   never invoke an argument.
@@ -24,3 +24,10 @@ control for a *constructor*.
 Nothing here is `closed`: these are descriptions of possible operations, not
 proofs, so an entry that disappears shows up as a vanished operation rather
 than as a refusal.
+
+## Retention correction (ADR 0023)
+
+`retainArray`, `retainMap` and `retainSet` no longer propose queued callback
+invocations: storage alone proves none. Their callback domains remain unknown;
+the existing direct and scheduler cases preserve their invocation proposals.
+The reviewed main and proposal snapshots remove only those storage claims.

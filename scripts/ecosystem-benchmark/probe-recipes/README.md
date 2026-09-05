@@ -45,16 +45,41 @@ the transcript. None of these modules does; nothing detects it if one starts.
 
 ## What each recipe is for, and what it measured (2026-09-04)
 
-Supplying this corpus **refuses** all three rows rather than certifying them,
-and that is the honest state — see
-`docs/package-contract-v2/phase21/2026-09-04-first-real-creates-certification.md`.
+The five `kobalte-utils-092-browser-*` recipes address `clamp`, `isArray`,
+`isFunction`, `isNumber` and `noop` in the independent published root JS case.
+Use `contract certify --entrypoint . --conditions browser --dependency-graph-lane`
+with this corpus and the exact published package. All five mandatory vetoes
+complete; five creates domains close. Other domains remain open. These claims
+do not replace the source subpath claims in the three-row benchmark, and the
+browser condition selects published runtime bytes without adding a DOM.
+ADRs 0015–0021 describe the proof and dependency-workspace corrections.
+
+ADR 0010 separates actual declaration-file imports from executable dependency
+hazards. Alpha now offers six new JS creates candidates. The two `clamp`
+recipes address its distinct import/solid cases; the other four JS candidates
+and its seven source candidates remain withheld for missing recipes. The
+historical first-run report is
+`docs/package-contract-v2/phase21/2026-09-04-first-real-creates-certification.md`;
+current measurements are recorded in ADR 0010, without repinning that ledger.
+
+An isolated follow-up addresses each of the four remaining JS claims with a
+scratch corpus. Both `getScrollParent` cases refuse the unknown-accessor census;
+both `isPointInPolygon` cases refuse the iteration-protocol census. None reaches
+its runtime gate. See `docs/2026-09-04-kobalte-remaining-js-candidates.md` for
+exact claims, source spans and audits. The checked-in corpus remains unchanged:
+these domains are open, and adding recipes alone cannot certify them.
 
 | recipe | claim | measured outcome |
 | --- | --- | --- |
+| `kobalte-utils-alpha-clamp-import.mjs`, `kobalte-utils-alpha-clamp-solid.mjs` | `@kobalte/utils@2.0.0-alpha.0` `clamp`, published `dist/index.js`, two exact cases | census and mandatory veto complete; two creates closures certify; other domains remain open |
 | `kobalte-utils-noop.mjs` | `@kobalte/utils@0.9.2` `noop`, `./src/noop.ts` | the implementation census **proves** `creates: []`; the probe gate then refuses because the artifact case is a `.ts` file under the private workspace's `node_modules` and the pinned interpreter will not strip types there |
-| `solid-primitives-i18n-scoped-translator.mjs` | `@solid-primitives/i18n@2.2.1` `scopedTranslator`, `dist/index.js` | census refuses: uncensused invoking form `coercion (TemplateExpression)` |
-| `solid-primitives-i18n-flatten.mjs` | `@solid-primitives/i18n@2.2.1` `flatten`, `dist/index.js` | census refuses: `iterationReachability` control-flow marker at depth 0 |
-| `solid-primitives-i18n-chained-translator.mjs` | `@solid-primitives/i18n@2.2.1` `chainedTranslator`, `dist/index.js` | census refuses: `iterationReachability` control-flow marker at depth 0 |
+| `solid-primitives-i18n-scoped-translator.mjs`, `solid-primitives-i18n-flatten.mjs`, `solid-primitives-i18n-chained-translator.mjs` | the three i18n creates candidates | the current row refuses first on `chainedTranslator`'s `property-access-unknown-accessor (SpreadAssignment)`; no gate executes |
+
+The clamp recipes exercise numeric boundaries and defaults and observe added
+own global keys during the calls. They cannot observe arbitrary allocations,
+package initialization before recipe entry, DOM behavior, or every argument.
+No session or transcript capability reaches package code. Only the independent
+implementation census proves completeness; these finite observations can veto.
 
 `scripts/ecosystem-probe-recipes.test.mjs` pins the manifest's shape, that every
 declared module exists and exports `runProbeSession`, and that no module names

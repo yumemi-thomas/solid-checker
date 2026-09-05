@@ -10,9 +10,7 @@ use std::{
 
 use crate::cache::{BuildCaches, ReusePlan, build_typescript_indexes};
 use crate::contract_semantics::AcceptedContractIndex;
-use crate::contracts::{
-    ResolvedContractBinding, accepted_bundled_returns, resolve_accepted_contract_imports,
-};
+use crate::contracts::{ResolvedContractBinding, resolve_accepted_contract_imports};
 use crate::identity::{SymbolId, SymbolName};
 use crate::indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
 use crate::reachability::{ReachabilityInputs, reachability_stage};
@@ -256,6 +254,8 @@ fn build_with_accepted_contract_inputs_measured_incremental(
     rule_options: &RuleOptions,
     caches: BuildCaches<'_>,
 ) -> Result<(Program, BuildTimings), BuildError> {
+    let external_contracts = contracts.external_packages();
+    let contracts = external_contracts.as_ref();
     let BuildCaches {
         ast_indexes: ast_indexes_cache,
         source_discovery: source_discovery_cache,
@@ -370,7 +370,6 @@ fn build_with_accepted_contract_inputs_measured_incremental(
     let substage_started = Instant::now();
     let mut resolved_contracts =
         resolve_accepted_contract_imports(facts, contracts, entities, dialect);
-    let bundled_returns = accepted_bundled_returns(facts, contracts);
     build_timings.contract_resolution = substage_started.elapsed();
     let missing_contract_exports = std::mem::take(&mut resolved_contracts.missing_exports);
     let semantic_lookup = SemanticLookup::new(
@@ -408,7 +407,6 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         symbol_names: &symbol_names,
         semantic_lookup,
         resolved_contracts: &resolved_contracts,
-        bundled_returns: &bundled_returns,
         runtime: &rule_options.runtime,
     };
     let discover = move || {

@@ -781,10 +781,9 @@ impl Dialect for Solid2 {
         &["solid-js", "@solidjs/signals", "@solidjs/web"]
     }
 
-    /// `pkg/contracts/bundled/solid-v2/solid-js.json`, the artifact
-    /// `solid-facts-backend` compiles in for this dialect.
-    fn bundled_contract_label(&self) -> &'static str {
-        "solid-v2/solid-js.json"
+    /// Reviewed Solid 2 semantics in this module, not a package certificate.
+    fn runtime_model_identity(&self) -> &'static str {
+        "solid-v2/model-1"
     }
 
     /// [`AUDITED_ARCHIVES`] and [`NEGATIVE_ROWS`] — 28 `creates` denials, 23

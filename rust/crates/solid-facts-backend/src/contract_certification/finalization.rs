@@ -79,6 +79,15 @@ pub(super) fn authenticate_probe_gates(
     probes: Option<&ProbeHarnessConfiguration>,
     pin: &TypeFactsProducerPin,
 ) -> Result<VerifiedProbeGateBatch, Policy2FinalizationError> {
+    authenticate_probe_gates_with_dependencies(plan, probes, pin, &[])
+}
+
+pub(super) fn authenticate_probe_gates_with_dependencies(
+    plan: &CertificationPlan,
+    probes: Option<&ProbeHarnessConfiguration>,
+    pin: &TypeFactsProducerPin,
+    dependencies: &[&CertificationPlan],
+) -> Result<VerifiedProbeGateBatch, Policy2FinalizationError> {
     let schedule = plan.probe_gate_schedule()?;
     if schedule.gates().is_empty() {
         let inspected = schedule.inspect_outcomes([])?;
@@ -86,7 +95,7 @@ pub(super) fn authenticate_probe_gates(
     }
     let configuration = probes.ok_or(Policy2FinalizationError::ProbeAuthorityRequired)?;
     let (evaluation, identity) =
-        probe_harness::run_probe_gates(plan, &schedule, configuration, pin)?;
+        probe_harness::run_probe_gates(plan, &schedule, configuration, pin, dependencies)?;
     let outcomes = schedule.outcomes_from_evaluation(&evaluation)?;
     let inspected = schedule.inspect_outcomes(outcomes)?;
     Ok(schedule.authenticate_with_harness(inspected, &identity)?)
@@ -127,6 +136,55 @@ pub(super) fn finalize_value_only_with_dependencies(
     issuer: &ConfiguredReceiptIssuer,
     revocation_epoch: u64,
 ) -> Result<FinalizedPolicy2Contract, Policy2FinalizationError> {
+    if probe_gates.requires_controlled_execution() {
+        return Err(Policy2FinalizationError::ControlledExecutionRequired);
+    }
+    let (canonical_main, bindings) = prepare_value_only(
+        plan,
+        proposal_document,
+        type_facts,
+        dependencies,
+        probe_gates,
+        pin,
+    )?;
+    let verifier_build_digest = &bindings.verifier_build_digest;
+    let receipt = issue_policy2_receipt(&canonical_main, &bindings, issuer)?;
+    let trust_configuration =
+        policy2_trust_configuration_for_issuer(issuer, verifier_build_digest, revocation_epoch)?;
+    let provenance = match issuer.kind() {
+        super::ReceiptIssuerKind::PersistentLocal => Policy2ReceiptProvenance::PersistentLocal {
+            trust_store: trust_configuration.trust_store(),
+            scope: issuer.scope(),
+        },
+        super::ReceiptIssuerKind::Portable => Policy2ReceiptProvenance::Portable {
+            trust_store: trust_configuration.trust_store(),
+        },
+        super::ReceiptIssuerKind::BuiltIn => {
+            return Err(Policy2FinalizationError::ConfiguredBuiltInIssuer);
+        }
+    };
+    let authenticated =
+        authenticate_policy2_receipt(&canonical_main, &receipt, &bindings, provenance)?;
+    Ok(FinalizedPolicy2Contract {
+        canonical_main,
+        receipt,
+        bindings,
+        authenticated,
+        trust_configuration,
+        withheld_closures: Vec::new(),
+    })
+}
+
+/// Shared positive-proof verification, deliberately before any signature is
+/// issued. Controlled execution must never create an extractable v2 receipt.
+pub(super) fn prepare_value_only(
+    plan: &CertificationPlan,
+    proposal_document: &[u8],
+    type_facts: Option<&VerifiedTypeFactsEvidence>,
+    dependencies: Option<&VerifiedDependencyComposition>,
+    probe_gates: &VerifiedProbeGateBatch,
+    pin: &TypeFactsProducerPin,
+) -> Result<(Vec<u8>, Policy2ReceiptBindings), Policy2FinalizationError> {
     let allowed = [
         ProofFamily::PackageIdentity,
         ProofFamily::ManifestEntrypoint,
@@ -327,31 +385,7 @@ pub(super) fn finalize_value_only_with_dependencies(
         verifier_source_digest: pin.source_manifest_sha256().to_owned(),
         verifier_build_digest: verifier_build_digest.clone(),
     };
-    let receipt = issue_policy2_receipt(&canonical_main, &bindings, issuer)?;
-    let trust_configuration =
-        policy2_trust_configuration_for_issuer(issuer, &verifier_build_digest, revocation_epoch)?;
-    let provenance = match issuer.kind() {
-        super::ReceiptIssuerKind::PersistentLocal => Policy2ReceiptProvenance::PersistentLocal {
-            trust_store: trust_configuration.trust_store(),
-            scope: issuer.scope(),
-        },
-        super::ReceiptIssuerKind::Portable => Policy2ReceiptProvenance::Portable {
-            trust_store: trust_configuration.trust_store(),
-        },
-        super::ReceiptIssuerKind::BuiltIn => {
-            return Err(Policy2FinalizationError::ConfiguredBuiltInIssuer);
-        }
-    };
-    let authenticated =
-        authenticate_policy2_receipt(&canonical_main, &receipt, &bindings, provenance)?;
-    Ok(FinalizedPolicy2Contract {
-        canonical_main,
-        receipt,
-        bindings,
-        authenticated,
-        trust_configuration,
-        withheld_closures: Vec::new(),
-    })
+    Ok((canonical_main, bindings))
 }
 
 impl From<super::RecipeGatingError> for Policy2FinalizationError {
@@ -399,6 +433,10 @@ fn hash_field(hash: &mut Sha256, value: &str) {
 
 #[derive(Debug, Error)]
 pub enum Policy2FinalizationError {
+    #[error(
+        "profiled evidence requires the controlled execution consumer; ordinary receipt issuance refused"
+    )]
+    ControlledExecutionRequired,
     #[error("policy-2 value-only finalization does not support demand family {family}")]
     UnsupportedDemand { family: String },
     #[error("policy-2 value-only finalization requires authenticated dependency receipts")]

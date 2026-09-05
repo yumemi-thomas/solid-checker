@@ -27,7 +27,7 @@ use crate::contract_semantics::{
     OwnerSource, Requirement, Schedule, Tracking, UncertifiableImportReason, ValueShape,
     ValueSource,
 };
-use crate::identity::symbol_id;
+use crate::interproc::ParameterMemberInvocation;
 use crate::pipeline::parallel_slice_results;
 
 /// Whether a value-kind export's shape leaves open the possibility that it is
@@ -53,10 +53,10 @@ fn shape_may_be_callable(shape: &ValueShape) -> bool {
 pub fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractExport {
     let export = accepted.export();
     let mut open_claims = BTreeSet::new();
-    let kind = if matches!(export.shape, ValueShape::Callable | ValueShape::Component) {
-        "function"
-    } else {
-        "value"
+    let kind = match export.shape {
+        ValueShape::Callable | ValueShape::Component => "function",
+        ValueShape::Unknown => "unknown",
+        _ => "value",
     };
 
     let mut callbacks = project_callbacks(export, &mut open_claims);
@@ -830,21 +830,9 @@ fn join_runtime_identity_aliases(
     }
 }
 
-/// Whether the dialect's own vocabulary outranks a package contract for a name
-/// imported from `module`.
-///
-/// Solid's built-ins have richer native semantics than any cross-package
-/// contract summary can express: ownership, async provenance, writes, and
-/// cleanup phases. The reviewed contract stays as evidence and for export
-/// completeness, but its coarse callbacks/returns must not be layered over
-/// native facts.
-///
-/// The gate is the dialect's module-ownership answer, not the literal package
-/// name `solid-js`. 1.x reaches `createStore` only through `solid-js/store` and
-/// `Portal` only through `solid-js/web`; 2.0 moved the whole DOM surface to the
-/// separate `@solidjs/web` package. Comparing package names gave the package
-/// root native precedence and every other entrypoint the contract's coarse
-/// answer, for the same primitives.
+/// A missing external-contract obligation must not invent a receipt
+/// requirement for a primitive already modeled by the selected dialect.
+/// Core contracts themselves are excluded at the analysis boundary.
 fn native_vocabulary_outranks_contract(
     dialect: &dyn Dialect,
     module: &str,
@@ -859,18 +847,6 @@ fn missing_accepted_export_needs_obligation(
     imported: &str,
 ) -> bool {
     !native_vocabulary_outranks_contract(dialect, module, imported)
-}
-
-/// Keep exact, artifact-selected callback timing from an accepted package
-/// contract even when the dialect owns the rest of the primitive. Ownership,
-/// returns, reads, and async behavior remain native.
-fn native_callback_overlay(summary: &ContractExport) -> Option<ContractExport> {
-    let callbacks = summary.callbacks.known()?.clone();
-    (!callbacks.is_empty()).then(|| ContractExport {
-        kind: summary.kind.clone(),
-        callbacks: ContractClaim::Known(callbacks),
-        ..ContractExport::default()
-    })
 }
 
 /// Keep the known parts of a partial export usable while opening the existing
@@ -940,42 +916,6 @@ pub(super) fn resolve_accepted_contract_imports(
 ) -> ResolvedContracts {
     let projected = project_accepted_contracts(facts, contracts);
     resolve_contract_imports_inner(facts, &projected, contracts, entities, dialect)
-}
-
-pub(super) fn accepted_bundled_returns(
-    facts: &ProjectFacts,
-    contracts: &AcceptedContractIndex,
-) -> HashMap<SymbolId, ContractReturn> {
-    let mut returned = HashMap::new();
-    for file in &facts.files {
-        if !file
-            .ast
-            .imports
-            .iter()
-            .any(|import| !import.type_only && import.module.as_str() == "solid-js")
-        {
-            continue;
-        }
-        let Ok(contract) = contracts.contract(file.path.as_str(), "solid-js") else {
-            continue;
-        };
-        if contract.artifact_case().entrypoint != "." {
-            continue;
-        }
-        for name in contract.artifact_case().exports.keys() {
-            let Ok(accepted) = contracts.resolve_name(file.path.as_str(), "solid-js", name) else {
-                continue;
-            };
-            if let Some(value) = project_accepted_export(&accepted)
-                .returns
-                .known()
-                .and_then(Clone::clone)
-            {
-                returned.entry(symbol_id(name)).or_insert(value);
-            }
-        }
-    }
-    returned
 }
 
 fn project_accepted_contracts(
@@ -1118,15 +1058,6 @@ fn resolve_contract_imports_inner(
                         let Some(symbol) = entities.get(&member_location).cloned() else {
                             continue;
                         };
-                        let native =
-                            native_vocabulary_outranks_contract(dialect, &import.module, &imported);
-                        let mut summary = summary;
-                        if native {
-                            let Some(overlay) = native_callback_overlay(&summary) else {
-                                continue;
-                            };
-                            summary = overlay;
-                        }
                         if !summary.open_claims.is_empty() {
                             push_unknown_contract_claims(
                                 &mut missing_exports,
@@ -1150,11 +1081,8 @@ fn resolve_contract_imports_inner(
                             },
                             summary,
                         };
-                        // Native dialect facts are richer than the package
-                        // schema, but the reviewed package contract remains
-                        // the only semantic evidence for public Solid exports
-                        // outside that native vocabulary. Apply the same
-                        // precedence to namespace and named imports.
+                        // External namespace bindings use the same exact
+                        // accepted semantics as named imports.
                         bindings.push(resolved.clone());
                         by_symbol.insert(symbol, resolved);
                     }
@@ -1206,14 +1134,6 @@ fn resolve_contract_imports_inner(
                     }
                     continue;
                 };
-                let native = native_vocabulary_outranks_contract(dialect, &import.module, imported);
-                let mut summary = summary;
-                if native {
-                    let Some(overlay) = native_callback_overlay(&summary) else {
-                        continue;
-                    };
-                    summary = overlay;
-                }
                 if !summary.open_claims.is_empty() {
                     push_unknown_contract_claims(
                         &mut missing_exports,
@@ -1240,11 +1160,7 @@ fn resolve_contract_imports_inner(
                     },
                     summary,
                 };
-                // Solid's built-ins have richer native semantics than their
-                // cross-package contract summary (ownership, async
-                // provenance, writes, and cleanup phases). Keep the bundled
-                // contract as evidence and for export completeness, but do
-                // not layer its coarse callbacks/returns over native facts.
+                // Only external package bindings enter this projection.
                 bindings.push(resolved.clone());
                 by_symbol.insert(symbol, resolved);
             }
@@ -1289,14 +1205,6 @@ fn resolve_contract_imports_inner(
                     }
                     continue;
                 };
-                let native = native_vocabulary_outranks_contract(dialect, module, imported);
-                let mut summary = summary;
-                if native {
-                    let Some(overlay) = native_callback_overlay(&summary) else {
-                        continue;
-                    };
-                    summary = overlay;
-                }
                 if !summary.open_claims.is_empty() {
                     push_unknown_contract_claims(
                         &mut missing_exports,
@@ -1424,9 +1332,7 @@ fn push_missing_accepted_export(
 }
 
 pub(super) struct ContractSemantics<'a> {
-    pub(super) bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
     pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
-    pub(super) source_primitives: &'a HashMap<SymbolId, SymbolId>,
 }
 
 pub(super) struct ContractGraph<'a> {
@@ -1446,7 +1352,7 @@ pub(super) struct ContractAnalysis<'a> {
     /// its callback domain open — see
     /// `interproc::push_unaccounted_parameter_escapes`.
     pub(super) escaped_parameters: &'a [Vec<usize>],
-    pub(super) invoked_parameter_members: &'a [Vec<(usize, Vec<String>)>],
+    pub(super) invoked_parameter_members: &'a [Vec<ParameterMemberInvocation>],
     pub(super) semantics: ContractSemantics<'a>,
 }
 
@@ -1459,7 +1365,7 @@ struct ContractExportNode<'a> {
     structured_return: Option<&'a ContractReturn>,
     callbacks: &'a [ContractCallback],
     escaped_parameters: &'a [usize],
-    invoked_parameter_members: &'a [(usize, Vec<String>)],
+    invoked_parameter_members: &'a [ParameterMemberInvocation],
 }
 
 impl<'a> ContractExportNode<'a> {
@@ -1495,14 +1401,7 @@ fn contract_export_function(
         .filter_map(|read| {
             let reactive_read = ContractReactiveRead {
                 kind: read.kind.clone().unwrap_or_else(|| "accessor".into()),
-                label: semantics
-                    .source_primitives
-                    .get(&read.symbol)
-                    .and_then(|primitive| semantics.bundled_returns.get(primitive))
-                    .map_or_else(
-                        || read.display.to_string(),
-                        |returned| returned.label.clone(),
-                    ),
+                label: read.display.to_string(),
                 parameter: None,
                 path: None,
                 // Provenance is stated exactly when the read was discovered in
@@ -1538,7 +1437,10 @@ fn contract_export_function(
     // accesses that a last-segment comparison would have collapsed into one
     // claim about `values`.
     let mut paths_by_parameter = BTreeMap::<usize, HashSet<&[String]>>::new();
-    for (parameter, path) in invoked_parameter_members {
+    for ParameterMemberInvocation {
+        parameter, path, ..
+    } in invoked_parameter_members
+    {
         paths_by_parameter
             .entry(*parameter)
             .or_default()
@@ -1576,14 +1478,7 @@ fn contract_export_function(
             } else {
                 "accessor".into()
             },
-            label: semantics
-                .source_primitives
-                .get(&read.symbol)
-                .and_then(|primitive| semantics.bundled_returns.get(primitive))
-                .map_or_else(
-                    || read.display.to_string(),
-                    |returned| returned.label.clone(),
-                ),
+            label: read.display.to_string(),
             parameter: None,
             elements: Vec::new(),
             properties: BTreeMap::new(),
@@ -1603,7 +1498,17 @@ fn contract_export_function(
     };
     ContractExport {
         kind: "function".into(),
-        reactive_reads: reactive_reads.into(),
+        // ADR 0013: an access path alone does not establish the execution of
+        // a nested callable. The compact model cannot express this uncertainty
+        // beside known reads, so keep the whole domain open, never empty.
+        reactive_reads: if invoked_parameter_members
+            .iter()
+            .all(|read| read.in_owner_body)
+        {
+            reactive_reads.into()
+        } else {
+            ContractClaim::Open
+        },
         callbacks,
         owner_requirements: Vec::new().into(),
         returns: returns.into(),
@@ -2601,37 +2506,9 @@ fn promote_callable_export(
 }
 
 #[cfg(test)]
-mod native_overlay_tests {
-    use super::{
-        ContractExport, missing_accepted_export_needs_obligation, native_callback_overlay,
-    };
-    use crate::{ContractCallback, ContractClaim, ContractReturn};
+mod native_obligation_tests {
+    use super::missing_accepted_export_needs_obligation;
     use solid_dialect::Solid2;
-
-    #[test]
-    fn native_overlay_keeps_only_exact_callback_timing() {
-        let summary = ContractExport {
-            kind: "function".into(),
-            callbacks: ContractClaim::Known(vec![ContractCallback {
-                parameter: 1,
-                execution: "inline".into(),
-                schedule: None,
-                arguments: Vec::new(),
-                owner: None,
-            }]),
-            returns: ContractClaim::Known(Some(ContractReturn {
-                kind: "accessor".into(),
-                label: "package return".into(),
-                ..ContractReturn::default()
-            })),
-            async_behavior: ContractClaim::Open,
-            ..ContractExport::default()
-        };
-        let overlay = native_callback_overlay(&summary).expect("known callback row");
-        assert_eq!(overlay.callbacks, summary.callbacks);
-        assert_eq!(overlay.returns, ContractClaim::Known(None));
-        assert_eq!(overlay.async_behavior, ContractClaim::Known(String::new()));
-    }
 
     #[test]
     fn partial_accepted_contract_does_not_reopen_dialect_owned_primitives() {

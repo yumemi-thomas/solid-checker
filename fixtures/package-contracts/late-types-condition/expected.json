@@ -1,0 +1,53 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "7be319c0d5f826a09331077b77b4a672646019a24415bb9bd870ec8497c2e29f",
+            "path": "./index.mjs",
+            "sha256": "49d7680cbd5ab169beaaefe54efe4c7568ffe840cf3ec921eb7bf0e7c3f42e02"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "401e57a6ea41c0f3b0952f85d08fb601e91a765a139d4d52bff31a47c5fe9b5c"
+          },
+          "exports": {
+            "value": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:9703891c0647af196c83992d32fd5226372ca7174dd9fa6d22f764de5b7ffa56",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "9703891c0647af196c83992d32fd5226372ca7174dd9fa6d22f764de5b7ffa56"
+    },
+    "name": "late-types-condition",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
+      "call": {
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "creates"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

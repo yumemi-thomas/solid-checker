@@ -514,12 +514,30 @@ this workspace's disposition. Four dispositions:
   omitted.
 
 `sandbox_policy_digest` (`probe_harness.rs`) mirrors these field names into the
-receipt-visible policy digest, at `scheme-version:6`.
+receipt-visible policy digest, now at `scheme-version:10` (ADR 0030).
+Version 7 also binds the canonical package-name/snapshot-root materialization
+manifest into each nonempty probe root. Graph-authenticated dependencies and
+compiler-source snapshots enter the same collision checks, private copies and
+watched census; no resolver escape or isolation guarantee is relaxed.
+Version 8 additionally binds the explicit inert ESM execution profile, its
+pinned strip-only interpretation, watched derived bytes and exact-source-URL
+hook. This profile has a separate controlled consumer and receipt version 3;
+ordinary published-byte certification does not enable it.
+Version 9 extends that hook to the parser-proved import-free grammar, binds
+recipe replay by the controlled consumer, and advances the separate receipt to
+version 4 and the worker protocol to v4. Ordinary certification still never
+installs the hook or accepts the controlled receipt.
+Version 10 adds ADR 0030's authenticated relative TypeScript graph. Every
+source and derived output is bound and watched, and the worker resolves only an
+exact `(importer URL, literal specifier, target URL)` edge map produced by the
+native authenticated snapshot resolver. Controlled receipt version 5 and worker
+protocol v5 carry the graph; ordinary consumers continue to refuse it.
 
 #### ESM (`ESM_RESOLVE`)
 
 | step | input it consults | disposition |
 | --- | --- | --- |
+| dependency materialization before resolution | transaction-authenticated source snapshots and transitive graph dependency snapshots | **CONTAINED / REFUSED / WATCHED** — exact snapshot bytes only, equal roots deduplicated, conflicting package roots refused, every copied dependency watched; scheme 7 binds the materialization manifest into the probe root |
 | specifier is a valid URL: `file:`, `data:` | the URL itself | **NOT DENIED** — bypasses package resolution entirely; a `file:` URL reads anything the launching user can read, and a `data:` URL needs no filesystem at all |
 | specifier is a valid `http(s):` URL | the network | **NOT DENIED** in the policy sense, though this Node build has no network-import support, so it fails at resolution. Network access itself is not denied |
 | specifier starts with `/`, `./`, `..` | the importer's URL | **NOT DENIED** — a relative path can climb out of the private tree |
@@ -553,6 +571,7 @@ receipt-visible policy digest, at `scheme-version:6`.
 
 | step | input it consults | disposition |
 | --- | --- | --- |
+| ADR 0026/0028/0030 controlled ESM profiles | native complete syntax whitelist, authenticated source graph, native expected outputs, native replayed relative edges and compiled Node/harness pins | **CONTAINED / REFUSED / WATCHED** — the trusted worker alone installs strip-only format overrides for exact selected `.ts` URLs, after primordial capture/freeze and before recipe import. Node output must equal every native expected output and watched derived file. The inert profile calls its sole export directly; the import-free and relative-graph profiles replay one selected recipe. The relative profile accepts only its receipt-bound exact edge map. Unmapped imports, URL variants and CommonJS refuse. Every frame echoes the binding and confirms the root source was loaded and the controlled consumer completed. No hook is installed for ordinary certification; controlled receipt v5 cannot enter the policy-2 consumer |
 | `NODE_OPTIONS` (`--import`, `--require`, `--loader`, `--experimental-loader`, `--conditions`, `--preserve-symlinks`) | the environment | **REFUSED** — `env_clear()` plus an explicitly emptied `NODE_OPTIONS`. This one matters most: `--import` runs a module *before* the worker evaluates, which is before its primordials are captured and before the intrinsic prototypes are frozen |
 | command-line flags | `argv` | **CONTAINED** — Rust builds the whole argument vector: one `--conditions=<name>` flag per requested export condition (each validated as a plain condition name first), then the worker path. Nothing else, and nothing from the environment |
 | `--env-file`, `--env-file-if-exists` | `argv`, then the named file | **REFUSED** — by argv, not by the environment: these are flags, so `env_clear()` does not bear on them, and the vector above contains no flag but `--conditions`. `NODE_OPTIONS` cannot smuggle one either (it is emptied, and Node disallows `--env-file` there) |
@@ -759,7 +778,13 @@ recorded rather than worked around.
   gate.
 
 `SandboxKind::Process` is recorded with a **verifier-computed** policy digest
-over exactly this scheme, at `scheme-version:6`. Its field list mirrors the
+over exactly this scheme, now at `scheme-version:10`. ADR 0028 extends the
+restricted transformer and exact-URL hook to import-free runtime expressions,
+adds recipe replay to the separate consumer fields, and advances the worker to
+protocol v4. ADR 0030 adds native-replayed exact relative edges, binds every
+module's source and output, and advances the worker to protocol v5. ADR 0021 adds
+`snapshot:dependency-materialization-manifest-bound-to-probe-root`; the version
+6 additions described below remain in force. Its field list mirrors the
 disposition table's own names — `resolution:private-package-scope`,
 `resolution:no-package-self-reference`,
 `resolution:no-package-imports-escape`,

@@ -28,9 +28,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use solid_facts_backend::{
     DiagnosticSession, NativeIncrementalSession, RequestedRuleEnablement, SourceChange, SourceFile,
-    TypeFactsSession, accepted_contract_catalog_members, bundled_first_party_contract_index,
-    discovered_contract_paths, imported_package_roots, read_accepted_contract_catalog_with_trust,
-    read_policy2_trust_configuration, semantic_demand_options_for_enablement,
+    TypeFactsSession, accepted_contract_catalog_members, discovered_contract_paths,
+    external_package_contract_requirements, imported_package_roots,
+    read_external_contract_catalog_with_trust, read_policy2_trust_configuration,
+    semantic_demand_options_for_enablement,
 };
 use solid_reactive_ir::CacheRetention;
 use solid_reactive_ir::RuntimeEnvironment;
@@ -610,8 +611,7 @@ fn answer(
         .project
         .parent()
         .ok_or("tsconfig has no parent directory")?;
-    let bundled =
-        bundled_first_party_contract_index(state.dialect.id, directory, &facts, &check.runtime)?;
+    let requirements = external_package_contract_requirements(state.dialect.id, directory, &facts);
     let catalog = if check.accepted_contract_catalog.is_empty() {
         let candidate = directory.join(".solid-checker/accepted-contracts.json");
         candidate.is_file().then_some(candidate)
@@ -623,10 +623,10 @@ fn answer(
         .transpose()?;
     let contracts = catalog
         .as_deref()
-        .map(|path| read_accepted_contract_catalog_with_trust(path, trust.as_ref()))
+        .map(|path| read_external_contract_catalog_with_trust(path, trust.as_ref()))
         .transpose()?
         .unwrap_or_default()
-        .with_fallback(bundled);
+        .with_fallback(requirements);
     let analysis = state
         .diagnostics
         .analyze_accepted_measured_with_enablement(

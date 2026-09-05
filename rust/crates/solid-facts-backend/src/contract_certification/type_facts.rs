@@ -396,6 +396,30 @@ pub struct VerifiedTypeFactsEvidence {
 }
 
 impl VerifiedTypeFactsEvidence {
+    /// A completed creates census proves this parent claim without consulting
+    /// dependency semantic claims. Only this live-verified token can expose
+    /// the premise; a wire WitnessBinding alone has no such authority.
+    pub(super) fn independent_creates_census(
+        &self,
+        plan: &CertificationPlan,
+        claim_id: &str,
+    ) -> Option<&str> {
+        let demand = plan.demand_graph().demands().iter().find(|demand| {
+            demand.family() == ProofFamily::DomainExhaustiveness
+                && matches!(demand.subject(), ProofDemandSubject::DomainClosure {
+                    subject,
+                    semantic_claim_id,
+                } if semantic_claim_id == claim_id && matches!(
+                    subject.path,
+                    SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates))
+                ))
+        })?;
+        self.bindings
+            .iter()
+            .find(|binding| binding.demand_id() == demand.id().as_str())
+            .map(WitnessBinding::evidence_root)
+    }
+
     #[must_use]
     pub fn witness_bindings(&self) -> &[WitnessBinding] {
         &self.bindings
@@ -5743,6 +5767,28 @@ fn require_operation_recursive_subject(
             }
         }
     }
+    if let ValueRoot::OperationOutput { operation } = root {
+        let operation = exported
+            .operation(&operation.0)
+            .ok_or_else(|| open("recursive output operation is absent"))?;
+        if let Some(ValueShape::Parameter {
+            index,
+            path: parameter_path,
+        }) = &operation.output
+        {
+            if operation.kind != OperationKind::Return
+                || !path.0.is_empty()
+                || !parameter_path.is_empty()
+                || *callable != DemandedCallability::Unknown
+            {
+                return Err(open(
+                    "returned parameter identity requires an unasserted whole parameter root",
+                ));
+            }
+            let (_, implementation) = require_export_implementation(plan, proof, transcript, open)?;
+            return require_returned_parameter_identity(implementation, *index, open, sites);
+        }
+    }
     // An overloaded export is proved by proving every overload. Nothing here
     // may short-circuit on the first: the demand is about the export, and a
     // caller may select any of them.
@@ -5751,6 +5797,50 @@ fn require_operation_recursive_subject(
             proof, transcript, exported, root, path, *callable, signature, open, sites,
         )?;
     }
+    Ok(())
+}
+
+fn require_returned_parameter_identity(
+    implementation: &typefacts::ExportImplementationTranscript,
+    index: u16,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    let flow = implementation
+        .control_flow
+        .as_ref()
+        .ok_or_else(|| open("returned parameter identity has no control-flow census"))?;
+    if !flow.unsupported.is_empty()
+        || !flow.incompleteness.is_empty()
+        || !flow.returns.iter().any(|site| {
+            site.reach == Reachability::Reachable
+                && site.carry_reach == Some(Reachability::Reachable)
+        })
+    {
+        return Err(open(
+            "returned parameter identity needs complete flow and an unconditional return",
+        ));
+    }
+    let returns = flow
+        .returns
+        .iter()
+        .filter(|site| site.reach != Reachability::Unreachable)
+        .collect::<Vec<_>>();
+    if returns.iter().any(|site| {
+        !site.parameter.as_ref().is_some_and(|source| {
+            source.parameter_index == usize::from(index) && source.path.is_empty()
+        })
+    }) {
+        return Err(open(
+            "returned parameter identity is absent or does not match the demanded parameter",
+        ));
+    }
+    sites.extend(returns.into_iter().map(|site| {
+        format!(
+            "implementation-returned-parameter:{index}:{}:{}:{}",
+            site.location.path, site.location.start_byte, site.location.end_byte,
+        )
+    }));
     Ok(())
 }
 
@@ -7184,7 +7274,7 @@ fn require_census_decides_closure(
 /// Exactly one is assigned per call admitted by the `MayExecute` floor, in the
 /// order the census tries them, and a call none of them fits refuses the domain
 /// **by name**. The set is closed on purpose: adding a disposition is adding a
-/// premise, and each of these five is a premise with an owner.
+/// premise, and each of these six is a premise with an owner.
 ///
 /// * `Unreachable` — the producer's control-flow census proves the call never
 ///   runs. `MayExecute` admits `Reachable` *and* `Unknown`, so an
@@ -7216,8 +7306,14 @@ fn require_census_decides_closure(
 /// * `LocalRecursion` — the callee's declaration resolves inside the certified
 ///   artifact's **own runtime source set**, so the census recurses into that
 ///   declaration's own transcript. Identity is symbol + source file + exact
-///   span, never name; a revisit refuses as a cycle, and depth
-///   [`MAX_COMPOSITION_DEPTH`] refuses rather than approximating.
+///   span, never name, and depth [`MAX_COMPOSITION_DEPTH`] refuses rather than
+///   approximating.
+/// * `LocalRecursionBackedge` — the same exact, stable local declaration is
+///   already on the current census stack. For this zero-upper-bound claim the
+///   edge closes a finite call-graph cycle: the target frame has already
+///   passed its transcript premises, and every non-cycle edge in every frame
+///   is still dispositioned normally. Re-entering the frame can repeat those
+///   bodies or diverge, but cannot introduce an unenumerated `create`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CensusDisposition {
     Unreachable,
@@ -7225,6 +7321,7 @@ enum CensusDisposition {
     StandardLibrary,
     DialectAxiom,
     LocalRecursion,
+    LocalRecursionBackedge,
 }
 
 impl CensusDisposition {
@@ -7235,6 +7332,7 @@ impl CensusDisposition {
             Self::StandardLibrary => "standard-library",
             Self::DialectAxiom => "dialect-axiom",
             Self::LocalRecursion => "local-recursion",
+            Self::LocalRecursionBackedge => "local-recursion-backedge",
         }
     }
 }
@@ -7400,21 +7498,52 @@ struct CensusSourceFacts {
 /// and the span of its name when it has one.
 #[derive(Clone, Copy, Debug)]
 struct CensusFunctionNode {
+    /// The Oxc function node itself. Oxc excludes an enclosing `export`
+    /// keyword from a function declaration's span.
     span: solid_facts::core::Span,
+    /// The exact declaration span typescript-go accepts for a local
+    /// declaration demand. For an inline exported declaration this is the
+    /// enclosing export span; otherwise it is [`Self::span`].
+    demand_span: solid_facts::core::Span,
     body: solid_facts::core::Span,
     name: Option<solid_facts::core::Span>,
 }
 
 impl CensusSourceFacts {
     fn function_nodes(&self) -> impl Iterator<Item = CensusFunctionNode> + '_ {
-        self.facts
-            .functions
-            .iter()
-            .map(|function| CensusFunctionNode {
+        self.facts.functions.iter().map(|function| {
+            let name = function.name.as_ref().map(|name| name.span);
+            // Oxc models `export function helper() {}` as an export node
+            // wrapping a function whose own span starts at `function`.
+            // typescript-go's FunctionDeclaration node starts at
+            // `export`. Bind the two parsers through the export fact's
+            // direct declaration name and shared end, rather than by
+            // scanning source text for a modifier spelling.
+            let demand_span = name
+                .and_then(|name| {
+                    self.facts
+                        .exports
+                        .iter()
+                        .filter(|export| {
+                            export.module.is_none()
+                                && export.span.start <= function.span.start
+                                && export.span.end == function.span.end
+                                && export
+                                    .declarations
+                                    .iter()
+                                    .any(|declaration| declaration.local.span == name)
+                        })
+                        .min_by_key(|export| export.span.end - export.span.start)
+                        .map(|export| export.span)
+                })
+                .unwrap_or(function.span);
+            CensusFunctionNode {
                 span: function.span,
+                demand_span,
                 body: function.body,
-                name: function.name.as_ref().map(|name| name.span),
-            })
+                name,
+            }
+        })
     }
 
     fn text_at(&self, span: solid_facts::core::Span) -> Option<&str> {
@@ -7990,24 +8119,6 @@ fn census_call_disposition(
             at()
         ));
     };
-    if run.visited.contains(&identity) {
-        return Err(format!(
-            "creates census refuses a cycle: the call at {} re-enters {}:{}..{}",
-            at(),
-            identity.path,
-            identity.start,
-            identity.end
-        ));
-    }
-    // The demanded export sits at depth 0, so a helper at depth `d` is `d`
-    // hops away; the bound is the one the composed-operation chain uses, and
-    // reaching it refuses rather than approximating.
-    if depth + 1 > MAX_COMPOSITION_DEPTH {
-        return Err(format!(
-            "creates census exceeds {MAX_COMPOSITION_DEPTH} local-recursion hops at {}",
-            at()
-        ));
-    }
     // The producer resolves a named function to its *identifier*, and answers
     // a local-declaration demand only for the exact span of the declaration
     // node. The node is bound from the authenticated bytes the identifier sits
@@ -8024,6 +8135,24 @@ fn census_call_disposition(
     // binding identifier of its own.
     census_local_binding_is_stable(run, &relative, &node, declaration)
         .map_err(|reason| format!("{reason}, called at {}", at()))?;
+    // The target has been re-bound from the authenticated bytes before the
+    // cycle is closed. That keeps a reassigned recursive name or another
+    // declaration from borrowing this fixed-point disposition.
+    if run.visited.contains(&identity) {
+        return Ok(Some((
+            CensusDisposition::LocalRecursionBackedge,
+            census_call_site(call, CensusDisposition::LocalRecursionBackedge),
+        )));
+    }
+    // The demanded export sits at depth 0, so a helper at depth `d` is `d`
+    // distinct declarations away. A back-edge was closed above and consumes
+    // no new hop; reaching the bound refuses rather than approximating.
+    if depth + 1 > MAX_COMPOSITION_DEPTH {
+        return Err(format!(
+            "creates census exceeds {MAX_COMPOSITION_DEPTH} local-recursion hops at {}",
+            at()
+        ));
+    }
     if run.evidence.local(&node).is_none() {
         if !run.requested.contains(&node) {
             run.requested.push(node);
@@ -8136,8 +8265,8 @@ fn census_local_declaration_node(
     match matches.as_slice() {
         [node] => Ok(typefacts::Location {
             path: declaration.location.path.clone(),
-            start_byte: u64::from(node.span.start),
-            end_byte: u64::from(node.span.end),
+            start_byte: u64::from(node.demand_span.start),
+            end_byte: u64::from(node.demand_span.end),
         }),
         [] => Err(format!(
             "creates census finds no function-like declaration node for {}",
@@ -8421,8 +8550,8 @@ fn census_local_binding_is_stable(
         .function_nodes()
         .find(|candidate| {
             (
-                u64::from(candidate.span.start),
-                u64::from(candidate.span.end),
+                u64::from(candidate.demand_span.start),
+                u64::from(candidate.demand_span.end),
             ) == (node.start_byte, node.end_byte)
         })
         .ok_or_else(|| {
@@ -13838,6 +13967,51 @@ mod tests {
         call
     }
 
+    #[test]
+    fn returned_parameter_identity_requires_every_return_and_complete_flow() {
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "test".into(),
+            reason: reason.into(),
+        };
+        let good = json!({
+            "location": {"path": "/pkg/dist/index.js", "startByte": 20, "endByte": 30},
+            "reach": "reachable", "carryReach": "reachable", "parameter": {"parameterIndex": 0},
+        });
+        let cases = [
+            (json!({"returns": [good.clone()]}), true),
+            (json!({"returns": []}), false),
+        ];
+        // Build variants explicitly: absence, mismatch, conditional return,
+        // unknown/unreachable edges, and an incomplete census cannot prove identity.
+        let mut variants = cases.to_vec();
+        for (field, value) in [
+            ("parameter", json!({"parameterIndex": 1})),
+            (
+                "parameter",
+                json!({"parameterIndex": 0, "path": [{"kind":"property", "property":"child"}]}),
+            ),
+            ("carryReach", json!("unknown")),
+            ("reach", json!("unreachable")),
+        ] {
+            let mut spoiled = good.clone();
+            spoiled[field] = value;
+            variants.push((json!({"returns": [spoiled]}), false));
+        }
+        let mut absent = good.clone();
+        absent.as_object_mut().unwrap().remove("parameter");
+        variants.push((json!({"returns": [absent.clone()]}), false));
+        variants.push((json!({"returns": [good.clone(), absent]}), false));
+        variants.push((json!({"returns": [good], "unsupported": ["try"]}), false));
+        for (flow, expected) in variants {
+            let mut implementation = implementation_with(Vec::new());
+            implementation.control_flow = Some(serde_json::from_value(flow.clone()).unwrap());
+            let mut sites = Vec::new();
+            let result = require_returned_parameter_identity(&implementation, 0, &open, &mut sites);
+            assert_eq!(result.is_ok(), expected, "{flow}: {result:?}");
+            assert_eq!(sites.is_empty(), !expected);
+        }
+    }
+
     fn implementation_with(
         calls: Vec<serde_json::Value>,
     ) -> typefacts::ExportImplementationTranscript {
@@ -16509,6 +16683,43 @@ mod tests {
         }
     }
 
+    /// Oxc excludes the `export` modifier from a function node while
+    /// typescript-go includes it in the FunctionDeclaration demand range. The
+    /// verifier binds the two parsers through the direct export declaration,
+    /// without changing the ordinary local-function range.
+    #[test]
+    fn probe_creates_census_demands_the_typescript_span_for_an_exported_local_helper() {
+        let source = "export function caller() { return helper(); }\n\
+                      export function helper() { return 1; }";
+        let offset = |needle: &str| u64::try_from(source.find(needle).unwrap()).unwrap();
+        let helper_export = offset("export function helper");
+        let helper_function = offset("function helper");
+        let helper_name = offset("helper() { return 1");
+        let certified = consumer_snapshot_with(source);
+        let roots = vec![consumer_root(&certified)];
+        let mut run = census_run(&certified, &roots);
+        let declaration: typefacts::ResolvedDeclaration = serde_json::from_value(json!({
+            "symbol": "symbol:helper",
+            "name": "helper",
+            "kind": "FunctionDeclaration",
+            "sourceFile": "/project/node_modules/consumer/dist/index.js",
+            "location": {
+                "path": "/project/node_modules/consumer/dist/index.js",
+                "startByte": helper_name,
+                "endByte": helper_name + 6,
+            },
+        }))
+        .expect("a valid declaration");
+
+        let demanded = census_local_declaration_node(&mut run, "dist/index.js", &declaration)
+            .expect("the exported helper binds to one declaration");
+        assert_eq!(demanded.start_byte, helper_export);
+        assert_eq!(demanded.end_byte, u64::try_from(source.len()).unwrap());
+        assert_ne!(demanded.start_byte, helper_function);
+        census_local_binding_is_stable(&mut run, "dist/index.js", &demanded, &declaration)
+            .expect("the same expanded demand still binds the Oxc function node");
+    }
+
     /// Every call the `MayExecute` floor admits gets exactly one disposition
     /// and one witness site, in the order the census tries them; the dialect
     /// disposition carries the tier's own site. A synthesized root matching the
@@ -16696,9 +16907,10 @@ mod tests {
 
     /// A callee declared in this artifact's own runtime source is a local
     /// recursion: without its transcript the census asks for it and decides
-    /// nothing; with it the census recurses, and a revisit refuses as a cycle.
+    /// nothing; with it the census recurses, and a revisit closes the finite
+    /// graph while every other edge remains subject to its ordinary premise.
     #[test]
-    fn creates_census_recurses_into_local_declarations_and_refuses_a_cycle() {
+    fn probe_creates_census_recurses_into_local_declarations_and_closes_a_cycle() {
         let source_path = "/project/node_modules/consumer/dist/index.js";
         // Real runtime bytes, because the census binds a local declaration to
         // its *node* by parsing them: the producer resolves `helper` to its
@@ -16816,8 +17028,10 @@ mod tests {
             "{refusal}"
         );
 
-        // With the helper's transcript, whose one call is back into the export:
-        // a cycle, refused by declaration identity.
+        // With the helper's transcript, whose one call is back into the export,
+        // the exact stable declaration is a finite-graph back-edge. The root
+        // frame already passed its transcript premises, so repeating it adds
+        // no unenumerated operation.
         let mut helper = census_transcript_with(
             vec![signals_call(
                 "useThing",
@@ -16860,11 +17074,42 @@ mod tests {
         // Seeded with the demanded export, as `census_creates_domain` does.
         run.visited
             .push(CensusDeclarationIdentity::of(export.declaration.as_ref().unwrap()).unwrap());
+        assert_eq!(
+            census_transcript(&mut run, &export, 0),
+            Ok(CensusStep::Decided)
+        );
+        assert!(run.sites.contains(&format!(
+            "census-call:{source_path}:{}:{}:call:reachable:local-recursion-backedge",
+            call_back_at.0, call_back_at.1
+        )));
+
+        // The back-edge does not excuse another edge in the same recursive
+        // frame. An unresolved call beside it still refuses the whole census.
+        helper.calls.push(signals_call(
+            "escape",
+            json!({
+                "location": {"path": source_path, "startByte": call_back_at.0, "endByte": call_back_at.1},
+                "target": "",
+                "targetModule": "",
+                "declaration": null,
+            }),
+        ));
+        let locals = vec![LocalDeclarationTranscript {
+            location: helper_location.clone(),
+            transcript: helper.clone(),
+        }];
+        let mut run = census_run(&certified, &roots);
+        run.runtime_sources.insert("dist/index.js".into());
+        run.evidence = CensusEvidence {
+            roots: &roots,
+            locals: &locals,
+        };
+        run.visited
+            .push(CensusDeclarationIdentity::of(export.declaration.as_ref().unwrap()).unwrap());
         let refusal = census_transcript(&mut run, &export, 0)
-            .expect_err("a helper calling back into the export is a cycle");
+            .expect_err("a cycle does not hide an unresolved sibling edge");
         assert!(
-            refusal.contains("refuses a cycle")
-                && refusal.contains(&format!(":{}..{}", export_name.0, export_name.1)),
+            refusal.contains("refuses an unresolved callee"),
             "{refusal}"
         );
 

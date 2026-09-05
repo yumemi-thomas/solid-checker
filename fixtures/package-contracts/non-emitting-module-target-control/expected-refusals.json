@@ -15,14 +15,6 @@
       "reason": "solid-checker-rust: emit package contract: entry file <package-root>/bundle.cjs has no runtime ESM exports"
     },
     {
-      "entrypoint": "./default-export",
-      "conditions": [],
-      "stage": "artifact-case",
-      "class": "published-artifact",
-      "applicability": "runtime-module",
-      "reason": "solid-checker-rust: emit package contract: entry file <package-root>/default-export.js exports \"default\", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind \"value\" would certify it invokes no caller-supplied callback"
-    },
-    {
       "entrypoint": "./effects",
       "conditions": [],
       "stage": "artifact-case",

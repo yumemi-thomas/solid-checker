@@ -14,6 +14,228 @@ fn root() -> PathBuf {
 }
 
 #[test]
+fn core_runtime_model_needs_no_contract_and_is_not_reported_as_certified() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    for fixture_name in ["dialect-solid-1x", "dialect-solid-2"] {
+        let fixture = root().join("fixtures/reactive-ir").join(fixture_name);
+        let output = checker()
+            .args([
+                "--project",
+                &fixture.join("tsconfig.json").to_string_lossy(),
+                "--typefacts",
+                &typefacts,
+                "--check-contracts",
+                "--format",
+                "json",
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let core = report["packages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["name"] == "solid-js")
+            .expect("core import is reported");
+        assert_eq!(core["status"], "builtin");
+        assert!(core["remedy"].is_null());
+        assert_eq!(core["contractPath"], "");
+        assert_eq!(report["missing"], 0);
+        assert!(
+            core["detail"]
+                .as_str()
+                .unwrap()
+                .contains("not installed-artifact authentication")
+        );
+    }
+}
+
+#[test]
+fn an_installed_core_alias_does_not_require_a_package_contract() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let directory = temporary_directory("core-foundation-installed-alias");
+    let package = directory.join("node_modules/core-alias");
+    fs::create_dir_all(&package).unwrap();
+    fs::write(
+        package.join("package.json"),
+        r#"{"name":"@solidjs/signals","version":"2.0.0-rc.3","types":"index.d.ts"}"#,
+    )
+    .unwrap();
+    // No behavioral signatures: this fixture tests resolution/reporting only.
+    fs::write(package.join("index.d.ts"), "export {};\n").unwrap();
+    fs::write(
+        directory.join("main.ts"),
+        "import * as core from 'core-alias'; export { core };\n",
+    )
+    .unwrap();
+    fs::write(directory.join("tsconfig.json"), r#"{"compilerOptions":{"module":"ESNext","moduleResolution":"Bundler"},"include":["main.ts"]}"#).unwrap();
+    let run = || {
+        checker()
+            .args([
+                "--project",
+                &directory.join("tsconfig.json").to_string_lossy(),
+                "--typefacts",
+                &typefacts,
+                "--dialect",
+                "solid-v2",
+                "--check-contracts",
+                "--format",
+                "json",
+            ])
+            .output()
+            .unwrap()
+    };
+    let output = run();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["packages"][0]["name"], "core-alias");
+    assert_eq!(report["packages"][0]["status"], "builtin");
+    // A similarly named external package retains its contract requirement.
+    fs::write(package.join("package.json"), r#"{"name":"@solidjs/signals-extra","version":"2.0.0-rc.3","types":"index.d.ts","peerDependencies":{"solid-js":"*"}}"#).unwrap();
+    let output = run();
+    assert_eq!(output.status.code(), Some(1));
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["packages"][0]["status"], "missing");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn an_incompatible_core_package_requires_a_dialect_change_not_a_receipt() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let project = root().join("fixtures/reactive-ir/rendering-csr-selected/tsconfig.json");
+    let output = checker()
+        .args([
+            "--project",
+            &project.to_string_lossy(),
+            "--typefacts",
+            &typefacts,
+            "--dialect",
+            "solid-v1",
+            "--check-contracts",
+            "--format",
+            "json",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let web = report["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["name"] == "@solidjs/web")
+        .expect("web is reported");
+    assert_eq!(web["status"], "unsupported-runtime");
+    assert!(
+        web["remedy"]
+            .as_str()
+            .unwrap()
+            .contains("a core package contract cannot extend")
+    );
+}
+
+#[test]
+fn missing_core_contract_objects_cannot_change_ordinary_findings() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let directory = temporary_directory("core-foundation-no-contracts");
+    let template: serde_json::Value = serde_json::from_slice(
+        &fs::read(root().join(
+            "fixtures/reactive-ir/package-return-consumer/.solid-checker/accepted-contracts.json",
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    let mut catalog = template.clone();
+    catalog["contracts"] = serde_json::Value::Array(
+        ["solid-js", "@solidjs/signals", "@solidjs/web"]
+            .into_iter()
+            .flat_map(|package| {
+                [package, "core-alias"]
+                    .into_iter()
+                    .map(|specifier| {
+                        let mut entry = template["contracts"][0].clone();
+                        entry["document"] = "absent-core-document.json".into();
+                        entry["import"]["packageName"] = package.into();
+                        entry["import"]["specifier"] = specifier.into();
+                        entry
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect(),
+    );
+    let catalog_path = directory.join("catalog.json");
+    fs::write(&catalog_path, serde_json::to_vec(&catalog).unwrap()).unwrap();
+    assert!(
+        solid_facts_backend::accepted_contract_catalog_members(&catalog_path)
+            .unwrap()
+            .is_empty()
+    );
+    for fixture_name in ["dialect-solid-1x", "dialect-solid-2"] {
+        let project = root()
+            .join("fixtures/reactive-ir")
+            .join(fixture_name)
+            .join("tsconfig.json");
+        let run = |catalog: bool| {
+            let mut command = checker();
+            command.args([
+                "--project",
+                &project.to_string_lossy(),
+                "--typefacts",
+                &typefacts,
+                "--format",
+                "json",
+            ]);
+            if catalog {
+                command.args(["--accepted-contracts", &catalog_path.to_string_lossy()]);
+            }
+            let output = command.output().unwrap();
+            assert!(
+                output.status.success() || output.status.code() == Some(1),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            decode_findings(&output.stdout)
+        };
+        let baseline = run(false);
+        assert!(
+            !baseline.is_empty(),
+            "the native model must exercise real findings"
+        );
+        assert_eq!(baseline, run(true));
+    }
+    catalog["contracts"][0]["import"]["packageName"] = "solid-js-extra".into();
+    catalog["contracts"][0]["import"]["specifier"] = "solid-js-extra".into();
+    fs::write(&catalog_path, serde_json::to_vec(&catalog).unwrap()).unwrap();
+    assert!(
+        solid_facts_backend::read_external_contract_catalog_with_trust(&catalog_path, None)
+            .is_err()
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn cli_validation_accepts_every_retired_bundle_main_as_a_proposal() {
     let directory = root().join("pkg/contracts/bundled/solid-v2");
     for entry in fs::read_dir(directory).unwrap() {

@@ -235,6 +235,66 @@ fn canonical_mutation(receipt: &[u8], mutate: impl FnOnce(&mut ReceiptDocument))
 type BindingMutation = (&'static str, fn(&mut Policy2ReceiptBindings));
 
 #[test]
+fn probe_execution_profiles_refuse_at_the_existing_consumer_boundary() {
+    let main = canonical_main(MAIN);
+    let normalized = contract_document::decode(&main)
+        .unwrap()
+        .normalize()
+        .unwrap();
+    let mut bindings = bindings(&main);
+    bindings.closed_claims_root =
+        solid_reactive_ir::contract_semantics::proof::policy2_closed_claims_root(
+            &normalized,
+            &normalized.artifact_cases()[0].id,
+        )
+        .unwrap()
+        .as_str()
+        .into();
+    let receipt = issue_builtin_policy2_receipt(&main, &bindings, "profile-control").unwrap();
+    let entry = BuiltInReceiptEntry {
+        entry_digest: digest_bytes(&receipt),
+        verifier_build_digest: bindings.verifier_build_digest.clone(),
+    };
+    crate::contract_interface::load_authenticated_policy2_embedded_contract(
+        &main, &receipt, &bindings, &entry,
+    )
+    .expect("the unmodified receipt must cross the active consumer boundary");
+    for profile in [
+        serde_json::Value::Null,
+        serde_json::json!("published-bytes"),
+        serde_json::json!({
+            "name": "node-strip-esm-import-free-v1",
+            "inputDigest": root("source"),
+            "outputDigest": root("derived"),
+            "transformerDigest": root("transformer"),
+            "moduleFormat": "module",
+            "resolution": "exact-node-esm",
+        }),
+        serde_json::json!({"name": "typescript-esnext", "version": "5.9.3"}),
+    ] {
+        let mut extended: serde_json::Value = serde_json::from_slice(&receipt).unwrap();
+        extended["payload"]["executionProfile"] = profile.clone();
+        let bytes = serde_json::to_vec(&extended).unwrap();
+        let Err(error) = crate::contract_interface::load_authenticated_policy2_embedded_contract(
+            &main, &bytes, &bindings, &entry,
+        ) else {
+            panic!("an unsupported execution profile granted consumer knowledge");
+        };
+        assert!(
+            matches!(&error, ContractFailure::ReceiptAuthentication { message }
+            if message.contains("unknown field `executionProfile`")),
+            "{error}"
+        );
+        let mut extended = serde_json::to_value(&bindings).unwrap();
+        extended["executionProfile"] = profile.clone();
+        assert!(serde_json::from_value::<Policy2ReceiptBindings>(extended).is_err());
+        let mut extended = serde_json::to_value(resolved_import()).unwrap();
+        extended["executionProfile"] = profile;
+        assert!(serde_json::from_value::<ResolvedImport>(extended).is_err());
+    }
+}
+
+#[test]
 fn local_and_portable_receipts_require_configured_external_trust() {
     let main = canonical_main(MAIN);
     let bindings = bindings(&main);

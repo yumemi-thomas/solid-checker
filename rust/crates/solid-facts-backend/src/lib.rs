@@ -91,6 +91,7 @@ pub mod dialect;
 mod evidence_sidecars;
 mod first_party_bundles;
 mod inferred_contract;
+mod package_requirements;
 mod phase16_benchmark;
 mod proposal_generation;
 mod runtime_probe_wire;
@@ -102,15 +103,17 @@ pub use contract_certification::{
     ArtifactSnapshot, ArtifactSnapshotError, AuthenticatedPolicy2Receipt, BuiltInReceiptEntry,
     CanonicalDependencyNodeIdentity, CertificationPlan, CertificationPlanningError,
     CertificationPlanningTransaction, CertificationRequest, ConfiguredReceiptIssuer,
-    DependencyCompositionError, DependencyCompositionRequirement, DependencyCompositionSchedule,
-    DependencyNodeIdentity, DependencyQueueNode, DependencyReceiptCompositionError,
-    FinalizedGraphNode, FinalizedPolicy2Contract, FinalizedPolicy2Graph, LocalArtifact,
-    LockPinnedArchive, Policy2FinalizationError, Policy2ReceiptBindings, Policy2ReceiptError,
-    Policy2ReceiptProvenance, Policy2TrustConfiguration, Policy2TrustEntry, Policy2TrustStore,
-    ProbeGate, ProbeGateError, ProbeGateSchedule, ProbeHarnessConfiguration, ProbeHarnessError,
-    PublishedArchive, PublishedContractGraphPlan, PublishedGraphCertificationError,
-    PublishedGraphLockSelection, PublishedGraphNodeRequest, PublishedGraphPlanningError,
-    PublishedGraphSourceRequest, PublishedPolicy2Catalog, ReceiptIssuerKind,
+    ControlledExecution, ControlledExecutionError, DependencyCompositionError,
+    DependencyCompositionRequirement, DependencyCompositionSchedule, DependencyNodeIdentity,
+    DependencyQueueNode, DependencyReceiptCompositionError, FinalizedGraphNode,
+    FinalizedPolicy2Contract, FinalizedPolicy2Graph, IMPORT_FREE_EXECUTION_PROFILE,
+    INERT_EXECUTION_PROFILE, LocalArtifact, LockPinnedArchive, Policy2FinalizationError,
+    Policy2ReceiptBindings, Policy2ReceiptError, Policy2ReceiptProvenance,
+    Policy2TrustConfiguration, Policy2TrustEntry, Policy2TrustStore, ProbeGate, ProbeGateError,
+    ProbeGateSchedule, ProbeHarnessConfiguration, ProbeHarnessError, PublishedArchive,
+    PublishedContractGraphPlan, PublishedGraphCertificationError, PublishedGraphLockSelection,
+    PublishedGraphNodeRequest, PublishedGraphPlanningError, PublishedGraphSourceRequest,
+    PublishedPolicy2Catalog, RELATIVE_GRAPH_EXECUTION_PROFILE, ReceiptIssuerKind,
     ReceiptPublicationError, RecipeGatedPlan, RecipeGatingError, SnapshotLimits,
     SnapshotVerifiedClosure, SnapshotVerifiedExports, SnapshotVerifiedResolution,
     TypeFactsCertificationError, TypeFactsCertificationSchedule, TypeFactsProducerPin,
@@ -139,8 +142,9 @@ pub use contract_interface::{
     ResolutionTraceStep, ResolvedExportBinding, ResolvedExportTarget, ResolvedFile, ResolvedImport,
     StandaloneResolutionAdapter, TypeFactsResolutionAdapter, accepted_contract_catalog_members,
     load_accepted_contract, load_accepted_contract_index, load_authenticated_policy2_contract,
-    load_authenticated_policy2_embedded_contract, read_accepted_contract_catalog,
-    read_accepted_contract_catalog_with_trust, read_policy2_trust_configuration,
+    load_authenticated_policy2_embedded_contract, load_external_contract_index,
+    read_accepted_contract_catalog, read_accepted_contract_catalog_with_trust,
+    read_external_contract_catalog_with_trust, read_policy2_trust_configuration,
     read_proposal_dependency_catalog_for_generation,
 };
 pub use contract_workflow::{
@@ -165,6 +169,7 @@ pub use first_party_bundles::{
     BundleSelector, FirstPartyBundle, FirstPartyBundleError, bundled_first_party_contract_index,
     solid1_bundles, solid2_rc3_bundles,
 };
+pub use package_requirements::external_package_contract_requirements;
 pub use phase16_benchmark::phase16_benchmark_report;
 pub use proposal_generation::{
     ConstructedProposal, LocalProposalClaim, PlannedProposal, PositiveOperationCandidate,

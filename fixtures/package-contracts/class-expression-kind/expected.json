@@ -22,6 +22,28 @@
           }
         }
       ]
+    },
+    "./unresolvable": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "5a16a9274d9e9de21a23551724d37915dc4893bd513c71ffe9a891f2cbd2f439",
+            "path": "./unresolvable.ts",
+            "sha256": "584498debcef13af910d989068b2bc9ccf36cb4e92c2e3540062c8f19b353fd7"
+          },
+          "declarations": {
+            "path": "./unresolvable.ts",
+            "sha256": "584498debcef13af910d989068b2bc9ccf36cb4e92c2e3540062c8f19b353fd7"
+          },
+          "exports": {
+            "fromHost": "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1unresolvable",
+            "typesBranch": "/exports/.~1unresolvable"
+          }
+        }
+      ]
     }
   },
   "format": "solid-reactivity-contract",
@@ -38,6 +60,10 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
+    "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b": {
+      "call": {},
+      "shape": "unknown"
+    },
     "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
       "call": {},
       "shape": "plain"

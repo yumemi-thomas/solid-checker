@@ -7,6 +7,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { runProbeSessions } from "../packages/cli/scripts/contract-probe-driver.mjs";
+import { PROBE_WORKER_PROTOCOL } from "../packages/cli/scripts/contract-probe-harness.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PHASE16 = join(ROOT, "benchmarks/package-contract-v2/phase16");
@@ -80,7 +81,7 @@ function distribution(values) {
   return { count: sorted.length, p50: at(0.5), p95: at(0.95), max: sorted.at(-1) };
 }
 
-async function benchmarkCurrentProbeExecution(iterations = 25) {
+export async function benchmarkCurrentProbeExecution(iterations = 25) {
   const recipePath = join(ROOT, INPUTS.currentProbeRecipe);
   const construction = `sha256:${sha256(readFileSync(recipePath))}`;
   const runtimeBuild = `sha256:${sha256(Buffer.from(`${process.execPath}\0${process.version}`))}`;
@@ -89,7 +90,7 @@ async function benchmarkCurrentProbeExecution(iterations = 25) {
       name: "node",
       version: process.version,
       build: runtimeBuild,
-      protocol: "solid-checker-runtime-probe-v2"
+      protocol: PROBE_WORKER_PROTOCOL
     },
     os: platform(),
     architecture: arch(),

@@ -1,5 +1,446 @@
 # Precision backlog
 
+## Authenticated relative TypeScript graphs add two scoped closures; browser profile withheld (2026-09-05)
+
+ADR 0030 adds `node-strip-relative-ts-graph-esm-v1`. The native snapshot
+resolver supplies an exact relative edge map; every graph module's authenticated
+source and pinned-Node strip-only output is digest-bound and watched. The worker
+refuses any unmapped import. Controlled receipt v5, worker protocol v5 and
+sandbox scheme 10 bind the expanded meaning, while ordinary consumers continue
+to reject every controlled receipt.
+
+Of the original eight extensionless-import candidates, `isVirtualPointerEvent`
+and `hasFocusWithin` pass the native census and complete their mandatory veto
+and fresh controlled recipe replay. No real-package contradiction was observed.
+The other six refuse before execution: two indexed property reads, three paths
+through `instanceof`, and one standard-library callback path that reaches the
+same refusing code. They remain open; a finite sample cannot override the
+census.
+
+The earlier census work also adds four import-free completions: `getWindow`,
+`getActiveElement`, alpha `roundToStepPrecision`, and alpha
+`snapValueToStep`. Across the original 40 TypeScript candidates, **20 now
+complete a controlled profile**, moving the combined structural population
+from 3/43 to **23/43**. Seventeen remaining candidates refuse in the native
+census. Three more—Kobalte 0.9.2 and alpha `getScrollParent`, plus 0.9.2
+`runAfterTransition`—pass census but need a browser execution profile.
+
+ADR 0031 retains that browser refusal. Vitest browser mode uses an unbound Vite
+transform and test protocol; ambient Playwright binaries do not preserve the
+compiled browser pin, exact module identity, descriptor framing, pre-import
+primordial capture, process-group lifecycle, or watched-isolation premises.
+No DOM globals are faked. A future browser profile must bind those facts before
+the three gates can run.
+
+## Controlled import-free TypeScript execution admits 18 scoped closures (2026-09-05)
+
+ADR 0028 adds `node-strip-import-free-esm-v1` as a checker-owned controlled
+execution profile. A complete Oxc validator proves byte-position-preserving
+erasure of a finite TypeScript grammar; pinned Node 24.11.1 must independently
+produce the exact expected bytes. Native creates census, mandatory contradiction
+veto, exact resolution, scoped receipt authentication and fresh recipe replay
+all remain required. Receipt v5, worker protocol v5 and sandbox scheme 10 bind
+the broader profile. Ordinary policy-2 consumers refuse the receipt, so this
+does not assert compatibility with an application's compiler or bundler.
+
+Of the POC's 26 import-free finite-sample candidates, **18 pass the independent
+production census and all 18 complete the controlled profile**, with zero
+real-package contradictions. Eight refuse before probing: one
+`CallableFunction.call`, five unknown platform accessors, and two unknown
+element accesses. ADRs 0029–0030 resolved the finite recursion, exported-helper
+span, nullish equality, and exact relative-import limitations. The reflection
+counterexample still forbids cross-profile reuse; a deliberate contradiction
+in derived bytes blocks issuance as required.
+
+The same-corpus ordinary three-row comparison is unchanged: Kobalte 0.9.2 still
+refuses on gate `a9c9b71f…f7bc`, alpha retains two JavaScript closures and 11
+withheld closures, and i18n retains its independent accessor-census refusal.
+Ordinary `exportsProven` remains 0. The production census diagnostic and
+controlled results are retained under `/private/tmp`; see the dated
+[implementation report](2026-09-05-controlled-import-free-type-erasure.md).
+
+## Built-in Solid runtime foundation migration (2026-09-05)
+
+ADR 0027 records the decision before implementation: ordinary analysis takes
+core behavior from the Solid dialect, not package contracts for `solid-js`,
+`@solidjs/signals`, or `@solidjs/web`. The initial audit found both embedded
+bundle lists and both indexes already empty; earlier documentation describing
+active core receipt loading was incorrect.
+
+The shared analysis boundary now excludes core entries by package identity
+and reserved specifier, including aliases, before metrics and cache identity.
+Native/daemon catalog discovery and the WASM host loader withhold core entries
+before opening document/receipt objects. Ordinary discovery no longer decodes
+historical core contracts. The name-keyed core return table and native callback
+overlay are removed; external contracts retain their existing proof boundary.
+Core support is reported as `builtin`, not as independently certified, and a
+core package outside the selected dialect is `unsupported-runtime`.
+
+This does not add authentication to the existing major-version dialect
+selection or declaration bootstrap. Artifact and conformance audit material
+and the certifier's exact identity checks remain intact. The implementation
+does not claim that a model selection verifies installed runtime bytes, and
+does not relax the prohibition on circular core certification. Verification
+passed: 379 backend, 236 IR, 63 dialect, 2 WASM, 11 contract-process, 15
+diagnostics-process, and 37 dialect-process tests; 154 script and 175 CLI tests;
+coverage, ownership, contract corpus, conformance, formatting and workspace
+Clippy. No snapshots moved for this migration. See the dated
+[implementation report](2026-09-05-built-in-solid-runtime-foundation.md).
+
+## Controlled inert TypeScript execution (2026-09-05)
+
+ADR 0026 precedes implementation of `node-strip-inert-esm-v1`. The consumer is
+a native-owned fresh invocation of the exact verified derived ESM module,
+after native census, mandatory veto and scoped receipt authentication. Its
+receipt version 3 cannot enter ordinary policy-2 acceptance or an analyzer
+catalog. It closes `creates` only within this controlled execution; it does
+not certify an arbitrary compiler or bundler's interpretation.
+
+The first grammar is deliberately finite: one direct exported synchronous
+function, no parameters or type parameters, no imports, no directives, and an
+empty body or bare return, optionally annotated `void`. A complete Oxc parse
+owns the whitelist and expected erasure. Pinned Node strip-only output must
+equal those expected bytes. Sandbox scheme 8 and worker protocol v3 bind the
+exact source URL, input/output and consumer echo, with every existing isolation
+and pin requirement retained. Reflection, importing modules and browser code
+remain refused. The broader profile in ADR 0025 remains unadmitted.
+
+Focused regressions extend the TS-only/published-JS pair through the controlled
+consumer, check source/output/Node-pin and receipt/profile mismatches, and
+inject a deliberate veto after observing the derived module. This is a veto
+control, not a claimed real-package contradiction. The native measurement of
+all 40 original source candidates admits **one**, Kobalte 0.9.2 noop, through
+its exact formerly incomplete gate and the controlled consumer. The other 39
+refuse this initial grammar. Ordinary TS creates-closure acceptance and exportsProven remain
+zero; the alpha's two existing JS closures are unchanged. All requested
+checks pass with no snapshot moves. See
+[the controlled-execution report](2026-09-05-controlled-inert-type-erasure.md).
+
+## Restricted type erasure: consumer execution remains unbound (2026-09-04)
+
+ADR 0025 precedes the new regressions. The completed side-conversation POC
+loaded 32 of the original 40 TS candidates and completed 26 finite samples;
+six needed browser APIs and eight required extensionless relative resolution.
+It issued no receipts. Its reflection control observes a contradiction after
+TypeScript emission that Node stripping does not observe, proving that the
+results cannot be reused across unspecified consumer compilers.
+
+The proposed `node-strip-esm-import-free-v1` profile is **not admitted**.
+Current finalization binds an empty transform schedule; ordinary receipt
+loading authenticates source-artifact resolution, not consumer-emitted modules
+or an enforced execution profile. A profile digest or configuration opt-in
+cannot fill that gap. The next implementation needs a checker-owned execution
+capability or independently verified final-build/execution evidence, plus a
+census bound to the derived execution. Until then all 40 source candidates
+retain their existing disposition; no passing finite sample closes a domain.
+
+Authenticated archive inspection reduces the eight importing candidates to
+three edges across six source modules: is-virtual-event → platform,
+scroll-into-view → get-scroll-parent, and tabbable → dom. All targets are
+published `.ts` files, but none exists at the exact extensionless spelling.
+Suffix inference must be part of a separately enforced resolution profile.
+No fake browser globals or loader are installed.
+
+`restricted-type-erasure` pins reflection divergence, a visible contradiction
+in stripped code, unsupported enum/TSX syntax, extensionless load refusal, and
+unknown-profile rejection at the active receipt consumer and binding decoders.
+The adjacent TS-only/native-census/IncompleteGate and published-JS certification
+pair remains unchanged. These regressions do not claim a production erasure
+gate or input/output verifier. Sandbox scheme 7 and all compiled pins remain
+unchanged; the existing five 0.9.2 browser-JS closures and two alpha clamp
+closures are preserved. The independent accessor census remains out of scope.
+The fresh same-corpus comparison and verification are recorded in
+[the profile investigation](2026-09-04-restricted-type-erasure-profile.md).
+
+## Five Kobalte published-JS creates domains pass their vetoes (2026-09-04)
+
+ADRs 0015–0024 record the decisions before each implementation. The explicit
+browser-conditioned root JS case of @kobalte/utils 0.9.2 now certifies creates
+for clamp, isArray, isFunction, isNumber and noop. Five mandatory gates complete
+against unchanged published bytes. This is a separate artifact case, not a
+replacement for any of the original 40 TypeScript-source candidates. The
+accessor census is unchanged. Other behavioral domains remain open.
+
+The fixes remove invented callback proposals from unexecuted returned
+descendants, the dialect's own bootstrap and collection retention; add an
+exact returned-parameter identity witness; authenticate static runtime imports;
+forward graph recipe configuration; compose an independently verified creates
+census with authenticated dependency receipts; and materialize those graph
+snapshots in the private probe workspace. Sandbox scheme 7 binds the copied
+dependency manifest and checks each dependency's actual Node condition target.
+All previous sandbox restrictions remain in force. Type Facts protocol 16
+binds the new positive identity fact; no missing fact is accepted as evidence.
+
+The Node-conditioned graph advances to 42 nodes/15 archives. Declaration
+fallback fixes seroval's late types branch, and distinguishing storage from
+invocation fixes its createReference overclaim. It still refuses the
+seroval-plugins AbortSignalPlugin root-shape proof. Its declaration is any;
+the verifier cannot currently establish the proposed non-callable root.
+This remains an explicit blocker, not a successful certification.
+
+The final three-row comparison also exposed alpha's false unchanged-parameter
+return proposal for roundToStepPrecision. ADR 0024 withholds identities for
+mutated/defaulted/aliased/wrapped inputs while keeping the native proof strict.
+Normalized function/arrow facts now preserve parameter initializers; AST cache
+schema 42 invalidates the old omissions. A direct identity remains proposed,
+and a forged identity after mutation refuses even against a numeric return type.
+
+The complete measurements, remaining eleven browser candidates, reviewed
+snapshot moves and verification results are in
+[the dated report](2026-09-04-published-js-probe-unlock.md). No ecosystem
+baseline or phase20/21 ledger is repinned. No source is transpiled.
+
+## Opaque local forwarding no longer invents callback timing (2026-09-04)
+
+ADR 0014 precedes a focused generator correction. A synchronous local helper
+inside an opaque wrapper or a stored arrow cannot establish same-stack
+callback execution by its enclosing export. The forwarding chain must be
+classified and reach the parameter owner's body. Otherwise callbacks remain
+unknown. Direct calls preserve their proposals; native proof acceptance,
+creates census, mandatory vetoes and sandbox scheme 6 remain unchanged.
+
+The reduced `opaque-callback-chain` fixture reproduces the old false claim
+without a Solid dependency. Its native test verifies the direct sibling and
+rejects that sibling's claim transplanted onto either opaque export. All 89
+existing corpus snapshots are unchanged; the new main and proposal snapshots
+make 90 fixtures and advance phase19's tracked stable-main count 180 → 181.
+The non-updating gate and inspection precede snapshot generation.
+
+Kobalte 0.9.2's offline graph passes the createReaction frontier and now refuses
+solid-js 1.9.14's indexArray, demand
+`sha256:0cc7f64b7816e102584b7c786aacd96b5364fc8a89f4090befe97c88f8e357b1`:
+`callback parameter has no exact direct-call or resolved-argument flow` in
+operation-reachability. It still contains 20 nodes across 13 authenticated
+artifacts, with zero cache misses. createReaction and startTransition callback
+proposals become unknown; neither callback's execution is newly certified.
+The remaining indexArray flow, direct primitive-slot fallback, original 40
+source cases and independent accessor/iteration census restrictions remain
+open. This slice does not claim an accepted Kobalte 0.9.2 graph.
+
+The same three-row recipe-bearing measurement remains **49 candidates, 9
+structurally loadable JS candidates, 2 completed gates, 0 runtime contradictions,
+exportsProven 0**. Both alpha clamp closures and their main/probe roots remain
+unchanged; no original candidate becomes newly probeable. ADR 0014 records the
+before/after report hashes and exact row refusals. Harness (97), backend (369),
+IR (234), armed process suites, corpus (90), coverage, ownership, scripts (153),
+CLI (173 plus types), formatting and workspace Clippy pass. Pins were rebuilt
+after Clippy; no benchmark or phase20/21 ledger was repinned.
+
+## Captured parameter reads no longer become direct-read proposals (2026-09-04)
+
+ADR 0013 precedes this change. Kobalte 0.9.2's failed `SetValues` demand names
+parameter 0's `of.values` path, whose matching call is captured inside the
+`mapArray` callback. The generator had lost execution provenance and emitted a
+same-stack, untracked operation. A reduced fixture with an arrow retained and
+discarded without invocation reproduces the same false proposal without any
+Solid dependency.
+
+The IR now preserves whether each parameter-member invocation belongs to its
+summary owner's direct body, including in incremental cache identity. When a
+captured invocation contributes, the compact model withholds the reads domain
+as unknown; it never closes an empty list. The direct sibling retains its read
+proposal. No verifier, creates-census, harness, sandbox scheme or scheduled
+veto changes. This removes an unsupported positive claim before planning;
+it does not certify the captured read or waive a failed proof demand.
+
+The real offline graph passes the `SetValues` frontier and now refuses
+`solid-js@1.9.14`'s `createReaction`, demand
+`sha256:05596de8b9acb119628dd17fb20788932d6664ecff0c36c3fbdb3f6a710b143f`:
+`callback parameter has no exact direct-call or resolved-argument flow`.
+The graph still has 20 nodes and 13 authenticated artifacts, with zero cache
+misses. No new accepted Kobalte graph or completed gate is claimed.
+
+The new `captured-parameter-member-read` corpus fixture pins captured, direct,
+and mixed cases; the existing 88 fixture snapshots do not move. Its new tracked
+main advances phase19's stable-main count from 179 to 180. Exact corpus output
+was inspected after the non-updating gate and before snapshot generation.
+The original source-only and accessor/iteration census restrictions remain.
+
+Final same-corpus measurement: **49 candidates, 9 structurally loadable JS
+candidates, 2 completed gates, 0 contradictions, exportsProven 0**, unchanged
+from the previous slice. Alpha retains both clamp creates closures and their
+receipt roots. No original candidate becomes newly probeable. The 89-fixture
+corpus, 97 harness tests, 368 backend tests, 234 IR tests, armed process suites,
+153 script tests, 173 CLI tests plus types, coverage and ownership pass.
+Formatting and Clippy pass; pins were rebuilt before measurement. ADR 0013
+records hashes and the exact remaining createReaction refusal.
+
+## Kobalte's JS graph passes unknown-kind and self-package binding blockers (2026-09-04)
+
+ADRs 0011 and 0012 precede two checker fixes. Present unresolved runtime-kind
+answers now retain explicit unknown shape with all behavior open; absent facts
+still refuse, and consumers preserve unknown through projection. Same-package
+re-export targets can be rebound across semantic dependency entrypoints without
+inventing local closure files. Native archive replay still requires the exact
+independently planned dependency target.
+
+Kobalte 0.9.2's offline graph moves from `solid-js/web`'s `Aliases` kind refusal,
+through the `ErrorBoundary` catalog-binding refusal, to native verification of
+**20 nodes across 13 published artifacts**. The next refusal is
+`@solid-primitives/keyed@1.5.3`'s `SetValues`: `parameter-rooted read has no exact
+implementation call or use`, demand
+`sha256:71692cbcd0429cdf24d41397ef43268cac1c99e21208f322eb5763e88dd9c18c`.
+All graph measurements assert zero cache misses. This is a checker proof
+boundary, not evidence of a package defect or missing declaration export.
+No accepted Kobalte 0.9.2 graph or new real creates closure is claimed.
+
+New native fixtures pin unknown callable/non-callable siblings alongside a
+completed JS veto, forged negative claims, same-package dependency replay, and
+missing/forged target refusals. Four formerly refused cases in three existing
+corpus fixtures now emit unknown shape and no behavioral claims; all previous
+claims remain unchanged. Those exact moves were reviewed before snapshot
+updates. No new main document was added; phase19 remains at 179. The sandbox
+stays at scheme 6, and all original TypeScript source and accessor/iteration
+census restrictions remain. See `docs/2026-09-04-kobalte-js-graph-unlock.md` for
+the measurements, validation, and next proof boundary.
+
+The final same-corpus three-row run preserves **49 candidates, 9 JS candidates,
+2 completed gates, 0 contradictions, and exportsProven 0**. No
+original source candidate becomes probeable. The 88-fixture corpus, 97 harness
+tests, 367 backend tests, 234 IR tests, all three armed process suites, 153
+script tests, 173 CLI tests plus types, coverage and ownership checks passed.
+Rustfmt/Clippy passed and pins were rebuilt before the final measurement.
+
+## Kobalte alpha's other four JS candidates hit the census before the veto (2026-09-04)
+
+The follow-up in `docs/2026-09-04-kobalte-remaining-js-candidates.md` schedules
+each previously untested JS claim independently, using retained authenticated
+archives and zero network/cache misses. Both `getScrollParent` cases refuse on
+`property-access-unknown-accessor (PropertyAccessExpression)` at
+`parentNode.parentElement`, `dist/index.js:668..692`. Both `isPointInPolygon`
+cases refuse on `iteration-protocol (ArrayBindingPattern)` at `[x, y]`,
+`dist/index.js:2636..2642`. All **four runtime gates are unexecuted**; adding
+recipes alone cannot unlock them. These are census refusals, not package
+defects or contradictions. A missing real DOM is an additional scroll-parent
+environment limitation, not the first measured refusal.
+
+A fifth, control run still certifies both clamp cases with the same accepted
+main digests and probe roots: **two completed control gates, zero contradictions,
+zero additional creates closures**. `exportsProven` stays 0. The population
+remains 49 candidates, nine structurally loadable; none of the original 43 was
+newly unlocked. The original 40 source cases, the accessor/iteration census,
+and Kobalte 0.9.2's `Aliases` proof remain separate open work.
+
+The four diagnostic corpora stay in scratch, with exact IDs and results in the
+report. The checked-in corpus still withholds those claims with creates open;
+no scheduled gate is waived. No production, fixture, snapshot, benchmark or
+ledger changes in this follow-up. Pinned build, isolated census attempts,
+successful clamp control and whitespace checks ran; ADR 0010 records the
+earlier full verification.
+
+## Declaration-file imports no longer block executable closure: two real clamp creates closures certify (2026-09-04)
+
+ADR 0010 was written before the code. The JS generator and native snapshot
+replay now distinguish bare imports in actual declaration files from runtime
+dependency imports. The declaration acquisition census and authenticated
+compiler-source witnesses remain required where a demand needs those types.
+Runtime imports, unresolved private specifiers, and opaque module references
+retain their refusal behavior. No harness or sandbox field changes; scheme 6,
+exact published bytes, Node pins, resolution echo and write detection remain.
+
+The same three rows with the original recipe corpus expose **six new JS
+creates candidates** in Kobalte alpha: `clamp`, `getScrollParent`, and
+`isPointInPolygon` under import/solid conditions. Adding two bounded clamp
+recipes then completes **two mandatory gates** and certifies creates on both
+published JS cases. **No contradiction** was observed. The other four new JS
+candidates remain withheld for missing recipes, as do alpha's seven source
+candidates. No census success is claimed for those four untested candidates.
+
+The original **43 candidates remain unchanged**; six independent JS claims
+bring the total to **49**, with **9 structurally loadable** instead of 3.
+**0/43 became probeable by substitution.** Kobalte 0.9.2 still refuses its noop
+gate `sha256:a9c9b71f143168b06eca801102c156b52b0b0302faa47780db2daa51cf88f7bc`;
+i18n still refuses the accessor census before its three gates execute.
+`exportsProven` remains **0** on all rows: two creates closures do not close all
+claim domains. The before/after reports use recipe corpora; the checked-in
+benchmark without one is not the baseline. ADR 0010 names both the same-corpus
+measurement and the subsequent recipe expansion separately.
+
+Paired fixtures prove declaration-only certification, wrong-lock type-evidence
+refusal, retained runtime hazards, and rejection of a forged runtime-edge
+omission. The 88-fixture contract corpus has **no snapshot changes**; phase19
+still counts **179** main documents. Harness, backend, IR, process, CLI, scripts,
+coverage, ownership, fmt and workspace Clippy checks passed; pins were rebuilt.
+No benchmark/phase20/phase21 ledger was repinned. The 40 source cases, the
+`Aliases` runtime-kind proof, and the accessor census remain separate open work.
+
+## Published JS binding investigation: Key resolves; alpha's declaration edge keeps creates open (2026-09-04)
+
+The follow-up investigation in
+`docs/2026-09-04-published-js-binding-investigation.md` used retained exact
+installs and the real certifier with cached authenticated archives, an offline
+fetch callback, and zero asserted cache misses. No missing package export or
+missing installed dependency explains the two Kobalte root blockers.
+
+For 0.9.2, `Key` binds on both axes in installed
+`@solid-primitives/keyed@1.5.3`. The original recipe-bearing benchmark reused
+its partial proposal; it did not enable the optional dependency-graph path.
+Selecting only `.` and enabling that path advances to `solid-js@1.9.14`'s
+`./web` export `Aliases`: the runtime kind is `(Unknown, Unknown)`. Its real
+JavaScript initializer has inferred type `any`, despite a separate
+`Record<string, string>` declaration. A new runtime-kind proof or exact
+dependency-export projection is needed; trusting the declaration is unsound.
+
+Alpha's JS bundle has zero module-loading expressions. Its only external
+closure hazard is the declaration import `JSX` from `@solidjs/web`. Both JS
+root cases certify, with ten function exports apiece and **zero closed creates
+domains**. Authenticated compiler-source declarations already exist as an
+evidence channel, but do not discharge this all-domain closure hazard. The
+recommended next slice distinguishes authenticated declaration-only closure
+evidence from executable dependency evidence in both generator and verifier.
+
+The standalone graph helpers' `csstype`/dynamic-loading errors are not the
+actual certifier's terminal outcomes; the report records the distinction.
+**No production change, newly probeable source case, completed creates gate,
+or contradiction.** The 40 source cases and the independent accessor-census
+refusals remain open. These root-only diagnostic runs are not a replacement
+for ADR 0009's three-row before/after measurement. No benchmark or ledger was
+repinned.
+
+## TypeScript source probes retain the exact-artifact refusal; all 40 have published JS siblings, none can substitute (2026-09-04)
+
+ADR 0009 (`docs/adr/0009-typescript-source-probe-disposition.md`) was written
+before the fixture code. **No production weakening ships.** A pinned transform
+would bind reproducibility, not preservation of contradictions; a published JS
+sibling is authenticated but is a different artifact case. The mandatory veto,
+workspace layout, resolution echo and scheme-version 6 stay unchanged.
+
+Measured on fresh three-row runs **with the recipe corpus**, before and after;
+the checked-in ecosystem report has no corpus and is not the baseline. The
+generator still proposes **43 candidates**: Kobalte 0.9.2 has 33 on 13 `.ts`
+cases, alpha has 7 on 3 `.ts` cases, and i18n has 3 on one `.js` case. Both
+Kobalte versions publish `dist/index.js`, and its public export list contains
+**all 40 candidate names (100%)**. Availability is not equivalence: **0/40**
+can replace the existing source-case gates. Nor does either JS root currently
+offer a closure candidate: 0.9.2's root is omitted on the accepted `Key`
+dependency binding; alpha's roots open `creates` on an unaccepted
+`./dist/index.d.ts:@solidjs/web` dependency. A future slice can certify those JS
+cases in their own right, with their own census and gates.
+
+| row | before and after, with the same corpus |
+| --- | --- |
+| `@kobalte/utils@0.9.2\|solid1\|only` | refused: `mandatory probe gate sha256:a9c9b71f143168b06eca801102c156b52b0b0302faa47780db2daa51cf88f7bc did not complete`; `noop`'s census passes |
+| `@kobalte/utils@2.0.0-alpha.0\|solid2\|only` | certified with seven closures withheld for missing recipes, no gate scheduled |
+| `@solid-primitives/i18n@2.2.1\|solid1\|only` | refused on `chainedTranslator`'s `property-access-unknown-accessor (SpreadAssignment)` at `dist/index.js:3471..3483`; all three gates unexecuted |
+
+**0 newly probeable, 3/43 structurally probeable, 0 completed gates, 0
+contradictions, `exportsProven` still 0 on all three rows.** Only four candidates
+have corpus recipes; 43 is not a count of executed gates. The failed 0.9.2 audit's
+zero `withheldClosures` does not mean its other 32 candidates ran. The ADR lists
+every scheduled gate and binds the two reports and artifact inventory by hash.
+A contradiction would count as a successful veto; none occurred on these real
+rows. Existing contradiction fixtures still pass.
+
+`fixtures/package-contracts/probe-source-disposition` now pins the previously
+uncovered structural blocker without a registry or package install: an exact
+`.ts`-only archive passes the census and refuses by `IncompleteGate`; its JS
+sibling certifies with a nonempty authenticated gate root. No main snapshot is
+added, and phase19's stable-main count remains 179. No benchmark/ledger or
+generated snapshot changes. The accessor-census blocker is independent,
+unchanged and out of scope. All 40 source candidates remain structurally
+unprobeable; a census-only policy, derived-case policy, or new loader needs its
+own consumer-visible semantics rather than an exception to this veto.
+
 ## The iteration protocol is classified by the operand's type, not by syntax (2026-09-04)
 
 `for…of`, a spread element, an array binding pattern and `yield*` were recorded

@@ -1069,7 +1069,9 @@ function selectTarget(target, context) {
       break;
     case "string": {
       const selected = substitutePattern(target, context.capture);
-      const path = validateTargetString(selected, context.packageRoot);
+      const initial = validateTargetString(selected, context.packageRoot);
+      const path = context.axis === "declarations" ? declarationCandidate(initial) : initial;
+      if (!path) fail("declarations-not-found", `no declaration target exists for ${initial}`);
       return {
         path,
         branch: context.pointer,
@@ -1092,7 +1094,8 @@ function selectTarget(target, context) {
             steps: [...context.steps, { condition: "array", target: String(index) }]
           });
         } catch (error) {
-          if (!(error instanceof ArtifactResolutionError) || error.code !== "invalid-target") throw error;
+          if (!(error instanceof ArtifactResolutionError) ||
+              (error.code !== "invalid-target" && error.code !== "declarations-not-found")) throw error;
           lastInvalid = error;
         }
       }
@@ -1107,7 +1110,9 @@ function selectTarget(target, context) {
       // "default": "./index.js"}` under conditions ["vendor"] resolves to
       // ./index.js. Taking the first *matching* key and refusing there instead
       // would report a defect where every real consumer resolves fine. Only a
-      // nested `conditions-unmatched` backtracks: `null` (blocked) and an
+      // nested `conditions-unmatched` backtracks on the runtime axis. On the
+      // declarations axis, a missing declaration also permits the next arm.
+      // `null` (blocked) and an
       // invalid target are properties of the package and still refuse
       // immediately, exactly as Node's own algorithm treats them.
       //
@@ -1117,6 +1122,7 @@ function selectTarget(target, context) {
       // condition the selection walked away from would put a name in the
       // resolution record's hashed trace that no consumer's resolution ever
       // traverses.
+      let missingDeclaration;
       for (const condition of keys) {
         if (condition !== "default" && !context.conditions.has(condition)) continue;
         try {
@@ -1129,12 +1135,14 @@ function selectTarget(target, context) {
         } catch (error) {
           if (
             !(error instanceof ArtifactResolutionError) ||
-            error.code !== "conditions-unmatched"
+            (error.code !== "conditions-unmatched" && error.code !== "declarations-not-found")
           ) {
             throw error;
           }
+          if (error.code === "declarations-not-found") missingDeclaration = error;
         }
       }
+      if (missingDeclaration) throw missingDeclaration;
       fail("conditions-unmatched", `${context.entrypoint} selects no active package-export condition`);
       break;
     }
@@ -1246,6 +1254,7 @@ export function selectPackageExportTarget({
     const selected = selectSubpath(manifest.exports, entrypoint);
     const target = selectTarget(selected.target, {
       packageRoot,
+      axis,
       entrypoint,
       capture: selected.capture,
       conditions: active,
@@ -1253,8 +1262,7 @@ export function selectPackageExportTarget({
       steps: [{ condition: "subpath", target: entrypoint }],
       conditionsTaken: []
     });
-    const path = axis === "declarations" ? declarationCandidate(target.path) : target.path;
-    if (!path) fail("declarations-not-found", `no declaration target exists for ${target.path}`);
+    const path = target.path;
     return {
       path,
       exists: isFile(path),
@@ -1355,6 +1363,7 @@ function resolvePackageImport({
   const selected = selectPackageImport(manifest.imports, specifier);
   const target = selectTarget(selected.target, {
     packageRoot,
+    axis,
     entrypoint: specifier,
     capture: selected.capture,
     conditions: active,
@@ -1362,9 +1371,7 @@ function resolvePackageImport({
     steps: [{ condition: "imports", target: specifier }],
     conditionsTaken: []
   });
-  const path = axis === "declarations" ? declarationCandidate(target.path) : target.path;
-  if (!path) fail("declarations-not-found", `no declaration target exists for ${target.path}`);
-  return path;
+  return target.path;
 }
 
 // A `#` specifier whose conditional target matches none of this partition's
@@ -2393,7 +2400,10 @@ function closureForRoots(
           artifactCase: accepted.artifactCase,
           acceptedContractDigest: accepted.acceptedContractDigest
         });
-      } else {
+      } else if (!(axis === "declarations" && isDeclarationFileName(path))) {
+        // ADR 0010: a declaration file does not execute this import. Its
+        // acquisition edge above remains, and Type Facts can use its typings
+        // only through authenticated compiler sources. Mirror Rust replay.
         hazards.push({
           kind: specifier.text.endsWith(".node")
             ? "native-code"

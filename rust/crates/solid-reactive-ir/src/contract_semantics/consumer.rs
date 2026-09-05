@@ -93,6 +93,45 @@ pub struct AcceptedContractIndex {
 }
 
 impl AcceptedContractIndex {
+    /// Ordinary analysis has one authority for Solid core: the built-in
+    /// dialect. Independent certification may still retain core contracts in
+    /// this general index, but they cannot supplement the runtime model.
+    /// Filter by authenticated package identity as well as written specifier,
+    /// so an alias cannot introduce a second authority. This is withholding,
+    /// never evidence that the specifier actually resolves to Solid.
+    #[must_use]
+    pub fn external_packages(&self) -> std::borrow::Cow<'_, Self> {
+        fn core_specifier(specifier: &str) -> bool {
+            solid_dialect::core_runtime_contract_reference("", specifier)
+        }
+
+        let retain = |key: &(String, String), contracts: &[AcceptedContract]| {
+            !core_specifier(&key.1)
+                && contracts.iter().all(|contract| {
+                    !solid_dialect::primitive_defining_package(&contract.package().name)
+                })
+        };
+        if self.imports.iter().all(|(key, values)| retain(key, values))
+            && self
+                .uncertifiable_imports
+                .keys()
+                .all(|(_, specifier)| !core_specifier(specifier))
+        {
+            return std::borrow::Cow::Borrowed(self);
+        }
+        let mut external = self.clone();
+        external.imports.retain(|key, values| retain(key, values));
+        external.identity.retain(|identity| {
+            external
+                .imports
+                .contains_key(&(identity.importer.clone(), identity.specifier.clone()))
+        });
+        external
+            .uncertifiable_imports
+            .retain(|(_, specifier), _| !core_specifier(specifier));
+        std::borrow::Cow::Owned(external)
+    }
+
     pub fn new(
         inputs: impl IntoIterator<Item = AcceptedContractInput>,
     ) -> Result<Self, SemanticQueryError> {

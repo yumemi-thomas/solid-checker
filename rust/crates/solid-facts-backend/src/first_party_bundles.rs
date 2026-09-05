@@ -369,7 +369,12 @@ pub(crate) fn solid1_bundles_with_measurements()
     Ok(Vec::new())
 }
 
-/// Builds receipt-validated analyzer inputs for exact first-party imports
+/// Retired bundle-loader compatibility seam. Ordinary native, daemon and
+/// WASM analysis no longer calls this function (ADR 0027). Both source lists
+/// are empty; these historical checks must not be described as active runtime
+/// authentication. The audited closure and conformance material remain intact.
+///
+/// Historically built receipt-validated analyzer inputs for exact first-party imports
 /// whose installed package closure reproduces the checked published-file
 /// census for the selected dialect.
 /// A missing runtime/build selection, mutated file, unattested lock identity,

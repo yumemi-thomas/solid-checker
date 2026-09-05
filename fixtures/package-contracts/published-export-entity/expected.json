@@ -24,6 +24,50 @@
           }
         }
       ]
+    },
+    "./mixed": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "d87db3ab9114314f78c6217264c95c2c987535bef00e4673383f93536cf1ce9e",
+            "path": "./mixed.js",
+            "sha256": "345dd38aa2a58578a7ce662fec214a7246cca278c664e17139ef0de54469143a"
+          },
+          "declarations": {
+            "path": "./mixed.d.ts",
+            "sha256": "8fe8c43e33104f3abeba8f4e89872d8045ed3abb15a4ff315dc406ad02f55461"
+          },
+          "exports": {
+            "mixedBinding": "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1mixed/default",
+            "typesBranch": "/exports/.~1mixed/types"
+          }
+        }
+      ]
+    },
+    "./unknown": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "1b280ec1d77912675a036dc1d0827e9e7001522ac65a3d4e9743efdf6cf348a9",
+            "path": "./unknown.js",
+            "sha256": "ae6fe5222984ccf222d120bab1ebb25d1b7dc5637f4f067eb4aa4a325ad2249c"
+          },
+          "declarations": {
+            "path": "./unknown.d.ts",
+            "sha256": "df4e51775c3d5d4cc8b35858d0e4072438b6277f21089de8cfb3ff631aff09b7"
+          },
+          "exports": {
+            "unknownBinding": "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1unknown/default",
+            "typesBranch": "/exports/.~1unknown/types"
+          }
+        }
+      ]
     }
   },
   "format": "solid-reactivity-contract",
@@ -72,6 +116,10 @@
         ]
       },
       "shape": "callable"
+    },
+    "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b": {
+      "call": {},
+      "shape": "unknown"
     },
     "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
       "call": {},

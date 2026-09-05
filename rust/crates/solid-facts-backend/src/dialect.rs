@@ -3,7 +3,7 @@
 //!
 //! A [`Dialect`] bundles everything a Solid version contributes to the
 //! checker: its vocabulary, its compiler adapter, its rule catalog, its rule
-//! documentation, and its bundled package contracts, plus the stable identity
+//! documentation, and its built-in runtime model, plus the stable identity
 //! that keys every cache and retained session. The analysis pipeline receives
 //! the selected `&Dialect` from its entry point — the CLI's `--dialect` flag,
 //! the wasm request, or [`detect`] when a request names none — and never

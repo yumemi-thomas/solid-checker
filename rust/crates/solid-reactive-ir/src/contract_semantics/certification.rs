@@ -1433,6 +1433,11 @@ impl WitnessBinding {
         &self.demand_id
     }
 
+    #[must_use]
+    pub fn evidence_root(&self) -> &str {
+        &self.evidence_root
+    }
+
     /// The witness sites this binding names, in the adapter's own order. Audit
     /// and test material: coverage validation folds them into the evidence
     /// root and authenticates none of them.

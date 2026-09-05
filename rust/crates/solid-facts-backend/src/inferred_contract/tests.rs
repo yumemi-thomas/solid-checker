@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use solid_reactive_ir::{
     ContractClaim, ContractEntrypoint, ContractExport, ContractPackage, ContractReactiveRead,
     PackageContract,
-    contract_semantics::{ClaimDomain, KnowledgeSet, OperationKind},
+    contract_semantics::{ClaimDomain, KnowledgeSet, KnowledgeState, OperationKind},
 };
 
 use super::*;
@@ -101,6 +101,21 @@ fn inferred(summary: ContractExport) -> PackageContract {
         )]),
         source_path: String::new(),
     }
+}
+
+#[test]
+fn unknown_runtime_kind_normalizes_without_negative_claims() {
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(ContractExport::unknown_runtime_kind()),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    assert_eq!(export.shape, ValueShape::Unknown);
+    for domain in ClaimDomain::ALL {
+        assert_eq!(export.claim_state(domain), KnowledgeState::Unknown);
+    }
+    assert!(normalized.closure_candidates.is_empty());
 }
 
 #[test]
@@ -217,6 +232,60 @@ fn a_dialects_own_archive_publishes_neither_bootstrapped_reads_nor_owner_creates
             )),
             "{package_name} must emit no read or owner-requirement operation"
         );
+    }
+}
+
+#[test]
+fn self_bootstrapped_callbacks_are_unknown_while_consuming_callbacks_survive() {
+    for package_name in [
+        "solid-js",
+        "@solidjs/signals",
+        "@solidjs/web",
+        "@solidjs/router",
+        "package",
+    ] {
+        let summary = ContractExport {
+            kind: "function".into(),
+            callbacks: ContractClaim::Known(vec![solid_reactive_ir::ContractCallback {
+                parameter: 0,
+                execution: "inline".into(),
+                schedule: None,
+                arguments: Vec::new(),
+                owner: None,
+            }]),
+            ..ContractExport::default()
+        };
+        let normalized = normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution_for_package(package_name, ["read".into()]),
+        )
+        .unwrap();
+        let export = &normalized.contract.artifact_cases()[0].exports["read"];
+        if solid_dialect::primitive_defining_package(package_name) {
+            assert!(matches!(
+                export.call.claims().callbacks,
+                KnowledgeSet::Unknown
+            ));
+            assert!(export.call.operations.is_empty());
+            assert!(
+                !normalized
+                    .closure_candidates
+                    .iter()
+                    .any(|candidate| matches!(
+                        candidate.path,
+                        SemanticClaimPath::Domain(
+                            solid_reactive_ir::contract_semantics::ClaimPath::Call(
+                                ClaimDomain::Callbacks
+                            )
+                        )
+                    ))
+            );
+        } else {
+            assert!(
+                matches!(&export.call.claims().callbacks, KnowledgeSet::Partial(callbacks) if callbacks.len() == 1)
+            );
+            assert_eq!(export.call.operations.len(), 1);
+        }
     }
 }
 

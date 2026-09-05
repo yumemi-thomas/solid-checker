@@ -4,9 +4,9 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "c66c26ab26158acfacf1000d0218ce188afc34f832026740a92f274c021d773f",
+            "closureSha256": "a728e0bb2b8cbef81d51837c60628fdde0da52c4c7e9236872723cc3b5262717",
             "path": "./index.js",
-            "sha256": "702e9e07e568e1a71b0574011320d2ee3505270e9486deefb0593f5536e54c1d"
+            "sha256": "8d8242d40372877487b61b807c12cc95c194aca8edae8a4107e5841b24b1cca2"
           },
           "declarations": {
             "path": "./index.d.ts",

@@ -10,6 +10,144 @@
   },
   "recipes": [
     {
+      "claimId": "claim:v1:sha256:3097ae0eb777db146a45ece5f141563231f220da4781b0b7c92f642eb653ea04",
+      "module": "kobalte-utils-092-browser-clamp.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "create-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS clamp, artifact artifact-case:cfd221a2e518e2d436990d5970d754d6c7c53e6ef8a627e0911476165ed24564; finite samples only",
+        "Own-global additions during calls only; no arbitrary allocation or initialization coverage",
+        "No DOM or OS write denial; non-observation does not establish absence"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:909c0de33c3e038394fef830e0c436c7c916dc3ea9964704c3fb2bcce339e142",
+      "module": "kobalte-utils-092-browser-is-array.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "create-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS isArray, artifact artifact-case:cfd221a2e518e2d436990d5970d754d6c7c53e6ef8a627e0911476165ed24564; finite samples only",
+        "Own-global additions during calls only; no arbitrary allocation or initialization coverage",
+        "No DOM or OS write denial; non-observation does not establish absence"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:1a9b9c80ab98d73b11f2622e34d4d2f3404a4a219c6247547928b892a129dada",
+      "module": "kobalte-utils-092-browser-is-function.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "create-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS isFunction, artifact artifact-case:cfd221a2e518e2d436990d5970d754d6c7c53e6ef8a627e0911476165ed24564; finite samples only",
+        "Own-global additions during calls only; no arbitrary allocation or initialization coverage",
+        "No DOM or OS write denial; non-observation does not establish absence"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:6535226c042f14a149a2baf11b125f7ab6d024ef1658248dae3250318ea46d80",
+      "module": "kobalte-utils-092-browser-is-number.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "create-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS isNumber, artifact artifact-case:cfd221a2e518e2d436990d5970d754d6c7c53e6ef8a627e0911476165ed24564; finite samples only",
+        "Own-global additions during calls only; no arbitrary allocation or initialization coverage",
+        "No DOM or OS write denial; non-observation does not establish absence"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:346d19aea833b3ef7b2c6d5896658fca994d1eda29536c62c05ebd3c1c974782",
+      "module": "kobalte-utils-092-browser-noop.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "create-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS noop, artifact artifact-case:cfd221a2e518e2d436990d5970d754d6c7c53e6ef8a627e0911476165ed24564; finite samples only",
+        "Own-global additions during calls only; no arbitrary allocation or initialization coverage",
+        "No DOM or OS write denial; non-observation does not establish absence"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:a4f303a9b5e3e78bead08d51d156e2885693d09623fc0423576105a024fd0d4a",
+      "module": "kobalte-utils-alpha-clamp-import.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": { "marker": "create-operation", "class": "call" },
+      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "coverageLimitations": [
+        "one pinned Node build and the import artifact case; finite numeric arguments only",
+        "observes added own global keys during calls, not arbitrary allocations or initialization effects",
+        "no DOM and no OS-level write denial; non-observation never proves absence"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:3f3b3df8ac938af042254d8e6cf1832c79bccb98dd0cc74197b7a02ff9617fa7",
+      "module": "kobalte-utils-alpha-clamp-solid.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": { "marker": "create-operation", "class": "call" },
+      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "coverageLimitations": [
+        "one pinned Node build and the solid artifact case; finite numeric arguments only",
+        "observes added own global keys during calls, not arbitrary allocations or initialization effects",
+        "no DOM and no OS-level write denial; non-observation never proves absence"
+      ]
+    },
+    {
       "claimId": "claim:v1:sha256:1553467a94fb362adae87d8f2809233d759d5c71fc3334a45fdf3ddc5cb7097d",
       "module": "kobalte-utils-noop.mjs",
       "importKind": "esm",

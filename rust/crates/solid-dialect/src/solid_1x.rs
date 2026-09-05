@@ -166,12 +166,9 @@ impl Dialect for Solid1x {
         &["solid-js"]
     }
 
-    /// `pkg/contracts/bundled/solid-v1/solid-js.json`, the artifact
-    /// `solid-facts-backend` compiles in for this dialect — not the reviewed
-    /// semantics source (`contracts/solid-v1/solid-js.json` in this crate), which
-    /// no diagnostic reads at runtime.
-    fn bundled_contract_label(&self) -> &'static str {
-        "solid-v1/solid-js.json"
+    /// Reviewed Solid 1 semantics in this module, not a package certificate.
+    fn runtime_model_identity(&self) -> &'static str {
+        "solid-v1/model-1"
     }
 
     /// Empty — see [`NEGATIVE_AUTHORITY`] for why the solid-v1 documents'

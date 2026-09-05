@@ -1309,8 +1309,15 @@ function storeMergedObject(source, target) {
 /// sorted first, and its entry module's `addScaleCorrector` bridge therefore
 /// resolved against nothing.
 ///
-/// `edges` are the caller's already-filtered runtime re-export edges, so the
+/// `edges` are the caller's already-filtered static runtime dependency edges, so the
 /// census cannot disagree with the set of nodes that gets planned.
+export function staticRuntimeDependencies(resolved) {
+  return resolved.externalDependencies.filter(
+    dependency => dependency.axis === "runtime" &&
+      (dependency.kind === "reexport" || dependency.kind === "import")
+  );
+}
+
 export function reexportImporterCensus(packageRoot, edges) {
   const census = new Map();
   for (const edge of edges) {
@@ -1348,7 +1355,7 @@ export function mergeProposalDependencies(dependencies, outputRoot) {
       dependency.planning.proposal,
       join(outputRoot, "objects", documentName)
     );
-    // One entry per module of the consuming package that re-exports this
+    // One entry per module of the consuming package that imports or re-exports this
     // specifier. `prepareState` located every one of them and refused the node
     // outright unless they all resolved to the same installed copy, so the
     // only field that differs between these entries is the importer -- exactly
@@ -1360,7 +1367,7 @@ export function mergeProposalDependencies(dependencies, outputRoot) {
       : [resolution.importer];
     if (!importers.includes(resolution.importer)) {
       throw new Error(
-        `dependency ${dependency.viaSpecifier} names an importer that re-exports nothing`
+        `dependency ${dependency.viaSpecifier} names an importer outside its occurrence census`
       );
     }
     for (const importer of importers) {
@@ -1413,7 +1420,10 @@ export function buildPublishedGraphExecutionRequest({
   typefactsExecutable,
   issuerConfiguration,
   catalogRoot,
-  trustConfigurationOutput
+  trustConfigurationOutput,
+  probeHarnessRoot,
+  probeNodeExecutable,
+  probeRecipeCorpus
 }) {
   if (!Array.isArray(cases) || cases.length === 0) {
     throw new TypeError("published graph execution requires at least one root case");
@@ -1424,6 +1434,9 @@ export function buildPublishedGraphExecutionRequest({
       .filter(state => state !== item.root)
       .map(graphNodeExecutionInput)
   });
+  const probes = probeRecipeCorpus
+    ? { probeHarnessRoot, probeNodeExecutable, probeRecipeCorpus }
+    : {};
   if (cases.length > 1) {
     const nodes = new Map();
     for (const item of cases) {
@@ -1442,6 +1455,7 @@ export function buildPublishedGraphExecutionRequest({
     }
     return {
       schemaVersion: 5,
+      ...probes,
       graphCaseSet: {
         nodes: [...nodes]
           .sort(([left], [right]) => left.localeCompare(right))
@@ -1459,6 +1473,7 @@ export function buildPublishedGraphExecutionRequest({
   }
   return {
     schemaVersion: 3,
+    ...probes,
     graph: graphFor(cases[0]),
     typefactsExecutable: resolve(typefactsExecutable),
     issuerConfiguration: resolve(issuerConfiguration),
@@ -1487,7 +1502,8 @@ async function executePreparedPublishedGraphs({
     typefactsExecutable,
     issuerConfiguration: options.issuerConfiguration,
     catalogRoot,
-    trustConfigurationOutput
+    trustConfigurationOutput,
+    ...probeHarnessRequest(options)
   });
   const requestPath = join(scratch, `published-graph-execution-${cases[0].root.index}.json`);
   writeFileSync(requestPath, `${JSON.stringify(execution, null, 2)}\n`);
@@ -1781,9 +1797,7 @@ async function preparePublishedGraphFallback({
         directDependencies.push({ state: child, viaSpecifier: dependency.specifier });
         return true;
       };
-      const semanticEdges = resolved.externalDependencies.filter(
-        dependency => dependency.axis === "runtime" && dependency.kind === "reexport"
-      );
+      const semanticEdges = staticRuntimeDependencies(resolved);
       const reexportImporters = reexportImporterCensus(node.packageRoot, semanticEdges);
       for (const dependency of semanticEdges) {
         await addSemanticDependency(dependency);
@@ -1966,14 +1980,23 @@ async function preparePublishedGraphFallback({
         if (explicitConditions.length) {
           generationArguments.push("--conditions", explicitConditions.join(","));
         }
-        const generated = await generatePackageContract(generationArguments, {
-          quiet: true,
-          proposalDependencies: merged.proposalDependencies,
-          proposalDependencyCatalog: merged.catalog,
-          privateGraphPreparation: true,
-          exactConditions: explicitConditions
-        });
-        const plannings = certificationPlannings(generated, state.artifactSnapshot);
+        let generated;
+        try {
+          generated = await generatePackageContract(generationArguments, {
+            quiet: true,
+            proposalDependencies: merged.proposalDependencies,
+            proposalDependencyCatalog: merged.catalog,
+            privateGraphPreparation: true,
+            exactConditions: explicitConditions
+          });
+        } catch (error) {
+          throw new Error(
+            `published dependency graph node ${state.node.packageName}@${state.node.packageVersion} ` +
+            `${state.node.entrypoint} [${state.node.conditions.join(",")}] refused: ${error.message}`,
+            { cause: error }
+          );
+        }
+        const plannings = certificationPlannings(generated, state.artifactSnapshot, options);
         if (plannings.length !== 1) {
           throw new Error(
             `exact graph node ${state.node.packageName}@${state.node.packageVersion} produced ${plannings.length} artifact cases`

@@ -85,6 +85,14 @@ _Avoid_: Generated contract, inferred contract
 A normalized package contract whose closed claims, package identity, artifact cases, and proof inputs are bound by a valid acceptance receipt. Open claims remain usable only as partial knowledge.
 _Avoid_: Verified JSON, trusted contract, reviewed contract
 
+**Built-in runtime model**:
+The selected Solid dialect's reviewed premises about `solid-js`,
+`@solidjs/signals`, and `@solidjs/web`. Ordinary analysis uses these premises
+without core package contracts. Model selection is neither an independent
+implementation certificate nor authentication of installed runtime bytes;
+unmodelled behavior remains unknown.
+_Avoid_: Certified Solid runtime, bundled core receipt, trusted package name
+
 **Normalized contract model**:
 The rich, wire-independent semantic representation produced by the single contract decoder and normalizer. Reactive IR consumes this model and never compact-document omission, summary, closure-array, or schema-version conventions.
 _Avoid_: Expanded JSON, decoded schema, contract AST

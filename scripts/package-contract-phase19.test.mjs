@@ -111,7 +111,7 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // (ADR 0008 § "The decline records"): the other side of that walk --
       // one export per blocker kind it declines on, pinned so "audit this
       // primitive next" is a measured answer rather than a guess.
-      stableMainDocuments: 179,
+      stableMainDocuments: 185,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

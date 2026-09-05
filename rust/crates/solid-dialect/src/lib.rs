@@ -404,6 +404,23 @@ pub fn primitive_defining_package(package: &str) -> bool {
     })
 }
 
+/// Whether a contract reference must be withheld from ordinary analysis
+/// because it names the built-in runtime foundation. This is not a resolver
+/// or proof of runtime identity: even an untrusted spelling can only remove
+/// contract authority here, never grant built-in semantics.
+#[must_use]
+pub fn core_runtime_contract_reference(package: &str, specifier: &str) -> bool {
+    primitive_defining_package(package)
+        || ["solid-js", "@solidjs/signals", "@solidjs/web"]
+            .iter()
+            .any(|name| {
+                specifier == *name
+                    || specifier
+                        .strip_prefix(name)
+                        .is_some_and(|suffix| suffix.starts_with('/'))
+            })
+}
+
 /// One of the eight **kinded** call claim domains a normalized package
 /// contract publishes.
 ///
@@ -1010,12 +1027,11 @@ pub trait Dialect: Sync {
     /// recognition would otherwise fabricate; no diagnostic reads it.
     fn primitive_defining_packages(&self) -> &'static [&'static str];
 
-    /// The basename diagnostics cite when a fact came from this dialect's
-    /// bundled `solid-js` contract (`bundled://<basename>#<primitive>`).
-    ///
-    /// The label is the checked-in artifact the fact was actually read from,
-    /// so a 1.x diagnostic must not cite the 2.0 file.
-    fn bundled_contract_label(&self) -> &'static str;
+    /// Identity of the reviewed built-in runtime model. Facts cite
+    /// `builtin-solid://<identity>#<primitive>`, never a package receipt.
+    /// Increment the model revision when the authority or interpretation
+    /// changes; Solid 1 and Solid 2 have independent identities.
+    fn runtime_model_identity(&self) -> &'static str;
 
     /// Resolves an exported name to a primitive, or `None` when this dialect
     /// does not export it.
@@ -1358,10 +1374,9 @@ pub trait Dialect: Sync {
     /// *whether* a call produces a source; this says *which kind*, and the
     /// engine branches on it to pick a `ReactiveSourceKind`.
     ///
-    /// Overlaps the bundled contract's `returns.kind` on purpose, and the
-    /// engine consults both. The contract can describe a single returned
-    /// store — 1.x's `createMutable`, 2.0's `createProjection` — and cannot
-    /// describe a tuple, which is what `createStore` returns in both versions.
+    /// Core return classification is owned here, without a package-contract
+    /// overlay. For tuple positions use [`Dialect::reactive_result_slot`];
+    /// this answer alone cannot distinguish a store from its setter.
     fn returns_store(&self, primitive: Primitive) -> bool;
 
     /// The reactive role this dialect assigns to one slot of what `primitive`

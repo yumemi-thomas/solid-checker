@@ -1047,6 +1047,21 @@ pub struct ContractExport {
 }
 
 impl ContractExport {
+    /// An identified export whose runtime kind could not be established.
+    /// This carries no negative or positive behavioral claims (ADR 0011).
+    #[must_use]
+    pub fn unknown_runtime_kind() -> Self {
+        Self {
+            kind: "unknown".into(),
+            reactive_reads: ContractClaim::Open,
+            returns: ContractClaim::Open,
+            callbacks: ContractClaim::Open,
+            owner_requirements: ContractClaim::Open,
+            async_behavior: ContractClaim::Open,
+            ..Self::default()
+        }
+    }
+
     /// Whether this summary contains any domain that only a runtime function
     /// may carry. A `value` export with one of these domains is internally
     /// inconsistent even when the domain is open: absence of proof is not a
@@ -1232,7 +1247,7 @@ impl PackageContract {
         name: &str,
         summary: &ContractExport,
     ) -> Result<(), String> {
-        if name.is_empty() || !matches!(summary.kind.as_str(), "function" | "value") {
+        if name.is_empty() || !matches!(summary.kind.as_str(), "function" | "value" | "unknown") {
             return Err(format!(
                 "package contract export {entrypoint}:{name} has unsupported kind {:?}",
                 summary.kind
@@ -1588,6 +1603,8 @@ impl IncrementalBuilder {
         contracts: &contract_semantics::AcceptedContractIndex,
         rule_options: &RuleOptions,
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
+        let external_contracts = contracts.external_packages();
+        let contracts = external_contracts.as_ref();
         let total_started = Instant::now();
         let lookup_started = Instant::now();
         let identity = BuildIdentity {
@@ -1904,8 +1921,8 @@ fn location_order(left: &Location, right: &Location) -> std::cmp::Ordering {
 /// give it, which is why this type exists:
 ///
 /// 1. A name the dialect does not export is not an error. `useUser()` is a
-///    call like any other, and the bundled contracts are keyed by *spelling*,
-///    so an unrecognised callee has to keep the one it was written with.
+///    call like any other; an unrecognised callee retains its spelling for
+///    diagnostics without gaining built-in runtime semantics.
 /// 2. Even a recognised primitive is spelled into diagnostics and hints, and
 ///    the spelling is dialect-specific.
 ///
@@ -1942,8 +1959,7 @@ impl PrimitiveName {
         }
     }
 
-    /// The source spelling. For messages and for the spelling-keyed bundled
-    /// contract table -- never for asking what a callee *is*.
+    /// The source spelling for messages, never for asking what a callee is.
     fn as_str(&self) -> &str {
         match self {
             Self::Known(_, spelling) => spelling,
@@ -3189,5 +3205,29 @@ mod tests {
             ..missing_view
         };
         assert!(!present_view.dependency_matches(&missing, &dependency));
+
+        let direct_members = vec![vec![crate::interproc::ParameterMemberInvocation {
+            parameter: 0,
+            path: vec!["of".into(), "values".into()],
+            in_owner_body: true,
+        }]];
+        let direct_view = InterproceduralResultView {
+            invoked_parameter_members: &direct_members,
+            ..present_view
+        };
+        let direct_state = InterproceduralResultDependencyState::Function {
+            name: nodes[0].name.clone(),
+            summary: Vec::new(),
+            invoked_parameters: Vec::new(),
+            invoked_parameter_members: direct_members[0].clone(),
+        };
+        let mut captured_members = direct_members.clone();
+        captured_members[0][0].in_owner_body = false;
+        let captured_view = InterproceduralResultView {
+            invoked_parameter_members: &captured_members,
+            ..direct_view
+        };
+        assert!(direct_view.dependency_matches(&direct_state, &dependency));
+        assert!(!captured_view.dependency_matches(&direct_state, &dependency));
     }
 }

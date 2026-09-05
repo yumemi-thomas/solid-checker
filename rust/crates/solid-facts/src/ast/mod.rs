@@ -28,10 +28,16 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 41;
+pub const AST_FACTS_SCHEMA: u32 = 42;
 
 mod emission;
+mod inert_erasure;
 mod span_index;
+
+pub use inert_erasure::{
+    ImportFreeErasure, InertErasure, RelativeImportErasure, import_free_erasure, inert_erasure,
+    relative_import_erasure,
+};
 
 pub use emission::{
     EmittingStatement, ModuleEmission, ModuleEmissionError, ModuleFlavor, module_emission,
@@ -2154,7 +2160,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                         self.binding_fact(
                             parameter.span,
                             &parameter.pattern,
-                            BindingMetadata::default(),
+                            BindingMetadata {
+                                initializer: parameter
+                                    .initializer
+                                    .as_ref()
+                                    .map(|value| value.span()),
+                                ..BindingMetadata::default()
+                            },
                         )
                     })
                     .collect(),
@@ -2210,7 +2222,10 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                     self.binding_fact(
                         parameter.span,
                         &parameter.pattern,
-                        BindingMetadata::default(),
+                        BindingMetadata {
+                            initializer: parameter.initializer.as_ref().map(|value| value.span()),
+                            ..BindingMetadata::default()
+                        },
                     )
                 })
                 .collect(),
@@ -3061,6 +3076,23 @@ fn export_declaration_surface_names(declaration: &Declaration<'_>) -> Vec<Export
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parameter_initializers_survive_function_and_arrow_normalization() {
+        let source = "function direct(value: number) { return value; } function defaulted(value = 1) { return value; } const arrow = (value = 2) => value;";
+        let facts = extract("/project/parameters.ts", source).unwrap();
+        assert_eq!(facts.functions.len(), 3);
+        let initializers = facts
+            .functions
+            .iter()
+            .map(|function| {
+                function.parameters[0]
+                    .initializer
+                    .map(|span| &source[span.start as usize..span.end as usize])
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(initializers, vec![None, Some("1"), Some("2")]);
+    }
 
     /// String directives: the module prologue lands in `module_directives`,
     /// each function's prologue lands on its `FunctionFact`, and a string

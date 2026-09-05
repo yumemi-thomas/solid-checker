@@ -1,0 +1,95 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "1d6283ac5859a5c02d46a82a1b1add8a2b695d21edbf04361c22e89be60b86a6",
+            "path": "./index.js",
+            "sha256": "46f1a811890b9a014c97a7d92e23d5fa269bdbaa1de060235263ecaa826200be"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "fc020d245292ecdacad21e3c6cd6874c666400fda8a7fc29372938cd2779a79d"
+          },
+          "exports": {
+            "Direct": "summary-a830f7ca4514a2d4a15286680536e5caf83d74352a7fbe2e0c660df1da73a045",
+            "Dormant": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "Invoked": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:d1bc4c24dec4206c7a84911281e9df465de30ad5c49f3c8b68c75d5020d4ce26",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "d1bc4c24dec4206c7a84911281e9df465de30ad5c49f3c8b68c75d5020d4ce26"
+    },
+    "name": "returned-callback-descendant",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-a830f7ca4514a2d4a15286680536e5caf83d74352a7fbe2e0c660df1da73a045": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "creates"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
+      "call": {
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "creates"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

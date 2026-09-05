@@ -546,6 +546,7 @@ fn watched_workspace(scratch: &Scratch) -> PrivateProbeWorkspace {
         worker: scratch.path().join("harness/contract-probe-worker.mjs"),
         recipes: BTreeMap::new(),
         runtime_target: snapshot.join("index.js"),
+        execution: None,
         dependency_roots: BTreeMap::from([(WATCHED_DEPENDENCY.to_owned(), dependency.clone())]),
         condition_flags: vec!["--conditions=import".into()],
         watched: vec![
@@ -1102,8 +1103,11 @@ fn the_sandbox_policy_digest_names_what_is_not_denied() {
     // receipt reader can see would all have passed. The literal below is the
     // second copy on purpose — a change has to be made twice, and the diff
     // says which field moved.
-    const EXPECTED: [&str; 42] = [
-        "scheme-version:6",
+    const EXPECTED: [&str; 46] = [
+        "scheme-version:10",
+        "profile:inert-or-import-free-or-relative-ts-graph-esm,explicit-controlled-consumer,ordinary-acceptance-refused",
+        "transform:pinned-node-strip-only,parser-runtime-token-preservation,all-derived-outputs-compared,watched-derived-graph",
+        "resolution:profile-hook-exact-source-url-and-authenticated-relative-edge-map,unmapped-profile-imports-refused",
         "enforcement:detect-and-refuse",
         "private-directory-mode:0700",
         "snapshot:private-copy-per-transaction",
@@ -1111,6 +1115,7 @@ fn the_sandbox_policy_digest_names_what_is_not_denied() {
         "snapshot:dependency-closure-from-transaction-authenticated-snapshots-only",
         "snapshot:one-version-per-dependency-name-or-refuse",
         "snapshot:unauthenticated-package-dependency-refuses-by-name",
+        "snapshot:dependency-materialization-manifest-bound-to-probe-root",
         "cwd:private-directory",
         "environment:allowlisted-not-inherited",
         "argv:worker-path-plus-requested-conditions-only",
@@ -1192,6 +1197,7 @@ fn a_repeated_watched_label_refuses_rather_than_being_merged() {
         worker: workspace.worker.clone(),
         recipes: BTreeMap::new(),
         runtime_target: workspace.runtime_target.clone(),
+        execution: None,
         dependency_roots: BTreeMap::new(),
         condition_flags: workspace.condition_flags.clone(),
         watched: workspace.watched.clone(),
@@ -1253,6 +1259,43 @@ fn resolution_node() -> Option<PathBuf> {
          the gate silently"
     );
     resolved
+}
+
+#[test]
+fn probe_type_erasure_reflection_does_not_establish_consumer_compatibility() {
+    let pin = ProbeHarnessPin::configured();
+    assert!(
+        pin.is_ok() || std::env::var("SOLID_CHECKER_EXPECT_PROBE_PINS").as_deref() != Ok("1"),
+        "the erasure regression must run through the Makefile with compiled pins"
+    );
+    let Ok(pin) = pin else { return };
+    let Some(node) = resolution_node() else {
+        return;
+    };
+    verify_node_executable(&node, &pin).expect("use this build's pinned Node, not POC pins");
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    let output = Command::new(node)
+        .arg(repository.join("fixtures/package-contracts/restricted-type-erasure/compare.mjs"))
+        .arg(repository.join("packages/cli/node_modules/typescript/lib/typescript.js"))
+        .env_clear()
+        .stdin(Stdio::null())
+        .output()
+        .expect("launch the fixed reflection regression, not a certification worker");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "strip=false;typescript=true;derived-contradiction=true;enum=refused;tsx=refused\n"
+    );
 }
 
 const RESOLUTION_PACKAGE: &str = "fixture-probe-package";

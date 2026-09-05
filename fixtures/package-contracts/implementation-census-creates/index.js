@@ -71,20 +71,21 @@ export function viaHelperChain(callback) {
   one(callback);
 }
 
-// Unconditional mutual recursion, on purpose: a guard such as `depth > 0`
-// would be an operator application on an untyped operand, which the producer
-// records as a `coercion` form, and the census would refuse on that row before
-// it ever reached the cycle. Nothing runs this; the census reads it.
-function cycleA() {
-  cycleB();
+// The boolean stop value makes the mandatory sample finite without adding a
+// coercing operator over an untyped JavaScript parameter. The static graph
+// still contains the cycle cycleA -> cycleB -> cycleA.
+function cycleA(done) {
+  if (done) return;
+  cycleB(true);
 }
 
-function cycleB() {
-  cycleA();
+function cycleB(done) {
+  if (done) return;
+  cycleA(true);
 }
 
 export function cycle() {
-  cycleA();
+  cycleA(false);
 }
 
 function hop9() {}

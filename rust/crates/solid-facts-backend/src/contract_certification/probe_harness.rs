@@ -209,7 +209,7 @@ use crate::{
 /// The startup/frame protocol Rust and the worker agree on. Bumping this
 /// invalidates every harness manifest digest, because the worker carries the
 /// string too.
-pub(crate) const PROBE_WORKER_PROTOCOL: &str = "solid-checker-runtime-probe-v2";
+pub(crate) const PROBE_WORKER_PROTOCOL: &str = "solid-checker-runtime-probe-v5";
 
 const STARTUP_FORMAT: &str = "solid-checker-probe-worker-startup";
 const RECIPE_CORPUS_FORMAT: &str = "solid-checker-probe-recipe-corpus";
@@ -525,6 +525,7 @@ pub(crate) struct BoundProbeHarnessIdentity {
     snapshot_root: String,
     demand_graph_root: String,
     gate_ids: Vec<String>,
+    execution: HarnessExecution,
     /// Stable identity fields bound into the receipt's probe-gate root, in
     /// this exact order. Per-launch nonces, process ids, and launch epochs are
     /// deliberately absent: they bind the live worker inside the transaction,
@@ -532,7 +533,17 @@ pub(crate) struct BoundProbeHarnessIdentity {
     fields: Vec<String>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HarnessExecution {
+    PublishedBytes,
+    ControlledInert,
+}
+
 impl BoundProbeHarnessIdentity {
+    pub(crate) fn requires_controlled_execution(&self) -> bool {
+        self.execution != HarnessExecution::PublishedBytes
+    }
+
     pub(crate) fn snapshot_root(&self) -> &str {
         &self.snapshot_root
     }
@@ -559,6 +570,7 @@ impl BoundProbeHarnessIdentity {
             snapshot_root: snapshot_root.into(),
             demand_graph_root: demand_graph_root.into(),
             gate_ids,
+            execution: HarnessExecution::PublishedBytes,
             fields: vec![
                 "harness-manifest:sha256:test".into(),
                 "node-executable:sha256:test".into(),
@@ -578,6 +590,43 @@ pub(crate) fn run_probe_gates(
     schedule: &ProbeGateSchedule,
     configuration: &ProbeHarnessConfiguration,
     type_facts_pin: &TypeFactsProducerPin,
+    graph_dependencies: &[&CertificationPlan],
+) -> Result<(RuntimeProbeEvaluation, BoundProbeHarnessIdentity), ProbeHarnessError> {
+    run_probe_gates_inner(
+        plan,
+        schedule,
+        configuration,
+        type_facts_pin,
+        graph_dependencies,
+        None,
+    )
+}
+
+pub(super) fn run_inert_gates(
+    plan: &CertificationPlan,
+    schedule: &ProbeGateSchedule,
+    configuration: &ProbeHarnessConfiguration,
+    type_facts_pin: &TypeFactsProducerPin,
+    module: &super::controlled_execution::InertModule,
+    consumer: bool,
+) -> Result<(RuntimeProbeEvaluation, BoundProbeHarnessIdentity), ProbeHarnessError> {
+    run_probe_gates_inner(
+        plan,
+        schedule,
+        configuration,
+        type_facts_pin,
+        &[],
+        Some((module, consumer)),
+    )
+}
+
+fn run_probe_gates_inner(
+    plan: &CertificationPlan,
+    schedule: &ProbeGateSchedule,
+    configuration: &ProbeHarnessConfiguration,
+    type_facts_pin: &TypeFactsProducerPin,
+    graph_dependencies: &[&CertificationPlan],
+    inert: Option<(&super::controlled_execution::InertModule, bool)>,
 ) -> Result<(RuntimeProbeEvaluation, BoundProbeHarnessIdentity), ProbeHarnessError> {
     if schedule.gates().is_empty() {
         return Err(ProbeHarnessError::Configuration(
@@ -602,18 +651,32 @@ pub(crate) fn run_probe_gates(
     // the scheduled recipes declare. A conforming `module-sync` target beside a
     // contradicting `import` one is otherwise a false pass.
     for kind in scheduled_import_kinds(schedule, &corpus)? {
+        if inert.is_some() && kind != ProbeImportKind::Esm {
+            return Err(ProbeHarnessError::Configuration(
+                "inert execution requires ESM recipes".into(),
+            ));
+        }
         refuse_unreproducible_artifact_case(plan, kind, &observed)?;
+    }
+    // Static graph edges are ESM imports. Reproduce their independently
+    // planned targets too; an extra Node condition must not silently select a
+    // different dependency artifact case from the same authenticated archive.
+    for dependency in graph_dependencies {
+        refuse_unreproducible_artifact_case(dependency, ProbeImportKind::Esm, &observed)?;
     }
     // The dependency closure the private workspace will carry, and the refusal
     // that keeps it from being a partial one. Both happen before the private
     // directory exists: a dependency the analyzed package imports and this
     // transaction did not authenticate is a named refusal, never a probe
     // against whatever the layout happens to resolve.
-    let dependencies = authenticated_dependency_closure(plan)?;
+    let dependencies = authenticated_dependency_closure(plan, graph_dependencies)?;
     require_authenticated_dependency_closure(plan, &dependencies)?;
+    for dependency in graph_dependencies {
+        require_authenticated_dependency_closure(dependency, &dependencies)?;
+    }
     require_declared_dependencies_authenticated(schedule, &corpus, &dependencies)?;
 
-    let workspace = PrivateProbeWorkspace::create(&PrivateWorkspaceInputs {
+    let workspace_inputs = PrivateWorkspaceInputs {
         plan,
         image: &image,
         corpus: &corpus,
@@ -626,7 +689,12 @@ pub(crate) fn run_probe_gates(
         type_facts_pin,
         requested_conditions: &requested,
         dependencies: &dependencies,
-    })?;
+    };
+    let workspace = if inert.is_some() {
+        PrivateProbeWorkspace::create_with_inert(&workspace_inputs, inert)?
+    } else {
+        PrivateProbeWorkspace::create(&workspace_inputs)?
+    };
 
     let launched = launch_every_session(
         &workspace,
@@ -654,7 +722,12 @@ pub(crate) fn run_probe_gates(
         protocol: Some(PROBE_WORKER_PROTOCOL.into()),
     };
     let evaluation = evaluate_runtime_probes(&runtime_plan, runs, producer)?;
-    let identity = BoundProbeHarnessIdentity {
+    let mut identity = BoundProbeHarnessIdentity {
+        execution: if inert.is_some() {
+            HarnessExecution::ControlledInert
+        } else {
+            HarnessExecution::PublishedBytes
+        },
         snapshot_root: plan.snapshot.root().to_owned(),
         demand_graph_root: plan.demand_graph.root().as_str().to_owned(),
         gate_ids: schedule
@@ -670,8 +743,15 @@ pub(crate) fn run_probe_gates(
             format!("sandbox-policy:{}", sandbox_policy_digest().as_str()),
             format!("runtime-probe-plan:{}", runtime_plan.digest().as_str()),
             format!("recipe-corpus:{}", corpus.root.as_str()),
+            format!(
+                "dependency-materialization:{}",
+                dependency_materialization_root(&dependencies)
+            ),
         ],
     };
+    if let Some((module, _)) = inert {
+        identity.fields.extend(module.binding());
+    }
     Ok((evaluation, identity))
 }
 
@@ -1084,8 +1164,11 @@ pub(crate) fn sandbox_policy_digest() -> Digest {
 /// against a literal copy, so dropping a field, renaming one, or bumping the
 /// scheme version without saying what changed fails a test rather than
 /// silently re-labelling every receipt's policy binding.
-pub(crate) const SANDBOX_POLICY_FIELDS: [&str; 42] = [
-    "scheme-version:6",
+pub(crate) const SANDBOX_POLICY_FIELDS: [&str; 46] = [
+    "scheme-version:10",
+    "profile:inert-or-import-free-or-relative-ts-graph-esm,explicit-controlled-consumer,ordinary-acceptance-refused",
+    "transform:pinned-node-strip-only,parser-runtime-token-preservation,all-derived-outputs-compared,watched-derived-graph",
+    "resolution:profile-hook-exact-source-url-and-authenticated-relative-edge-map,unmapped-profile-imports-refused",
     "enforcement:detect-and-refuse",
     "private-directory-mode:0700",
     "snapshot:private-copy-per-transaction",
@@ -1100,6 +1183,7 @@ pub(crate) const SANDBOX_POLICY_FIELDS: [&str; 42] = [
     "snapshot:dependency-closure-from-transaction-authenticated-snapshots-only",
     "snapshot:one-version-per-dependency-name-or-refuse",
     "snapshot:unauthenticated-package-dependency-refuses-by-name",
+    "snapshot:dependency-materialization-manifest-bound-to-probe-root",
     "cwd:private-directory",
     "environment:allowlisted-not-inherited",
     "argv:worker-path-plus-requested-conditions-only",
@@ -1749,6 +1833,7 @@ struct PrivateProbeWorkspace {
     /// conditions, and a probe that observed any other file observed a
     /// different artifact case than the one being certified.
     runtime_target: PathBuf,
+    execution: Option<runtime_probe_wire::InertExecutionRequest>,
     /// Where each authenticated dependency copy sits, by package name.
     ///
     /// A recipe that declares it needs a dependency specifier has its echoed
@@ -1803,6 +1888,13 @@ struct PrivateWorkspaceInputs<'a> {
 
 impl PrivateProbeWorkspace {
     fn create(inputs: &PrivateWorkspaceInputs<'_>) -> Result<Self, ProbeHarnessError> {
+        Self::create_with_inert(inputs, None)
+    }
+
+    fn create_with_inert(
+        inputs: &PrivateWorkspaceInputs<'_>,
+        inert: Option<(&super::controlled_execution::InertModule, bool)>,
+    ) -> Result<Self, ProbeHarnessError> {
         let PrivateWorkspaceInputs {
             plan,
             image,
@@ -1888,6 +1980,93 @@ impl PrivateProbeWorkspace {
         }
 
         let worker = harness_directory.join(WORKER_ENTRY);
+        let execution = if let Some((module, consumer)) = inert {
+            let mut execution_modules = Vec::new();
+            let mut private_sources = BTreeMap::new();
+            let mut root_derived = None;
+            for (index, derived_module) in module.modules.iter().enumerate() {
+                let source =
+                    package_directory.join(single_safe_relative_path(&derived_module.source_path)?);
+                if !source.is_file() {
+                    return Err(ProbeHarnessError::Configuration(format!(
+                        "controlled graph source {:?} is not part of the private snapshot copy",
+                        derived_module.source_path
+                    )));
+                }
+                let source = fs::canonicalize(source)?;
+                let derived = harness_directory.join(format!("controlled-derived-{index}.mjs"));
+                write_private_file(&derived, derived_module.output.as_bytes())?;
+                let derived = fs::canonicalize(derived)?;
+                if derived_module.source_path == module.source_path {
+                    root_derived = Some(derived.clone());
+                }
+                private_sources.insert(derived_module.source_path.clone(), source.clone());
+                execution_modules.push(runtime_probe_wire::DerivedExecutionModuleRequest {
+                    source_path: source.to_string_lossy().into_owned(),
+                    derived_path: derived.to_string_lossy().into_owned(),
+                    source_digest: derived_module.source_digest.clone(),
+                    output_digest: derived_module.output_digest.clone(),
+                });
+            }
+            let (derived, modules, edges) = if module.modules.is_empty() {
+                let derived = harness_directory.join("inert-derived.mjs");
+                write_private_file(&derived, module.output.as_bytes())?;
+                (fs::canonicalize(derived)?, Vec::new(), Vec::new())
+            } else {
+                let edges = module
+                    .edges
+                    .iter()
+                    .map(|edge| {
+                        Ok(runtime_probe_wire::DerivedExecutionEdgeRequest {
+                            importer_path: private_sources
+                                .get(&edge.importer_path)
+                                .ok_or_else(|| {
+                                    ProbeHarnessError::Configuration(format!(
+                                        "controlled graph importer {:?} has no derived module",
+                                        edge.importer_path
+                                    ))
+                                })?
+                                .to_string_lossy()
+                                .into_owned(),
+                            specifier: edge.specifier.clone(),
+                            target_path: private_sources
+                                .get(&edge.target_path)
+                                .ok_or_else(|| {
+                                    ProbeHarnessError::Configuration(format!(
+                                        "controlled graph target {:?} has no derived module",
+                                        edge.target_path
+                                    ))
+                                })?
+                                .to_string_lossy()
+                                .into_owned(),
+                        })
+                    })
+                    .collect::<Result<Vec<_>, ProbeHarnessError>>()?;
+                (
+                    root_derived.expect("a controlled graph always contains its root"),
+                    execution_modules,
+                    edges,
+                )
+            };
+            Some(runtime_probe_wire::InertExecutionRequest {
+                profile: module.profile.into(),
+                // Node canonicalizes the enclosing /var -> /private/var alias
+                // on macOS. Bind that exact URL, without changing the selected
+                // source or weakening the independent resolution check.
+                source_path: fs::canonicalize(&runtime_target)?
+                    .to_string_lossy()
+                    .into_owned(),
+                derived_path: fs::canonicalize(&derived)?.to_string_lossy().into_owned(),
+                source_digest: module.source_digest.clone(),
+                output_digest: module.output_digest.clone(),
+                export_name: module.export_name.clone(),
+                consumer,
+                modules,
+                edges,
+            })
+        } else {
+            None
+        };
         let mut watched = vec![
             // The private directory itself, by direct entry rather than by
             // content: `TMPDIR` and the cwd are this directory, so a
@@ -1976,6 +2155,7 @@ impl PrivateProbeWorkspace {
             worker,
             recipes,
             runtime_target,
+            execution,
             dependency_roots,
             condition_flags: requested_conditions
                 .iter()
@@ -2153,8 +2333,16 @@ impl PrivateProbeWorkspace {
         verify_startup_frame(&startup, &nonce, node_version)?;
 
         if let Some(mut stdin) = worker.take_stdin() {
+            let mut session: serde_json::Value = serde_json::from_slice(session_bytes)
+                .map_err(|error| ProbeHarnessError::Protocol(error.to_string()))?;
+            if let Some(execution) = &self.execution {
+                session["execution"] = serde_json::to_value(execution)
+                    .map_err(|error| ProbeHarnessError::Protocol(error.to_string()))?;
+            }
+            let session_bytes = serde_json::to_vec(&session)
+                .map_err(|error| ProbeHarnessError::Protocol(error.to_string()))?;
             let written = stdin
-                .write_all(session_bytes)
+                .write_all(&session_bytes)
                 .and_then(|()| stdin.write_all(b"\n"))
                 .and_then(|()| stdin.flush());
             drop(stdin);
@@ -2211,6 +2399,22 @@ impl PrivateProbeWorkspace {
             &self.runtime_target,
             &self.dependency_roots,
         )?;
+        match (&self.execution, &decoded.execution) {
+            (None, None) => {}
+            (Some(expected), Some(actual))
+                if actual.binding == *expected
+                    && actual.loaded
+                    && actual.consumer_completed == expected.consumer => {}
+            _ => {
+                return Err(ProbeHarnessError::Protocol(format!(
+                    "execution profile/input/output/consumer echo mismatch or source was not loaded (stage: {})",
+                    decoded
+                        .execution
+                        .as_ref()
+                        .map_or("missing", |actual| actual.stage.as_str())
+                )));
+            }
+        }
         Ok(decoded.run)
     }
 }
@@ -3006,8 +3210,9 @@ struct AuthenticatedDependency<'a> {
     snapshot: &'a super::ArtifactSnapshot,
 }
 
-/// Every dependency snapshot this transaction authenticated, keyed by package
-/// name.
+/// Every source or transitive graph dependency snapshot this transaction
+/// authenticated, keyed by package name. Graph receipt composition runs before
+/// this input is forwarded; no caller-supplied path becomes a snapshot here.
 ///
 /// **One version per name, or refuse.** Two authenticated snapshots of one name
 /// at different versions cannot both be `<private>/node_modules/<name>`, and the
@@ -3026,15 +3231,41 @@ struct AuthenticatedDependency<'a> {
 /// the source set is keyed by a canonical identity that includes the installed
 /// root, so a package hoisted and also nested appears twice — and are placed
 /// once.
-fn authenticated_dependency_closure(
-    plan: &CertificationPlan,
-) -> Result<BTreeMap<String, AuthenticatedDependency<'_>>, ProbeHarnessError> {
+fn authenticated_dependency_closure<'a>(
+    plan: &'a CertificationPlan,
+    graph_dependencies: &[&'a CertificationPlan],
+) -> Result<BTreeMap<String, AuthenticatedDependency<'a>>, ProbeHarnessError> {
     let mut closure = BTreeMap::<String, AuthenticatedDependency<'_>>::new();
-    for source in &plan.certification_sources {
-        let name = source.snapshot.package_name().to_owned();
+    let snapshots = plan
+        .certification_sources
+        .iter()
+        .map(|source| &source.snapshot)
+        .chain(graph_dependencies.iter().flat_map(|dependency| {
+            std::iter::once(&dependency.snapshot).chain(
+                dependency
+                    .certification_sources
+                    .iter()
+                    .map(|source| &source.snapshot),
+            )
+        }));
+    for snapshot in snapshots {
+        let name = snapshot.package_name().to_owned();
         let directory = safe_package_directory(&name)?;
+        if name == plan.snapshot.package_name() {
+            if snapshot.root() == plan.snapshot.root() {
+                continue;
+            }
+            return Err(ProbeHarnessError::AmbiguousDependencyVersion {
+                package_name: name.clone(),
+                versions: format!(
+                    "{name}@{} and {name}@{} with different snapshot roots",
+                    plan.snapshot.package_version(),
+                    snapshot.package_version()
+                ),
+            });
+        }
         match closure.get(&name) {
-            Some(existing) if existing.snapshot.root() == source.snapshot.root() => continue,
+            Some(existing) if existing.snapshot.root() == snapshot.root() => continue,
             Some(existing) => {
                 let mut versions = [
                     format!(
@@ -3042,7 +3273,7 @@ fn authenticated_dependency_closure(
                         existing.snapshot.package_name(),
                         existing.snapshot.package_version()
                     ),
-                    format!("{name}@{}", source.snapshot.package_version()),
+                    format!("{name}@{}", snapshot.package_version()),
                 ];
                 versions.sort();
                 return Err(ProbeHarnessError::AmbiguousDependencyVersion {
@@ -3056,11 +3287,23 @@ fn authenticated_dependency_closure(
             name,
             AuthenticatedDependency {
                 directory,
-                snapshot: &source.snapshot,
+                snapshot,
             },
         );
     }
     Ok(closure)
+}
+
+fn dependency_materialization_root(
+    dependencies: &BTreeMap<String, AuthenticatedDependency<'_>>,
+) -> String {
+    let fields = dependencies
+        .iter()
+        .flat_map(|(name, dependency)| [name.as_str(), dependency.snapshot.root()])
+        .collect::<Vec<_>>();
+    root("probe-dependency-materialization", fields)
+        .as_str()
+        .to_owned()
 }
 
 /// Refuses when the analyzed package imports a dependency this transaction

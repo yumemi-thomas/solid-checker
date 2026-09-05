@@ -19,10 +19,11 @@ use solid_facts_backend::{
     BackendError, ImportIdentityMeasurement, RequestedRuleEnablement, SemanticDemandOptions,
     SourceFile, TypeFactsProvider, TypeFactsSession, accepted_package_contract_statuses,
     analyze_project_accepted_measured_with_enablement, attest_import_identities,
-    build_project_native_measured_with_demands, bundled_first_party_contract_index,
-    contract_identity_scope, default_typefacts_executable, dialect,
-    encode_inferred_entrypoint_workflow_with_external_targets, merge_contract_proposals,
-    merge_plans, read_accepted_contract_catalog_with_trust, read_policy2_trust_configuration,
+    build_project_native_measured_with_demands, contract_identity_scope,
+    default_typefacts_executable, dialect,
+    encode_inferred_entrypoint_workflow_with_external_targets,
+    external_package_contract_requirements, merge_contract_proposals, merge_plans,
+    read_external_contract_catalog_with_trust, read_policy2_trust_configuration,
     read_proposal_dependency_catalog_for_generation, review_contract_document,
     semantic_demand_options_for_enablement, validate_contract_document,
 };
@@ -279,6 +280,9 @@ fn prove_declared_applicability(
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ContractCertificationExecutionRequest {
     schema_version: u16,
+    /// Versions 6 and 7 only: a controlled invocation, never an accepted catalog.
+    #[serde(default)]
+    execution_profile: Option<String>,
     #[serde(default)]
     planning: Option<ContractCertificationPlanningRequest>,
     #[serde(default)]
@@ -934,6 +938,25 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
                 request_path.display()
             )
         })?)?;
+    let single_shape = request.planning.is_some()
+        && request.plannings.is_empty()
+        && request.graph.is_none()
+        && request.graphs.is_empty()
+        && request.graph_case_set.is_none();
+    let controlled_profile = request.execution_profile.as_deref();
+    let is_controlled = single_shape
+        && matches!(
+            (request.schema_version, controlled_profile),
+            (6, Some(solid_facts_backend::INERT_EXECUTION_PROFILE))
+                | (7, Some(solid_facts_backend::IMPORT_FREE_EXECUTION_PROFILE))
+                | (
+                    8,
+                    Some(solid_facts_backend::RELATIVE_GRAPH_EXECUTION_PROFILE)
+                )
+        );
+    if request.execution_profile.is_some() && !is_controlled {
+        return Err("unsupported execution profile; controlled execution requires version 6/inert, version 7/import-free, or version 8/relative TypeScript graph and one planning".into());
+    }
     let is_single = request.schema_version == 1
         && request.planning.is_some()
         && request.plannings.is_empty()
@@ -972,9 +995,10 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
         && !is_graph
         && !is_graph_case_set
         && !is_deduplicated_graph_case_set
+        && !is_controlled
     {
         return Err(
-            "certification execution version 1 requires one planning; version 2 requires at least two plannings; version 3 requires one finite graph; version 4 requires at least two finite graphs; version 5 requires one deduplicated finite graph case-set"
+            "certification execution version 1 requires one planning; version 2 requires at least two plannings; version 3 requires one finite graph; version 4 requires at least two finite graphs; version 5 requires one deduplicated finite graph case-set; version 6 requires one planning and executionProfile node-strip-inert-esm-v1; version 7 requires one planning and executionProfile node-strip-import-free-esm-v1; version 8 requires one planning and executionProfile node-strip-relative-ts-graph-esm-v1"
                 .into(),
         );
     }
@@ -1020,6 +1044,31 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
         .map_err(|error| format!("Type Facts producer pinning failed: {error}"))?;
     let probes = probe_harness_configuration(&request)?;
     let probes = probes.as_ref();
+
+    if is_controlled {
+        let planning = request
+            .planning
+            .ok_or("controlled execution planning disappeared")?;
+        let (plan, proposal) = certification_plan_from_request(planning)?;
+        let profile = controlled_profile.ok_or("controlled execution profile disappeared")?;
+        let result = plan.certify_and_execute(
+            profile,
+            &proposal,
+            &pin,
+            &issuer,
+            probes.ok_or("controlled execution requires the pinned probe harness and corpus")?,
+        )?;
+        let mut bytes = serde_json::to_vec_pretty(&result)?;
+        bytes.push(b'\n');
+        let output = Path::new(&request.catalog_root).join("controlled-execution.json");
+        write_atomic_file(&output, &bytes)?;
+        println!(
+            "controlled execution completed under {}: {}",
+            profile,
+            output.display()
+        );
+        return Ok(());
+    }
 
     if is_graph {
         return execute_contract_graph_certification(
@@ -1905,7 +1954,7 @@ fn verify_policy2_discovery(request_path: &Path) -> Result<(), Box<dyn std::erro
     }
     .ok_or("single-case or graph discovery request has no root planning")?;
     let catalog = catalog_root.join("accepted-contracts.json");
-    let index = read_accepted_contract_catalog_with_trust(&catalog, Some(&trust))?;
+    let index = read_external_contract_catalog_with_trust(&catalog, Some(&trust))?;
     let importer = &planning.resolution.importer;
     let specifier = &planning.resolution.specifier;
     let selected = index
@@ -1955,7 +2004,7 @@ fn verify_policy2_case_set_discovery(
             &case.catalog_digest,
             "policy-2 case-set catalog",
         )?;
-        let index = read_accepted_contract_catalog_with_trust(&catalog, Some(trust))?;
+        let index = read_external_contract_catalog_with_trust(&catalog, Some(trust))?;
         let selected =
             index
                 .semantic_identity()
@@ -2819,12 +2868,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                     } else {
                         Some(PathBuf::from(&request.accepted_contract_catalog))
                     };
-                    let bundled = bundled_first_party_contract_index(
-                        dialect.id,
-                        &package_root,
-                        &facts,
-                        &request.runtime,
-                    )?;
+                    let requirements =
+                        external_package_contract_requirements(dialect.id, &package_root, &facts);
                     let trust = (!request.receipt_trust_configuration.is_empty())
                         .then(|| {
                             read_policy2_trust_configuration(Path::new(
@@ -2834,10 +2879,10 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                         .transpose()?;
                     let contracts = discovered_catalog
                         .as_deref()
-                        .map(|path| read_accepted_contract_catalog_with_trust(path, trust.as_ref()))
+                        .map(|path| read_external_contract_catalog_with_trust(path, trust.as_ref()))
                         .transpose()?
                         .unwrap_or_default()
-                        .with_fallback(bundled);
+                        .with_fallback(requirements);
                     let contracts = if request.proposal_dependency_catalog.is_empty() {
                         contracts
                     } else {
@@ -2974,8 +3019,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         } else {
             project.parent().unwrap_or_else(|| Path::new("."))
         };
-        let bundled =
-            bundled_first_party_contract_index(dialect.id, directory, &facts, &request.runtime)?;
+        let requirements = external_package_contract_requirements(dialect.id, directory, &facts);
         let catalog = if request.accepted_contract_catalog.is_empty() {
             let candidate = directory.join(".solid-checker/accepted-contracts.json");
             candidate.is_file().then_some(candidate)
@@ -2989,10 +3033,10 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             .transpose()?;
         let contracts = catalog
             .as_deref()
-            .map(|path| read_accepted_contract_catalog_with_trust(path, trust.as_ref()))
+            .map(|path| read_external_contract_catalog_with_trust(path, trust.as_ref()))
             .transpose()?
             .unwrap_or_default()
-            .with_fallback(bundled);
+            .with_fallback(requirements);
         let statuses = accepted_package_contract_statuses(dialect, project, &facts, &contracts)?;
         let actionable = statuses
             .iter()
@@ -3036,7 +3080,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                     println!("No imported Solid packages need contracts.");
                 } else if actionable.is_empty() {
                     println!(
-                        "\nEvery imported Solid package has a contract for its installed version."
+                        "\nNo external package contract requirements remain; built-in runtime model support is reported separately."
                     );
                 } else {
                     println!(
@@ -3074,8 +3118,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         } else {
             project.parent().unwrap_or_else(|| Path::new("."))
         };
-        let bundled =
-            bundled_first_party_contract_index(dialect.id, directory, &facts, &request.runtime)?;
+        let requirements = external_package_contract_requirements(dialect.id, directory, &facts);
         let trust = (!request.receipt_trust_configuration.is_empty())
             .then(|| {
                 read_policy2_trust_configuration(Path::new(&request.receipt_trust_configuration))
@@ -3083,10 +3126,10 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             .transpose()?;
         let contracts = discovered_catalog
             .as_deref()
-            .map(|path| read_accepted_contract_catalog_with_trust(path, trust.as_ref()))
+            .map(|path| read_external_contract_catalog_with_trust(path, trust.as_ref()))
             .transpose()?
             .unwrap_or_default()
-            .with_fallback(bundled);
+            .with_fallback(requirements);
         let contracts = if request.proposal_dependency_catalog.is_empty() {
             contracts
         } else {
@@ -6664,14 +6707,14 @@ fn attach_generated_owner_requirements(
 /// A bare `kind: "value"` summary is the maximal certified negative claim —
 /// `validate_export` bars it from carrying even an open function domain — so it is
 /// publishable only against a proof that the export is not a function.
-/// [`solid_reactive_ir::export_kind_proof`] holds the whole rule; only its two
-/// closed answers publish anything here. `Unknown` (an `any`, `unknown`,
+/// [`solid_reactive_ir::export_kind_proof`] holds the whole rule. `Unknown` (an `any`, `unknown`,
 /// `never` or error type, which is what an untyped dependency leaves behind in
 /// a published `.js` artifact), `Mixed`, and an absent fact are the absence of
 /// that proof — on *either* of the two signature facts — and treating any of
 /// them as `value` is how `@solid-devtools/locator@0.16.7` came to publish
 /// "invokes no caller-supplied callback" for `addClickInterceptor(fn)`.
-/// Refusing costs the entrypoint; publishing costs the claim, which is worse.
+/// ADR 0011 preserves present unresolved answers as explicit unknown shape
+/// with wholly open behavior. An absent answer still refuses the entrypoint.
 /// See docs/package-contracts.md "Refused entrypoints versus failed
 /// generation".
 ///
@@ -6737,10 +6780,11 @@ fn reconcile_entry_export_kind(
         {
             Err("whose closed runtime kind is non-callable, but package contract value export summary cannot have function effects".into())
         }
-        solid_reactive_ir::ExportKindProof::Unresolvable(callability, constructability) => {
-            Err(format!(
-                "whose runtime kind no closed type answers ({callability:?}, {constructability:?})"
-            ))
+        // The exact runtime binding exists, but neither kind is proven.
+        // Publish no behavioral knowledge about it. The stable main's
+        // `shape: unknown` must survive projection and re-export (ADR 0011).
+        solid_reactive_ir::ExportKindProof::Unresolvable(_, _) => {
+            Ok(solid_reactive_ir::ContractExport::unknown_runtime_kind())
         }
         // Demanded and unanswered, not undemanded: `demand_plan` requests both
         // signature facts at every export specifier and every exported
@@ -6759,6 +6803,26 @@ fn reconcile_entry_export_kind(
 mod entry_export_kind_reconciliation_tests {
     use super::reconcile_entry_export_kind;
     use solid_reactive_ir::{ContractClaim, ContractExport, ExportKindProof};
+
+    #[test]
+    fn unresolved_runtime_kind_discards_inference_without_claiming_non_callability() {
+        let summary = ContractExport {
+            kind: "function".into(),
+            creates_walk_clean: true,
+            creates_closed_empty: true,
+            ..ContractExport::default()
+        };
+        let result = reconcile_entry_export_kind(
+            ExportKindProof::Unresolvable(
+                typefacts::Callability::Unknown,
+                typefacts::Constructability::Unknown,
+            ),
+            summary,
+        )
+        .unwrap();
+        assert_eq!(result, ContractExport::unknown_runtime_kind());
+        assert!(reconcile_entry_export_kind(ExportKindProof::Unanswered, result).is_err());
+    }
 
     // A closed non-callable proof carrying function domains is a contradiction
     // between two facts, not a cleanup opportunity: the one measured instance

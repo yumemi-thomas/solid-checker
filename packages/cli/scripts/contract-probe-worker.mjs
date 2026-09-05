@@ -1,4 +1,4 @@
-// One isolated runtime-probe-v2 session for a stable-v1 proposal. Recipe modules emit raw
+// One isolated worker-v5 session for a stable-v1 proposal. Recipe modules emit raw
 // semantic events; Rust later validates and classifies the complete run.
 //
 // The worker decides nothing semantic and asserts nothing about its own
@@ -47,11 +47,13 @@
 // none.
 
 import { createHash, randomUUID } from "node:crypto";
-import { writeSync } from "node:fs";
+import { readFileSync, writeSync } from "node:fs";
 import { createRequire } from "node:module";
+import * as moduleRuntime from "node:module";
 import { pathToFileURL } from "node:url";
 
 import {
+  PROBE_WORKER_PROTOCOL,
   adoptFrameValue,
   appendFrameItem,
   createFrameList,
@@ -60,7 +62,7 @@ import {
   serializeFrame
 } from "./contract-probe-harness.mjs";
 
-const PROTOCOL = "solid-checker-runtime-probe-v2";
+const PROTOCOL = PROBE_WORKER_PROTOCOL;
 const STARTUP_FORMAT = "solid-checker-probe-worker-startup";
 const REPORT_DESCRIPTOR = 3;
 
@@ -90,6 +92,15 @@ const stdin = process.stdin;
 // `catch` that is meant to contain the failure.
 const ErrorConstructor = Error;
 const asString = String;
+const readBytes = readFileSync;
+// Namespace reads keep ordinary audit workers usable on runtimes without
+// these optional APIs. The controlled profile only runs the compiled-pinned
+// Node and fails inside the transaction if either capability is unavailable.
+const installHooks = moduleRuntime.registerHooks;
+const stripTypes = moduleRuntime.stripTypeScriptTypes;
+const apply = Reflect.apply;
+const hasOwn = Object.hasOwn;
+const ownKeys = Object.keys;
 
 // Nothing after this line may add a property to an intrinsic prototype, and
 // nothing here needs to. A package top level that tries — the
@@ -208,23 +219,140 @@ isolation.process = `${processId}:${uuid()}`;
 isolation.realm = uuid();
 isolation.moduleInstance = uuid();
 const harness = createRuntimeProbeHarness(session);
+// Captured before recipe import. A recipe receives `session`, so no profile
+// field is ever read from it after untrusted code has run.
+const requestedExecution = session.execution;
+const execution = requestedExecution ? createFrameRecord() : null;
+let sourceUrl;
+let exportName;
+let consume = false;
+let controlledEdgeKeys;
+let resolvedEdgeKeys;
+if (execution) {
+  execution.binding = adoptFrameValue(requestedExecution);
+  execution.loaded = false;
+  execution.consumerCompleted = false;
+  execution.stage = "requested";
+}
 let outcome;
 try {
-  const module = await import(`${toFileUrl(recipePath).href}?${isolation.moduleInstance}`);
+  if (execution) {
+    const binding = execution.binding;
+    if (!["node-strip-inert-esm-v1", "node-strip-import-free-esm-v1", "node-strip-relative-ts-graph-esm-v1"].includes(binding.profile) || resolution?.importKind !== "esm") {
+      throw new ErrorConstructor("unsupported controlled execution profile or import kind");
+    }
+    sourceUrl = toFileUrl(binding.sourcePath).href;
+    exportName = binding.exportName;
+    consume = binding.consumer;
+    if (sourceUrl !== resolution.esm) throw new ErrorConstructor("profile source resolution mismatch");
+    const isGraph = binding.profile === "node-strip-relative-ts-graph-esm-v1";
+    if (isGraph !== (binding.modules !== undefined && binding.modules.length > 0)) {
+      throw new ErrorConstructor("profile module graph mismatch");
+    }
+    if (!isGraph && ((binding.modules?.length ?? 0) !== 0 || (binding.edges?.length ?? 0) !== 0)) {
+      throw new ErrorConstructor("single-module profile carried graph fields");
+    }
+    const requestedModules = isGraph ? binding.modules : [binding];
+    const controlledModules = createFrameRecord();
+    for (let moduleIndex = 0; moduleIndex < requestedModules.length; moduleIndex += 1) {
+      const module = requestedModules[moduleIndex];
+      const moduleUrl = toFileUrl(module.sourcePath).href;
+      if (hasOwn(controlledModules, moduleUrl)) throw new ErrorConstructor("duplicate controlled source URL");
+      const source = readBytes(module.sourcePath, "utf8");
+      const derived = readBytes(module.derivedPath, "utf8");
+      const output = stripTypes(source, { mode: "strip" });
+      if (digest(source) !== module.sourceDigest || digest(output) !== module.outputDigest || derived !== output) {
+        throw new ErrorConstructor("profile transformer/input/output mismatch");
+      }
+      const verified = createFrameRecord();
+      verified.output = output;
+      controlledModules[moduleUrl] = verified;
+    }
+    const rootModule = controlledModules[sourceUrl];
+    if (!rootModule || digest(readBytes(binding.sourcePath, "utf8")) !== binding.sourceDigest || digest(rootModule.output) !== binding.outputDigest) {
+      throw new ErrorConstructor("profile root module binding mismatch");
+    }
+    controlledEdgeKeys = createFrameRecord();
+    resolvedEdgeKeys = createFrameRecord();
+    const requestedEdges = binding.edges ?? [];
+    for (let edgeIndex = 0; edgeIndex < requestedEdges.length; edgeIndex += 1) {
+      const edge = requestedEdges[edgeIndex];
+      const importerUrl = toFileUrl(edge.importerPath).href;
+      const targetUrl = toFileUrl(edge.targetPath).href;
+      if (!hasOwn(controlledModules, importerUrl) || !hasOwn(controlledModules, targetUrl)) {
+        throw new ErrorConstructor("profile edge names an unbound module");
+      }
+      const key = `${importerUrl}\0${edge.specifier}`;
+      if (hasOwn(controlledEdgeKeys, key)) throw new ErrorConstructor("duplicate profile edge key");
+      controlledEdgeKeys[key] = targetUrl;
+    }
+    execution.stage = "transform-verified";
+    // Only this exact source URL receives a format override. Node still owns
+    // package resolution; Rust compares its answer with the selected snapshot.
+    // No suffix inference, aliases, imports from the subject, or CJS fallback.
+    installHooks({
+      resolve(specifier, context, nextResolve) {
+        if (hasOwn(controlledModules, context.parentURL)) {
+          const key = `${context.parentURL}\0${specifier}`;
+          if (!hasOwn(controlledEdgeKeys, key)) throw new ErrorConstructor("controlled profile module import refused");
+          if (context.conditions.includes("require")) throw new ErrorConstructor("profile CommonJS consumption refused");
+          resolvedEdgeKeys[key] = true;
+          return { url: controlledEdgeKeys[key], shortCircuit: true };
+        }
+        const result = nextResolve(specifier, context);
+        if (ownKeys(controlledModules).some((url) => result.url.startsWith(`${url}?`) || result.url.startsWith(`${url}#`))) {
+          throw new ErrorConstructor("profile source URL variant refused");
+        }
+        if (hasOwn(controlledModules, result.url) && context.conditions.includes("require")) {
+          throw new ErrorConstructor("profile CommonJS consumption refused");
+        }
+        return result;
+      },
+      load(url, context, nextLoad) {
+        if (!hasOwn(controlledModules, url)) return nextLoad(url, context);
+        if (url === sourceUrl) {
+          execution.loaded = true;
+          execution.stage = "module-loaded";
+        }
+        return { format: "module", source: controlledModules[url].output, shortCircuit: true };
+      }
+    });
+  }
   outcome = createFrameRecord();
-  if (typeof module.runProbeSession !== "function") {
-    outcome.kind = "refused";
-    outcome.reason = "recipe module exports no runProbeSession function";
-  } else {
-    // Passed through as it came back, deliberately not `?? {}`: an object
-    // literal has `Object.prototype` on its chain, and `drain` then had to
-    // decide "did the recipe supply a flush control?" with a lookup that
-    // reaches it. `drain` asks for an own property of whatever this is,
-    // including `undefined`.
-    const controls = await module.runProbeSession(session, harness);
-    await harness.drain(controls);
+  if (consume && execution.binding.profile === "node-strip-inert-esm-v1") {
+    const subject = await import(sourceUrl);
+    harness.emit({ marker: "call", kind: "call", phase: "enter" });
+    const result = apply(subject[exportName], undefined, []);
+    if (result !== undefined) throw new ErrorConstructor("controlled inert call returned a value");
+    execution.consumerCompleted = true;
+    execution.stage = "consumer-completed";
+    harness.emit({ marker: "call", kind: "call", phase: "exit" });
+    await harness.drain(undefined);
     outcome.kind = "completed";
     outcome.events = harness.events();
+  } else {
+    const module = await import(`${toFileUrl(recipePath).href}?${isolation.moduleInstance}`);
+    if (typeof module.runProbeSession !== "function") {
+      outcome.kind = "refused";
+      outcome.reason = "recipe module exports no runProbeSession function";
+    } else {
+      // Passed through as it came back, deliberately not `?? {}`: an object
+      // literal has `Object.prototype` on its chain, and `drain` then had to
+      // decide "did the recipe supply a flush control?" with a lookup that
+      // reaches it. `drain` asks for an own property of whatever this is,
+      // including `undefined`.
+      const controls = await module.runProbeSession(session, harness);
+      await harness.drain(controls);
+      outcome.kind = "completed";
+      outcome.events = harness.events();
+      if (consume) {
+        if (ownKeys(controlledEdgeKeys ?? {}).some((key) => !hasOwn(resolvedEdgeKeys, key))) {
+          throw new ErrorConstructor("controlled profile edge was not resolved");
+        }
+        execution.consumerCompleted = true;
+        execution.stage = "consumer-completed";
+      }
+    }
   }
 } catch (error) {
   outcome = createFrameRecord();
@@ -238,6 +366,7 @@ run.session = sessionId;
 run.environment = environment;
 run.isolation = isolation;
 if (resolution) run.resolution = resolution;
+if (execution) run.execution = execution;
 run.drainedMicrotasks = harness.drainedMicrotasks();
 run.drainedMacrotasks = harness.drainedMacrotasks();
 run.outcome = outcome;

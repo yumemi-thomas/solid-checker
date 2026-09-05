@@ -178,10 +178,12 @@ fn normalize_inferred_contract_identity(
 /// This is a **generation-scope decision, not a proof**: the predicate is an
 /// exact package-name match with no version and no integrity behind it, which
 /// is not identity. That is admissible only because the decision can act in
-/// exactly one direction — it *withholds* claims, turning the two domains
+/// exactly one direction — it *withholds* claims, turning the affected domains
 /// open, and can never establish one. The generator cannot answer the other
 /// way either: emitting `reads: []`/`creates: []` *closed*, as the audits do,
 /// would manufacture a negative claim from a derivation that produced nothing.
+/// ADR 0017 also withholds callbacks: compact summaries do not retain whether
+/// callback timing came from this bootstrap, including through local helpers.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum GenerationScope {
     /// An ordinary consuming package: every derived domain is published.
@@ -200,8 +202,8 @@ impl GenerationScope {
     }
 
     /// Whether path-bootstrapped primitive recognition inside this archive may
-    /// reach the published document as owner-requirement cleanups and reactive
-    /// reads.
+    /// reach the published document as callbacks, owner-requirement cleanups,
+    /// reactive reads or creates proposals.
     fn publishes_bootstrapped_reactive_domains(self) -> bool {
         matches!(self, Self::ConsumingPackage)
     }
@@ -220,6 +222,10 @@ fn normalize_export(
     let mut resources = Vec::new();
 
     let callbacks = match &summary.callbacks {
+        // The compact summary loses bootstrap provenance, including through
+        // local helper composition. ADR 0017 withholds this domain wholesale
+        // inside primitive-defining archives rather than granting self-trust.
+        _ if !scope.publishes_bootstrapped_reactive_domains() => KnowledgeSet::Unknown,
         ContractClaim::Open => KnowledgeSet::Unknown,
         ContractClaim::Known(callbacks) => KnowledgeSet::Complete(
             callbacks
@@ -440,6 +446,7 @@ fn normalize_export(
             },
         },
         shape: match summary.kind.as_str() {
+            "unknown" => ValueShape::Unknown,
             "function" => ValueShape::Callable,
             "component" => ValueShape::Component,
             _ => ValueShape::Plain,

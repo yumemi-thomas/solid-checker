@@ -13,7 +13,7 @@ use solid_facts_backend::SemanticDemandGroup;
 use solid_facts_backend::{
     AcceptedContractSource, BackendError, ResolvedImport, SemanticDemandOptions, SourceFile,
     TypeFactsProvider, analyze_project_accepted_measured_with_enablement,
-    build_project_native_measured_with_demands, load_accepted_contract_index,
+    build_project_native_measured_with_demands, load_external_contract_index,
 };
 
 #[derive(Deserialize)]
@@ -196,7 +196,7 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
         })
         .collect::<Vec<_>>();
     let contracts =
-        load_accepted_contract_index(encoded.iter().map(|(document, receipt, import)| {
+        load_external_contract_index(encoded.iter().map(|(document, receipt, import)| {
             AcceptedContractSource {
                 document,
                 receipt,

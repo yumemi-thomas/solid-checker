@@ -195,6 +195,8 @@ impl DiagnosticSession {
         contracts: &AcceptedContractIndex,
         enablement: RequestedRuleEnablement<'_>,
     ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
+        let external_contracts = contracts.external_packages();
+        let contracts = external_contracts.as_ref();
         let ir_started = Instant::now();
         let mut rule_options = discover_rule_options(project)?;
         rule_options.request_presets(enablement.presets.iter().cloned());
@@ -669,13 +671,13 @@ impl PackageContractStatus {
     pub fn needs_action(&self) -> bool {
         matches!(
             self.status.as_str(),
-            "missing" | "unverified" | "stale" | "unbound"
+            "missing" | "unverified" | "stale" | "unbound" | "unsupported-runtime"
         )
     }
 }
 
-/// Reports stable-v1 receipt coverage for every imported package that is
-/// either first-party to the selected dialect or declares a Solid dependency.
+/// Reports external receipt coverage and the separately identified built-in
+/// runtime foundation. Built-in model selection is not artifact certification.
 /// Coverage is complete only when every exact imported specifier binds in the
 /// already receipt-validated normalized index.
 pub fn accepted_package_contract_statuses(
@@ -700,6 +702,25 @@ pub fn accepted_package_contract_statuses(
     let resolved = facts.resolved_imports.as_ref();
     let mut statuses = Vec::new();
     for module in imported_package_roots(facts) {
+        if let Some(core_package) = core_runtime_package_for_status(&module, facts) {
+            let modeled = dialect
+                .vocabulary
+                .primitive_defining_packages()
+                .contains(&core_package);
+            statuses.push(PackageContractStatus {
+                name: module,
+                status: if modeled { "builtin" } else { "unsupported-runtime" }.into(),
+                installed_integrity: None,
+                detail: Some(if modeled {
+                    format!("built-in runtime model {}; no package receipt is required; model selection is not installed-artifact authentication", dialect.vocabulary.runtime_model_identity())
+                } else {
+                    format!("this core package is outside the {} runtime model", dialect.id)
+                }),
+                remedy: (!modeled).then(|| "select a compatible Solid dialect and runtime; a core package contract cannot extend the built-in model".into()),
+                contract_path: String::new(),
+            });
+            continue;
+        }
         let installed = installed_package_manifest(project_directory, &module)?;
         let manifest = installed.as_ref().map(|(_, manifest)| manifest);
         if !first_party.contains(&module.as_str()) && !manifest.is_some_and(manifest_uses_solid) {
@@ -784,6 +805,48 @@ pub fn accepted_package_contract_statuses(
     }
     statuses.sort_by(|left, right| left.name.cmp(&right.name));
     Ok(statuses)
+}
+
+/// Reporting-only classification. An alias counts as core only when every
+/// exact import occurrence resolves to the same defining package. This does
+/// not authenticate its bytes or grant semantics to the source program.
+fn core_runtime_package_for_status<'a>(
+    module: &'a str,
+    facts: &'a ProjectFacts,
+) -> Option<&'a str> {
+    if solid_dialect::primitive_defining_package(module) {
+        return Some(module);
+    }
+    let resolved = facts.resolved_imports.as_ref()?;
+    let mut selected = None;
+    for file in &facts.files {
+        for import in file
+            .ast
+            .imports
+            .iter()
+            .filter(|import| package_root(&import.module) == module)
+        {
+            let solid_facts::SpecifierAttestation::Attested(answer) =
+                resolved.specifier(file.path.as_str(), import.span, &import.module)
+            else {
+                return None;
+            };
+            if answer.resolution != solid_facts::ImportResolution::NodeModules {
+                return None;
+            }
+            let package = answer
+                .resolver_package_name
+                .as_deref()
+                .or(answer.package_name.as_deref())?;
+            if !solid_dialect::primitive_defining_package(package)
+                || selected.is_some_and(|other| other != package)
+            {
+                return None;
+            }
+            selected = Some(package);
+        }
+    }
+    selected
 }
 
 #[derive(Deserialize)]

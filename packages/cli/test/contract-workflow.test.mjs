@@ -36,6 +36,7 @@ import {
   locateExternalDependencyPackageRoot,
   mergeProposalDependencies,
   reexportImporterCensus,
+  staticRuntimeDependencies,
   certificationImporterPathFor,
   parseCertifyArguments,
   partialProposalHasDependencyFrontier,
@@ -898,7 +899,7 @@ test("only a genuinely absent dynamic optional peer is inapplicable", () => {
   );
 });
 
-test("the re-export importer census sees every module, not the first one sorted", () => {
+test("the static runtime importer census includes imports and re-exports at every occurrence", () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-reexport-census-"));
   try {
     const packageRoot = join(root, "node_modules", "consumer");
@@ -915,13 +916,13 @@ test("the re-export importer census sees every module, not the first one sorted"
         }
       })}\n`
     );
-    // Both modules re-export the same specifier. `./dist/core/nested.js`
+    // One module imports and one re-exports the same specifier. `./dist/core/nested.js`
     // sorts before `./dist/index.js`, so a first-occurrence census names the
     // nested module and drops the entry module -- exactly the shape that made
     // `motion-solidjs@0.6.0`'s entry-module bridge resolve against nothing.
     writeFileSync(
       join(packageRoot, "dist", "index.js"),
-      'export { SHARED } from "shared-dependency";\n' +
+      'import { SHARED as source } from "shared-dependency"; export const SHARED = source + "!";\n' +
         'export { NESTED } from "./core/nested.js";\n'
     );
     writeFileSync(
@@ -965,9 +966,14 @@ test("the re-export importer census sees every module, not the first one sorted"
       resolutionKind: "import",
       integrity: "sha512-consumer"
     });
-    const edges = resolved.externalDependencies.filter(
-      edge => edge.axis === "runtime" && edge.kind === "reexport"
-    );
+    const edges = staticRuntimeDependencies(resolved);
+    assert.deepEqual(edges.map(edge => edge.kind), ["reexport", "import"]);
+    assert(resolved.externalDependencies.some(edge => edge.axis === "declarations"));
+    assert(edges.every(edge => edge.axis === "runtime"));
+    assert.deepEqual(staticRuntimeDependencies({ externalDependencies: [
+      { axis: "runtime", kind: "dynamic", specifier: "late" },
+      { axis: "declarations", kind: "import", specifier: "types" }
+    ] }), [], "dynamic and declaration edges do not gain semantic authority");
     assert.deepEqual(
       edges.map(edge => edge.importerPath),
       ["./dist/core/nested.js", "./dist/index.js"],
@@ -980,7 +986,7 @@ test("the re-export importer census sees every module, not the first one sorted"
     assert.deepEqual(
       [...(census.get("shared-dependency") ?? [])].sort(),
       [nestedImporter, entryImporter].sort(),
-      "the census carries every re-exporting module of the package"
+      "the census carries both importing and re-exporting modules of the package"
     );
 
     // The emitted catalog carries both, with the node's own importer being the
@@ -1073,7 +1079,7 @@ test("the private graph catalog names every module that re-exports a dependency"
         [{ ...dependency, reexportImporters: [entryImporter] }],
         join(root, "catalog-mismatch")
       ),
-      /names an importer that re-exports nothing/,
+      /names an importer outside its occurrence census/,
       "the node's own resolution must be one of the occurrences"
     );
 
@@ -1174,6 +1180,32 @@ test("published graph case-set execution deduplicates canonical node transport",
     { root: "right-full-identity", nodes: ["right-full-identity", "shared-full-identity"] }
   ]);
   assert.equal(JSON.stringify(execution).includes("receipt"), false);
+});
+
+test("both graph execution shapes carry the configured pinned probe paths", () => {
+  const root = {
+    node: { key: "root", bunLockPath: "/project/bun.lock", lockLocator: "root" },
+    planning: { schemaVersion: 1, proposal: "/scratch/root.json", resolution: {} }
+  };
+  const configured = {
+    probeHarnessRoot: "/repository",
+    probeNodeExecutable: "/pinned/node",
+    probeRecipeCorpus: "/recipes"
+  };
+  for (const count of [1, 2]) {
+    const inputs = {
+      cases: Array.from({ length: count }, () => ({ root, nodes: [root] })),
+      typefactsExecutable: "/bin/typefacts",
+      issuerConfiguration: "/config/issuer.json",
+      catalogRoot: "/catalog",
+      trustConfigurationOutput: "/config/trust.json"
+    };
+    const absent = buildPublishedGraphExecutionRequest(inputs);
+    assert.equal("probeRecipeCorpus" in absent, false);
+    const armed = buildPublishedGraphExecutionRequest({ ...inputs, ...configured });
+    for (const [key, value] of Object.entries(configured)) assert.equal(armed[key], value);
+    assert.equal("sandboxPolicy" in armed, false, "the adapter cannot declare isolation authority");
+  }
 });
 
 test("certification publishes only after every authority stage succeeds", async () => {

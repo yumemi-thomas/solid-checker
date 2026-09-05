@@ -28,12 +28,14 @@ All three refuse with the *same* reason as each other — `has no runtime ESM
 exports` — which is the point: an empty export surface separates none of them
 from a type-only module, and only emission does.
 
-Two more refusals guard the erasability table itself:
+Two ordinary runtime cases guard the erasability table itself:
 
 - `./default-export` → `export default 1;`. The emitted module binds its
   default export to an evaluated expression. This is the tail of `@solidjs/h`'s
   `types/hyperscript.d.ts` in miniature (`declare const _default; export default
-  _default;`), and it is why that member is not answered by this rule.
+  _default;`), and it is why that member is not answered by this rule. Its
+  unresolved runtime kind is retained as an unknown shape with behavior open
+  (ADR 0011); it must never be classified as inapplicable.
 - `./enum` → `runtime-enum.ts`: a non-`declare` `enum` emits an object at
   runtime, so the case stays ordinary — and it **certifies**, which proves the
   refusals above are the shapes and not the fixture.

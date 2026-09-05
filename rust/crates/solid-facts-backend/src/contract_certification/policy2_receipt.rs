@@ -172,6 +172,12 @@ pub struct ConfiguredReceiptIssuer {
 }
 
 impl ConfiguredReceiptIssuer {
+    pub(super) fn sign_controlled_execution(&self, payload: &[u8]) -> [u8; 64] {
+        self.signing_key
+            .sign(&super::controlled_execution::signature_message(payload))
+            .to_bytes()
+    }
+
     pub fn persistent_local(
         scope: impl Into<String>,
         seed: [u8; 32],

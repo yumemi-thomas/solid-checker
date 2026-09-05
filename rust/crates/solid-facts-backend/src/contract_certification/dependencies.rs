@@ -433,6 +433,26 @@ impl PublishedContractGraphPlan {
         issuer: &ConfiguredReceiptIssuer,
         revocation_epoch: u64,
     ) -> Result<VerifiedDependencyComposition, DependencyReceiptCompositionError> {
+        self.authenticate_dependency_receipts_with_census(
+            parent,
+            receipts,
+            issuer,
+            revocation_epoch,
+            None,
+        )
+    }
+
+    fn authenticate_dependency_receipts_with_census(
+        &self,
+        parent: &CanonicalDependencyNodeIdentity,
+        receipts: &[(
+            &CanonicalDependencyNodeIdentity,
+            &AuthenticatedPolicy2Receipt,
+        )],
+        issuer: &ConfiguredReceiptIssuer,
+        revocation_epoch: u64,
+        type_facts: Option<&super::type_facts::VerifiedTypeFactsEvidence>,
+    ) -> Result<VerifiedDependencyComposition, DependencyReceiptCompositionError> {
         let node = self
             .nodes
             .iter()
@@ -470,6 +490,7 @@ impl PublishedContractGraphPlan {
             receipts,
             issuer,
             revocation_epoch,
+            type_facts,
         )
     }
 
@@ -655,27 +676,33 @@ impl PublishedContractGraphPlan {
                                 })
                         })
                         .collect::<Result<Vec<_>, _>>()?;
-                    Some(self.authenticate_dependency_receipts(
+                    Some(self.authenticate_dependency_receipts_with_census(
                         &node.identity,
                         &receipts,
                         issuer,
                         revocation_epoch,
+                        type_facts,
                     )?)
                 };
             // Every graph node derives, runs, and authenticates its own veto
             // set against its own snapshot and demand graph. A parent never
             // inherits a child's probe authority.
-            let probe_gates =
-                super::finalization::authenticate_probe_gates(&node.plan, probes, pin).map_err(
-                    |source| PublishedGraphCertificationError::FinalizationAtNode {
-                        node: node.identity.digest().into(),
-                        package: format!(
-                            "{}@{}",
-                            node.identity.package_name, node.identity.package_version
-                        ),
-                        source,
-                    },
-                )?;
+            let probe_gates = super::finalization::authenticate_probe_gates_with_dependencies(
+                &node.plan,
+                probes,
+                pin,
+                &self.transitive_dependency_plans(node)?,
+            )
+            .map_err(|source| {
+                PublishedGraphCertificationError::FinalizationAtNode {
+                    node: node.identity.digest().into(),
+                    package: format!(
+                        "{}@{}",
+                        node.identity.package_name, node.identity.package_version
+                    ),
+                    source,
+                }
+            })?;
             let contract = super::finalization::finalize_value_only_with_dependencies(
                 &node.plan,
                 &proposal,
@@ -2042,6 +2069,7 @@ impl VerifiedDependencyComposition {
         )],
         issuer: &ConfiguredReceiptIssuer,
         revocation_epoch: u64,
+        type_facts: Option<&super::type_facts::VerifiedTypeFactsEvidence>,
     ) -> Result<Self, DependencyReceiptCompositionError> {
         if expected_dependencies.len() != receipts.len() {
             return Err(DependencyReceiptCompositionError::ReceiptCensus {
@@ -2083,6 +2111,9 @@ impl VerifiedDependencyComposition {
                     dependency: dependency.digest().into(),
                 }
             })?;
+            let census = requirement
+                .semantic_claim_id()
+                .and_then(|claim| type_facts?.independent_creates_census(parent, claim));
             authenticate_dependency_receipt(
                 parent,
                 requirement,
@@ -2091,6 +2122,7 @@ impl VerifiedDependencyComposition {
                 receipt,
                 issuer,
                 revocation_epoch,
+                census,
             )?;
             match &verifier_build_digest {
                 Some(expected) if expected != receipt.verifier_build_digest().as_str() => {
@@ -2108,17 +2140,28 @@ impl VerifiedDependencyComposition {
                 dependency,
                 receipt,
             );
+            let evidence_root = census.map_or(evidence_root.clone(), |census| {
+                composition_root(
+                    "independent-creates-census-composition",
+                    graph_root,
+                    &[evidence_root.as_str(), census],
+                )
+            });
+            let mut sites = vec![
+                format!("graph:{graph_root}"),
+                format!("parent-case:{}", parent.selected_artifact_case_id()),
+                format!("dependency-node:{}", dependency.digest()),
+                format!("dependency-receipt:{}", receipt.receipt_digest()),
+            ];
+            if let Some(census) = census {
+                sites.push(format!("independent-creates-census:{census}"));
+            }
             witnesses.push(
                 solid_reactive_ir::contract_semantics::certification::WitnessBinding::new(
                     solid_reactive_ir::contract_semantics::certification::ProofWitnessVariant::AcceptedDependencyComposition,
                     requirement.demand_id(),
                     evidence_root,
-                    vec![
-                        format!("graph:{graph_root}"),
-                        format!("parent-case:{}", parent.selected_artifact_case_id()),
-                        format!("dependency-node:{}", dependency.digest()),
-                        format!("dependency-receipt:{}", receipt.receipt_digest()),
-                    ],
+                    sites,
                 ),
             );
             receipt_rows.push(format!(
@@ -2225,6 +2268,11 @@ impl VerifiedDependencyComposition {
 /// A parent demand that *relied* on a withheld closure still refuses on its
 /// own: a `DependencyClosure` requirement names the semantic claim id, and the
 /// receipt's contract no longer contains it (`MissingClosedClaim`).
+/// ADR 0020 adds one independent premise: a live-verified creates census of
+/// the exact parent demand can prove that claim without any dependency
+/// semantic assumption. Receipt identity and weakening still authenticate,
+/// and the census evidence root is bound into the composition witness.
+#[allow(clippy::too_many_arguments)]
 fn authenticate_dependency_receipt(
     parent: &CertificationPlan,
     requirement: &DependencyCompositionRequirement,
@@ -2233,6 +2281,7 @@ fn authenticate_dependency_receipt(
     receipt: &AuthenticatedPolicy2Receipt,
     issuer: &ConfiguredReceiptIssuer,
     revocation_epoch: u64,
+    independent_creates_census: Option<&str>,
 ) -> Result<(), DependencyReceiptCompositionError> {
     let bindings = receipt.bindings();
     if dependency.semantic_digest != requirement.dependency().accepted_contract_digest {
@@ -2327,6 +2376,7 @@ fn authenticate_dependency_receipt(
     }
     if let Some(semantic_claim_id) = requirement.semantic_claim_id()
         && !receipt.contains_closed_claim_id(semantic_claim_id)
+        && independent_creates_census.is_none()
     {
         return Err(DependencyReceiptCompositionError::MissingClosedClaim {
             demand_id: requirement.demand_id().into(),
@@ -2363,6 +2413,7 @@ pub(super) fn authenticate_dependency_claim_for_test(
         receipt,
         issuer,
         revocation_epoch,
+        None,
     )
 }
 

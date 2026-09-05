@@ -63,6 +63,7 @@ disposition, and the first call with none refuses the domain by name:
 | `standard-library` | the callee resolved, by default-library symbol identity, to a member of `lib.*.d.ts`; the engine registers no version-1 resource into a Solid runtime, **and** the member transfers control to no callable the census cannot see: every slot the reviewed invoker table says it invokes, and every slot the producer saw a callable in, is parameter-rooted or a callable literal inside the transcript; `Function.prototype.{call,apply,bind}`, `Reflect.apply`/`construct`, `eval` and `Function` refuse by name |
 | `dialect-axiom` | the audited Solid 2.0 negative table denies the primitive's `creates` (ADR 0007); not reachable in this fixture, see below |
 | `local-recursion` | the callee is declared in this artifact's own runtime source under a binding identifier nothing in the file writes or redeclares, and the census recurses into its transcript |
+| `local-recursion-backedge` | the same exact stable declaration is already on the current census stack; the edge closes the finite graph while every non-cycle edge remains subject to its ordinary disposition |
 
 ## What each export is for
 
@@ -70,7 +71,7 @@ disposition, and the first call with none refuses the domain by name:
 | --- | --- | --- |
 | `plain` | **certifies** with a recipe | `callback(0)` is parameter-rooted; `mapAll` is a local recursion whose `Array.from(items)` and `values.map(callback)` are standard-library members handed only parameter-rooted values; `never()` after the `return` is proven **unreachable** by the producer's control-flow census (`census-total:5:1`) |
 | `viaHelperChain` | **certifies** with a recipe | three local-recursion hops, the innermost parameter-rooted |
-| `cycle` | refuses: cycle | `cycleA` calls `cycleB` calls `cycleA`; the revisit is refused by declaration identity (symbol, file, exact span), never by name |
+| `cycle` | **certifies** with a recipe | `cycleA` calls `cycleB` calls `cycleA`; the exact stable revisit closes the zero-upper-bound graph, and the boolean argument makes the mandatory sample finite |
 | `deep` | refuses: depth | nine local-recursion hops, past the `MAX_COMPOSITION_DEPTH` (8) bound; refused rather than approximated |
 | `unresolved` | refuses: unresolved callee | `externalGlobal` is an identifier no declaration binds: no declaration, no parameter root, no disposition. The refusal names the call. (The generator's own walk also refuses to *propose* for it — an unresolved callee is never evidence of harmlessness — so the corpus proposal leaves its `creates` open and the tracer closes it by hand to pin the census's refusal.) |
 | `taggedTemplate` | refuses: uncensused form | a `TaggedTemplateExpression` invokes its tag and appears in no `calls` row; the producer records it as `tagged-template` and the census refuses on it |
@@ -157,10 +158,10 @@ ran. None hands `session` or `harness` to the package.
 
 - **`plain` and `noRecipe` must stay byte-identical in body.** The difference
   between their rows is the corpus, and only the corpus.
-- **`cycle` must stay guard-free.** A `depth > 0` guard is an operator
-  application on an untyped operand, which the producer records as a `coercion`
-  form; the census would refuse on that row before reaching the cycle, and the
-  test would pass for the wrong reason.
+- **`cycle` uses a boolean stop argument.** A numeric `depth > 0` guard on an
+  untyped JavaScript parameter would itself be a coercion form and obscure the
+  graph premise. Boolean truthiness and literal arguments keep the sample
+  finite without adding another invoking form.
 - **`deep` must stay at nine hops or more**, one past the bound.
 - **`unresolved` must stay a bare undeclared identifier.** An import from an
   unaudited dependency is not the same case: a bare specifier that resolves to

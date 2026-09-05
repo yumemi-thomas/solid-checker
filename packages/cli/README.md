@@ -101,7 +101,12 @@ longer matches the installed version:
 solid-checker contract check
 ```
 
-Packages are reported as bundled, accepted, unverified, stale, unbound, or
+Core runtime packages are reported as `builtin`, meaning the selected Solid
+dialect supplies their modeled behavior without a package receipt. This is
+model selection, not independent certification or installed-artifact
+authentication. A core package outside that dialect is `unsupported-runtime`.
+
+External packages are reported as certified, unverified, stale, unbound, or
 missing; every uncertifying status names its remedy, and the command exits
 non-zero when action is required. `unbound` means no exact project import
 occurrence matches the catalog entry. `stale` means document, receipt, package,

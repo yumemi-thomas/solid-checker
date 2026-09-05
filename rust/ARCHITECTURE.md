@@ -43,7 +43,7 @@ answer; it must not switch on an API spelling itself.
 | Rule projection and wording | `solid-reactive-ir::projection` owns typed finding seeds, shared selection, and finding assembly | `dialects/solid-v1/rules` declares capabilities and maps every supported seed to 1.x identity, severity, message, hint, and evidence | `dialects/solid-v2/rules` declares capabilities and maps every supported seed to 2.0 identity, severity, message, hint, and evidence |
 | ESLint-era file-local checks | fact helpers live in `solid-reactive-ir::upstream_compat` | `solid1x_*` modules; executed only for `Version::V1` | Not executed |
 | Shared static and fine-grained defects | `StaticDefectKind`, populated by static analysis and `upstream_compat::shared_reactivity`; contains no rule prose | Projected and worded by the 1.x catalog | Projected and worded by the 2.0 catalog; the async-tracked-scope check is omitted |
-| Package contracts | stable-v1 wire decode, receipt validation, and exact artifact acquisition terminate in `solid-facts-backend`; the wire-independent model and accepted semantic index live in `solid-reactive-ir::contract_semantics`; every bundled package is declared in the dialect manifest | receipt-issued exact `solid-js@1.9.14` plus scheduled, debounce, and rootless artifact cases | receipt-issued exact `solid-js@2.0.0-rc.3`, `@solidjs/web@2.0.0-rc.3`, and `@solidjs/signals@2.0.0-rc.3` artifact cases |
+| Package contracts | stable-v1 decoding, receipt validation, and exact external artifact acquisition terminate in `solid-facts-backend`; normalized external semantics live in `solid-reactive-ir::contract_semantics` | External package contracts; `solid-js` behavior comes from the built-in model | External package contracts; `solid-js`, `@solidjs/signals`, and `@solidjs/web` behavior comes from the built-in model |
 
 At runtime the stable dialect ids are `solid-v1` and `solid-v2`. In Rust,
 `Version::V1` always means Solid 1.x and `Version::V2` always means Solid 2.0;
@@ -93,8 +93,8 @@ their Solid version does not have.
 
 **Composition.** `solid_facts_backend::dialect::Dialect` bundles everything a
 Solid version contributes: the compiler-provider factory, the catalog's
-`solve`, rule documentation, package-contract finding projection, and the
-bundled contract set, plus a stable `id`. Dialects register in
+`solve`, rule documentation, external package-contract finding projection, and
+the built-in runtime model, plus a stable `id`. Dialects register in
 `dialect::ALL` and are resolved at the entry points — the CLI's `--dialect`
 flag and the wasm request's optional `dialect` field, defaulting to detection
 from the project's resolved `solid-js` version with `solid-v2` as the
@@ -305,7 +305,16 @@ transcripts cannot be replayed as authority, and catalog publication is the
 last transaction stage after accepted bytes and configured-issuer receipt.
 
 All former policy-1 built-ins are currently retired, so both bundle indexes
-are empty. Catalog version 2 can retain an exact import as
+are empty. ADR 0027 removes those historical documents from ordinary discovery.
+Core package entries are withheld before reading document or receipt content
+objects; the normalized analysis boundary independently excludes core identity,
+including aliases. Native, daemon and WASM share this policy. The core return
+table and callback overlay formerly sourced from contracts are removed. Model
+support is reported as `builtin`, separately from independent certification.
+Existing dialect selection and runtime-environment premises remain explicit;
+model selection is not an authentication of installed runtime bytes.
+
+For external packages, catalog version 2 can retain an exact import as
 `obsolete-policy1`; that produces a claim-local uncertifiable result without
 loading the old receipt or supplying semantics. The proof root remains opaque
 authority because raw proof material is outside

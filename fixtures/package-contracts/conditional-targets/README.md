@@ -19,3 +19,7 @@ The `development` and `default` branches are shipped, so the package still
 produces a proposal: the refusal is localized to the `solid` census row, which
 is the second half of the claim. A regression that made the row inapplicable
 would empty `expected-refusals.json` while `expected.json` stayed green.
+
+ADR 0022 lets declaration selection reach the later types arm. This exposes
+the same missing runtime target in the combined development/solid partition;
+both partitions now record the refusal. The successful main/proposal stay unchanged.

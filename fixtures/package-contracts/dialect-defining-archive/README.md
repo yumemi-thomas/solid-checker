@@ -66,6 +66,13 @@ not depend on one.
 
 ## Traps
 
+ADR 0017 extends the same scope decision to callback proposals. The existing
+`onSettled` pair now also pins an explicit unknown callback domain for signals
+and the unchanged callback operation for router-shaped. This does not certify
+callback absence. Since summaries lose bootstrap provenance, independent
+direct callbacks in primitive-defining packages are also withheld until that
+provenance or an independent execution proof is available.
+
 - Both fixtures **must** stay under a directory component named `@solidjs`.
   Move either one to a flat `fixtures/package-contracts/<name>/` and the path
   bootstrap stops firing, no primitive is recognized, the control stops emitting

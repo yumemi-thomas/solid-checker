@@ -348,7 +348,7 @@ impl ClosureReplay<'_> {
                 self.record_opaque_frontier(importer, specifier);
                 Ok(())
             }
-            LocalResolution::External => self.record_external(importer, specifier),
+            LocalResolution::External => self.record_external(importer, specifier, axis),
             LocalResolution::Missing => closure_mismatch(format!(
                 "local closure module {specifier:?} from {importer:?} was not found"
             )),
@@ -359,6 +359,7 @@ impl ClosureReplay<'_> {
         &mut self,
         importer: &str,
         specifier: &str,
+        axis: ModuleAxis,
     ) -> Result<(), ArtifactSnapshotError> {
         let matches = self
             .supplied_dependencies
@@ -367,6 +368,15 @@ impl ClosureReplay<'_> {
             .collect::<Vec<_>>();
         match matches.as_slice() {
             [dependency] => self.dependencies.push((*dependency).clone()),
+            // ADR 0010: declaration files do not execute their imports. Their
+            // bytes still bind the specifier, and Type Facts can use external
+            // typings only through the authenticated compiler-source channel.
+            // Keep supplied semantic edges and export-binding checks intact.
+            [] if axis == ModuleAxis::Declarations
+                && is_declaration_file_name(importer)
+                && !specifier.starts_with('#')
+                && !specifier.ends_with(".node")
+                && !specifier.ends_with(".wasm") => {}
             [] => self.record_opaque_frontier(importer, specifier),
             _ => {
                 return closure_mismatch(format!(

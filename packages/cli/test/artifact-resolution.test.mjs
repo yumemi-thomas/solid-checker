@@ -64,6 +64,41 @@ function target(root, manifest, conditions, axis = "runtime", resolutionKind = "
 }
 
 describe("standalone package-export resolution", () => {
+  test("declaration imports retain acquisition edges without runtime hazards", () => {
+    const base = fileURLToPath(new URL("../../../fixtures/package-contracts/declaration-import-closure/", import.meta.url));
+    for (const [directory, name, runtimeImport] of [
+      ["declarations-only", "probe-declaration-only", false],
+      ["runtime-import", "probe-runtime-import", true]
+    ]) {
+      const root = join(base, directory);
+      const result = resolvePackageArtifactClosure({
+        importer: join(root, "consumer.mjs"), specifier: name,
+        packageRoot: root, integrity: "sha512:fixture"
+      });
+      expect(result.externalDependencies).toEqual(expect.arrayContaining([
+        expect.objectContaining({ axis: "declarations", specifier: "source-types" })
+      ]));
+      expect(result.closure.hazards.map(h => h.source)).toEqual(
+        runtimeImport ? ["./index.js:source-types"] : []
+      );
+      expect(result.closure.dependencies).toEqual([]);
+      expect(result.closure.entries).toEqual(expect.arrayContaining([
+        expect.objectContaining({ role: "declaration", path: "./index.d.ts" })
+      ]));
+    }
+  });
+
+  test("declaration-only narrowing retains unresolved private specifiers", () => {
+    const root = fixture({ name: "private-types", version: "1.0.0",
+      imports: { "#platform": { browser: "./platform.js" } },
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+    }, { "index.js": "export function noop() {}",
+      "index.d.ts": 'import "#platform"; export declare function noop(): void;' });
+    const result = resolvePackageArtifactClosure({ importer: join(root, "consumer.mjs"),
+      specifier: "private-types", packageRoot: root, integrity: "sha512:fixture" });
+    expect(result.closure.hazards.map(h => h.source)).toEqual(["./index.d.ts:#platform"]);
+  });
+
   test("preserves nested ordered branches for every supported custom condition", () => {
     const manifest = {
       name: "matrix",
@@ -249,6 +284,22 @@ describe("standalone package-export resolution", () => {
     expect(declarations.file.path).toBe(join(root, "types/public.d.ts"));
     expect(runtime.trace.branch).toBe("/exports/./import");
     expect(declarations.trace.branch).toBe("/exports/./types");
+  });
+
+  test("continues to late types only when the earlier branch has no declaration", () => {
+    const manifest = { name: "late-types", version: "1.0.0", type: "module",
+      exports: { ".": { import: "./index.mjs", types: "./index.d.ts" } } };
+    const files = { "index.mjs": "export const value = 1;",
+      "index.d.ts": "export declare const value: number;" };
+    const root = fixture(manifest, files);
+    expect(target(root, manifest, [], "declarations").trace.branch).toBe("/exports/./types");
+    expect(target(root, manifest, []).file.path).toBe(join(root, "index.mjs"));
+    const sibling = fixture(manifest, { ...files, "index.d.mts": files["index.d.ts"] });
+    expect(target(sibling, manifest, [], "declarations").trace.branch).toBe("/exports/./import");
+    const missing = fixture(manifest, { "index.d.ts": files["index.d.ts"] });
+    expect(() => target(missing, manifest, [])).toThrowError(
+      expect.objectContaining({ code: "target-not-found" }));
+    expect(target(missing, manifest, [], "declarations").file.path).toBe(join(missing, "index.d.ts"));
   });
 
   test("substitutes declaration extensions from the selected runtime module format", () => {
@@ -753,7 +804,6 @@ describe("exact artifact records and closure", () => {
       integrity: "sha512:test"
     });
     expect(planned.closure.hazards.map(hazard => hazard.source)).toEqual([
-      "./index.d.ts:external-types/subpath",
       "./index.js:external-runtime"
     ]);
     expect(planned.externalDependencies).toEqual([

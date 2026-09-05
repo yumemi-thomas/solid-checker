@@ -464,10 +464,36 @@ pub fn read_accepted_contract_catalog_with_trust(
     path: &Path,
     trust: Option<&Policy2TrustConfiguration>,
 ) -> Result<AcceptedContractIndex, ContractFailure> {
+    read_catalog_with_trust(path, trust, false)
+}
+
+/// Ordinary analysis does not read core documents or receipts. Their catalog
+/// entries are withheld before opening any content object; this grants no
+/// premise about what the actual import resolves to.
+pub fn read_external_contract_catalog_with_trust(
+    path: &Path,
+    trust: Option<&Policy2TrustConfiguration>,
+) -> Result<AcceptedContractIndex, ContractFailure> {
+    read_catalog_with_trust(path, trust, true)
+}
+
+fn read_catalog_with_trust(
+    path: &Path,
+    trust: Option<&Policy2TrustConfiguration>,
+    external_only: bool,
+) -> Result<AcceptedContractIndex, ContractFailure> {
     let (catalog, base) = decode_accepted_contract_catalog(path)?;
     let mut uncertifiable = Vec::with_capacity(catalog.contracts.len());
     let mut accepted = Vec::new();
     for mut entry in catalog.contracts {
+        if external_only
+            && solid_dialect::core_runtime_contract_reference(
+                &entry.import.package_name,
+                &entry.import.specifier,
+            )
+        {
+            continue;
+        }
         let document_path = catalog_member_path(&base, &entry.document)?;
         let document = read_boundary_file(
             &document_path,
@@ -572,12 +598,19 @@ fn verify_catalog_digest(
     Ok(())
 }
 
-/// Returns every exact document and receipt referenced by the catalog so a
+/// Returns external documents and receipts referenced by the catalog so a
 /// retained analyzer cache cannot survive a content-object replacement.
+/// Core objects are not ordinary-analysis inputs and are not opened or watched.
 pub fn accepted_contract_catalog_members(path: &Path) -> Result<Vec<PathBuf>, ContractFailure> {
     let (catalog, base) = decode_accepted_contract_catalog(path)?;
     let mut paths = Vec::with_capacity(catalog.contracts.len());
     for entry in catalog.contracts {
+        if solid_dialect::core_runtime_contract_reference(
+            &entry.import.package_name,
+            &entry.import.specifier,
+        ) {
+            continue;
+        }
         paths.push(catalog_member_path(&base, &entry.document)?);
         if let Some(receipt) = entry.receipt {
             paths.push(catalog_member_path(&base, &receipt)?);
@@ -917,6 +950,18 @@ pub fn load_accepted_contract_index<'a>(
     })
 }
 
+/// Host/WASM counterpart of external-only native catalog discovery.
+pub fn load_external_contract_index<'a>(
+    sources: impl IntoIterator<Item = AcceptedContractSource<'a>>,
+) -> Result<AcceptedContractIndex, ContractFailure> {
+    load_accepted_contract_index(sources.into_iter().filter(|source| {
+        !solid_dialect::core_runtime_contract_reference(
+            &source.import.package_name,
+            &source.import.specifier,
+        )
+    }))
+}
+
 pub(crate) fn invalid_identity(reason: impl Into<String>) -> ContractFailure {
     ContractFailure::IdentityMismatch {
         reason: reason.into(),
@@ -926,6 +971,36 @@ pub(crate) fn invalid_identity(reason: impl Into<String>) -> ContractFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn host_core_contract_payloads_are_withheld_without_decoding() {
+        let catalog: serde_json::Value = serde_json::from_slice(include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../fixtures/reactive-ir/package-return-consumer/.solid-checker/accepted-contracts.json"
+        ))).unwrap();
+        let mut import: ResolvedImport =
+            serde_json::from_value(catalog["contracts"][0]["import"].clone()).unwrap();
+        import.specifier = "aliased-core".into();
+        for package in ["solid-js", "@solidjs/signals", "@solidjs/web"] {
+            import.package_name = package.into();
+            let index = load_external_contract_index([AcceptedContractSource {
+                document: b"not JSON",
+                receipt: b"not a receipt",
+                import: &import,
+            }])
+            .unwrap();
+            assert!(index.semantic_identity().is_empty());
+        }
+        import.package_name = "@solidjs/web-extra".into();
+        assert!(
+            load_external_contract_index([AcceptedContractSource {
+                document: b"not JSON",
+                receipt: b"not a receipt",
+                import: &import,
+            }])
+            .is_err()
+        );
+    }
 
     #[test]
     fn policy1_receipts_are_obsolete_at_the_active_boundary() {

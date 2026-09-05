@@ -126,6 +126,116 @@ fn accepted() -> AcceptedContract {
 }
 
 #[test]
+fn ordinary_analysis_excludes_core_authority_even_through_aliases() {
+    for package in ["solid-js", "@solidjs/signals", "@solidjs/web"] {
+        let mut core = accepted();
+        core.package.name = package.into();
+        for specifier in [package, "runtime-alias"] {
+            let index = AcceptedContractIndex::new([AcceptedContractInput {
+                importer: "/project/main.ts".into(),
+                specifier: specifier.into(),
+                contract: core.clone(),
+            }])
+            .unwrap();
+            assert!(index.contract("/project/main.ts", specifier).is_ok());
+            let external = index.external_packages();
+            assert!(external.contract("/project/main.ts", specifier).is_err());
+            assert_eq!(
+                external.cache_fingerprint(),
+                AcceptedContractIndex::default().cache_fingerprint()
+            );
+        }
+    }
+}
+
+#[test]
+fn external_authority_and_similar_names_survive_core_filtering() {
+    for package in [
+        "pkg",
+        "solid-js-extra",
+        "@solidjs/router",
+        "@solidjs/web-extra",
+    ] {
+        let mut contract = accepted();
+        contract.package.name = package.into();
+        let index = AcceptedContractIndex::new([AcceptedContractInput {
+            importer: "/project/main.ts".into(),
+            specifier: package.into(),
+            contract,
+        }])
+        .unwrap();
+        assert!(matches!(
+            index.external_packages(),
+            std::borrow::Cow::Borrowed(_)
+        ));
+        assert_eq!(
+            index.external_packages().cache_fingerprint(),
+            index.cache_fingerprint()
+        );
+    }
+}
+
+#[test]
+fn missing_or_obsolete_core_receipts_are_not_analysis_requirements() {
+    let index = AcceptedContractIndex::default().with_uncertifiable_import_reasons([
+        (
+            ("/project/main.ts".into(), "solid-js/store".into()),
+            UncertifiableImportReason::ObsoletePolicy1,
+        ),
+        (
+            ("/project/main.ts".into(), "@solidjs/signals".into()),
+            UncertifiableImportReason::Unspecified,
+        ),
+        (
+            ("/project/main.ts".into(), "@solidjs/web/server".into()),
+            UncertifiableImportReason::Unspecified,
+        ),
+        (
+            ("/project/main.ts".into(), "@solidjs/router".into()),
+            UncertifiableImportReason::Unspecified,
+        ),
+    ]);
+    let external = index.external_packages();
+    for specifier in ["solid-js/store", "@solidjs/signals", "@solidjs/web/server"] {
+        assert!(!external.is_uncertifiable("/project/main.ts", specifier));
+    }
+    assert!(external.is_uncertifiable("/project/main.ts", "@solidjs/router"));
+}
+
+#[test]
+fn unknown_runtime_export_projection_preserves_open_call_behavior() {
+    let mut contract = accepted();
+    let export = contract.selected_case.exports.get_mut("run").unwrap();
+    export.shape = ValueShape::Unknown;
+    export.call = CallSemantics::new(
+        CallClaims::default(),
+        vec![],
+        vec![],
+        vec![],
+        GuardPartition::default(),
+    );
+    let identity = export.identity.clone();
+    let accepted_use = AcceptedContractUse {
+        contract: &contract,
+        identity: identity.clone(),
+    };
+    let projected = crate::project_accepted_export(&accepted_use);
+    assert_eq!(projected.kind, "unknown");
+    assert!(projected.callbacks.is_open());
+    assert!(projected.reactive_reads.is_open());
+    assert!(projected.returns.is_open());
+    assert!(projected.owner_requirements.is_open());
+    assert!(!projected.creates_closed_empty);
+    assert!(!projected.creates_walk_clean);
+    let facts = CallSiteFacts::default();
+    let instance = contract.instantiate_export(&identity, &facts).unwrap();
+    assert_eq!(
+        instance.operation_claim(ClaimDomain::Creates).knowledge,
+        KnowledgeSet::Unknown
+    );
+}
+
+#[test]
 fn exact_export_identity_refuses_same_spelling_from_another_artifact() {
     let accepted = accepted();
     let identity = accepted.export("run").unwrap().identity.clone();

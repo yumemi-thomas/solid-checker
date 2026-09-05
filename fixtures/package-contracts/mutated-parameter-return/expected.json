@@ -1,0 +1,99 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "8fcff93efb62850e18965c27468eecc727438cb046f2e99211e057cc3c88d93f",
+            "path": "./index.ts",
+            "sha256": "eb2c6c4d0de1b1530c4d9f913092a4a2a16333bae2793414a84c8c1e9f23c1d4"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "1a4694b11191fff588029501d4a147324cd196ddd69356e075613bec733234a2"
+          },
+          "exports": {
+            "Alias": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "Async": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "Defaulted": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "Destructured": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "Direct": "summary-d56b106025dc3fe97c292b5aee63c737a503db6c44f4f037fe4c9a4f2eefb175",
+            "Mutated": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "Nested": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "Updated": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:aa42e7f92e78fd56d19e6dfb504b43ae1a717a8288098753b6a3791db29ce5e4",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "aa42e7f92e78fd56d19e6dfb504b43ae1a717a8288098753b6a3791db29ce5e4"
+    },
+    "name": "mutated-parameter-return",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-d56b106025dc3fe97c292b5aee63c737a503db6c44f4f037fe4c9a4f2eefb175": {
+      "call": {
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "index": 0,
+              "kind": "parameter",
+              "path": []
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "creates"
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
+      "call": {
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "creates"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}
