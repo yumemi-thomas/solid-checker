@@ -18379,6 +18379,29 @@ unchanged (368 certified / 30 refused, the buckets above), under the ceiling,
 and that is the pin. The runner's suite now runs in `make verify`
 (`ecosystem-runner-test`), so a pin over the ceiling fails the handoff gate
 instead of a hand-run test; a failure there is read with `pmset -g` in hand.
+**Overloaded exports are synthesized too.** The 57 `noRecipe` candidates left
+after the graph-lane extension were exports declared with overloads
+(`createLazyMemo`, nine `@tanstack/solid-query` exports): the producer reports
+the overload set rather than one signature, and synthesis had asked for one.
+It now takes the set when the producer proves it complete and samples every
+overload; a partial set still synthesizes nothing. The census fixture's new
+`overloaded` export pins it.
+
+**Repinned (mains, 110 s):** 368 certified / 30 refused, no row changed status;
+`noRecipe` 57 → 18, the 39 served candidates now decided by their census (11
+more `censusRefused`, 1059) or withheld by the interpreter's resolution (28
+more `vetoUnreproducible`, 265); `vetoThrew` 25 unchanged. The 18 left are
+`queryOptions`, `mutationOptions` and `infiniteQueryOptions` on the six
+`@tanstack/solid-query` and `solid-query-persist-client` rows — two declared
+overloads each, and no set reported: the producer reports an overload set
+all-or-nothing (`completeOverloadSet` in
+apps/solid-typefacts/internal/typefacts/tsgo/export_value_transcripts.go),
+and for these one overload's current signature declaration cannot be selected
+(`currentSignatureDeclaration` returns none), so the whole field stays empty
+and the candidate stays withheld by name. Why that declaration is unavailable
+for a bundled `declare function` overload is a producer question and the next
+`noRecipe` item.
+
 What would move the CPU itself is a census policy question, not a
 tuning one: hashing the three pinned images (263 MB) between every session is
 what the census promises, and hashing them once per batch or dropping the

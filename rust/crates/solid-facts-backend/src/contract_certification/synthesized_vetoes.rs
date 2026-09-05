@@ -1,6 +1,6 @@
 //! Synthesized vetoes (ADR 0036 § 3): a recipe module the checker derives from
-//! an export's Type Facts call signature for a proposable closure candidate no
-//! hand recipe addresses.
+//! an export's Type Facts call signature — or its complete overload set — for a
+//! proposable closure candidate no hand recipe addresses.
 //!
 //! A synthesized module is an **input to the veto, never evidence for the
 //! closure** — exactly the standing of a hand recipe. It imports the export
@@ -57,8 +57,9 @@ pub enum VetoSynthesisError {
 }
 
 /// Synthesizes a veto for every candidate in `withheld` that was withheld for
-/// want of a recipe and whose export stated a unique call signature. `None`
-/// when nothing could be synthesized, so the caller keeps the hand corpus.
+/// want of a recipe and whose export stated a call signature or a complete
+/// overload set. `None` when nothing could be synthesized, so the caller keeps
+/// the hand corpus.
 pub(crate) fn synthesize(
     plan: &CertificationPlan,
     evidence: &VerifiedTypeFactsEvidence,
@@ -70,8 +71,8 @@ pub(crate) fn synthesize(
         .filter(|record| record.reason == WITHHELD_CLOSURE_NO_RECIPE)
         .filter_map(|record| {
             evidence
-                .call_signature(&record.export)
-                .map(|signature| (record, signature))
+                .call_signatures(&record.export)
+                .map(|signatures| (record, signatures))
         })
         .collect::<Vec<_>>();
     if candidates.is_empty() {
@@ -118,7 +119,7 @@ pub(crate) fn synthesize(
     }
     let mut entries = hand_entries;
     let specifier = plan.resolved_import.specifier.as_str();
-    for (record, signature) in candidates {
+    for (record, signatures) in candidates {
         let module = format!(
             "synthesized-{}.mjs",
             record
@@ -130,7 +131,7 @@ pub(crate) fn synthesize(
                 .take(16)
                 .collect::<String>()
         );
-        let source = module_source(specifier, &record.export, &record.domain, signature);
+        let source = module_source(specifier, &record.export, &record.domain, signatures);
         std::fs::write(directory.join(&module), source)?;
         let (marker, observation) = match record.domain.as_str() {
             "returns" => (
@@ -152,8 +153,15 @@ pub(crate) fn synthesize(
             "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
             "coverageLimitations": [
                 format!(
-                    "synthesized veto (ADR 0036) for {} `{}`: a finite sample of {} call(s) derived from the export's Type Facts call signature; a throwing sample call is recorded as a sample-threw event and observes nothing",
-                    record.domain, record.export, sample_count(signature)
+                    "synthesized veto (ADR 0036) for {} `{}`: a finite sample of {} call(s) derived from the export's Type Facts call signature{}; a throwing sample call is recorded as a sample-threw event and observes nothing",
+                    record.domain,
+                    record.export,
+                    sample_count(signatures),
+                    if signatures.len() > 1 {
+                        format!(" ({} overloads, every one sampled)", signatures.len())
+                    } else {
+                        String::new()
+                    }
                 ),
                 format!("{} contradiction observed as: {}", record.domain, observation),
             ],
@@ -297,9 +305,26 @@ fn render(sample: Sample, literals: &[String]) -> String {
 
 const MAX_SAMPLE_CALLS: usize = 6;
 
-/// The argument tuples: tuple `i` takes each slot's `i`-th candidate, cycling,
-/// so every candidate of every slot is exercised at least once within the cap.
-fn sample_tuples(signature: &typefacts::SelectedSignature) -> Vec<Vec<String>> {
+/// The argument tuples for an export: every overload's tuples in declaration
+/// order, each distinct tuple once. An overloaded export is sampled under every
+/// overload — a contradiction one call shape provokes is a contradiction — and
+/// the cap applies per overload, so no overload is starved by another's width.
+fn sample_tuples(signatures: &[typefacts::SelectedSignature]) -> Vec<Vec<String>> {
+    let mut tuples = Vec::new();
+    for signature in signatures {
+        for tuple in signature_sample_tuples(signature) {
+            if !tuples.contains(&tuple) {
+                tuples.push(tuple);
+            }
+        }
+    }
+    tuples
+}
+
+/// One signature's argument tuples: tuple `i` takes each slot's `i`-th
+/// candidate, cycling, so every candidate of every slot is exercised at least
+/// once within the cap.
+fn signature_sample_tuples(signature: &typefacts::SelectedSignature) -> Vec<Vec<String>> {
     let slots = signature
         .parameters
         .iter()
@@ -324,17 +349,17 @@ fn sample_tuples(signature: &typefacts::SelectedSignature) -> Vec<Vec<String>> {
         .collect()
 }
 
-fn sample_count(signature: &typefacts::SelectedSignature) -> usize {
-    sample_tuples(signature).len()
+fn sample_count(signatures: &[typefacts::SelectedSignature]) -> usize {
+    sample_tuples(signatures).len()
 }
 
 fn module_source(
     specifier: &str,
     export: &str,
     domain: &str,
-    signature: &typefacts::SelectedSignature,
+    signatures: &[typefacts::SelectedSignature],
 ) -> String {
-    let tuples = sample_tuples(signature)
+    let tuples = sample_tuples(signatures)
         .into_iter()
         .map(|arguments| format!("  [{}],", arguments.join(", ")))
         .collect::<Vec<_>>()

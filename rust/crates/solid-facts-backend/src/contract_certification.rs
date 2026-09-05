@@ -795,7 +795,7 @@ pub fn certify_value_only_case_set(
             if probes.is_some()
                 && gated.withheld().iter().any(|record| {
                     record.reason == WITHHELD_CLOSURE_NO_RECIPE
-                        && evidence.call_signature(&record.export).is_some()
+                        && evidence.call_signatures(&record.export).is_some()
                 })
             {
                 return individually(plan);
@@ -11361,7 +11361,7 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 26] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 27] = [
         "callLibraryOutsideTable",
         "callNonLibraryReceiver",
         "cycle",
@@ -11373,6 +11373,7 @@ export const value = phantom;
         "moduleReceiverRead",
         "nestedCallableParameterRead",
         "noRecipe",
+        "overloaded",
         "plain",
         "reassignedHelper",
         "reflectApply",
@@ -12323,6 +12324,7 @@ export const value = phantom;
             "moduleReceiverRead",
             "nestedCallableParameterRead",
             "noRecipe",
+            "overloaded",
             "plain",
             "reassignedHelper",
             "reflectApply",
@@ -12533,7 +12535,7 @@ export const value = phantom;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
-    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 24] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 25] = [
         "callLibraryOutsideTable",
         "callNonLibraryReceiver",
         "cycle",
@@ -12544,6 +12546,7 @@ export const value = phantom;
         "moduleReceiverRead",
         "nestedCallableParameterRead",
         "noRecipe",
+        "overloaded",
         "plain",
         "reassignedHelper",
         "reflectApply",
@@ -12567,10 +12570,11 @@ export const value = phantom;
     /// (`veto`). `deep` closes `returns` while its `creates` is refused at the
     /// depth bound: the `returns` census reads the export's own completions
     /// and recurses into no callee.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 9] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 10] = [
         "cycle",
         "memberParameterRooted",
         "noRecipe",
+        "overloaded",
         "plain",
         "spreadArgs",
         "switchBreak",
@@ -13195,6 +13199,36 @@ export const value = phantom;
         assert!(
             creates_is_closed_in(finalized.canonical_main(), "noRecipe"),
             "the census proved the closure and the synthesized veto did not contradict it"
+        );
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan),
+            "the synthesized gate ran"
+        );
+    }
+
+    /// `overloaded`: `plain`'s body under a declaration with two overloads and
+    /// no hand recipe. The export states no single call signature, so the
+    /// first synthesis (ADR 0036 § 3) had nothing to derive from and the
+    /// candidate stayed withheld as `no recipe in corpus` — 57 candidates of
+    /// the ecosystem corpus on 2026-09-06. Synthesis now takes the complete
+    /// declared overload set and samples every member, and the row certifies
+    /// with `creates` closed exactly as `noRecipe` does.
+    #[test]
+    fn the_probe_gate_tracer_synthesizes_a_veto_from_a_complete_overload_set() {
+        let Some((plan, outcome)) = census_certify("overloaded", None) else {
+            return;
+        };
+        let finalized =
+            outcome.expect("a veto synthesized from the overload set carries the candidate");
+        assert!(
+            finalized.withheld_closures().is_empty(),
+            "nothing is withheld: {:?}",
+            finalized.withheld_closures()
+        );
+        assert!(
+            creates_is_closed_in(finalized.canonical_main(), "overloaded"),
+            "the census proved the closure and no sampled overload contradicted it"
         );
         assert_ne!(
             finalized.bindings().probe_gate_root,

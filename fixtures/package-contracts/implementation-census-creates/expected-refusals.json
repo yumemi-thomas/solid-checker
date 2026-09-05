@@ -18,7 +18,7 @@
       "kind": "unresolved-callee",
       "package": "",
       "callee": "",
-      "location": "<package-root>/index.js:13283:13322",
+      "location": "<package-root>/index.js:13759:13798",
       "declaration": "",
       "shape": "expression-callee",
       "spelling": "function-expression"

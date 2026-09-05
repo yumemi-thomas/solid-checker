@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "8969441726d371d0b91534fe1434fa148e7c8a44130254a9696633def844e24d",
+            "closureSha256": "fb93e9a6c62620ff2931abc969db682b5257540d4b5cc5aac8a39c552bf293b8",
             "path": "./index.js",
-            "sha256": "42cb533882de1025a2c8cd8f1274867a214a416a729692fd0aae26ed0b2f1b9b"
+            "sha256": "d76130be596ae44892377ab11b3a4788591e13c9c37e4532d8d64af8bdc62bef"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "6a383115a75647c96b97bcedb68be81b0bcf1378429cb8f61abefcd09c6fe09d"
+            "sha256": "9346fc41004d20d499d98602e29f5d1cd43e0c473f854b064c733df69f8529b9"
           },
           "exports": {
             "callLibraryOutsideTable": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -24,6 +24,7 @@
             "moduleReceiverRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "nestedCallableParameterRead": "summary-8e800eff6ddbdabfd339f5dfad278e3aa7623ae76cb8598687f1d3fbdd01821f",
             "noRecipe": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
+            "overloaded": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
             "plain": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
             "reassignedHelper": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "reflectApply": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",

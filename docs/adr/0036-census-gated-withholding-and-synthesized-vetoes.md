@@ -325,3 +325,18 @@ one label after another.
   sequential with a census between them. `motion-solidjs@0.6.0` alone went from
   88 s to 31 s (gate pre-pass 72 s to 15 s) with an identical audit; the
   timing report gains `gateWorkers`.
+- **Synthesis takes a complete overload set.** § 3 derived a veto only from an
+  export stating exactly one call signature; an overloaded export states none
+  and the producer reports the set, so its candidate stayed `no recipe in
+  corpus` — the 57 of the repinned corpus, `createLazyMemo` and nine
+  `@tanstack/solid-query` exports among them. The evidence now keeps the
+  overload set when `require_complete_overload_set` proves it the whole
+  declared set, and the synthesized module samples every overload (each
+  overload's tuples in declaration order, each distinct tuple once, the cap per
+  overload). A partial set synthesizes nothing. Pinned by the census fixture's
+  `overloaded` export and
+  `the_probe_gate_tracer_synthesizes_a_veto_from_a_complete_overload_set`.
+  On the repinned corpus it serves 39 of the 57; the 18 left are three
+  `@tanstack/solid-query` exports whose overload set the producer does not
+  report because one overload's current declaration cannot be selected
+  (docs/precision-backlog.md, 2026-09-06).

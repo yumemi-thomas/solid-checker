@@ -94,6 +94,7 @@ disposition, and the first call with none refuses the domain by name:
 | `spreadUntyped` | refuses: uncensused form | `joinAll(...items)` drives the iteration protocol on `items`, an unannotated ordinary parameter and therefore `any`. `any` enumerates no members, and "the checker could not find `[Symbol.iterator]`" is never "iterating this reaches no user code", so the producer records the `SpreadElement` as `iteration-protocol` (`docs/typefacts/adr/0026-…`) and the census refuses on it. **Arguments do not otherwise matter for `creates`** — a call is dispositioned by its callee — but a spread is an invoking form of its own, not an argument |
 | `spreadArgs` | **certifies** with a recipe | byte-identical to `spreadUntyped`'s body, and the pair that shows the iteration arm is decided by the operand's *type*: `args` is a **rest** parameter, so its own type is `any[]` however its elements are typed. Iterating an array drives `Array.prototype[Symbol.iterator]` and the array iterator it returns, both engine code, so no form is recorded and the census closes the domain. A census that classified iteration by syntax refused this |
 | `noRecipe` | certifies | byte-for-byte `plain`'s body, and no hand recipe for *this* export's claim. Since ADR 0036 the certifier synthesizes the veto from the export's Type Facts call signature, so the candidate is planned, the census proves it and the row certifies with `creates` closed; before ADR 0036 recipe-gated planning withheld it by name (`no recipe in corpus`), which is still what happens when no harness is configured at all |
+| `overloaded` | certifies | byte-for-byte `plain`'s body, declared with **two overloads** and no hand recipe. The export states no single call signature; since 2026-09-06 synthesis takes the complete declared overload set and samples every member, so the candidate is planned, the census proves it and the row certifies with `creates` closed. A partial overload set would synthesize nothing and the candidate would stay withheld by name |
 | `loopCall` | **certifies** with a recipe | a bare `while` with no jump in it. The producer cannot give a reachability *lower* bound inside a loop body, so it reports `iterationReachability` — classified `reachability-lower-bound` — and `mount(el)` is on the wire at `reach: unknown`, which the `MayExecute` floor admits. This is the shape ADR 0008 item 0 over-refused on real code (`@solid-primitives/i18n`'s `flatten` and `chainedTranslator`) |
 | `switchBreak` | **certifies** with a recipe | `mount(el); break;` inside a `switch` case. The `break`'s target is the `switch` that owns it, so the producer covers that construct as the region the jump makes non-universal and reduces the row's reach to `unknown` — it used to **drop** the row, and since a dropped `CallExpression` leaves no uncensused-form row either, the marker was the only trace. `mount` is now dispositioned by local recursion, which is what certifies it: never a relaxed marker |
 | `whileBreak` | **certifies** with a recipe | the same, with the `break` owned by a `while` |
@@ -178,8 +179,9 @@ ran. None hands `session` or `harness` to the package.
 
 ## What must stay true
 
-- **`plain` and `noRecipe` must stay byte-identical in body.** The difference
-  between their rows is the corpus, and only the corpus.
+- **`plain`, `noRecipe` and `overloaded` must stay byte-identical in body.**
+  The difference between their rows is the corpus and the declaration, and
+  only those; `overloaded` must keep exactly two overloads in `index.d.ts`.
 - **`cycle` uses a boolean stop argument.** A numeric `depth > 0` guard on an
   untyped JavaScript parameter would itself be a coercion form and obscure the
   graph premise. Boolean truthiness and literal arguments keep the sample

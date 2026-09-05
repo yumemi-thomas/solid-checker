@@ -401,9 +401,10 @@ pub struct VerifiedTypeFactsEvidence {
     bindings: Vec<WitnessBinding>,
     session_evidence_root: String,
     /// ADR 0036: the unique call signature of every scheduled export whose
-    /// transcript stated one, by export name. Read only by veto synthesis; a
-    /// signature here proves nothing and binds nothing.
-    call_signatures: std::collections::BTreeMap<String, typefacts::SelectedSignature>,
+    /// transcript stated one, by export name — one signature, or the complete
+    /// declared overload set. Read only by veto synthesis; a signature here
+    /// proves nothing and binds nothing.
+    call_signatures: std::collections::BTreeMap<String, Vec<typefacts::SelectedSignature>>,
 }
 
 impl VerifiedTypeFactsEvidence {
@@ -433,9 +434,12 @@ impl VerifiedTypeFactsEvidence {
 
     #[must_use]
     /// The unique call signature the export-value transcript stated for
-    /// `export`, when it stated exactly one (ADR 0036).
-    pub(super) fn call_signature(&self, export: &str) -> Option<&typefacts::SelectedSignature> {
-        self.call_signatures.get(export)
+    /// `export`, when it stated exactly one, or its complete declared overload
+    /// set (ADR 0036). Never a partial set: an overload the producer did not
+    /// report would be a call shape synthesis never samples, and the sample is
+    /// only as honest as the set it was drawn from.
+    pub(super) fn call_signatures(&self, export: &str) -> Option<&[typefacts::SelectedSignature]> {
+        self.call_signatures.get(export).map(Vec::as_slice)
     }
 
     pub fn witness_bindings(&self) -> &[WitnessBinding] {
@@ -2932,14 +2936,13 @@ fn verify_live_export_value_answer_with_project_census(
     let mut census_refusals = Vec::<CensusRefusal>::new();
     for (index, scheduled) in schedule.export_values.iter().enumerate() {
         let transcript = &answer.transcripts[index];
-        if let (Some(signature), Some(proof)) = (
-            transcript.call_signature.as_ref(),
-            scheduled.proof_demands.first(),
-        ) {
+        if let Some(proof) = scheduled.proof_demands.first()
+            && let Some(signatures) = stated_call_signatures(transcript)
+        {
             let (_, export) = proof_artifact_export(&proof.subject);
             call_signatures
                 .entry(export.to_owned())
-                .or_insert_with(|| signature.clone());
+                .or_insert(signatures);
         }
         if transcript.location != scheduled.demand.location {
             let (expected, actual) = diagnostic_location_pair(
@@ -3553,6 +3556,31 @@ fn verify_export_value_family(
 /// no declared overload is missing. The two fields are also mutually exclusive,
 /// so a transcript populating both is refused rather than silently answered from
 /// one of them.
+/// The call signatures an export-value transcript states for veto synthesis:
+/// its one signature, or its overload set when that set is provably the whole
+/// declared one. `None` for a value with no signature, for a transcript that
+/// states both forms, and for a partial overload set.
+fn stated_call_signatures(
+    transcript: &ExportValueTranscript,
+) -> Option<Vec<typefacts::SelectedSignature>> {
+    match (
+        transcript.call_signature.as_ref(),
+        transcript.call_signatures.as_slice(),
+    ) {
+        (Some(signature), []) => Some(vec![signature.clone()]),
+        (None, overloads) if !overloads.is_empty() => {
+            let incomplete = |reason: &str| TypeFactsCertificationError::UnsupportedDemand {
+                demand: String::new(),
+                reason: reason.to_owned(),
+            };
+            require_complete_overload_set(overloads, &incomplete)
+                .ok()
+                .map(|()| overloads.to_vec())
+        }
+        _ => None,
+    }
+}
+
 fn require_export_call_signatures<'a>(
     proof: &ScheduledProofDemand,
     transcript: &'a ExportValueTranscript,

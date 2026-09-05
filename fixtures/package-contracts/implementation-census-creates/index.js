@@ -165,6 +165,17 @@ export function noRecipe(items, callback) {
   never();
 }
 
+// Byte-for-byte the body of `plain` once more, declared with two overloads in
+// `index.d.ts` and with no hand recipe: the export has no *one* call signature
+// to synthesize from, only a complete overload set, and synthesis samples
+// every member of it. `seed` is unused on purpose — the second overload's
+// extra parameter is a call shape, not behavior.
+export function overloaded(items, callback, seed) {
+  callback(0);
+  return mapAll(items, callback);
+  never();
+}
+
 // A helper with nothing to refuse: the point of the four exports below is what
 // happens *around* the call to it, not inside it.
 function mount(el) {

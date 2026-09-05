@@ -10,6 +10,11 @@ export declare function taggedTemplate(): string;
 export declare function spreadArgs(first: number, second: number): number[];
 export declare function spreadUntyped(items: Iterable<number>): number[];
 export declare function noRecipe<T, U>(items: Iterable<T>, callback: (value: T) => U): U[];
+// Two overloads and no hand recipe. The runtime body is `plain`'s again; what
+// differs is that the export states no single call signature, only a complete
+// overload set, and synthesis samples every member of it (ADR 0036).
+export declare function overloaded<T, U>(items: Iterable<T>, callback: (value: T) => U): U[];
+export declare function overloaded<T, U>(items: Iterable<T>, callback: (value: T) => U, seed: U): U[];
 export declare function loopCall(el: unknown): void;
 export declare function switchBreak(kind: string, el: unknown): void;
 export declare function whileBreak(el: unknown): void;
