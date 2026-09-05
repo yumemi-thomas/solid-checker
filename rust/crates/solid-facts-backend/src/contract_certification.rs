@@ -857,6 +857,7 @@ pub(crate) fn withheld_weakening(
     for closure in withheld {
         let domain = match closure.domain.as_str() {
             "creates" => ClaimDomain::Creates,
+            "returns" => ClaimDomain::Returns,
             _ => {
                 return Err(RecipeGatingError::UnknownDomain {
                     artifact_case: closure.artifact_case.clone(),
@@ -913,9 +914,10 @@ impl CertificationPlan {
     /// eventually binds says `creates` is open and no demand ever claimed
     /// otherwise. Nothing edits a demand graph in place.
     ///
-    /// Only `creates` is gated. It is the one behavioral call domain with a
-    /// census, so it is the only one whose candidate can be proven and reach a
-    /// gate; every other call domain still refuses by name at witness
+    /// Only the proposable call domains are gated — `creates` (ADR 0008) and
+    /// `returns` (ADR 0035). They are the behavioral call domains with a
+    /// census, so theirs are the only candidates that can be proven and reach
+    /// a gate; every other call domain still refuses by name at witness
     /// acquisition, before any gate is consulted, exactly as before.
     pub fn recipe_gated(
         &self,
@@ -926,7 +928,10 @@ impl CertificationPlan {
             .transpose()?;
         let mut withheld = Vec::new();
         for closure in self.candidates.closure_candidates() {
-            if closure.path != SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates)) {
+            let SemanticClaimPath::Domain(ClaimPath::Call(domain)) = &closure.path else {
+                continue;
+            };
+            if !domain.is_proposable() {
                 continue;
             }
             let claim_id = self
@@ -947,7 +952,7 @@ impl CertificationPlan {
             withheld.push(WithheldClosure {
                 artifact_case: closure.artifact_case.clone(),
                 export: closure.export.clone(),
-                domain: "creates".to_owned(),
+                domain: type_facts::call_claim_domain_name(*domain).to_owned(),
                 semantic_claim_id: claim_id.as_str().to_owned(),
                 reason: WITHHELD_CLOSURE_NO_RECIPE.to_owned(),
             });
@@ -10700,6 +10705,21 @@ export const value = phantom;
     /// The census fixture as one published artifact, proposing `creates: []`
     /// for exactly `closed_export`. Every export is a function, and the
     /// proposal says so.
+    /// The census fixture's exports whose valueless-completion walk is clean
+    /// (ADR 0035): block-bodied, neither `async` nor generator, and no
+    /// `return` carrying an expression in their own body.
+    const CENSUS_FIXTURE_VALUELESS_EXPORTS: [&str; 9] = [
+        "cycle",
+        "deep",
+        "labelledBreak",
+        "loopCall",
+        "setterOnParameter",
+        "stdlibRefInvoker",
+        "switchBreak",
+        "viaHelperChain",
+        "whileBreak",
+    ];
+
     fn census_fixture_plan(closed_export: &str) -> CertificationPlan {
         let fixture = census_fixture();
         let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
@@ -10881,6 +10901,268 @@ export const value = phantom;
                 "{export}: the refusal must name {needle:?}: {rendered}"
             );
         }
+    }
+
+    // ADR 0035: the `returns` census fixture, planned the same way as the
+    // `creates` one with a hand-closed `returns: []` for the named export.
+    fn returns_fixture() -> std::path::PathBuf {
+        repository_root().join("fixtures/package-contracts/implementation-census-returns")
+    }
+
+    const RETURNS_FIXTURE_EXPORTS: [&str; 9] = [
+        "asyncVoid",
+        "bareCompletion",
+        "bareReturnInLoop",
+        "earlyBareReturn",
+        "expressionArrow",
+        "generatorVoid",
+        "nestedReturnsValue",
+        "returnsValue",
+        "valueReturnInLoop",
+    ];
+
+    fn returns_fixture_plan(closed_export: &str) -> CertificationPlan {
+        let fixture = returns_fixture();
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let name = "implementation-census-returns-package";
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let root = "/project/node_modules/implementation-census-returns-package";
+        let bindings = RETURNS_FIXTURE_EXPORTS.map(|export| {
+            (
+                export,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        plan_for_test_package_closing(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[(closed_export, ClaimDomain::Returns)],
+            &|_| ValueShape::Callable,
+        )
+    }
+
+    fn returns_census_certify(
+        export: &str,
+        recipe: &str,
+    ) -> Option<(
+        CertificationPlan,
+        Result<super::FinalizedPolicy2Contract, super::Policy2FinalizationError>,
+    )> {
+        let pin = pinned_producer_for_test()?;
+        let label = format!("returns-census-{export}");
+        let scratch = TracerScratch::new(&label);
+        let plan = returns_fixture_plan(export);
+        let schedule = plan.probe_gate_schedule().unwrap();
+        assert_eq!(
+            schedule.gates().len(),
+            1,
+            "{export}: one returns candidate, one veto"
+        );
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        let configuration = tracer_configuration_from(
+            &returns_fixture(),
+            scratch.path(),
+            &label,
+            &[(claim_id.as_str(), recipe)],
+        )?;
+        let outcome = tracer_certify(&plan, &pin, &configuration);
+        Some((plan, outcome))
+    }
+
+    fn returns_is_closed_in(main: &[u8], export: &str) -> bool {
+        let decoded = crate::contract_document::decode(main)
+            .expect("canonical main decodes")
+            .normalize()
+            .expect("canonical main normalizes");
+        decoded.artifact_cases().iter().any(|case| {
+            case.exports.get(export).is_some_and(|semantics| {
+                semantics
+                    .operation_claim(ClaimDomain::Returns)
+                    .is_some_and(|claim| claim.is_closed() && claim.items().is_empty())
+            })
+        })
+    }
+
+    /// ADR 0035: every valueless completion certifies `returns: []` through
+    /// the implementation census and the mandatory veto, and the receipt's
+    /// probe gate root is nonempty because the veto ran.
+    #[test]
+    fn the_probe_gate_tracer_returns_census_certifies_every_valueless_completion() {
+        for export in [
+            "bareCompletion",
+            "earlyBareReturn",
+            "bareReturnInLoop",
+            "nestedReturnsValue",
+        ] {
+            let Some((plan, outcome)) = returns_census_certify(export, "valueless.mjs") else {
+                return;
+            };
+            let finalized = outcome.unwrap_or_else(|error| {
+                panic!("{export}: a valueless completion must certify: {error}")
+            });
+            assert!(finalized.withheld_closures().is_empty(), "{export}");
+            assert_ne!(
+                finalized.bindings().probe_gate_root,
+                super::finalization::empty_probe_gate_root(&plan),
+                "{export}"
+            );
+            assert!(
+                returns_is_closed_in(finalized.canonical_main(), export),
+                "{export}"
+            );
+        }
+    }
+
+    /// ADR 0035: every export that yields a value refuses by name — the
+    /// completion form, or the value-carrying site with its reach.
+    #[test]
+    fn the_probe_gate_tracer_returns_census_refuses_every_value_yielding_completion() {
+        for (export, needles) in [
+            (
+                "returnsValue",
+                &["value-carrying completion", "reach reachable"][..],
+            ),
+            (
+                "expressionArrow",
+                &["value-carrying completion", "reach reachable"][..],
+            ),
+            ("asyncVoid", &["async implementation"][..]),
+            ("generatorVoid", &["generator implementation"][..]),
+            (
+                "valueReturnInLoop",
+                &["value-carrying completion", "reach unknown"][..],
+            ),
+        ] {
+            let Some((_, outcome)) = returns_census_certify(export, "refused-export.mjs") else {
+                return;
+            };
+            let Err(error) = outcome else {
+                panic!("{export}: the returns census must refuse this export by name");
+            };
+            let rendered = error.to_string();
+            assert!(
+                matches!(&error, super::Policy2FinalizationError::TypeFacts(_))
+                    && rendered.contains("is unsupported"),
+                "{export}: the refusal must be an unsupported Type Facts demand: {rendered}"
+            );
+            for needle in needles {
+                assert!(
+                    rendered.contains(needle),
+                    "{export}: must name {needle:?}: {rendered}"
+                );
+            }
+        }
+    }
+
+    /// ADR 0035, generator side: the fixture's own `expected.json` proposes
+    /// `returns: []` for exactly the exports the valueless-completion walk
+    /// clears, beside `creates: []` for every function export, and each
+    /// candidate schedules one mandatory veto.
+    #[test]
+    fn the_generated_returns_fixture_carries_its_valueless_candidates_into_planning() {
+        let fixture = returns_fixture();
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let generated = std::fs::read(fixture.join("expected.json")).expect("generated proposal");
+        let decoded = crate::contract_document::decode(&generated)
+            .expect("the generator's own document decodes")
+            .normalize()
+            .expect("the generator's own document normalizes");
+        let name = "implementation-census-returns-package";
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let root = "/project/node_modules/implementation-census-returns-package";
+        let bindings = RETURNS_FIXTURE_EXPORTS.map(|export| {
+            (
+                export,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        // The same one-field rebinding `census_generated_fixture_plan` makes:
+        // the corpus gate's `fixture:sha256:` manifest integrity becomes the
+        // published archive's own, and nothing else in the document moves.
+        let snapshot = ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2())
+            .expect("the fixture archive snapshots");
+        let mut package = decoded.package().clone();
+        package.integrity = snapshot.package_integrity().into();
+        let candidate = ContractProposal::new(package, decoded.artifact_cases().to_vec())
+            .normalize()
+            .expect("rebinding the integrity keeps the document normalizable");
+        let plan = try_plan_supplied_candidate_for_test_package(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            candidate,
+        )
+        .expect("the generated document plans against its own artifact");
+        let candidates_for = |domain: ClaimDomain| {
+            let path = SemanticClaimPath::Domain(ClaimPath::Call(domain));
+            plan.candidates
+                .closure_candidates()
+                .iter()
+                .filter(|candidate| candidate.path == path)
+                .map(|candidate| candidate.export.as_str())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            candidates_for(ClaimDomain::Returns),
+            [
+                "bareCompletion",
+                "bareReturnInLoop",
+                "earlyBareReturn",
+                "nestedReturnsValue"
+            ],
+            "the valueless-completion walk's proposals, and only those"
+        );
+        // `expressionArrow` is a `const` arrow export: the generator binds walk
+        // verdicts to function declarations and proposes nothing for it, in
+        // either domain. Every other export is a function declaration whose
+        // `creates` walk is clean.
+        assert_eq!(
+            candidates_for(ClaimDomain::Creates),
+            [
+                "asyncVoid",
+                "bareCompletion",
+                "bareReturnInLoop",
+                "earlyBareReturn",
+                "generatorVoid",
+                "nestedReturnsValue",
+                "returnsValue",
+                "valueReturnInLoop",
+            ]
+        );
+        assert_eq!(plan.probe_gate_schedule().unwrap().gates().len(), 12);
     }
 
     /// The sibling package `primitive-consumer/`, whose one export calls a real
@@ -11359,11 +11641,22 @@ export const value = phantom;
             candidates, proposing,
             "the generated document's own proposals, and only those"
         );
+        // ADR 0035: the exports whose valueless-completion walk is clean also
+        // propose `returns: []`, and only those.
+        let returns = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Returns));
+        let returns_candidates = plan
+            .candidates
+            .closure_candidates()
+            .iter()
+            .filter(|candidate| candidate.path == returns)
+            .map(|candidate| candidate.export.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(returns_candidates, CENSUS_FIXTURE_VALUELESS_EXPORTS);
         // One mandatory contradiction veto per candidate, and one
         // `DomainExhaustiveness` demand: the census is now reachable.
         assert_eq!(
             plan.probe_gate_schedule().unwrap().gates().len(),
-            proposing.len()
+            proposing.len() + returns_candidates.len()
         );
         for export in proposing {
             assert_eq!(creates_demand_ids(&plan, export).len(), 1, "{export}");
@@ -11372,9 +11665,16 @@ export const value = phantom;
         // And with no recipe corpus the row is exactly the row it was: every
         // candidate withheld by name, no gate, no demand, the domain open.
         let gated = plan.recipe_gated(None).expect("gating without a corpus");
-        assert_eq!(gated.withheld().len(), proposing.len());
+        assert_eq!(
+            gated.withheld().len(),
+            proposing.len() + returns_candidates.len()
+        );
         for record in gated.withheld() {
-            assert_eq!(record.domain, "creates");
+            assert!(
+                record.domain == "creates" || record.domain == "returns",
+                "{}",
+                record.domain
+            );
             assert_eq!(record.reason, super::WITHHELD_CLOSURE_NO_RECIPE);
         }
         assert!(
@@ -11447,9 +11747,19 @@ export const value = phantom;
             finalized.bindings().probe_gate_root,
             super::finalization::empty_probe_gate_root(&plan)
         );
+        // ADR 0035: the valueless exports' `returns` candidates are withheld
+        // beside their `creates` ones, for the same want of a recipe.
+        let withheld_returns = finalized
+            .withheld_closures()
+            .iter()
+            .filter(|record| record.domain == "returns")
+            .map(|record| record.export.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(withheld_returns, CENSUS_FIXTURE_VALUELESS_EXPORTS);
         let withheld = finalized
             .withheld_closures()
             .iter()
+            .filter(|record| record.domain == "creates")
             .map(|record| record.export.as_str())
             .collect::<Vec<_>>();
         assert_eq!(

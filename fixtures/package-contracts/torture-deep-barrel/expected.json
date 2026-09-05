@@ -13,7 +13,7 @@
             "sha256": "38b0ddc2ca0220a224f0b27b37aaffe05b317d0e124c2050e99a81750b3cfb42"
           },
           "exports": {
-            "deepFactory": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1",
+            "deepFactory": "summary-5f5b804e83be5aede7d0abaf2dc45cc361fe1b11fc38c0a3ccf72ca6ebf6f4dc",
             "deepValue": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
           },
           "resolution": {
@@ -38,11 +38,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
-      "call": {},
-      "shape": "plain"
-    },
-    "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1": {
+    "summary-5f5b804e83be5aede7d0abaf2dc45cc361fe1b11fc38c0a3ccf72ca6ebf6f4dc": {
       "call": {
         "callbacks": [
           {
@@ -54,7 +50,8 @@
           }
         ],
         "closed": [
-          "creates"
+          "creates",
+          "returns"
         ],
         "creates": [],
         "operations": [
@@ -77,10 +74,16 @@
           }
         ],
         "proposedClosures": [
-          "creates"
-        ]
+          "creates",
+          "returns"
+        ],
+        "returns": []
       },
       "shape": "callable"
+    },
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
     }
   }
 }

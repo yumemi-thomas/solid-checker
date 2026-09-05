@@ -85,10 +85,27 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
             // stay withdrawn and travel to the plan sidecar below as
             // measurement only — publishing a closure no census can decide
             // would refuse the row instead of proving anything.
-            export.propose_closures(paths.iter().filter_map(|path| match path {
-                ClaimPath::Call(domain) if domain.is_proposable() => Some(*domain),
-                _ => None,
-            }));
+            //
+            // `returns` republishes the *empty* closure only (ADR 0035): a
+            // described return weakened into a partial positive claim is not a
+            // candidate this census decides, and republishing it would propose
+            // an enumeration the census refuses.
+            let proposable = paths
+                .iter()
+                .filter_map(|path| match path {
+                    ClaimPath::Call(domain) if domain.is_proposable() => Some(*domain),
+                    _ => None,
+                })
+                .filter(|domain| {
+                    *domain != solid_reactive_ir::contract_semantics::ClaimDomain::Returns
+                        || export
+                            .operation_claim(
+                                solid_reactive_ir::contract_semantics::ClaimDomain::Returns,
+                            )
+                            .is_some_and(|claim| claim.items().is_empty())
+                })
+                .collect::<Vec<_>>();
+            export.propose_closures(proposable);
             candidates.extend(paths.into_iter().map(|path| SemanticClaimSubject {
                 artifact_case: artifact_case.id.clone(),
                 export: name.clone(),
@@ -308,9 +325,26 @@ fn normalize_export(
         ),
     };
 
+    // ADR 0035. `Known(None)` is the reactive analysis having *described* no
+    // return — which is true of every export returning a plain value — and is
+    // not a derived "yields nothing" claim, so it proposes nothing by itself.
+    // The empty closure is proposed exactly when the generator's own
+    // valueless-completion walk cleared this function export
+    // (`solid_reactive_ir::valueless_completion`); the census then proves it.
+    // A described return keeps publishing its positive operation, which the
+    // weakening below turns into a partial claim rather than a closure.
     let returns = match &summary.returns {
         ContractClaim::Open => KnowledgeSet::Unknown,
-        ContractClaim::Known(None) => KnowledgeSet::Complete(Vec::new()),
+        ContractClaim::Known(None) => {
+            if scope.publishes_bootstrapped_reactive_domains()
+                && summary.kind == "function"
+                && summary.returns_walk_clean
+            {
+                KnowledgeSet::Complete(Vec::new())
+            } else {
+                KnowledgeSet::Unknown
+            }
+        }
         ContractClaim::Known(Some(returned)) => {
             let id = OperationId(format!("{prefix}return"));
             let mut output = return_shape(returned)?;

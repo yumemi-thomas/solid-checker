@@ -111,7 +111,12 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // (ADR 0008 § "The decline records"): the other side of that walk --
       // one export per blocker kind it declines on, pinned so "audit this
       // primitive next" is a measured answer rather than a guess.
-      stableMainDocuments: 185,
+      // 186 adds the implementation-census-returns fixture's main document
+      // (docs/adr/0035-returns-census-for-valueless-completion.md): the
+      // `returns` census's tracer, whose valueless exports propose
+      // `returns: []` beside `creates: []` and whose value-yielding exports
+      // refuse by name.
+      stableMainDocuments: 186,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

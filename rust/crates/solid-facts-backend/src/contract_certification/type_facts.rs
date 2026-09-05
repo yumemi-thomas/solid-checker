@@ -3252,6 +3252,23 @@ fn verify_export_value_family(
                     });
                 }
                 sites.extend(census_sites);
+            } else if matches!(
+                &subject.path,
+                SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Returns))
+            ) {
+                // ADR 0035: the same implementation transcript, read for its
+                // completions instead of its calls. No callee is dispositioned
+                // and no local declaration is recursed into: a callee's value
+                // reaches this export's caller only through a return site of
+                // this export's own, which is what the census reads.
+                let (export, implementation) =
+                    require_export_implementation(plan, proof, transcript, &open)?;
+                require_census_decides_closure(
+                    proof,
+                    &subject.path,
+                    ClosureCensus::Implementation,
+                )?;
+                sites.extend(census_returns_domain(proof, export, implementation)?);
             } else {
                 // This census is the exported value's own observation and
                 // nothing else: no control-flow branch census, so no guard
@@ -7178,12 +7195,17 @@ enum ClosureCensus {
 ///   (`docs/adr/0008-implementation-census-for-creates.md`). The declaration
 ///   censuses still refuse it, because two exports with identical declarations
 ///   have identical declaration censuses.
+/// * The **`returns` call domain**, under the same census, for the empty
+///   closure only. Its premise is [`census_returns_domain`]: a plain (neither
+///   `async` nor generator) implementation whose classified control-flow
+///   census carries no value-carrying completion at the `MayExecute` floor
+///   (`docs/adr/0035-returns-census-for-valueless-completion.md`).
 ///
 /// Everything else refuses. Two cases are worth naming because they look close:
 ///
 /// * The **other behavioral call domains** — `reads`, `writes`, `callbacks`,
-///   `cleanups`, `disposals`, `invalidates`, and equally `throws` and `returns`
-///   — are decided by the implementation too, but no census of them exists
+///   `cleanups`, `disposals`, `invalidates`, and equally `throws` — are
+///   decided by the implementation too, but no census of them exists
 ///   yet: `reads` additionally needs the proxy property-access forms, and
 ///   `throws` is not a census target under version 1 at all
 ///   (`phase21/2026-09-03-implementation-census-plan.md` § 4.4-4.5). Admitting
@@ -7217,13 +7239,13 @@ fn require_census_decides_closure(
             }),
         ) if value_path.0.is_empty() => Ok(()),
         (ClosureCensus::Invocation, SemanticClaimPath::Domain(ClaimPath::GuardPartition)) => Ok(()),
-        // The one behavioral call domain with a census: `creates`, decided by
-        // the implementation census and nothing else. Every other call domain
-        // keeps refusing by name below, including under this census, because
-        // no census of *it* exists yet.
+        // The behavioral call domains with a census: `creates` (ADR 0008) and
+        // `returns` (ADR 0035), decided by the implementation census and
+        // nothing else. Every other call domain keeps refusing by name below,
+        // including under this census, because no census of *it* exists yet.
         (
             ClosureCensus::Implementation,
-            SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates)),
+            SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates | ClaimDomain::Returns)),
         ) => Ok(()),
         (_, SemanticClaimPath::Domain(ClaimPath::Value { root, domain, .. })) => {
             Err(unsupported(format!(
@@ -7242,8 +7264,8 @@ fn require_census_decides_closure(
         (ClosureCensus::Implementation, SemanticClaimPath::Domain(ClaimPath::Call(domain))) => {
             Err(unsupported(format!(
                 "implementation-census premise required: the implementation census decides the \
-                 creates call domain only; closing the {} call domain needs its own census of \
-                 every invoking form that reaches it, which does not exist yet",
+                 creates and returns call domains only; closing the {} call domain needs its own \
+                 census of every invoking form that reaches it, which does not exist yet",
                 call_claim_domain_name(*domain)
             )))
         }
@@ -7386,6 +7408,12 @@ const CENSUS_CONTROL_FLOW_CLASSES_PROTOCOL: u64 = 15;
 /// that never promised the premise behind it would admit; the check is here for
 /// the same reason the two constants above are.
 const CENSUS_PARAMETER_ROOTED_SUBJECTS_PROTOCOL: u64 = 18;
+
+/// The handshake protocol at which an implementation transcript states its
+/// completion form (ADR 0035). A `returns` census on an older producer would
+/// read an absent form as plain, which is the one reading the fact exists to
+/// forbid.
+const CENSUS_COMPLETION_FORM_PROTOCOL: u64 = 19;
 
 /// One local declaration's own implementation transcript, keyed by the exact
 /// span it was demanded at.
@@ -7715,6 +7743,178 @@ fn census_creates_domain(
     sites.sort();
     sites.dedup();
     Ok((outcome, sites, run.requested))
+}
+
+/// The `returns` implementation census (ADR 0035): whether the demanded
+/// export's own implementation completes without yielding a value on every
+/// path at the `MayExecute` floor.
+///
+/// Decides the **empty** closure only. A `returns` proposal that enumerates
+/// operations is refused exactly as a nonempty `creates` enumeration is: this
+/// census derives no return shapes to compare it against, and admitting it
+/// would certify the proposal's own word (objection 5 of ADR 0006).
+///
+/// No callee is dispositioned. A helper's return value reaches this export's
+/// caller only through a return site of this export's own, and a return site
+/// carrying an expression refuses whatever the expression is.
+fn census_returns_domain(
+    proof: &ScheduledProofDemand,
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    implementation: &typefacts::ExportImplementationTranscript,
+) -> Result<Vec<String>, TypeFactsCertificationError> {
+    let refuse = |reason: String| TypeFactsCertificationError::UnsupportedDemand {
+        demand: proof.id.clone(),
+        reason,
+    };
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_COMPLETION_FORM_PROTOCOL {
+        return Err(refuse(format!(
+            "returns-census premise required: the completion-form fact arrived at handshake \
+             protocol {CENSUS_COMPLETION_FORM_PROTOCOL} and this build speaks {}, so an absent \
+             form would be read as a plain callable",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_CONTROL_FLOW_CLASSES_PROTOCOL {
+        return Err(refuse(format!(
+            "returns-census premise required: classified control-flow incompleteness arrived at \
+             handshake protocol {CENSUS_CONTROL_FLOW_CLASSES_PROTOCOL} and this build speaks {}",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
+    let proposed = export
+        .operation_claim(ClaimDomain::Returns)
+        .ok_or_else(|| refuse("returns is not an operation domain of this export".into()))?;
+    if !proposed.items().is_empty() {
+        return Err(refuse(format!(
+            "a returns closure candidate must enumerate no operation, but the proposal names {}",
+            proposed.items().len()
+        )));
+    }
+    census_returns_transcript(implementation).map_err(refuse)
+}
+
+/// The per-transcript half of [`census_returns_domain`]: the premises read off
+/// the implementation transcript alone, so they can be pinned against a
+/// synthesized transcript. `Err` is the refusal, by name and location.
+fn census_returns_transcript(
+    implementation: &typefacts::ExportImplementationTranscript,
+) -> Result<Vec<String>, String> {
+    let at = format!(
+        "{}:{}..{}",
+        implementation.location.path,
+        implementation.location.start_byte,
+        implementation.location.end_byte
+    );
+    // Premise 1: a plain callable. An `async` function hands its caller a
+    // promise on every completion, a generator an iterator, whatever the body
+    // does; an unclassified or unstated form is refused, never read as plain.
+    match implementation.completion_form {
+        Some(typefacts::ImplementationCompletionForm::Plain) => {}
+        Some(typefacts::ImplementationCompletionForm::Async) => {
+            return Err(format!(
+                "returns census refuses an async implementation at {at}: every completion hands \
+                 the caller a promise"
+            ));
+        }
+        Some(typefacts::ImplementationCompletionForm::Generator) => {
+            return Err(format!(
+                "returns census refuses a generator implementation at {at}: every completion \
+                 hands the caller an iterator"
+            ));
+        }
+        Some(typefacts::ImplementationCompletionForm::AsyncGenerator) => {
+            return Err(format!(
+                "returns census refuses an async generator implementation at {at}: every \
+                 completion hands the caller an async iterator"
+            ));
+        }
+        Some(typefacts::ImplementationCompletionForm::Unclassified) => {
+            return Err(format!(
+                "returns census refuses an implementation at {at} whose completion form the \
+                 producer did not classify"
+            ));
+        }
+        None => {
+            return Err(format!(
+                "returns census refuses an implementation transcript at {at} that states no \
+                 completion form"
+            ));
+        }
+    }
+    // Premise 5: the census is present. An absence is never zero returns.
+    let Some(control_flow) = implementation.control_flow.as_ref() else {
+        return Err(format!(
+            "returns census refuses an implementation transcript with no control-flow census at \
+             {at}"
+        ));
+    };
+    // Premise 4: every incompleteness is the one admissible class. A loop, a
+    // `switch` or a `try` whose lower bound alone is unmodelled still has every
+    // return inside it on the wire, with reach `unknown`, and premise 3 reads
+    // that row like any other; a construct the census cannot account for at
+    // all has no such guarantee.
+    if let Some(row) = control_flow
+        .incompleteness
+        .iter()
+        .find(|row| row.class != typefacts::ControlFlowIncompletenessClass::ReachabilityLowerBound)
+    {
+        return Err(format!(
+            "returns census refuses an implementation transcript whose control-flow census cannot \
+             account for a construct ({}, {}) at {}:{}..{}, for {at}",
+            row.marker,
+            control_flow_incompleteness_class_name(row.class),
+            row.location.path,
+            row.location.start_byte,
+            row.location.end_byte
+        ));
+    }
+    if let Some(marker) = control_flow.unsupported.iter().find(|marker| {
+        !control_flow
+            .incompleteness
+            .iter()
+            .any(|row| row.marker == **marker)
+    }) {
+        return Err(format!(
+            "returns census refuses an implementation transcript with an unclassified \
+             control-flow marker {marker} at {at}"
+        ));
+    }
+    // Premises 2 and 3: every return site at the floor is bare. An expression
+    // body arrives as a value-carrying site over the body itself. A
+    // value-carrying site the producer proved unreachable performs nothing and
+    // is admitted with its own witness, exactly as an unreachable call is in
+    // the `creates` census.
+    let mut sites = Vec::new();
+    for site in &control_flow.returns {
+        let disposition = match (site.value.is_some(), site.reach) {
+            (false, _) => "bare",
+            (true, Reachability::Unreachable) => "value-unreachable",
+            (true, reach) => {
+                return Err(format!(
+                    "returns census refuses a value-carrying completion at {}:{}..{}, reach {}",
+                    site.location.path,
+                    site.location.start_byte,
+                    site.location.end_byte,
+                    reachability_name(reach)
+                ));
+            }
+        };
+        sites.push(format!(
+            "census-return:{}:{}:{}:{}:{}",
+            site.location.path,
+            site.location.start_byte,
+            site.location.end_byte,
+            reachability_name(site.reach),
+            disposition
+        ));
+    }
+    sites.push(format!(
+        "census-returns-total:{}",
+        control_flow.returns.len()
+    ));
+    sites.sort();
+    sites.dedup();
+    Ok(sites)
 }
 
 /// Every path the verified closure manifest calls **runtime** source of the
@@ -9048,7 +9248,7 @@ const fn value_claim_domain_name(domain: ValueClaimDomain) -> &'static str {
     }
 }
 
-const fn call_claim_domain_name(domain: ClaimDomain) -> &'static str {
+pub(super) const fn call_claim_domain_name(domain: ClaimDomain) -> &'static str {
     match domain {
         ClaimDomain::Reads => "reads",
         ClaimDomain::Writes => "writes",
@@ -16945,6 +17145,148 @@ mod tests {
                 "census-dialect-axiom:@solidjs/signals@2.0.0-rc.3#sha512-/yPhTf3xS1FRR4MX:createTrackedEffect:creates",
                 "census-form:/project/node_modules/consumer/dist/index.js:260:270:property-access-unknown-accessor:reachable:parameter-rooted-accessor",
             ]
+        );
+    }
+
+    /// ADR 0035: the `returns` census reads the implementation's completion
+    /// form and its return sites, and nothing else. Every premise refuses by
+    /// name; a value-carrying site is admitted only when the producer proved it
+    /// unreachable.
+    #[test]
+    fn returns_census_admits_only_bare_or_unreachable_completions() {
+        let transcript = |form: serde_json::Value,
+                          returns: serde_json::Value,
+                          incompleteness: serde_json::Value|
+         -> typefacts::ExportImplementationTranscript {
+            let mut value = json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 40},
+                "controlFlow": {"returns": returns}
+            });
+            if !form.is_null() {
+                value["completionForm"] = form;
+            }
+            if !incompleteness.is_null() {
+                value["controlFlow"]["unsupported"] = json!(["iterationReachability"]);
+                value["controlFlow"]["incompleteness"] = incompleteness;
+            }
+            serde_json::from_value(value).unwrap()
+        };
+        let site = |start: u64, end: u64, reach: &str, value: bool| {
+            let mut row = json!({
+                "location": {"path": "/project/index.js", "startByte": start, "endByte": end},
+                "reach": reach
+            });
+            if value {
+                row["value"] = json!({
+                    "callability": "nonCallable",
+                    "constructability": "nonConstructable",
+                    "primitive": {"mayBeNumber": true}
+                });
+            }
+            row
+        };
+
+        // Admitted: no return site at all, bare returns at every reach, and a
+        // value-carrying return the producer proved unreachable.
+        assert_eq!(
+            census_returns_transcript(&transcript(json!("plain"), json!([]), json!(null))).unwrap(),
+            vec!["census-returns-total:0".to_owned()]
+        );
+        let admitted = census_returns_transcript(&transcript(
+            json!("plain"),
+            json!([
+                site(10, 17, "reachable", false),
+                site(20, 27, "unknown", false),
+                site(30, 39, "unreachable", true)
+            ]),
+            json!(null),
+        ))
+        .unwrap();
+        assert_eq!(
+            admitted,
+            vec![
+                "census-return:/project/index.js:10:17:reachable:bare".to_owned(),
+                "census-return:/project/index.js:20:27:unknown:bare".to_owned(),
+                "census-return:/project/index.js:30:39:unreachable:value-unreachable".to_owned(),
+                "census-returns-total:3".to_owned(),
+            ]
+        );
+        // A bare return under a lower-bound-only construct is admitted.
+        census_returns_transcript(&transcript(
+            json!("plain"),
+            json!([site(10, 17, "unknown", false)]),
+            json!([{"marker": "iterationReachability", "class": "reachability-lower-bound",
+                    "location": {"path": "/project/index.js", "startByte": 5, "endByte": 30}}]),
+        ))
+        .unwrap();
+
+        // Refused, each by name.
+        for (form, returns, incompleteness, needle) in [
+            (
+                json!(null),
+                json!([]),
+                json!(null),
+                "states no completion form",
+            ),
+            (
+                json!("unclassified"),
+                json!([]),
+                json!(null),
+                "did not classify",
+            ),
+            (
+                json!("async"),
+                json!([]),
+                json!(null),
+                "async implementation",
+            ),
+            (
+                json!("generator"),
+                json!([]),
+                json!(null),
+                "generator implementation",
+            ),
+            (
+                json!("async-generator"),
+                json!([]),
+                json!(null),
+                "async generator implementation",
+            ),
+            (
+                json!("plain"),
+                json!([site(10, 17, "reachable", true)]),
+                json!(null),
+                "value-carrying completion at /project/index.js:10..17, reach reachable",
+            ),
+            (
+                json!("plain"),
+                json!([site(10, 17, "unknown", true)]),
+                json!(null),
+                "value-carrying completion at /project/index.js:10..17, reach unknown",
+            ),
+            (
+                json!("plain"),
+                json!([]),
+                json!([{"marker": "iterationReachability", "class": "flow-unaccounted",
+                        "location": {"path": "/project/index.js", "startByte": 5, "endByte": 30}}]),
+                "cannot account for a construct (iterationReachability, flow-unaccounted)",
+            ),
+        ] {
+            let refusal = census_returns_transcript(&transcript(form, returns, incompleteness))
+                .expect_err("the returns census must refuse this transcript");
+            assert!(refusal.contains(needle), "{refusal}");
+        }
+        // No control-flow census at all is an absence, not zero returns.
+        let mut absent: typefacts::ExportImplementationTranscript = serde_json::from_value(json!({
+            "location": {"path": "/project/index.js", "startByte": 0, "endByte": 40},
+            "completionForm": "plain"
+        }))
+        .unwrap();
+        absent.control_flow = None;
+        assert!(
+            census_returns_transcript(&absent)
+                .expect_err("no census")
+                .contains("no control-flow census")
         );
     }
 

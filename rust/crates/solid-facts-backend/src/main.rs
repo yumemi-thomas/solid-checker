@@ -6424,6 +6424,11 @@ struct GeneratedOwnerRequirements {
     /// above and nothing here.
     creates_walk_declines_by_symbol: HashMap<String, Vec<solid_reactive_ir::CreatesDecline>>,
     creates_walk_declines_by_function: HashMap<FunctionKey, Vec<solid_reactive_ir::CreatesDecline>>,
+    /// Functions whose implementation the valueless-completion walk cleared
+    /// (ADR 0035), by the same two identities. Membership is the positive
+    /// answer a `returns: []` proposal needs.
+    clean_returns_walk_by_symbol: HashSet<String>,
+    clean_returns_walk_by_function: HashSet<FunctionKey>,
 }
 
 fn canonical_symbol_aliases(facts: &solid_facts::ProjectFacts) -> HashMap<String, String> {
@@ -6524,6 +6529,14 @@ fn generated_owner_requirements_by_symbol(
                 function.span.start,
                 function.span.end,
             );
+            // The `returns` proposal walk's verdict (ADR 0035), independent of
+            // the `creates` one: syntax alone, no call resolution.
+            if solid_reactive_ir::valueless_completion(file, function).is_ok() {
+                if let Some(Some(symbol)) = function_symbols.get(&key) {
+                    indexed.clean_returns_walk_by_symbol.insert(symbol.clone());
+                }
+                indexed.clean_returns_walk_by_function.insert(key.clone());
+            }
             if !program
                 .creates_proposal_walk
                 .proposes(file.path.as_str(), span)
@@ -6663,6 +6676,13 @@ fn attach_generated_owner_requirements(
         || default_function
             .as_ref()
             .is_some_and(|key| generated.clean_creates_walk_by_function.contains(key));
+    // ADR 0035: the same shape for `returns: []`, read from the syntax walk.
+    summary.returns_walk_clean = symbol
+        .as_ref()
+        .is_some_and(|symbol| generated.clean_returns_walk_by_symbol.contains(symbol))
+        || default_function
+            .as_ref()
+            .is_some_and(|key| generated.clean_returns_walk_by_function.contains(key));
     // The negative half, carried for measurement only: which blockers the walk
     // named for this export. Attached whichever identity resolved it, in the
     // same order the two `clean` sets are consulted.

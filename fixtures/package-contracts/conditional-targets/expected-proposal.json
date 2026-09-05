@@ -5,25 +5,6 @@
   "semanticDigest": "sha256:d40ebbb1615ad16acb52bcc60f37cb3d81d3646c173ca3320340a9c0a1e709b0",
   "closureCandidates": [
     {
-      "claimId": "claim:v1:sha256:0fe83394dba3d2200c0a070aee7ea94665c8b095a3057239e14bedff71606767",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./development.js",
-        "runtimeDigest": "sha256:252354a3dde324ce5d19f9923abe2b59ddb6e2a10b2006e04b0c1d81abe5954d",
-        "declarationsPath": "./development.js",
-        "declarationsDigest": "sha256:252354a3dde324ce5d19f9923abe2b59ddb6e2a10b2006e04b0c1d81abe5954d",
-        "closureDigest": "sha256:4a43243bda3bb5a5ba7ea3f15024534b008028502f3c980103e66f32e5c7bd29"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:48aa8f31a28e4d8b94217e73edfe1636703fc7eab5f92bf720a0831d94ad87d9",
-        "export": "maybeRead",
-        "path": {
-          "kind": "call",
-          "domain": "returns"
-        }
-      }
-    },
-    {
       "claimId": "claim:v1:sha256:1fca8b5a98092a107683424e615f5627e2b2826135b669a61f9d6bf615979254",
       "artifact": {
         "entrypoint": ".",
@@ -136,25 +117,6 @@
           "domain": "callbacks"
         }
       }
-    },
-    {
-      "claimId": "claim:v1:sha256:e2eeb614f2bfd2b616b31d314ea64baaba91badf17126a9c67cbd9ba3bf7fb52",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./production.js",
-        "runtimeDigest": "sha256:252354a3dde324ce5d19f9923abe2b59ddb6e2a10b2006e04b0c1d81abe5954d",
-        "declarationsPath": "./production.js",
-        "declarationsDigest": "sha256:252354a3dde324ce5d19f9923abe2b59ddb6e2a10b2006e04b0c1d81abe5954d",
-        "closureDigest": "sha256:b8f6e132c9424a4ac4abb31c3366d63f497afd53d5a5e33f5711e5493ec5ea1f"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:e21cf4f3303deb9a23f79e5be50f7e45452ae98281946a5b07173c85cd4e23fb",
-        "export": "maybeRead",
-        "path": {
-          "kind": "call",
-          "domain": "returns"
-        }
-      }
     }
   ],
   "unresolvedClaims": [
@@ -194,6 +156,25 @@
         "path": {
           "kind": "call",
           "domain": "cleanups"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:0fe83394dba3d2200c0a070aee7ea94665c8b095a3057239e14bedff71606767",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./development.js",
+        "runtimeDigest": "sha256:252354a3dde324ce5d19f9923abe2b59ddb6e2a10b2006e04b0c1d81abe5954d",
+        "declarationsPath": "./development.js",
+        "declarationsDigest": "sha256:252354a3dde324ce5d19f9923abe2b59ddb6e2a10b2006e04b0c1d81abe5954d",
+        "closureDigest": "sha256:4a43243bda3bb5a5ba7ea3f15024534b008028502f3c980103e66f32e5c7bd29"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:48aa8f31a28e4d8b94217e73edfe1636703fc7eab5f92bf720a0831d94ad87d9",
+        "export": "maybeRead",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
         }
       }
     },
@@ -503,6 +484,25 @@
           "kind": "operation-axis",
           "operation": "artifact-case:e21cf4f3303deb9a23f79e5be50f7e45452ae98281946a5b07173c85cd4e23fb:maybeRead:operation:callback-0",
           "domain": "owner-lifetime"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:e2eeb614f2bfd2b616b31d314ea64baaba91badf17126a9c67cbd9ba3bf7fb52",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./production.js",
+        "runtimeDigest": "sha256:252354a3dde324ce5d19f9923abe2b59ddb6e2a10b2006e04b0c1d81abe5954d",
+        "declarationsPath": "./production.js",
+        "declarationsDigest": "sha256:252354a3dde324ce5d19f9923abe2b59ddb6e2a10b2006e04b0c1d81abe5954d",
+        "closureDigest": "sha256:b8f6e132c9424a4ac4abb31c3366d63f497afd53d5a5e33f5711e5493ec5ea1f"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:e21cf4f3303deb9a23f79e5be50f7e45452ae98281946a5b07173c85cd4e23fb",
+        "export": "maybeRead",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
         }
       }
     },

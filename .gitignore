@@ -103,6 +103,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/implementation-census-creates/node_modules/**
 !fixtures/package-contracts/creates-decline-records/node_modules/
 !fixtures/package-contracts/creates-decline-records/node_modules/**
+!fixtures/package-contracts/implementation-census-returns/node_modules/
+!fixtures/package-contracts/implementation-census-returns/node_modules/**
 # The nested consumer whose own top-level `import "solid-js"` is what the
 # probe workspace's authenticated dependency closure has to resolve. Its stub
 # is copied into the private workspace and *run* there, so an untracked one

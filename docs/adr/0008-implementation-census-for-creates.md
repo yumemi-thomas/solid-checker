@@ -82,7 +82,7 @@ so no contract that proposes nothing moves and no receipt for one document can
 authenticate the other. Only domains this verifier can decide are publishable —
 `ClaimDomain::PROPOSABLE`, today `creates` alone — because publishing a closure
 no census can decide refuses the row rather than proving anything; the
-generator's `reads`/`returns`/`callbacks` candidates stay weakened and travel to
+generator's `reads`/`callbacks` candidates (and, until ADR 0035, `returns`) stay weakened and travel to
 the plan sidecar as measurement.
 
 **Rejected: passing the plan sidecar into the planning request.** It would have
@@ -658,10 +658,12 @@ accessor-census disposition below; see
 - **A local declaration with no binding identifier** (an arrow or function
   expression a variable holds), **a written binding**, and **a redeclared
   name** — refused at the local-recursion step by name and location.
-- **Every behavioral call domain other than `creates`**: `reads` (needs the
-  proxy property-access forms, § 4.4), `writes`, `callbacks`, `cleanups`,
-  `disposals`, `invalidates`, `returns`; `throws` is not a census target under
-  version 1 at all. `ClosureCensus::Implementation` refuses them by name.
+- **Every behavioral call domain other than `creates` and `returns`**: `reads`
+  (needs the proxy property-access forms, § 4.4), `writes`, `callbacks`,
+  `cleanups`, `disposals`, `invalidates`; `throws` is not a census target under
+  version 1 at all. `ClosureCensus::Implementation` refuses them by name. The
+  empty `returns` closure is decided since ADR 0035, by the same transcript's
+  completion form and return sites and with no callee disposition at all.
 - **A dependency export without an audited negative row.** The plan's first
   terminator — a dependency whose `creates` is closed by an authenticated
   receipt — is not implemented, because § 4.5's accepted-dependency disposition

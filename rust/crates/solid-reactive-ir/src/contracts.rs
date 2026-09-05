@@ -126,6 +126,7 @@ pub fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractEx
         creates_closed_empty,
         creates_walk_clean: false,
         creates_walk_declines: Vec::new(),
+        returns_walk_clean: false,
     }
 }
 
@@ -1525,6 +1526,7 @@ fn contract_export_function(
         creates_closed_empty: false,
         creates_walk_clean: false,
         creates_walk_declines: Vec::new(),
+        returns_walk_clean: false,
     }
 }
 

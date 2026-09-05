@@ -13,9 +13,9 @@
             "sha256": "97b4406bc42572fbfdc2d970b8511033be5b023255541df1fc8b97b96390a85f"
           },
           "exports": {
-            "captured": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "direct": "summary-71f3db3a89cc9c1014a1603931a379b82c1c4b8170164f49082284fcc79208d6",
-            "mixed": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "captured": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
+            "direct": "summary-3a867ed12e19ce9c6d61910469d1d174f2eb148030508f55d5f741c268a4035a",
+            "mixed": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94"
           },
           "resolution": {
             "runtimeBranch": "/exports/./import",
@@ -39,10 +39,11 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-71f3db3a89cc9c1014a1603931a379b82c1c4b8170164f49082284fcc79208d6": {
+    "summary-3a867ed12e19ce9c6d61910469d1d174f2eb148030508f55d5f741c268a4035a": {
       "call": {
         "closed": [
-          "creates"
+          "creates",
+          "returns"
         ],
         "creates": [],
         "operations": [
@@ -75,23 +76,28 @@
           }
         ],
         "proposedClosures": [
-          "creates"
+          "creates",
+          "returns"
         ],
         "reads": [
           "read-0"
-        ]
+        ],
+        "returns": []
       },
       "shape": "callable"
     },
-    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
+    "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94": {
       "call": {
         "closed": [
-          "creates"
+          "creates",
+          "returns"
         ],
         "creates": [],
         "proposedClosures": [
-          "creates"
-        ]
+          "creates",
+          "returns"
+        ],
+        "returns": []
       },
       "shape": "callable"
     }

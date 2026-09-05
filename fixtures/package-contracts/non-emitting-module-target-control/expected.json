@@ -13,7 +13,7 @@
             "sha256": "b7d3c9c3c5d7902806837473604ed13db1667be92712fa629ac9560ee4b2acf8"
           },
           "exports": {
-            "mount": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1"
+            "mount": "summary-5f5b804e83be5aede7d0abaf2dc45cc361fe1b11fc38c0a3ccf72ca6ebf6f4dc"
           },
           "resolution": {
             "runtimeBranch": "/exports/./import",
@@ -79,7 +79,7 @@
             "sha256": "3818059da34b6ca9f5de317f661eeaa025b9fe904f3c9616da8b423f70547d6c"
           },
           "exports": {
-            "start": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "start": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1runtime-barrel",
@@ -107,11 +107,7 @@
       "call": {},
       "shape": "unknown"
     },
-    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
-      "call": {},
-      "shape": "plain"
-    },
-    "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1": {
+    "summary-5f5b804e83be5aede7d0abaf2dc45cc361fe1b11fc38c0a3ccf72ca6ebf6f4dc": {
       "call": {
         "callbacks": [
           {
@@ -123,7 +119,8 @@
           }
         ],
         "closed": [
-          "creates"
+          "creates",
+          "returns"
         ],
         "creates": [],
         "operations": [
@@ -146,20 +143,29 @@
           }
         ],
         "proposedClosures": [
-          "creates"
-        ]
+          "creates",
+          "returns"
+        ],
+        "returns": []
       },
       "shape": "callable"
     },
-    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
+    },
+    "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94": {
       "call": {
         "closed": [
-          "creates"
+          "creates",
+          "returns"
         ],
         "creates": [],
         "proposedClosures": [
-          "creates"
-        ]
+          "creates",
+          "returns"
+        ],
+        "returns": []
       },
       "shape": "callable"
     }

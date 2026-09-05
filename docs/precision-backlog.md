@@ -1,5 +1,33 @@
 # Precision backlog
 
+## The `returns` census decides valueless completion (2026-09-05)
+
+ADR 0035 makes `returns` the second behavioral call domain the implementation
+census decides, for the empty closure only. The producer (handshake protocol
+19) states each implementation's completion form from syntax; the verifier
+certifies `returns: []` when the form is plain, the control-flow census is
+classified, and every return site at the `MayExecute` floor is bare or proven
+unreachable, and refuses everything else by name and location. No callee is
+dispositioned: a helper's value reaches the caller only through the export's own
+return site.
+
+The generator proposes the closure only where its own valueless-completion walk
+is clean. Its `returns: Known(None)` convention — "no reactive return
+described", true of every export returning a plain value — no longer surfaces as
+a closure candidate: 179 spurious sidecar candidates left the corpus and 53
+void exports across 28 fixtures gained the closure, each reviewed against its
+source. The convention itself is left as it is; what the generator's `returns`
+shape describes is a semantic-model question, recorded here, not a census one.
+
+Measured: the ordinary three-row baseline is unchanged, because no Kobalte
+alpha export the walk can bind completes without a value; the yield on real
+rows waits on void exports with recipes. `exportsProven` stays 0. Two limits
+are recorded rather than closed: a `const` arrow export proposes nothing in any
+domain (the generator binds walk verdicts to function declarations), and a
+return inside a class or object-literal method is attributed to the enclosing
+function, which can only over-decline. See the dated
+[implementation report](2026-09-05-returns-census.md).
+
 ## An accessor reached through a parameter is the caller's code: three more census closures (2026-09-05)
 
 ADR 0034 extends the census's `parameter-rooted` principle from calls to read

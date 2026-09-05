@@ -1,0 +1,80 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "65dce17465e2c455c0fd591cbab621733a7b77869337b3c87b2edf30c786c753",
+            "path": "./index.js",
+            "sha256": "930835b174925d8c21ca843f4024a778e261f158606e860c3ae5cc4ae5d7ed2a"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "cfdae445fe890f0b73327c01703c1fb46ebb7be5a9369585a1aa870fc226e85f"
+          },
+          "exports": {
+            "asyncVoid": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "bareCompletion": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
+            "bareReturnInLoop": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
+            "earlyBareReturn": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
+            "expressionArrow": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "generatorVoid": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "nestedReturnsValue": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
+            "returnsValue": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "valueReturnInLoop": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:e5bebb53b5ae194725aa66dcb04d78af05ffb5f5a7b98a5a472f1ddbb2d73eaa",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "e5bebb53b5ae194725aa66dcb04d78af05ffb5f5a7b98a5a472f1ddbb2d73eaa"
+    },
+    "name": "implementation-census-returns-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94": {
+      "call": {
+        "closed": [
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "creates",
+          "returns"
+        ],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    },
+    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
+      "call": {
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "creates"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

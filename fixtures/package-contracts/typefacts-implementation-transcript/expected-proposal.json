@@ -2,7 +2,7 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:19747c8009f4b845913622ec7c5cb150ac591a5f628342040d3be3bf66301884",
+  "semanticDigest": "sha256:1f3f42a8d4218f8bfe41096f3bb30777d402f98f20be6eec10bd8ef0ca0c5a3d",
   "closureCandidates": [
     {
       "claimId": "claim:v1:sha256:06e5f7505b464f7dd341d1b6cdaeb8df3e370cad63474449a7c5f44e22d522e7",
@@ -20,25 +20,6 @@
         "path": {
           "kind": "call",
           "domain": "creates"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:18bececd0193911667a69be90a6095374a8265292877bb4f45d5484c65955454",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.js",
-        "runtimeDigest": "sha256:4299336e363a7b5bc67f468317aea6e3aafe831d59563a739dfaf5282b561143",
-        "declarationsPath": "./index.d.ts",
-        "declarationsDigest": "sha256:e5f5665660ecd0c092cc052fdd4ba54ab868a7b412ffa465e4d79a86beb38ffe",
-        "closureDigest": "sha256:529f350f0f64f988a2dddfdfda60e20b0ab70acb3fa5960f1fd58eaf942ee071"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:5463075a1d82495fe96270c20699f8131edefd0beffe1b592995e3f8e52ed928",
-        "export": "retained",
-        "path": {
-          "kind": "call",
-          "domain": "returns"
         }
       }
     },
@@ -193,25 +174,6 @@
           "domain": "callbacks"
         }
       }
-    },
-    {
-      "claimId": "claim:v1:sha256:e87ba79d94c089dd4a9fe289d0926bc10a2a971cbdecfe42fa27292e62b18bf1",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.js",
-        "runtimeDigest": "sha256:4299336e363a7b5bc67f468317aea6e3aafe831d59563a739dfaf5282b561143",
-        "declarationsPath": "./index.d.ts",
-        "declarationsDigest": "sha256:e5f5665660ecd0c092cc052fdd4ba54ab868a7b412ffa465e4d79a86beb38ffe",
-        "closureDigest": "sha256:529f350f0f64f988a2dddfdfda60e20b0ab70acb3fa5960f1fd58eaf942ee071"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:5463075a1d82495fe96270c20699f8131edefd0beffe1b592995e3f8e52ed928",
-        "export": "returned",
-        "path": {
-          "kind": "call",
-          "domain": "returns"
-        }
-      }
     }
   ],
   "unresolvedClaims": [
@@ -290,6 +252,25 @@
         "path": {
           "kind": "call",
           "domain": "disposals"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:18bececd0193911667a69be90a6095374a8265292877bb4f45d5484c65955454",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.js",
+        "runtimeDigest": "sha256:4299336e363a7b5bc67f468317aea6e3aafe831d59563a739dfaf5282b561143",
+        "declarationsPath": "./index.d.ts",
+        "declarationsDigest": "sha256:e5f5665660ecd0c092cc052fdd4ba54ab868a7b412ffa465e4d79a86beb38ffe",
+        "closureDigest": "sha256:529f350f0f64f988a2dddfdfda60e20b0ab70acb3fa5960f1fd58eaf942ee071"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:5463075a1d82495fe96270c20699f8131edefd0beffe1b592995e3f8e52ed928",
+        "export": "retained",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
         }
       }
     },
@@ -770,6 +751,25 @@
         "path": {
           "kind": "call",
           "domain": "cleanups"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:e87ba79d94c089dd4a9fe289d0926bc10a2a971cbdecfe42fa27292e62b18bf1",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.js",
+        "runtimeDigest": "sha256:4299336e363a7b5bc67f468317aea6e3aafe831d59563a739dfaf5282b561143",
+        "declarationsPath": "./index.d.ts",
+        "declarationsDigest": "sha256:e5f5665660ecd0c092cc052fdd4ba54ab868a7b412ffa465e4d79a86beb38ffe",
+        "closureDigest": "sha256:529f350f0f64f988a2dddfdfda60e20b0ab70acb3fa5960f1fd58eaf942ee071"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:5463075a1d82495fe96270c20699f8131edefd0beffe1b592995e3f8e52ed928",
+        "export": "returned",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
         }
       }
     }

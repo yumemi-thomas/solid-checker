@@ -17,6 +17,7 @@ mod pipeline;
 mod projection;
 mod reachability;
 mod reactive_analysis;
+pub mod returns_walk;
 mod runtime_semantics;
 mod server_rules;
 mod source_discovery;
@@ -30,6 +31,7 @@ pub use attribution::ObligationReach;
 pub use creates_walk::{CreatesDecline, CreatesDeclineKind, CreatesProposalWalk};
 pub use owners::function_binding_name;
 pub use pipeline::{build, build_with_accepted_contracts_measured};
+pub use returns_walk::{ReturnsDecline, valueless_completion};
 
 pub use upstream_compat::solid1x_options::{RuleOptions, RuleOverride, Solid1xRuleOptions};
 
@@ -1044,6 +1046,12 @@ pub struct ContractExport {
     /// only "no blocker was named" — for a summary no walk reached that is
     /// silence, not a clean walk, which is what `creates_walk_clean` says.
     pub creates_walk_declines: Vec<crate::CreatesDecline>,
+    /// Whether the generator's valueless-completion walk cleared this export's
+    /// implementation (ADR 0035): a block-bodied, non-`async`, non-generator
+    /// function whose own body carries no `return` with an expression. A
+    /// proposal input for `returns: []` and never a proof; `false` is
+    /// "do not propose", including for a summary no walk reached.
+    pub returns_walk_clean: bool,
 }
 
 impl ContractExport {

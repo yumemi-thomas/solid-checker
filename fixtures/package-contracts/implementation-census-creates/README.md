@@ -18,7 +18,12 @@ proposes since ADR 0034 aligned the walk with the census's
 `parameter-rooted-accessor` disposition.)
 
 A proposing export's summary in `expected.json` states the closure and labels
-it: `closed: ["creates"]`, `creates: []`, `proposedClosures: ["creates"]`. That
+it: `closed: ["creates"]`, `creates: []`, `proposedClosures: ["creates"]`. (Since
+ADR 0035 the nine exports whose bodies never carry a value-returning completion
+— `cycle`, `deep`, `labelledBreak`, `loopCall`, `setterOnParameter`,
+`stdlibRefInvoker`, `switchBreak`, `viaHelperChain`, `whileBreak` — also
+propose `returns: []` and carry a second closure candidate; see
+`../implementation-census-returns`.) That
 label is the difference between a generator's proposal and a reviewed negative
 claim, and stating the closure is what makes the candidate reach the certifier
 at all (ADR 0008 § 1 "How the proposal is published"). Because the label is

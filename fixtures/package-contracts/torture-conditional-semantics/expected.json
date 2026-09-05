@@ -14,7 +14,7 @@
           },
           "exports": {
             "mode": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
-            "schedule": "summary-a830f7ca4514a2d4a15286680536e5caf83d74352a7fbe2e0c660df1da73a045"
+            "schedule": "summary-0e2e1fd6985c15d05e8af279525bc2b8a4135375e7b13d2422de5dbf30cf3407"
           },
           "resolution": {
             "runtimeBranch": "/exports/./node/import",
@@ -33,7 +33,7 @@
           },
           "exports": {
             "mode": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
-            "schedule": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1"
+            "schedule": "summary-5f5b804e83be5aede7d0abaf2dc45cc361fe1b11fc38c0a3ccf72ca6ebf6f4dc"
           },
           "resolution": {
             "runtimeBranch": "/exports/./browser/import",
@@ -57,11 +57,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
-      "call": {},
-      "shape": "plain"
-    },
-    "summary-a830f7ca4514a2d4a15286680536e5caf83d74352a7fbe2e0c660df1da73a045": {
+    "summary-0e2e1fd6985c15d05e8af279525bc2b8a4135375e7b13d2422de5dbf30cf3407": {
       "call": {
         "callbacks": [
           {
@@ -73,7 +69,8 @@
           }
         ],
         "closed": [
-          "creates"
+          "creates",
+          "returns"
         ],
         "creates": [],
         "operations": [
@@ -96,12 +93,14 @@
           }
         ],
         "proposedClosures": [
-          "creates"
-        ]
+          "creates",
+          "returns"
+        ],
+        "returns": []
       },
       "shape": "callable"
     },
-    "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1": {
+    "summary-5f5b804e83be5aede7d0abaf2dc45cc361fe1b11fc38c0a3ccf72ca6ebf6f4dc": {
       "call": {
         "callbacks": [
           {
@@ -113,7 +112,8 @@
           }
         ],
         "closed": [
-          "creates"
+          "creates",
+          "returns"
         ],
         "creates": [],
         "operations": [
@@ -136,10 +136,16 @@
           }
         ],
         "proposedClosures": [
-          "creates"
-        ]
+          "creates",
+          "returns"
+        ],
+        "returns": []
       },
       "shape": "callable"
+    },
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
     }
   }
 }

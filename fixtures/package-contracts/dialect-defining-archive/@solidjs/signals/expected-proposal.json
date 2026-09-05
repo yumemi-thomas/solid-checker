@@ -3,27 +3,7 @@
   "planVersion": 1,
   "semanticModelVersion": 1,
   "semanticDigest": "sha256:f24762e4bb600ed2e70460b1c9ff67290a556be73d6bd21826b511c6816f4aea",
-  "closureCandidates": [
-    {
-      "claimId": "claim:v1:sha256:ec1eb553ef70717218a940c928aa9312e5520706e3b7e4edc124dfb8c29500d2",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.ts",
-        "runtimeDigest": "sha256:9752777f0a665ee7017e424974ee489f2ff990526947109211d8f22212ca9fa7",
-        "declarationsPath": "./index.ts",
-        "declarationsDigest": "sha256:9752777f0a665ee7017e424974ee489f2ff990526947109211d8f22212ca9fa7",
-        "closureDigest": "sha256:d71f75772b440eebc0866018e3aa14204be0970fbf40c4640ace929498855c7b"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:aa17135a7abd6fe79d8c874c330553ffec26c39018422921c66b849c2e1398f4",
-        "export": "onSettled",
-        "path": {
-          "kind": "call",
-          "domain": "returns"
-        }
-      }
-    }
-  ],
+  "closureCandidates": [],
   "unresolvedClaims": [
     {
       "claimId": "claim:v1:sha256:2f1197ad9be7d4e4a14d67f0e74b84535540a735b29f92f2353da7af00d4424a",
@@ -173,6 +153,25 @@
         "path": {
           "kind": "call",
           "domain": "writes"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:ec1eb553ef70717218a940c928aa9312e5520706e3b7e4edc124dfb8c29500d2",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:9752777f0a665ee7017e424974ee489f2ff990526947109211d8f22212ca9fa7",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:9752777f0a665ee7017e424974ee489f2ff990526947109211d8f22212ca9fa7",
+        "closureDigest": "sha256:d71f75772b440eebc0866018e3aa14204be0970fbf40c4640ace929498855c7b"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:aa17135a7abd6fe79d8c874c330553ffec26c39018422921c66b849c2e1398f4",
+        "export": "onSettled",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
         }
       }
     },

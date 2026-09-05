@@ -2,7 +2,7 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:38a11bfa80192ae656521912864268280eb7a90817e374d360e8c01296c47181",
+  "semanticDigest": "sha256:51aea3c3006a22e8e6692ebe16b0cb1bb5f4e9d3cf3884f085eaa5c0fbfeb37b",
   "closureCandidates": [
     {
       "claimId": "claim:v1:sha256:036a533cd6c7fe14cb9dbff415d9a13c5711abd4c62529952aa7aedb48397e3a",
@@ -20,25 +20,6 @@
         "path": {
           "kind": "call",
           "domain": "reads"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:26e8d99a43ab6735f20b9a4d8a0480f58901f02d32ad6f0b2b3309b32b2cc3f9",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.js",
-        "runtimeDigest": "sha256:38b0ddc2ca0220a224f0b27b37aaffe05b317d0e124c2050e99a81750b3cfb42",
-        "declarationsPath": "./index.js",
-        "declarationsDigest": "sha256:38b0ddc2ca0220a224f0b27b37aaffe05b317d0e124c2050e99a81750b3cfb42",
-        "closureDigest": "sha256:0e60b25e2f2c093fc7c421abcc630357abb291e9dcf8586e8b3817ded30c68c7"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:cf5ad0e9c39bb3d795122f791a7b72d76f6887073f92c3c02fd5c9b98d77c176",
-        "export": "deepValue",
-        "path": {
-          "kind": "call",
-          "domain": "returns"
         }
       }
     },
@@ -173,6 +154,25 @@
         "export": "deepValue",
         "path": {
           "kind": "guard-partition"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:26e8d99a43ab6735f20b9a4d8a0480f58901f02d32ad6f0b2b3309b32b2cc3f9",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.js",
+        "runtimeDigest": "sha256:38b0ddc2ca0220a224f0b27b37aaffe05b317d0e124c2050e99a81750b3cfb42",
+        "declarationsPath": "./index.js",
+        "declarationsDigest": "sha256:38b0ddc2ca0220a224f0b27b37aaffe05b317d0e124c2050e99a81750b3cfb42",
+        "closureDigest": "sha256:0e60b25e2f2c093fc7c421abcc630357abb291e9dcf8586e8b3817ded30c68c7"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:cf5ad0e9c39bb3d795122f791a7b72d76f6887073f92c3c02fd5c9b98d77c176",
+        "export": "deepValue",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
         }
       }
     },

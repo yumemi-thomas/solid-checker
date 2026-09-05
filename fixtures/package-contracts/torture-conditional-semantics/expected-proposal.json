@@ -2,7 +2,7 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:c9e3f39492d3157b243b1ba54e702b00d7d42e29b812922296b95b60df371136",
+  "semanticDigest": "sha256:373054b23bb4f0f17a2f033c6b42a8a75cb432c8fb8504b10c28b38b60d7ffd4",
   "closureCandidates": [
     {
       "claimId": "claim:v1:sha256:001434ffe6f048a6202c066a46da865b92eebb43f4c3329be6d5bbb6a45dd764",
@@ -58,25 +58,6 @@
         "path": {
           "kind": "call",
           "domain": "reads"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:47ef6588570e43ffb10e79e0be161d8d41bbb57500c25409e413da6b16e78b4f",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./server.js",
-        "runtimeDigest": "sha256:f1626624dd712243ab0b566355af7fe0d8ff899c7bd39a0322e1cca317eb90de",
-        "declarationsPath": "./server.js",
-        "declarationsDigest": "sha256:f1626624dd712243ab0b566355af7fe0d8ff899c7bd39a0322e1cca317eb90de",
-        "closureDigest": "sha256:795e11f0a29227ebf91f7a69286798b68473c2b15d448dd444ac8ebdd4d0bba3"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:38aa4c4523be4919fd5f2e0322ad94aa1bf35b8d9b8639f49e48de9c3fbc2f54",
-        "export": "mode",
-        "path": {
-          "kind": "call",
-          "domain": "returns"
         }
       }
     },
@@ -172,25 +153,6 @@
         "path": {
           "kind": "call",
           "domain": "reads"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:b7b51a7505d2cf63c4bf3fa30aa44d2bd90df44ebcd99e52fc6295a42d7228a1",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./browser.js",
-        "runtimeDigest": "sha256:4ca5dde6383ea34995000f35ebc418f9db89d4d0e87298dd9551b7fe29b20e7c",
-        "declarationsPath": "./browser.js",
-        "declarationsDigest": "sha256:4ca5dde6383ea34995000f35ebc418f9db89d4d0e87298dd9551b7fe29b20e7c",
-        "closureDigest": "sha256:79d159948645d5958e7a19fc6d27cf63d81c745e92730552684bfd4811b4bd22"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:b65eb99ae301ccf23be3a1f63be8f678a69180067052965b60417b543ee1b01d",
-        "export": "mode",
-        "path": {
-          "kind": "call",
-          "domain": "returns"
         }
       }
     },
@@ -438,6 +400,25 @@
         "path": {
           "kind": "call",
           "domain": "disposals"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:47ef6588570e43ffb10e79e0be161d8d41bbb57500c25409e413da6b16e78b4f",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./server.js",
+        "runtimeDigest": "sha256:f1626624dd712243ab0b566355af7fe0d8ff899c7bd39a0322e1cca317eb90de",
+        "declarationsPath": "./server.js",
+        "declarationsDigest": "sha256:f1626624dd712243ab0b566355af7fe0d8ff899c7bd39a0322e1cca317eb90de",
+        "closureDigest": "sha256:795e11f0a29227ebf91f7a69286798b68473c2b15d448dd444ac8ebdd4d0bba3"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:38aa4c4523be4919fd5f2e0322ad94aa1bf35b8d9b8639f49e48de9c3fbc2f54",
+        "export": "mode",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
         }
       }
     },
@@ -707,6 +688,25 @@
         "path": {
           "kind": "call",
           "domain": "cleanups"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:b7b51a7505d2cf63c4bf3fa30aa44d2bd90df44ebcd99e52fc6295a42d7228a1",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./browser.js",
+        "runtimeDigest": "sha256:4ca5dde6383ea34995000f35ebc418f9db89d4d0e87298dd9551b7fe29b20e7c",
+        "declarationsPath": "./browser.js",
+        "declarationsDigest": "sha256:4ca5dde6383ea34995000f35ebc418f9db89d4d0e87298dd9551b7fe29b20e7c",
+        "closureDigest": "sha256:79d159948645d5958e7a19fc6d27cf63d81c745e92730552684bfd4811b4bd22"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:b65eb99ae301ccf23be3a1f63be8f678a69180067052965b60417b543ee1b01d",
+        "export": "mode",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
         }
       }
     },

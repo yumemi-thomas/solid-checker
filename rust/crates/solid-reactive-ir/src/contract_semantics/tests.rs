@@ -1168,7 +1168,12 @@ fn a_proposed_closure_is_refused_over_an_open_domain_and_over_an_undecidable_one
         "{undecidable}"
     );
     assert!(ClaimDomain::Creates.is_proposable());
-    assert_eq!(ClaimDomain::PROPOSABLE, [ClaimDomain::Creates]);
+    assert!(ClaimDomain::Returns.is_proposable());
+    assert!(!ClaimDomain::Reads.is_proposable());
+    assert_eq!(
+        ClaimDomain::PROPOSABLE,
+        [ClaimDomain::Creates, ClaimDomain::Returns]
+    );
 }
 
 /// Opening a domain withdraws its proposal.

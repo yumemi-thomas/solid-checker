@@ -2,27 +2,8 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:11376200e36b3b030b928d95a70a20f8414c8a68c72d1d21b86e47c12fe227fb",
+  "semanticDigest": "sha256:296d06f0229c598f367f496c35ddf33d6fc3e2ede8131cc17b1b177736492680",
   "closureCandidates": [
-    {
-      "claimId": "claim:v1:sha256:042872fd0442f1fe597b0799db78b379d2c406fc6f05fe116133a07f3eab490d",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.ts",
-        "runtimeDigest": "sha256:6ce7c4f7e39d58d5c9131e783efbfe23df0e8e564c0f1a260a016babca11a8bc",
-        "declarationsPath": "./index.ts",
-        "declarationsDigest": "sha256:6ce7c4f7e39d58d5c9131e783efbfe23df0e8e564c0f1a260a016babca11a8bc",
-        "closureDigest": "sha256:2344f180d8bba86dfffcb4b5ffce8cd086a772560297762aaddeecd94a58c80d"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:a213b86c207837f7c9b0d52b4ea423284890bebedcbcfb6a162367a763ca8e79",
-        "export": "readRoot",
-        "path": {
-          "kind": "call",
-          "domain": "returns"
-        }
-      }
-    },
     {
       "claimId": "claim:v1:sha256:330a1541cb0612ecfec39b5d20d7e2ec69f6854abd42cd607eb478851147b0a5",
       "artifact": {
@@ -96,25 +77,6 @@
         "path": {
           "kind": "call",
           "domain": "reads"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:7766bd645d459bbad5bb4b8864cf1229d900c657ce9ca206e63c6909a04a3723",
-      "artifact": {
-        "entrypoint": "./feature",
-        "runtimePath": "./feature.js",
-        "runtimeDigest": "sha256:ea095407e81898c6f52d68c3bc9d7932d3323245a821f4bcbf551594c358bbaa",
-        "declarationsPath": "./feature.js",
-        "declarationsDigest": "sha256:ea095407e81898c6f52d68c3bc9d7932d3323245a821f4bcbf551594c358bbaa",
-        "closureDigest": "sha256:e74a0c34d2952f7044b7807e6db1ec73b69a2a282572014252fd9102ec84cbfd"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:ba670fdda1d5b07ed012ea06efe1bdcd9e69c9ccbfbcbd55e5da8c01f79d5016",
-        "export": "featureValue",
-        "path": {
-          "kind": "call",
-          "domain": "returns"
         }
       }
     },
@@ -215,6 +177,25 @@
     }
   ],
   "unresolvedClaims": [
+    {
+      "claimId": "claim:v1:sha256:042872fd0442f1fe597b0799db78b379d2c406fc6f05fe116133a07f3eab490d",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:6ce7c4f7e39d58d5c9131e783efbfe23df0e8e564c0f1a260a016babca11a8bc",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:6ce7c4f7e39d58d5c9131e783efbfe23df0e8e564c0f1a260a016babca11a8bc",
+        "closureDigest": "sha256:2344f180d8bba86dfffcb4b5ffce8cd086a772560297762aaddeecd94a58c80d"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:a213b86c207837f7c9b0d52b4ea423284890bebedcbcfb6a162367a763ca8e79",
+        "export": "readRoot",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
+        }
+      }
+    },
     {
       "claimId": "claim:v1:sha256:0c8f8b61462fc6f0dcd6b722e05e8e5a68e78c4f6b9b84781bf688a7cdb09d76",
       "artifact": {
@@ -383,6 +364,25 @@
         "path": {
           "kind": "call",
           "domain": "cleanups"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:7766bd645d459bbad5bb4b8864cf1229d900c657ce9ca206e63c6909a04a3723",
+      "artifact": {
+        "entrypoint": "./feature",
+        "runtimePath": "./feature.js",
+        "runtimeDigest": "sha256:ea095407e81898c6f52d68c3bc9d7932d3323245a821f4bcbf551594c358bbaa",
+        "declarationsPath": "./feature.js",
+        "declarationsDigest": "sha256:ea095407e81898c6f52d68c3bc9d7932d3323245a821f4bcbf551594c358bbaa",
+        "closureDigest": "sha256:e74a0c34d2952f7044b7807e6db1ec73b69a2a282572014252fd9102ec84cbfd"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:ba670fdda1d5b07ed012ea06efe1bdcd9e69c9ccbfbcbd55e5da8c01f79d5016",
+        "export": "featureValue",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
         }
       }
     },

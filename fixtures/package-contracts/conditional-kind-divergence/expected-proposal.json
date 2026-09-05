@@ -2,27 +2,8 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:9d968e8289476a3d498e9a0455a27d97b9334b1aef604b978c7734e04117df0f",
+  "semanticDigest": "sha256:d7140c84803dd651e1db34783c10f1327c922f169df8b5c8ed95ef04b78987c3",
   "closureCandidates": [
-    {
-      "claimId": "claim:v1:sha256:10ec2966bdb18bf7ca8bd7f6b7416d0de5d6dfd545af4959d55a8efec5abd366",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./production.js",
-        "runtimeDigest": "sha256:f344ecbcc3d9739da3be4afacedc89a3271685f459f301ae65a05e821a5a4b90",
-        "declarationsPath": "./production.js",
-        "declarationsDigest": "sha256:f344ecbcc3d9739da3be4afacedc89a3271685f459f301ae65a05e821a5a4b90",
-        "closureDigest": "sha256:8adf7c01ed5591ed9e6c4a9413a08a060d3307ce1268d5c2921df9e96324e2d2"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:05312316afc662b6ea68372795d8a5306ad38deb667f038ff46e5bbef7c8012f",
-        "export": "conditionalShape",
-        "path": {
-          "kind": "call",
-          "domain": "returns"
-        }
-      }
-    },
     {
       "claimId": "claim:v1:sha256:347a7b17154ee9767fc3f985b681bcd249e0bb4ea30349ac5eb9776ee63348ab",
       "artifact": {
@@ -174,6 +155,25 @@
         "export": "conditionalShape",
         "path": {
           "kind": "guard-partition"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:10ec2966bdb18bf7ca8bd7f6b7416d0de5d6dfd545af4959d55a8efec5abd366",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./production.js",
+        "runtimeDigest": "sha256:f344ecbcc3d9739da3be4afacedc89a3271685f459f301ae65a05e821a5a4b90",
+        "declarationsPath": "./production.js",
+        "declarationsDigest": "sha256:f344ecbcc3d9739da3be4afacedc89a3271685f459f301ae65a05e821a5a4b90",
+        "closureDigest": "sha256:8adf7c01ed5591ed9e6c4a9413a08a060d3307ce1268d5c2921df9e96324e2d2"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:05312316afc662b6ea68372795d8a5306ad38deb667f038ff46e5bbef7c8012f",
+        "export": "conditionalShape",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
         }
       }
     },

@@ -24,44 +24,6 @@
       }
     },
     {
-      "claimId": "claim:v1:sha256:056cf709fbd91a42b8a0bb817c7e47a2410e7a166a495a0b8a32a8b1903a344c",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./node.js",
-        "runtimeDigest": "sha256:fcefb04a3038e2295d73b31ec50c3274fc25608fd5c31a05ca5e9c14f24dc444",
-        "declarationsPath": "./node.js",
-        "declarationsDigest": "sha256:fcefb04a3038e2295d73b31ec50c3274fc25608fd5c31a05ca5e9c14f24dc444",
-        "closureDigest": "sha256:c1e358e47e5e016e555d536b3d54613d31932a296084d03190b7030ca92a9caa"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:079013a8b749494c8d79446af969e8035aa2082982f95376271480d9d2fc5d80",
-        "export": "Steady",
-        "path": {
-          "kind": "call",
-          "domain": "returns"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:10c0ea6f3781592f9e7ea0790c3b13ee47bb987a2a6d3c44fc16403f59623c01",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./node.js",
-        "runtimeDigest": "sha256:fcefb04a3038e2295d73b31ec50c3274fc25608fd5c31a05ca5e9c14f24dc444",
-        "declarationsPath": "./node.js",
-        "declarationsDigest": "sha256:fcefb04a3038e2295d73b31ec50c3274fc25608fd5c31a05ca5e9c14f24dc444",
-        "closureDigest": "sha256:c1e358e47e5e016e555d536b3d54613d31932a296084d03190b7030ca92a9caa"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:079013a8b749494c8d79446af969e8035aa2082982f95376271480d9d2fc5d80",
-        "export": "Show",
-        "path": {
-          "kind": "call",
-          "domain": "returns"
-        }
-      }
-    },
-    {
       "claimId": "claim:v1:sha256:4d851cfce0aba2365466e4e938470f12ba0255f114a2ab62caaf59fb130ed410",
       "artifact": {
         "entrypoint": ".",
@@ -219,6 +181,25 @@
       }
     },
     {
+      "claimId": "claim:v1:sha256:056cf709fbd91a42b8a0bb817c7e47a2410e7a166a495a0b8a32a8b1903a344c",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./node.js",
+        "runtimeDigest": "sha256:fcefb04a3038e2295d73b31ec50c3274fc25608fd5c31a05ca5e9c14f24dc444",
+        "declarationsPath": "./node.js",
+        "declarationsDigest": "sha256:fcefb04a3038e2295d73b31ec50c3274fc25608fd5c31a05ca5e9c14f24dc444",
+        "closureDigest": "sha256:c1e358e47e5e016e555d536b3d54613d31932a296084d03190b7030ca92a9caa"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:079013a8b749494c8d79446af969e8035aa2082982f95376271480d9d2fc5d80",
+        "export": "Steady",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
+        }
+      }
+    },
+    {
       "claimId": "claim:v1:sha256:0956eda5d9aa4fa1de760b5d0b8f9d33539d15b2930a9bee858289e7cdc0cfe6",
       "artifact": {
         "entrypoint": ".",
@@ -233,6 +214,25 @@
         "export": "Show",
         "path": {
           "kind": "guard-partition"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:10c0ea6f3781592f9e7ea0790c3b13ee47bb987a2a6d3c44fc16403f59623c01",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./node.js",
+        "runtimeDigest": "sha256:fcefb04a3038e2295d73b31ec50c3274fc25608fd5c31a05ca5e9c14f24dc444",
+        "declarationsPath": "./node.js",
+        "declarationsDigest": "sha256:fcefb04a3038e2295d73b31ec50c3274fc25608fd5c31a05ca5e9c14f24dc444",
+        "closureDigest": "sha256:c1e358e47e5e016e555d536b3d54613d31932a296084d03190b7030ca92a9caa"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:079013a8b749494c8d79446af969e8035aa2082982f95376271480d9d2fc5d80",
+        "export": "Show",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
         }
       }
     },

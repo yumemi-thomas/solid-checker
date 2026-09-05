@@ -767,17 +767,17 @@ impl ClaimDomain {
     /// The call domains a document may *propose* closed
     /// (`CallSemantics::proposed_closures`).
     ///
-    /// One domain, because `creates` is the only behavioral call domain the
-    /// certifier has a proof mode for: the implementation census
-    /// (ADR 0008). A candidate the certifier cannot decide is not a weaker
-    /// proposal, it is a refused row — every other domain refuses by name at
-    /// witness acquisition, and only `creates` is recipe-gated, so a proposal
-    /// of one of them could never close and could only turn a row whose every
-    /// other claim was proven into a refusal. The generator's candidates for
-    /// the other domains therefore stay in the proposal plan sidecar as
-    /// measurement, and this list grows one domain at a time as each census
-    /// lands.
-    pub const PROPOSABLE: [Self; 1] = [Self::Creates];
+    /// The behavioral call domains the certifier has a proof mode for — the
+    /// implementation census: `creates` (ADR 0008) and `returns` (ADR 0035,
+    /// the empty closure only). A candidate the certifier cannot decide is not
+    /// a weaker proposal, it is a refused row — every other domain refuses by
+    /// name at witness acquisition, and only these are recipe-gated, so a
+    /// proposal of one of the others could never close and could only turn a
+    /// row whose every other claim was proven into a refusal. The generator's
+    /// candidates for the other domains therefore stay in the proposal plan
+    /// sidecar as measurement, and this list grows one domain at a time as
+    /// each census lands.
+    pub const PROPOSABLE: [Self; 2] = [Self::Creates, Self::Returns];
 
     /// Whether a document may propose this domain for closure proof.
     #[must_use]
