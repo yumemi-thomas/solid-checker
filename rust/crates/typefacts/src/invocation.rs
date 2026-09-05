@@ -410,6 +410,17 @@ pub struct ExportImplementationTranscript {
     /// reads its absence as [`ImplementationCompletionForm::Plain`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub completion_form: Option<ImplementationCompletionForm>,
+    /// The declaration whose body this transcript's census walked when
+    /// [`Self::declaration`] is a binding that aliases it by identity --
+    /// `const defaultScheduler = systemSetTimeoutZero` (handshake protocol
+    /// 20). Absent when the body is the declaration's own. The producer states
+    /// it only for an exact alias: an identifier initializer, the binding never
+    /// assigned in its file, the aliased function never assigned in its own;
+    /// an import that module resolution took to a sibling `.d.ts` is followed
+    /// to the runtime module the specifier denotes and to that module's export
+    /// of the imported name, which is what the import binds at runtime.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub implementation_of: Option<ResolvedDeclaration>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub parameter_uses: Vec<ParameterUse>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

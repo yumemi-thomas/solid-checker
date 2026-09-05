@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"path"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -233,11 +234,38 @@ func (p *project) exportImplementationTranscriptLocked(
 	}
 	selectedDeclaration := p.currentSignatureDeclaration(signatures[0], target)
 	implementation := invocationImplementationDeclaration(selectedDeclaration, target)
+	// A binding that aliases a function -- `const defaultScheduler =
+	// systemSetTimeoutZero` -- has no body of its own, and when the aliased
+	// name is imported from a sibling module of a package that ships
+	// declarations, module resolution lands on the `.d.ts`, which has no body
+	// either. The runtime value is the runtime module's export of that name,
+	// so the census walks that body and the transcript states the hop
+	// (handshake protocol 20): Declaration stays the demanded binding's own
+	// declaration, and ImplementationOf names whose body was walked.
+	//
+	// The hop is taken whenever the binding is such an alias, not only when
+	// the signature path found no body: for a local alias that path already
+	// reached the aliased function and named *it* as the declaration, which
+	// misnamed the export; the binding is the declaration, and the aliased
+	// function is what the transcript now says it is.
+	var implementationOf *typefacts.ResolvedDeclaration
+	if aliased, aliasedSymbol := p.aliasedRuntimeImplementationLocked(target); aliased != nil {
+		if resolved := p.resolvedDeclaration(nil, aliased, aliasedSymbol); resolved != nil {
+			implementationOf = resolved
+			implementation = aliased
+			selectedDeclaration = aliased
+		}
+	}
 	if selectedDeclaration == nil || implementation == nil || implementation.Body() == nil {
 		transcript.OpenReasons = append(transcript.OpenReasons, "implementationUnavailable")
 		return transcript
 	}
-	transcript.Declaration = p.resolvedDeclaration(nil, implementation, target)
+	if implementationOf != nil {
+		transcript.Declaration = p.resolvedDeclaration(nil, target.ValueDeclaration, target)
+		transcript.ImplementationOf = implementationOf
+	} else {
+		transcript.Declaration = p.resolvedDeclaration(nil, implementation, target)
+	}
 	if transcript.Declaration == nil {
 		transcript.OpenReasons = append(transcript.OpenReasons, "declarationUnavailable")
 		return transcript
@@ -767,6 +795,92 @@ func importedAliasIdentity(symbol *ast.Symbol) (string, string) {
 		return owner.AsImportDeclaration().ModuleSpecifier.Text(), importedName
 	}
 	return "", ""
+}
+
+// aliasedRuntimeImplementationLocked finds the body behind a binding that
+// merely aliases a function: `const defaultScheduler = systemSetTimeoutZero`.
+// It answers only when the alias is exact by identity -- the binding is an
+// identifier initializer (through identity-preserving wrappers) and is never
+// assigned anywhere in its file, and the function it names is never assigned
+// in its own file -- so the binding's runtime value *is* that function object.
+//
+// The aliased name may be local or imported. An import that the program
+// resolved to a sibling `.d.ts` (a package that ships declarations beside its
+// runtime) is followed to the runtime module the specifier denotes -- the file
+// at that relative path in the accepted program, never a declaration file --
+// and to that module's own export of the imported name, which is what the
+// import binds at runtime. Anything less exact -- a non-relative specifier, a
+// file the program does not hold, a missing export, a body-less target --
+// answers nothing, and the transcript stays open as before.
+func (p *project) aliasedRuntimeImplementationLocked(target *ast.Symbol) (*ast.Node, *ast.Symbol) {
+	if target == nil || target.ValueDeclaration == nil || !ast.IsVariableDeclaration(target.ValueDeclaration) {
+		return nil, nil
+	}
+	binding := target.ValueDeclaration
+	if p.symbolIsAssignedLocked(target, binding) {
+		return nil, nil
+	}
+	initializer := identityPreservingUnwrap(binding.Initializer())
+	if initializer == nil || !ast.IsIdentifier(initializer) {
+		return nil, nil
+	}
+	aliasSymbol := p.checker.GetSymbolAtLocation(initializer)
+	if aliasSymbol == nil {
+		return nil, nil
+	}
+	if canonical := p.canonicalSymbol(aliasSymbol); canonical != nil {
+		if body := callableBodyDeclaration(canonical); body != nil && !p.symbolIsAssignedLocked(canonical, body) {
+			return body, canonical
+		}
+	}
+	specifier, importedName := importedAliasIdentity(aliasSymbol)
+	if specifier == "" || importedName == "" || !(strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../")) {
+		return nil, nil
+	}
+	importer := ast.GetSourceFileOfNode(binding)
+	if importer == nil {
+		return nil, nil
+	}
+	// Program file names are forward-slash paths; the specifier is relative
+	// to the importer's directory, exactly as the module loader resolves it.
+	runtimePath := path.Clean(path.Join(path.Dir(importer.FileName()), specifier))
+	runtimeFile := p.program.GetSourceFile(runtimePath)
+	if runtimeFile == nil || runtimeFile.IsDeclarationFile || !p.isCurrentSourceFile(runtimeFile) || runtimeFile.Symbol == nil {
+		return nil, nil
+	}
+	for _, exported := range p.checker.GetExportsOfModule(runtimeFile.Symbol) {
+		if exported == nil || exported.Name != importedName {
+			continue
+		}
+		canonical := p.canonicalSymbol(exported)
+		if canonical == nil {
+			return nil, nil
+		}
+		body := callableBodyDeclaration(canonical)
+		if body == nil || p.symbolIsAssignedLocked(canonical, body) {
+			return nil, nil
+		}
+		return body, canonical
+	}
+	return nil, nil
+}
+
+// callableBodyDeclaration is the one declaration of `symbol` that carries a
+// callable body: a function declaration, or a variable whose initializer is a
+// function-like expression. Anything else answers nil.
+func callableBodyDeclaration(symbol *ast.Symbol) *ast.Node {
+	for _, declaration := range symbol.Declarations {
+		if declaration.Body() != nil && isExactCallableImplementationKind(strings.TrimPrefix(declaration.KindString(), "Kind")) {
+			return declaration
+		}
+		if ast.IsVariableDeclaration(declaration) {
+			if initializer := identityPreservingUnwrap(declaration.Initializer()); initializer != nil &&
+				initializer.Body() != nil && ast.IsFunctionLikeDeclaration(initializer) {
+				return initializer
+			}
+		}
+	}
+	return nil
 }
 
 func (p *project) returnValueSourcesLocked(expression *ast.Node) []typefacts.ImplementationValueSource {

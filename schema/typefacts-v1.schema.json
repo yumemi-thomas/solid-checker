@@ -681,6 +681,7 @@
         "declaration": { "$ref": "#/$defs/resolvedDeclaration" },
         "signature": { "$ref": "#/$defs/selectedSignature" },
         "completionForm": { "type": "string", "enum": ["plain", "async", "generator", "async-generator", "unclassified"] },
+        "implementationOf": { "$ref": "#/$defs/resolvedDeclaration" },
         "parameterUses": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/parameterUse" } },
         "controlFlow": { "$ref": "#/$defs/controlFlowCensus" },
         "callableReturns": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/callableReturnCensus" } },

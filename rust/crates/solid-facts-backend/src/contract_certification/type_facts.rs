@@ -5849,8 +5849,26 @@ fn require_returned_parameter_identity(
         .control_flow
         .as_ref()
         .ok_or_else(|| open("returned parameter identity has no control-flow census"))?;
-    if !flow.unsupported.is_empty()
-        || !flow.incompleteness.is_empty()
+    // Which incompleteness the identity fact can stand beside (ADR 0016,
+    // amendment of 2026-09-05). The fact itself is flow-insensitive: the
+    // producer emits it only when the parameter's symbol is assigned nowhere
+    // in the implementation and the body mentions neither `eval` nor
+    // `arguments`, so no construct's flow can change *which value* a return
+    // site carries. What flow decides is only whether a return is reached, and
+    // a `reachability-lower-bound` construct -- a loop, `try`, or `switch` the
+    // census walked in full -- leaves that answered for every site outside it:
+    // the producer keeps `reachable` across a construct that completes
+    // normally and marks the sites inside `unknown`, which the agreement check
+    // below still reads (`unknown` is not `unreachable`). A `flow-unaccounted`
+    // construct answers neither question, and an unclassified marker is a
+    // producer that did not say which, so both keep the fact open.
+    let unaccounted = flow
+        .incompleteness
+        .iter()
+        .any(|row| row.class != typefacts::ControlFlowIncompletenessClass::ReachabilityLowerBound);
+    let unclassified = !flow.unsupported.is_empty() && flow.incompleteness.is_empty();
+    if unaccounted
+        || unclassified
         || !flow.returns.iter().any(|site| {
             site.reach == Reachability::Reachable
                 && site.carry_reach == Some(Reachability::Reachable)
@@ -14412,7 +14430,62 @@ mod tests {
         absent.as_object_mut().unwrap().remove("parameter");
         variants.push((json!({"returns": [absent.clone()]}), false));
         variants.push((json!({"returns": [good.clone(), absent]}), false));
-        variants.push((json!({"returns": [good], "unsupported": ["try"]}), false));
+        // Incompleteness by class (ADR 0016, amendment of 2026-09-05). A
+        // walked loop or `try` -- `@solidjs/web`'s `claimElement`, which loops
+        // over its handlers and then returns its parameter -- leaves the
+        // identity fact provable: the fact is flow-insensitive and the return
+        // after the construct stays reachable. A construct whose flow is
+        // unaccounted, or a marker the producer never classified, keeps it open.
+        let loop_row = |class: &str| {
+            json!({
+                "marker": "iterationReachability",
+                "class": class,
+                "location": {"path": "/pkg/dist/index.js", "startByte": 8, "endByte": 18},
+            })
+        };
+        variants.push((
+            json!({
+                "returns": [good.clone()],
+                "unsupported": ["iterationReachability"],
+                "incompleteness": [loop_row("reachability-lower-bound")],
+            }),
+            true,
+        ));
+        variants.push((
+            json!({
+                "returns": [good.clone()],
+                "unsupported": ["iterationReachability"],
+                "incompleteness": [loop_row("flow-unaccounted")],
+            }),
+            false,
+        ));
+        variants.push((
+            json!({"returns": [good.clone()], "unsupported": ["iterationReachability"]}),
+            false,
+        ));
+        // A return inside the walked construct is `unknown`, not `unreachable`,
+        // so it still has to agree on the parameter.
+        let mut inside = good.clone();
+        inside["reach"] = json!("unknown");
+        inside["carryReach"] = json!("unknown");
+        inside["location"] = json!({"path": "/pkg/dist/index.js", "startByte": 10, "endByte": 16});
+        variants.push((
+            json!({
+                "returns": [inside.clone(), good.clone()],
+                "unsupported": ["iterationReachability"],
+                "incompleteness": [loop_row("reachability-lower-bound")],
+            }),
+            true,
+        ));
+        inside["parameter"] = json!({"parameterIndex": 1});
+        variants.push((
+            json!({
+                "returns": [inside, good],
+                "unsupported": ["iterationReachability"],
+                "incompleteness": [loop_row("reachability-lower-bound")],
+            }),
+            false,
+        ));
         for (flow, expected) in variants {
             let mut implementation = implementation_with(Vec::new());
             implementation.control_flow = Some(serde_json::from_value(flow.clone()).unwrap());

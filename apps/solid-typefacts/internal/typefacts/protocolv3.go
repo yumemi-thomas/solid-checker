@@ -4,7 +4,16 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 19: an implementation transcript states its
+// TypeFactsHandshakeProtocol is 20: an implementation transcript may state
+// ImplementationOf — the declaration whose body its census walked when its own
+// declaration is a binding that aliases that function by identity
+// (`const defaultScheduler = systemSetTimeoutZero`, followed through a sibling
+// `.d.ts` to the runtime module's export of the imported name). A protocol-19
+// producer refused such a binding as implementationUnavailable; a transcript
+// without the field is a body of its own declaration on either protocol, so the
+// field is additive, and the number moves because a consumer that never read
+// the field must know that a body may now come from a named other declaration.
+// Protocol 19: an implementation transcript states its
 // completion form — plain, async, generator, async generator — so a `returns`
 // census can refuse a callable that hands its caller a promise or an iterator
 // whatever its body does (ADR 0035); an absent form on an older producer must
@@ -107,8 +116,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // Protocol 11 separated the members a value declares from the members it
 // carries only through the compiler's apparent-type augmentation.
 const (
-	TypeFactsHandshakeProtocol uint64 = 19
-	TypeFactsSchemaSHA256             = "sha256:b3a63564488672c921e6647e9b7351dccd5b9175d62cc3344f745784456ab678"
+	TypeFactsHandshakeProtocol uint64 = 20
+	TypeFactsSchemaSHA256             = "sha256:b3993c8aae676d361125a5b86832215ac0039a1ba90a61513d7facae30f123f6"
 )
 
 type ServiceHandshake struct {

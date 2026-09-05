@@ -284,8 +284,15 @@ type ExportImplementationTranscript struct {
 	// implementation, beside Declaration; a consumer never reads its absence
 	// as plain (handshake protocol 19).
 	CompletionForm ImplementationCompletionForm `cbor:"completionForm,omitempty" json:"completionForm,omitempty"`
-	ParameterUses  []ParameterUse               `cbor:"parameterUses,omitempty" json:"parameterUses,omitempty"`
-	ControlFlow    *ControlFlowCensus           `cbor:"controlFlow,omitempty" json:"controlFlow,omitempty"`
+	// ImplementationOf names the declaration whose body this transcript's
+	// census walked when Declaration is a binding that merely aliases it by
+	// identity -- `const defaultScheduler = systemSetTimeoutZero` (handshake
+	// protocol 20). Absent when the body is Declaration's own. Never stated
+	// unless the alias is exact: an identifier initializer, the binding never
+	// assigned in its file, and the aliased function never assigned in its own.
+	ImplementationOf *ResolvedDeclaration `cbor:"implementationOf,omitempty" json:"implementationOf,omitempty"`
+	ParameterUses    []ParameterUse       `cbor:"parameterUses,omitempty" json:"parameterUses,omitempty"`
+	ControlFlow      *ControlFlowCensus   `cbor:"controlFlow,omitempty" json:"controlFlow,omitempty"`
 	// CallableReturns records the return-carry edges owned by each nested
 	// callable in this implementation. The top-level implementation's return
 	// sites remain in ControlFlow; these rows let a consumer compose a returned

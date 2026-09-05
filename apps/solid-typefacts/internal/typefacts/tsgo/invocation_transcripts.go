@@ -1632,6 +1632,30 @@ func isCallableDeclaration(node *ast.Node) bool {
 		(ast.IsFunctionLikeDeclaration(node) || ast.IsClassStaticBlockDeclaration(node))
 }
 
+// containsReturnStatement reports whether `node` holds a `return` of the
+// enclosing function -- one not inside a nested callable, whose returns are
+// that callable's own. It decides whether an arm that never completes normally
+// left by throwing alone or may have left by returning a value.
+func containsReturnStatement(node *ast.Node) bool {
+	if node == nil {
+		return false
+	}
+	if ast.IsReturnStatement(node) {
+		return true
+	}
+	found := false
+	node.ForEachChild(func(child *ast.Node) bool {
+		if found || isCallableDeclaration(child) {
+			return false
+		}
+		if containsReturnStatement(child) {
+			found = true
+		}
+		return false
+	})
+	return found
+}
+
 // returnedParameterIdentityLocked proves binding identity, not value shape.
 // Every excluded form remains open; symbol spelling is never positive evidence.
 func (p *project) returnedParameterIdentityLocked(implementation, expression *ast.Node) *typefacts.ParameterValueSource {
@@ -1814,11 +1838,33 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 				return elseState
 			}
 			merged := flowState{reach: mergeReachability(thenState.reach, elseState.reach)}
+			// A throw guard -- an arm whose exit is unreachable and whose only
+			// way out is a `throw`, never a `return` -- takes nothing from the
+			// state after the `if`: an execution that reaches the next
+			// statement took the other arm and completed it, and no
+			// value-return edge competes from inside the guard, because an
+			// execution that throws returns no value at all. When the other arm
+			// is absent or always completes normally, the successor therefore
+			// keeps the entry carry strength, and `if (!ok) throw …; return
+			// input;` still has an unconditional value-return edge
+			// (`@solidjs/web`'s `withMeta`). An arm that may `return` is not a
+			// guard: its return is another value-return edge, and the merge
+			// below keeps the successor's carry unknown exactly as before.
+			thenGuards := thenState.reach == typefacts.Unreachable &&
+				!containsReturnStatement(statement.ThenStatement)
+			elseGuards := statement.ElseStatement != nil &&
+				elseState.reach == typefacts.Unreachable &&
+				!containsReturnStatement(statement.ElseStatement)
 			switch {
 			case merged.reach == typefacts.Unreachable || state.carryReach == typefacts.Unreachable:
 				merged.carryReach = typefacts.Unreachable
 			case p.constructCompletesNormallyLocked(statement.ThenStatement) &&
 				(statement.ElseStatement == nil || p.constructCompletesNormallyLocked(statement.ElseStatement)):
+				merged.carryReach = state.carryReach
+			case thenGuards &&
+				(statement.ElseStatement == nil || p.constructCompletesNormallyLocked(statement.ElseStatement)):
+				merged.carryReach = state.carryReach
+			case elseGuards && p.constructCompletesNormallyLocked(statement.ThenStatement):
 				merged.carryReach = state.carryReach
 			default:
 				merged.carryReach = typefacts.ReachUnknown

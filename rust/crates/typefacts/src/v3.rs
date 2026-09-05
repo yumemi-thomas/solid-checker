@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:b3a63564488672c921e6647e9b7351dccd5b9175d62cc3344f745784456ab678";
+    "sha256:b3993c8aae676d361125a5b86832215ac0039a1ba90a61513d7facae30f123f6";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -138,6 +138,13 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
+// Protocol 20 lets an implementation transcript state `implementationOf`: the
+// declaration whose body it walked when its declaration is a binding that
+// aliases that function by identity (`const defaultScheduler =
+// systemSetTimeoutZero`, followed through a sibling `.d.ts` to the runtime
+// module's export). A protocol-19 producer refused such a binding as
+// `implementationUnavailable`; a transcript without the field is a body of its
+// own declaration, on either protocol.
 // Protocol 19 states an implementation transcript's completion form — plain,
 // async, generator, async generator — so a `returns` census can refuse a
 // callable that hands its caller a promise or an iterator whatever its body
@@ -147,7 +154,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // producer is never "not rooted".
 // Protocol 17 includes exact-null loose equality in the positive
 // uncensused-form classifier. Protocol 16 added unchanged-parameter identity.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 19;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 20;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
