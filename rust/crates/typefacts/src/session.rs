@@ -3735,6 +3735,7 @@ mod tests {
             reach: crate::Reachability::Reachable,
             enclosing_callable: None,
             captured: false,
+            subject_parameter: None,
         }
     }
 

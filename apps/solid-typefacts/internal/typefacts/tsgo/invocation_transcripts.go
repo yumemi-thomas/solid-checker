@@ -1661,20 +1661,7 @@ func (p *project) returnedParameterIdentityLocked(implementation, expression *as
 	}
 	// Direct eval and mapped arguments can mutate a binding without a visible
 	// assignment to its symbol. Refuse mentions rather than guessing strictness.
-	var dynamic bool
-	var scan func(*ast.Node)
-	scan = func(node *ast.Node) {
-		if node == nil || dynamic {
-			return
-		}
-		if ast.IsIdentifier(node) && (node.Text() == "eval" || node.Text() == "arguments") {
-			dynamic = true
-			return
-		}
-		node.ForEachChild(func(child *ast.Node) bool { scan(child); return dynamic })
-	}
-	scan(implementation)
-	if dynamic {
+	if mentionsArgumentsOrEval(implementation) {
 		return nil
 	}
 	var result *typefacts.ParameterValueSource

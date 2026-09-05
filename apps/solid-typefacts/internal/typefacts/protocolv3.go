@@ -4,7 +4,10 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 17: the uncensused-form census now states the
+// TypeFactsHandshakeProtocol is 18: an uncensused form and a `.call`/`.apply`
+// row can state the parameter their subject is rooted at (ADR 0034), and an
+// absent fact on an older producer must not be read as "not rooted".
+// Protocol 17: the uncensused-form census states the
 // ECMAScript guarantee that loose equality against an exact null literal does
 // not invoke a coercion hook. An older producer's empty list does not carry
 // that reviewed classifier meaning, so the handshake moves even though the
@@ -100,8 +103,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // Protocol 11 separated the members a value declares from the members it
 // carries only through the compiler's apparent-type augmentation.
 const (
-	TypeFactsHandshakeProtocol uint64 = 17
-	TypeFactsSchemaSHA256             = "sha256:730fbe96f0363181a88ad2a4a56bded9bdbc575f8d40ebef642be8b788e45d1b"
+	TypeFactsHandshakeProtocol uint64 = 18
+	TypeFactsSchemaSHA256             = "sha256:b8b7f607b2d8937711d3b222a99e79e5f6efbb20f449a248b20f023f5e91c73c"
 )
 
 type ServiceHandshake struct {

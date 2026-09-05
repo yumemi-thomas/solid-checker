@@ -523,6 +523,19 @@ pub struct UncensusedInvokingForm {
     pub enclosing_callable: Option<Location>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub captured: bool,
+    /// The parameter of the transcript's own declaration at which this form's
+    /// subject — the receiver of a property or element read — is rooted
+    /// through a chain of property and element reads (ADR 0034, handshake
+    /// protocol 18). Stated only for a `get-accessor` or
+    /// `property-access-unknown-accessor` form in read position whose root is
+    /// a plain, uninitialized, non-rest parameter binding written nowhere in
+    /// its file, in a declaration mentioning neither `arguments` nor `eval`.
+    ///
+    /// **Absence is never "not rooted."** A protocol-17 producer states nothing
+    /// here for a rooted form, so a consumer that reads this field must
+    /// require protocol 18 first.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject_parameter: Option<usize>,
 }
 
 /// The closed vocabulary of invoking forms the call census does not record.
@@ -653,6 +666,19 @@ pub struct ImplementationCall {
     pub callee_parameter: Option<ParameterValueSource>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub argument_parameters: Vec<Option<ParameterValueSource>>,
+    /// For a `.call` or `.apply` whose resolved callee is the default library's
+    /// `Function.prototype` member: the resolved declaration of the *receiver*
+    /// expression, e.g. `Object.prototype.toString` in
+    /// `Object.prototype.toString.call(value)` (ADR 0034, protocol 18). A
+    /// consumer may decide such a site by the receiver instead of refusing every
+    /// by-reference transfer alike, but only for receivers it has reviewed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call_receiver: Option<ResolvedDeclaration>,
+    /// Beside `call_receiver`: the parameter of this declaration the `this`
+    /// argument (slot 0) is rooted at, under exactly the premises of
+    /// [`UncensusedInvokingForm::subject_parameter`]. Absent otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub this_parameter: Option<usize>,
     /// Per written argument slot, the traced value provenance of the expression
     /// written there — the same trace [`ReturnSite::sources`] carries for a
     /// returned expression. Parallel to `argument_parameters` and gated the

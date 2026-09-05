@@ -540,6 +540,7 @@ func (p *project) implementationCallCensusLocked(
 	for _, root := range roots {
 		bySymbol[p.canonicalSymbol(root.symbol)] = root
 	}
+	subjectRoots := p.parameterSubjectRootsLocked(implementation)
 	var calls []typefacts.ImplementationCall
 	// The walk is shared with the parameter-use census on purpose: a call and a
 	// property access on the same statement must not disagree about whether
@@ -649,6 +650,10 @@ func (p *project) implementationCallCensusLocked(
 			}
 			call.Target, call.TargetName, call.TargetModule, call.Declaration =
 				p.implementationCallTargetLocked(node.Expression())
+			// ADR 0034: a `.call`/`.apply` on a default-library receiver states
+			// that receiver and the parameter its `this` argument is rooted at.
+			call.CallReceiver, call.ThisParameter =
+				p.thisProtocolCallLocked(node, call.Declaration, subjectRoots)
 			// The value provenance of the callee, from the same tracer the
 			// return sites and the argument slots use. It answers a different
 			// question than the resolution just above — "what created the value

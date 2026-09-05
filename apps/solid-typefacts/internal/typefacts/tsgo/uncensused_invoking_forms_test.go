@@ -1284,3 +1284,153 @@ func TestExportValueDemandDigestSeparatesLocalDeclarationLocations(t *testing.T)
 		t.Fatalf("digests collide: none=%s one=%s two=%s", none, one, two)
 	}
 }
+
+// subjectSource pins ADR 0034's subject-parameter premise, positive and negative:
+// only a read accessor whose receiver chain roots at a plain, uninitialized,
+// non-rest parameter that is written nowhere — in a declaration mentioning
+// neither `arguments` nor `eval` — states a subject parameter.
+const subjectSource = `const registry: any = { value: 1, inner: [{ value: 2 }] };
+
+export function parameterRead(source: any): unknown {
+	return source.value;
+}
+
+export function parameterChainRead(source: any): unknown {
+	return source.inner[0].value;
+}
+
+export function writtenParameter(source: any): unknown {
+	source = registry;
+	return source.value;
+}
+
+export function writtenAfterRead(source: any): unknown {
+	const seen = source.value;
+	source = registry;
+	return seen;
+}
+
+export function moduleRead(): unknown {
+	return registry.value;
+}
+
+export function nestedParameterRead(items: any[]): unknown[] {
+	return items.map((item: any) => item.value);
+}
+
+export function defaultedParameter(source: any = registry): unknown {
+	return source.value;
+}
+
+export function destructuredParameter({ inner }: any): unknown {
+	return inner.value;
+}
+
+export function setterOnParameter(source: any): void {
+	source.value = 1;
+}
+
+export function deletedOnParameter(source: any): void {
+	delete source.value;
+}
+
+export function argumentsMention(source: any): unknown {
+	void arguments.length;
+	return source.value;
+}
+
+export function toStringTagViaCall(value: unknown): boolean {
+	return Object.prototype.toString.call(value) === "[object String]";
+}
+
+export function sliceViaCall(value: unknown): unknown {
+	return Array.prototype.slice.call(value);
+}
+
+function helper(this: unknown): unknown {
+	return this;
+}
+
+export function localViaCall(value: unknown): unknown {
+	return helper.call(value);
+}
+`
+
+func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises(t *testing.T) {
+	analyzer, dir := markerProject(t, map[string]string{"subjects.ts": subjectSource})
+	path := filepath.Join(dir, "subjects.ts")
+	zero := 0
+	for _, testCase := range []struct {
+		export string
+		want   []*int
+	}{
+		{"parameterRead", []*int{&zero}},
+		{"parameterChainRead", []*int{&zero, &zero, &zero}},
+		{"writtenParameter", []*int{nil}},
+		{"writtenAfterRead", []*int{nil}},
+		{"moduleRead", []*int{nil}},
+		{"nestedParameterRead", []*int{nil}},
+		{"defaultedParameter", []*int{nil}},
+		{"destructuredParameter", []*int{nil}},
+		{"setterOnParameter", []*int{nil}},
+		{"deletedOnParameter", []*int{nil}},
+		{"argumentsMention", []*int{nil}},
+	} {
+		transcript := implementationTranscriptFor(t, analyzer, path, subjectSource, testCase.export)
+		forms := transcript.UncensusedInvokingForms
+		if len(forms) != len(testCase.want) {
+			t.Fatalf("%s: %d forms (%v), want %d", testCase.export, len(forms), markerKinds(forms), len(testCase.want))
+		}
+		for index, want := range testCase.want {
+			got := forms[index].SubjectParameter
+			switch {
+			case want == nil && got != nil:
+				t.Fatalf("%s form %d (%s) states subject parameter %d, want none", testCase.export, index, forms[index].Kind, *got)
+			case want != nil && (got == nil || *got != *want):
+				t.Fatalf("%s form %d (%s) subject parameter = %v, want %d", testCase.export, index, forms[index].Kind, got, *want)
+			}
+		}
+	}
+}
+
+func TestCallAndApplyStateTheirReceiverAndThisParameter(t *testing.T) {
+	analyzer, dir := markerProject(t, map[string]string{"subjects.ts": subjectSource})
+	path := filepath.Join(dir, "subjects.ts")
+	for _, testCase := range []struct {
+		export        string
+		receiver      string
+		library       bool
+		thisParameter bool
+	}{
+		{"toStringTagViaCall", "Object.toString", true, true},
+		{"sliceViaCall", "Array.slice", true, true},
+		{"localViaCall", "helper", false, true},
+	} {
+		transcript := implementationTranscriptFor(t, analyzer, path, subjectSource, testCase.export)
+		var found *typefacts.ImplementationCall
+		for index := range transcript.Calls {
+			if transcript.Calls[index].Declaration != nil && transcript.Calls[index].Declaration.Name == "call" {
+				found = &transcript.Calls[index]
+			}
+		}
+		if found == nil {
+			t.Fatalf("%s: no `.call` row among %d calls", testCase.export, len(transcript.Calls))
+		}
+		if found.CallReceiver == nil {
+			t.Fatalf("%s: the `.call` row states no receiver", testCase.export)
+		}
+		if found.CallReceiver.QualifiedName != testCase.receiver || found.CallReceiver.StandardLibrary != testCase.library {
+			t.Fatalf(
+				"%s: receiver = %q (library %v), want %q (library %v)",
+				testCase.export, found.CallReceiver.QualifiedName, found.CallReceiver.StandardLibrary,
+				testCase.receiver, testCase.library,
+			)
+		}
+		if (found.ThisParameter != nil) != testCase.thisParameter || (found.ThisParameter != nil && *found.ThisParameter != 0) {
+			t.Fatalf("%s: this parameter = %v, want stated=%v index 0", testCase.export, found.ThisParameter, testCase.thisParameter)
+		}
+		for _, form := range transcript.UncensusedInvokingForms {
+			t.Fatalf("%s: unexpected uncensused form %s at %d", testCase.export, form.Kind, form.Location.StartByte)
+		}
+	}
+}

@@ -294,6 +294,7 @@ func (p *project) uncensusedInvokingFormCensusLocked(
 	implementation *ast.Node,
 ) []typefacts.UncensusedInvokingForm {
 	var forms []typefacts.UncensusedInvokingForm
+	roots := p.parameterSubjectRootsLocked(implementation)
 	p.walkImplementationBodyLocked(
 		implementation,
 		func(node *ast.Node, enclosing *ast.Node, reach typefacts.Reachability) {
@@ -315,10 +316,157 @@ func (p *project) uncensusedInvokingFormCensusLocked(
 				enclosingLocation := nodeLocation(enclosing)
 				form.EnclosingCallable = &enclosingLocation
 			}
+			form.SubjectParameter = p.accessorFormSubjectParameterLocked(node, kind, roots)
 			forms = append(forms, form)
 		},
 	)
 	return forms
+}
+
+// parameterSubjectRoots is the ADR 0034 premise set for one declaration: the
+// parameters a form's subject may be rooted at, or nil when the declaration
+// admits none.
+//
+// A parameter qualifies when its binding is a plain identifier with no
+// initializer and no rest token, and the identifier is written nowhere in its
+// file. A defaulted parameter is excluded because the default value is an
+// object *this* code created, not one the caller handed over; a rest parameter
+// because the array is the engine's; a destructured element because the
+// pattern already read a property the caller's object may compute. The whole
+// declaration is excluded when it mentions `arguments` or `eval`, either of
+// which can rebind a parameter without a visible assignment.
+type parameterSubjectRoots struct {
+	byParameterSymbol map[*ast.Symbol]int
+}
+
+func (p *project) parameterSubjectRootsLocked(implementation *ast.Node) *parameterSubjectRoots {
+	if implementation == nil || mentionsArgumentsOrEval(implementation) {
+		return nil
+	}
+	roots := &parameterSubjectRoots{byParameterSymbol: make(map[*ast.Symbol]int)}
+	for index, parameter := range implementation.Parameters() {
+		name := parameter.Name()
+		if name == nil || !ast.IsIdentifier(name) || parameter.Initializer() != nil ||
+			parameter.AsParameterDeclaration().DotDotDotToken != nil {
+			continue
+		}
+		symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(name))
+		if symbol == nil || p.symbolIsAssignedLocked(symbol, implementation) {
+			continue
+		}
+		roots.byParameterSymbol[symbol] = index
+	}
+	if len(roots.byParameterSymbol) == 0 {
+		return nil
+	}
+	return roots
+}
+
+// mentionsArgumentsOrEval reports whether any identifier in the subtree spells
+// `arguments` or `eval`. Direct eval and mapped arguments can mutate a binding
+// without a visible assignment to its symbol, so a premise about an unwritten
+// binding refuses the mention rather than guessing strictness.
+func mentionsArgumentsOrEval(root *ast.Node) bool {
+	var dynamic bool
+	var scan func(*ast.Node)
+	scan = func(node *ast.Node) {
+		if node == nil || dynamic {
+			return
+		}
+		if ast.IsIdentifier(node) && (node.Text() == "eval" || node.Text() == "arguments") {
+			dynamic = true
+			return
+		}
+		node.ForEachChild(func(child *ast.Node) bool { scan(child); return dynamic })
+	}
+	scan(root)
+	return dynamic
+}
+
+// subjectParameterLocked answers the qualifying parameter a subject expression
+// is rooted at: the expression, after identity-preserving unwrapping, is either
+// a reference to such a parameter or a chain of property, element and
+// optional-chain reads whose innermost receiver is one. Anything else — a call
+// result, a module binding, a nested callable's own parameter, a literal —
+// answers nil.
+func (p *project) subjectParameterLocked(subject *ast.Node, roots *parameterSubjectRoots) *int {
+	if roots == nil {
+		return nil
+	}
+	node := identityPreservingUnwrap(subject)
+	for node != nil && (ast.IsPropertyAccessExpression(node) || nodeKindName(node) == "ElementAccessExpression") {
+		node = identityPreservingUnwrap(node.Expression())
+	}
+	if node == nil || !ast.IsIdentifier(node) {
+		return nil
+	}
+	symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(node))
+	if symbol == nil {
+		return nil
+	}
+	index, ok := roots.byParameterSymbol[symbol]
+	if !ok {
+		return nil
+	}
+	return &index
+}
+
+// accessorFormSubjectParameterLocked states the subject parameter for exactly
+// the two read-accessor kinds ADR 0034 admits, in read position, on a property
+// or element access node. Every other form — a setter, a write position, a
+// `delete`, a destructuring pattern, a spread, an iteration, a coercion —
+// stays unstated, which the consumer reads as "refuse as before".
+func (p *project) accessorFormSubjectParameterLocked(
+	node *ast.Node,
+	kind typefacts.UncensusedInvokingFormKind,
+	roots *parameterSubjectRoots,
+) *int {
+	if roots == nil {
+		return nil
+	}
+	if kind != typefacts.UncensusedGetAccessor && kind != typefacts.UncensusedPropertyAccessUnknownAccessor {
+		return nil
+	}
+	if !ast.IsPropertyAccessExpression(node) && nodeKindName(node) != "ElementAccessExpression" {
+		return nil
+	}
+	if ast.GetAssignmentTarget(node) != nil {
+		return nil
+	}
+	if parent := node.Parent; parent != nil && nodeKindName(parent) == "DeleteExpression" {
+		return nil
+	}
+	return p.subjectParameterLocked(node.Expression(), roots)
+}
+
+// thisProtocolCallLocked states the receiver of a `.call` or `.apply` whose
+// resolved callee is the default library's Function.prototype member, together
+// with the parameter its `this` argument is rooted at (ADR 0034). The consumer
+// decides which receivers it has reviewed; this side only states the facts.
+func (p *project) thisProtocolCallLocked(
+	node *ast.Node,
+	callee *typefacts.ResolvedDeclaration,
+	roots *parameterSubjectRoots,
+) (*typefacts.ResolvedDeclaration, *int) {
+	if node == nil || !ast.IsCallExpression(node) || callee == nil || !callee.StandardLibrary {
+		return nil, nil
+	}
+	if callee.Name != "call" && callee.Name != "apply" {
+		return nil, nil
+	}
+	expression := identityPreservingUnwrap(node.Expression())
+	if expression == nil || !ast.IsPropertyAccessExpression(expression) {
+		return nil, nil
+	}
+	_, _, _, receiver := p.implementationCallTargetLocked(expression.Expression())
+	if receiver == nil {
+		return nil, nil
+	}
+	var thisParameter *int
+	if arguments := node.Arguments(); len(arguments) > 0 && exactArgumentSlots(node) > 0 {
+		thisParameter = p.subjectParameterLocked(arguments[0], roots)
+	}
+	return receiver, thisParameter
 }
 
 // classifyInvokingFormLocked answers the marker kind for one node, or false
