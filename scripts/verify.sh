@@ -250,6 +250,17 @@ SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
 step bun-test
 bun run --cwd packages/cli test
 
+# The ecosystem runner's own tests, among them the wall-time budget the pinned
+# report has to meet. Until 2026-09-06 nothing here ran them: a pin taken at
+# 224 s against the 150 s ceiling passed every gate below and failed only when
+# the runner suite was run by hand. The budget is a host fact as much as a
+# code fact — the same binary measures 85-105 s on mains and 170-200 s on
+# battery in Low Power Mode — so a failure here is judged with `pmset -g` in
+# hand (docs/precision-backlog.md, 2026-09-06).
+step ecosystem-runner-test
+bun packages/cli/node_modules/vitest/vitest.mjs run \
+  --config packages/cli/vitest.config.mjs scripts/ecosystem-benchmark/*.test.mjs
+
 # Phase 0 is immutable historical evidence. Validate its pinned bytes and
 # internal invariants; never regenerate it from the current dependency graph.
 step phase0-baseline

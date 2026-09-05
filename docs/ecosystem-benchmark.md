@@ -409,8 +409,9 @@ joined at process exit moved nothing off the slot.
 Two later facts about these numbers (2026-09-06). First, they depend on the
 host's power state: the binary that pinned 85 s on 2026-09-05 measured 172 s
 and 1,755 CPU-seconds the next day on the same host on battery in Low Power
-Mode, so a wall time is only comparable to the pin when `pmset -g` shows the
-same `powermode`. Second, with the recipe corpus the graph lanes run one
+Mode, and the current binary 197 s there against 104 s on mains an hour later,
+so a wall time is only comparable to the pin when `pmset -g` shows the same
+`powermode`. Second, with the recipe corpus the graph lanes run one
 probe-gate batch per node, and a batch's cost is its sessions (about 0.1 s of
 launch each) plus a census between sessions that hashes the pinned Node
 executable, the verifier image and the Type Facts image (263 MB); the batches

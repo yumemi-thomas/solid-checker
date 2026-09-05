@@ -18362,22 +18362,24 @@ numbers:
 
 | binary | wall | CPU (user + sys) |
 | --- | --- | --- |
-| previous pin's binary (`4c2edb41`), warm caches, today | 172 s | 1,755 s |
-| this change, today (the pin) | 197 s | 2,008 s |
+| previous pin's binary (`4c2edb41`), warm caches, battery, Low Power Mode | 172 s | 1,755 s |
+| this change, battery, Low Power Mode | 197 s | 2,008 s |
+| this change, mains, `powermode 0` (**the pin**) | 104 s | 1,178 s |
 | previous pin as recorded (2026-09-05, same binary) | 85 s | — |
 
-The same binary that pinned 85 s takes 172 s on this host today, so the ceiling
-cannot be judged from today's runs; this change costs about 15 % of wall and
-14 % of CPU over the previous binary, most of it the vetoes that now actually
+The same binary that pinned 85 s takes 172 s on this host on battery, so a
+battery run cannot be judged against the ceiling; this change costs about 15 %
+of wall and 14 % of CPU over the previous binary, most of it the vetoes that now actually
 run. Of the roughly 2,000 CPU-seconds, the probe gates are about 400 thread-
 seconds (census hashing 209, of which the pinned Node executable 121; launches
 202) plus the Node sessions' own CPU; the remainder is acquisition, proposal
-generation and finalization, as before. The pin was retaken with this change
-(statuses unchanged, 368 certified / 30 refused; the buckets above) and records
-today's wall; it has to be retaken on mains power before the budget test can
-pass, and the runner's suite should then join `make verify` — a step was drafted
-and withdrawn from this change because it would fail on the host state, not on
-the code. What would move the CPU itself is a census policy question, not a
+generation and finalization, as before. The pin was first retaken on
+battery (197 s) and then, once the host was on mains, again: 104 s, statuses
+unchanged (368 certified / 30 refused, the buckets above), under the ceiling,
+and that is the pin. The runner's suite now runs in `make verify`
+(`ecosystem-runner-test`), so a pin over the ceiling fails the handoff gate
+instead of a hand-run test; a failure there is read with `pmset -g` in hand.
+What would move the CPU itself is a census policy question, not a
 tuning one: hashing the three pinned images (263 MB) between every session is
 what the census promises, and hashing them once per batch or dropping the
 producer image (re-verified against its pin before every producer launch
