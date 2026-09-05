@@ -250,7 +250,28 @@ Bun install invocations it needs per probe:
 ```sh
 make ecosystem-sentinel     # the pinned regression subset
 make ecosystem-benchmark    # every row's every probe
+make ecosystem-regression   # every row, compared against the pinned report; fails on a lost receipt
 ```
+
+`ecosystem-regression` is the certification regression gate. It runs the same
+full corpus as `ecosystem-benchmark`, writes its reports under
+`rust/target/ecosystem-regression/` so the pinned `benchmarks/ecosystem/report.json`
+is never moved by a gate run, and evaluates
+`scripts/ecosystem-benchmark/certification-regression-thresholds.json`, whose one
+rule is `maxCertificationRegressions: 0`: no row the pin certified may come back
+uncertified (refused, infrastructure failure, or not attempted at all). The
+comparison is the report's `combined.baseline.certificationRegressions`, which
+is separate from the generation-outcome `regressions` because the two move
+independently -- a row keeps emitting a complete contract while its receipt is
+refused. It exists because twelve receipts were lost between the 2026-09-04 pin
+and commit `01b84ada` with every other gate green: `make verify` does not run
+the corpus (registry access, several minutes of compute), and the three-row
+contract corpus cannot see a receipt lost in a row it does not contain. Run it
+before landing a change to the certifier, the Type Facts producer, the
+generator, or this runner; repinning remains a deliberate
+`make ecosystem-benchmark`. The threshold refuses a run that supplied no
+`--baseline` rather than passing it, since a ceiling on lost receipts means
+nothing without the pin.
 
 Reports are named for the scope that produced them. Only an unfiltered run
 writes the canonical `benchmarks/ecosystem/report.json` and `report.md`;
@@ -271,6 +292,26 @@ measure against the possibly-stale checked-in `bin/solid-checker-rust`. The
 sentinel uses a fresh debug build to preserve its deliberate timeout-class
 probe; the full corpus uses a fresh release build so its duration represents
 shipped package generation. See `scripts/ecosystem-benchmark/README.md`.
+
+A Solid 2 probe's install is completed with `@solidjs/web` at the same version
+as its pinned `solid-js` when the manifest row pinned `solid-js` alone and the
+manifest's release catalog lists that `@solidjs/web` version
+(`solidRuntimeCompletion` in `run.mjs`). A Solid 2 application always installs
+the two together -- the DOM half left `solid-js/web` for its own package -- and
+a package whose runtime imports `@solidjs/web` routinely declares only
+`solid-js` as a peer: `@tanstack/solid-query@6.0.0-rc.0` and
+`@tanstack/solid-query-persist-client@6.0.0-rc.0` did, and installing their
+declared peers alone left the import unresolved, so the checker refused all
+four of their rows with "`@solidjs/web` is not installed above …", a statement
+about the benchmark's environment rather than the package. The result records
+what was added under `runtimeCompletion` (`{}` when the pin was installed as
+is) and `installedVersions` shows it; `solid` stays the manifest's own pin.
+Solid 1 probes are never completed, since `solid-js/web` ships inside
+`solid-js` there, and a `solid-js` version whose `@solidjs/web` twin the
+discovery never saw is not substituted. The refusals this does *not* touch are
+the genuine ones: `@solid-primitives/favicon` and `drag-drop` import
+`solid-js/web`, which `solid-js@2` no longer exports, and stay refused as
+`dependency-target-not-exported`.
 
 The runner uses up to eight workers, bounded by the host's available CPU count,
 and accepts `--concurrency N` for an explicit comparison. Reports retain

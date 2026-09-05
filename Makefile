@@ -275,4 +275,23 @@ ecosystem-benchmark: build-checker-release
 	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 600 --attempt-certification \
 	  --thresholds scripts/ecosystem-benchmark/phase16-thresholds.json
 
-.PHONY: ecosystem-discover ecosystem-benchmark-test ecosystem-sentinel ecosystem-benchmark
+# The certification regression gate: the same full run as ecosystem-benchmark,
+# compared against the pinned benchmarks/ecosystem/report.json and failing on
+# any row the pin certified that this commit does not. It writes its reports
+# under rust/target so the pin is never moved by a gate run; repinning stays a
+# deliberate `make ecosystem-benchmark`. This is what a change to the certifier,
+# the producer, the generator, or the runner runs before it lands: `make verify`
+# does not include it (it needs the registry and several minutes of compute),
+# and the three-row corpus cannot see a receipt lost elsewhere in the corpus --
+# twelve were lost between the 2026-09-04 pin and 01b84ada with every gate green.
+ecosystem-regression: build-checker-release
+	mkdir -p "$(CURDIR)/rust/target/ecosystem-regression"
+	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
+	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 600 --attempt-certification \
+	  --baseline benchmarks/ecosystem/report.json \
+	  --thresholds scripts/ecosystem-benchmark/certification-regression-thresholds.json \
+	  --json "$(CURDIR)/rust/target/ecosystem-regression/report.json" \
+	  --markdown "$(CURDIR)/rust/target/ecosystem-regression/report.md"
+
+.PHONY: ecosystem-discover ecosystem-benchmark-test ecosystem-sentinel ecosystem-benchmark ecosystem-regression

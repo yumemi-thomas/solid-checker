@@ -10,10 +10,18 @@ is the short day-to-day operator reference.
 make ecosystem-discover    # network: refresh manifest.json from the registry
 make ecosystem-sentinel    # no registry metadata: run the pinned sentinel subset
 make ecosystem-benchmark   # no registry metadata: run every row's every probe
+make ecosystem-regression  # every row against the pinned report; exit 1 on any lost receipt
 ```
 
+`ecosystem-regression` is the pre-merge certification gate: the full corpus
+compared with `--baseline benchmarks/ecosystem/report.json` under
+`certification-regression-thresholds.json` (`maxCertificationRegressions: 0`),
+writing under `rust/target/ecosystem-regression/` so it never moves the pin.
+See "Discovery and execution" in `docs/ecosystem-benchmark.md`.
+
 `ecosystem-discover` is the only one of these that touches the network on its
-own account; `ecosystem-sentinel` and `ecosystem-benchmark` read
+own account; `ecosystem-sentinel`, `ecosystem-benchmark` and
+`ecosystem-regression` read
 `manifest.json` and only reach the network to `bun install` each probe's exact
 pinned versions.
 

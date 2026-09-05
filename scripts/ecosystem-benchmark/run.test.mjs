@@ -25,11 +25,48 @@ import {
   recommendedConcurrency,
   resolveProbeIdFilter,
   resolveRegistryCache,
+  solidRuntimeCompletion,
   unknownExplicitProbeIds,
   runBenchmark,
   runScope,
   startProgressHeartbeat
 } from "./run.mjs";
+
+test("a Solid 2 probe pinned to solid-js alone is completed with the same-version @solidjs/web", () => {
+  const solidReleases = {
+    "solid-js": { v1: ["1.9.14"], v2: ["2.0.0-rc.0", "2.0.0-rc.3"] },
+    "@solidjs/web": { v1: [], v2: ["2.0.0-rc.0", "2.0.0-rc.3"] }
+  };
+  const row = { solidTarget: "solid2" };
+  // `@tanstack/solid-query@6.0.0-rc.0`: peers `solid-js` only, imports `@solidjs/web`.
+  assert.deepEqual(
+    solidRuntimeCompletion(row, { solid: { "solid-js": "2.0.0-rc.3" } }, solidReleases),
+    { "@solidjs/web": "2.0.0-rc.3" }
+  );
+  // Already pinned: nothing to add.
+  assert.deepEqual(
+    solidRuntimeCompletion(
+      row,
+      { solid: { "solid-js": "2.0.0-rc.3", "@solidjs/web": "2.0.0-rc.3" } },
+      solidReleases
+    ),
+    {}
+  );
+  // A version the pinned release catalog never saw is not substituted.
+  assert.deepEqual(
+    solidRuntimeCompletion(row, { solid: { "solid-js": "2.0.0-rc.9" } }, solidReleases),
+    {}
+  );
+  // No catalog, no completion.
+  assert.deepEqual(solidRuntimeCompletion(row, { solid: { "solid-js": "2.0.0-rc.3" } }, null), {});
+  // Solid 1 ships `solid-js/web` inside `solid-js`; never completed.
+  assert.deepEqual(
+    solidRuntimeCompletion({ solidTarget: "solid1" }, { solid: { "solid-js": "1.9.14" } }, solidReleases),
+    {}
+  );
+  // A probe with no solid-js pin (`@solidjs/diagnostics`) has nothing to pair with.
+  assert.deepEqual(solidRuntimeCompletion(row, { solid: {} }, solidReleases), {});
+});
 
 // ---------------------------------------------------------------------------
 // Fixtures: a tiny manifest with a handful of probes, enough to exercise

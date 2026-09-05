@@ -316,9 +316,35 @@ function packageInstallPath(projectDir, packageName) {
   return join(projectDir, "node_modules", ...packageName.split("/"));
 }
 
-function buildSpecs(row, probe) {
+// The runtime packages a Solid 2 probe's environment is completed with beyond
+// what the manifest row pinned.
+//
+// A Solid 2 application installs `solid-js` and `@solidjs/web` together --
+// the DOM half moved out of `solid-js/web` into its own package -- and a
+// package whose runtime imports `@solidjs/web` routinely declares only
+// `solid-js` as a peer (`@tanstack/solid-query@6.0.0-rc.0` and its
+// persist-client are the corpus cases). Installing the row's declared peers
+// alone then leaves that import unresolved and the checker refuses the row
+// with "`@solidjs/web` is not installed", which describes the benchmark's
+// environment rather than the package. The completion is the same-version
+// release, and only when the pinned manifest's release catalog lists it, so it
+// never substitutes a version the discovery did not see. A Solid 1 probe is
+// never completed: `solid-js/web` is part of `solid-js` there. The result
+// records what was added under `runtimeCompletion`; `solid` stays the
+// manifest's own pin.
+export function solidRuntimeCompletion(row, probe, solidReleases = null) {
+  if (row?.solidTarget !== "solid2") return {};
+  const pinned = probe?.solid ?? {};
+  const solidJs = pinned["solid-js"];
+  if (typeof solidJs !== "string" || "@solidjs/web" in pinned) return {};
+  const webReleases = solidReleases?.["@solidjs/web"]?.v2;
+  if (!Array.isArray(webReleases) || !webReleases.includes(solidJs)) return {};
+  return { "@solidjs/web": solidJs };
+}
+
+function buildSpecs(row, probe, completion = {}) {
   const specs = [`${row.package}@${row.version}`];
-  for (const [name, version] of Object.entries(probe.solid ?? {})) {
+  for (const [name, version] of Object.entries({ ...(probe.solid ?? {}), ...completion })) {
     specs.push(`${name}@${version}`);
   }
   return specs;
@@ -328,9 +354,9 @@ function buildSpecs(row, probe) {
 // probed package itself carries an integrity pin in the manifest row; the
 // Solid runtime packages are checked by version only (verifyInstall already
 // skips the integrity comparison whenever `want.integrity` is falsy).
-function buildExpectedVersions(row, probe) {
+function buildExpectedVersions(row, probe, completion = {}) {
   const expected = { [row.package]: { version: row.version, integrity: row.integrity ?? null } };
-  for (const [name, version] of Object.entries(probe.solid ?? {})) {
+  for (const [name, version] of Object.entries({ ...(probe.solid ?? {}), ...completion })) {
     expected[name] = { version, integrity: null };
   }
   return expected;
@@ -500,6 +526,9 @@ export function probeOutcome(className) {
 function buildResult({
   row,
   probe,
+  // Runtime packages `solidRuntimeCompletion` added beyond the manifest pin;
+  // `{}` for a row installed as pinned, and for an install that never ran.
+  runtimeCompletion = {},
   installedVersions,
   integrityVerified,
   declaredEntrypoints,
@@ -543,6 +572,9 @@ function buildResult({
     probeKind: probe.kind,
     channel: probe.channel,
     solid: probe.solid,
+    // Runtime packages added beyond the manifest pin (see
+    // `solidRuntimeCompletion`); `{}` when the pin was installed as is.
+    runtimeCompletion,
     installedVersions,
     integrityVerified,
     declaredEntrypoints,
@@ -685,7 +717,6 @@ function readCertificationAttempt(
       // neither a demand nor a gate, and the row certifies with that domain
       // open. Read off the audit's `withheldClosures`; an older audit has none.
       withheldClosures: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures.length : 0,
-    withheldClosureReasons: withheldClosureReasons(audit),
       withheldClosureReasons: withheldClosureReasons(audit),
       ordinaryAnalysis: audit?.ordinaryAnalysis ?? null
     };
@@ -761,13 +792,14 @@ function buildInfraFailureResult({ row, probe, error, phase, durationMs }) {
 
 async function runProbe(
   { row, probe },
-  { timeoutMs, keepTemp, attemptCertification, projectLease = null },
+  { timeoutMs, keepTemp, attemptCertification, projectLease = null, solidReleases = null },
   hooks
 ) {
   const now = hooks.now ?? Date.now;
   const overallStart = now();
-  const specs = buildSpecs(row, probe);
-  const expected = buildExpectedVersions(row, probe);
+  const runtimeCompletion = solidRuntimeCompletion(row, probe, solidReleases);
+  const specs = buildSpecs(row, probe, runtimeCompletion);
+  const expected = buildExpectedVersions(row, probe, runtimeCompletion);
 
   let project;
   try {
@@ -982,6 +1014,7 @@ async function runProbe(
     return buildResult({
       row,
       probe,
+      runtimeCompletion,
       installedVersions,
       integrityVerified: true,
       declaredEntrypoints,
@@ -1326,7 +1359,8 @@ export async function runBenchmark({ manifest, probeIds = null, options = {}, ho
               timeoutMs,
               keepTemp,
               attemptCertification: false,
-              projectLease
+              projectLease,
+              solidReleases: manifest.solidReleases ?? null
             },
             hooks
           );

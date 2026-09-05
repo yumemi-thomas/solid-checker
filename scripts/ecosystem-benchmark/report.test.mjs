@@ -712,6 +712,104 @@ test("a partial contract is never counted as a success, and its refusals are rep
   );
 });
 
+test("a certified baseline row that no longer certifies is a certification regression the threshold refuses", () => {
+  const attempt = (status, reason = null) => ({
+    attempted: true,
+    status,
+    ...(reason ? { reason } : {})
+  });
+  // Both rows still emit a complete contract, so the generation comparison
+  // sees no movement at all; only the receipt moved.
+  const results = [
+    {
+      ...makeResult({ package: "@corvu/drawer", version: "0.2.4", family: "corvu", class: "success" }),
+      certificationAttempt: attempt("refused", "published graph planning failed: ambiguous")
+    },
+    {
+      ...makeResult({ package: "@corvu/dialog", version: "0.2.4", family: "corvu", class: "success" }),
+      certificationAttempt: attempt("certified")
+    },
+    // Certified now, not attempted in the baseline: a fix, never a regression.
+    {
+      ...makeResult({ package: "@corvu/utils", version: "0.4.2", family: "corvu", class: "success" }),
+      certificationAttempt: attempt("certified")
+    }
+  ];
+  const baseline = {
+    results: [
+      {
+        probeId: "@corvu/drawer@0.2.4|solid1|only",
+        package: "@corvu/drawer",
+        outcome: "success",
+        class: "success",
+        certificationAttempt: attempt("certified")
+      },
+      {
+        probeId: "@corvu/dialog@0.2.4|solid1|only",
+        package: "@corvu/dialog",
+        outcome: "success",
+        class: "success",
+        certificationAttempt: attempt("certified")
+      },
+      {
+        probeId: "@corvu/utils@0.4.2|solid1|only",
+        package: "@corvu/utils",
+        outcome: "success",
+        class: "success"
+      }
+    ]
+  };
+  const report = buildReport({
+    manifest: makeManifest({ results }),
+    results,
+    baseline,
+    startedAt: "2026-09-05T09:00:00.000Z",
+    finishedAt: "2026-09-05T09:01:00.000Z"
+  });
+
+  assert.equal(report.combined.baseline.regressionCount, 0, "generation saw nothing move");
+  assert.equal(report.combined.baseline.certificationRegressionCount, 1);
+  assert.deepEqual(report.combined.baseline.certificationRegressions, [
+    {
+      probeId: "@corvu/drawer@0.2.4|solid1|only",
+      package: "@corvu/drawer",
+      previousStatus: "certified",
+      currentStatus: "refused",
+      currentReason: "published graph planning failed: ambiguous"
+    }
+  ]);
+  assert.equal(report.combined.baseline.certificationFixCount, 1);
+  assert.equal(report.combined.baseline.certificationFixes[0].probeId, "@corvu/utils@0.4.2|solid1|only");
+  assert.equal(report.combined.baseline.certificationFixes[0].previousStatus, "not attempted");
+
+  const markdown = renderMarkdown(report);
+  assert.match(markdown, /- Certification regressions: 1/);
+  assert.match(markdown, /@corvu\/drawer@0\.2\.4\|solid1\|only: certified -> refused/);
+
+  const refused = evaluateThresholds(report, { global: { maxCertificationRegressions: 0 } });
+  assert.equal(refused.ok, false);
+  assert.deepEqual(refused.failures[0], {
+    scope: "global",
+    metric: "certificationRegressions",
+    actual: 1,
+    maximum: 0,
+    probes: ["@corvu/drawer@0.2.4|solid1|only"]
+  });
+  assert.equal(evaluateThresholds(report, { global: { maxCertificationRegressions: 1 } }).ok, true);
+
+  // The ceiling means nothing without a pin to compare against, so a run that
+  // supplied no baseline fails the threshold rather than passing it silently.
+  const unpinned = buildReport({
+    manifest: makeManifest({ results }),
+    results,
+    startedAt: "2026-09-05T09:00:00.000Z",
+    finishedAt: "2026-09-05T09:01:00.000Z"
+  });
+  const unbaselined = evaluateThresholds(unpinned, { global: { maxCertificationRegressions: 0 } });
+  assert.equal(unbaselined.ok, false);
+  assert.equal(unbaselined.failures[0].note, "no baseline supplied");
+});
+
 test("a baseline success that becomes a partial contract is a regression", () => {
   const results = [
     makeResult({ package: "@kobalte/core", version: "0.13.13", family: "kobalte", class: "partial-success" })

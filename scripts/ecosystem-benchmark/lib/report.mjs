@@ -897,12 +897,45 @@ function buildBaselineComparison(baseline, currentResults) {
   newProbes.sort(compareStrings);
   removedProbes.sort(compareStrings);
 
+  // The certification half, compared separately. `outcome` is the generation
+  // result and says nothing about whether the row's receipt was issued: a row
+  // can keep emitting a complete contract while its certification goes from
+  // certified to refused, and that is the loss that matters once the corpus is
+  // measured by receipts. Twelve rows moved exactly that way between the
+  // 2026-09-04 pin and the commits that followed it, and nothing here saw it.
+  // A row the baseline certified that this run did not attempt counts too: an
+  // unattempted row issues no receipt either.
+  const certificationRegressions = [];
+  const certificationFixes = [];
+  const certified = result => result?.certificationAttempt?.status === "certified";
+  for (const [probeId, current] of currentByProbe) {
+    const prior = baselineByProbe.get(probeId);
+    if (!prior) continue;
+    const was = certified(prior);
+    const is = certified(current);
+    if (was === is) continue;
+    const entry = {
+      probeId,
+      package: current.package,
+      previousStatus: prior.certificationAttempt?.status ?? "not attempted",
+      currentStatus: current.certificationAttempt?.status ?? "not attempted",
+      currentReason: is ? null : (current.certificationAttempt?.reason ?? null)
+    };
+    (was ? certificationRegressions : certificationFixes).push(entry);
+  }
+  certificationRegressions.sort((left, right) => compareStrings(left.probeId, right.probeId));
+  certificationFixes.sort((left, right) => compareStrings(left.probeId, right.probeId));
+
   return {
     provided: true,
     regressionCount: regressions.length,
     fixCount: fixes.length,
     regressions,
     fixes,
+    certificationRegressionCount: certificationRegressions.length,
+    certificationFixCount: certificationFixes.length,
+    certificationRegressions,
+    certificationFixes,
     newProbes,
     removedProbes
   };
@@ -1519,6 +1552,18 @@ function renderCombinedSection(combined) {
       // becoming complete, and printing "-> success" would overstate it.
       lines.push(`  - ${entry.probeId}: ${entry.previousClass} -> ${entry.currentClass}`);
     }
+    // Older reports built without the certification comparison carry no
+    // counts here; render nothing rather than a misleading zero.
+    if (typeof combined.baseline.certificationRegressionCount === "number") {
+      lines.push(`- Certification regressions: ${combined.baseline.certificationRegressionCount}`);
+      for (const entry of combined.baseline.certificationRegressions) {
+        lines.push(`  - ${entry.probeId}: ${entry.previousStatus} -> ${entry.currentStatus}`);
+      }
+      lines.push(`- Certification fixes: ${combined.baseline.certificationFixCount}`);
+      for (const entry of combined.baseline.certificationFixes) {
+        lines.push(`  - ${entry.probeId}: ${entry.previousStatus} -> ${entry.currentStatus}`);
+      }
+    }
     if (combined.baseline.newProbes.length > 0) lines.push(`- New probes: ${combined.baseline.newProbes.join(", ")}`);
     if (combined.baseline.removedProbes.length > 0) {
       lines.push(`- Removed probes: ${combined.baseline.removedProbes.join(", ")}`);
@@ -1637,6 +1682,33 @@ export function evaluateThresholds(report, thresholds = {}) {
         metric: "generatablePercentage",
         actual,
         minimum: globalGeneratable
+      });
+    }
+  }
+
+  // A ceiling on rows the baseline certified that this run did not. It is
+  // meaningful only against a baseline, so a threshold file that names it
+  // while the run supplied none is a configuration failure, not a pass: the
+  // gate this exists for is "no receipt lost against the pinned report", and
+  // silence about the pin cannot satisfy it.
+  const maxCertificationRegressions = thresholds?.global?.maxCertificationRegressions;
+  if (typeof maxCertificationRegressions === "number") {
+    const baseline = report.combined?.baseline;
+    if (!baseline?.provided) {
+      failures.push({
+        scope: "global",
+        metric: "certificationRegressions",
+        actual: null,
+        maximum: maxCertificationRegressions,
+        note: "no baseline supplied"
+      });
+    } else if ((baseline.certificationRegressionCount ?? 0) > maxCertificationRegressions) {
+      failures.push({
+        scope: "global",
+        metric: "certificationRegressions",
+        actual: baseline.certificationRegressionCount,
+        maximum: maxCertificationRegressions,
+        probes: baseline.certificationRegressions.map(entry => entry.probeId)
       });
     }
   }
