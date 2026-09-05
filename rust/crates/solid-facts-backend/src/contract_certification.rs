@@ -12,7 +12,8 @@ use solid_reactive_ir::contract_semantics::{
     ClaimDomain, ClaimPath, ContractProposal, NormalizedContract, SemanticClaimPath,
     certification::{
         CertificationCandidates, DemandPlanningError, DependencyDemandInput, ProofDemandGraph,
-        ProofFamily, ProofWitnessVariant, WitnessBinding, WitnessCoverage, proof_policy_2,
+        ProofDemandSubject, ProofFamily, ProofWitnessVariant, WitnessBinding, WitnessCoverage,
+        proof_policy_2,
     },
 };
 use std::{
@@ -44,6 +45,7 @@ mod module_closure;
 mod policy2_receipt;
 mod probe_gates;
 mod probe_harness;
+mod synthesized_vetoes;
 mod type_facts;
 pub use type_facts::report_certification_timing;
 mod witness_wire;
@@ -539,20 +541,65 @@ impl CertificationPlan {
         revocation_epoch: u64,
         probes: Option<&ProbeHarnessConfiguration>,
     ) -> Result<FinalizedPolicy2Contract, Policy2FinalizationError> {
-        let gated = self.recipe_gated(probes.map(ProbeHarnessConfiguration::recipe_corpus))?;
-        let plan = gated.plan();
-        let evidence = type_facts::acquire_and_verify_export_values(plan, pin)?;
-        let probe_gates = finalization::authenticate_probe_gates(plan, probes, pin)?;
-        finalization::finalize_value_only(
-            plan,
-            canonical_proposal,
-            &evidence,
-            &probe_gates,
-            pin,
-            issuer,
-            revocation_epoch,
-        )
-        .map(|finalized| finalized.with_withheld_closures(gated.withheld().to_vec()))
+        // ADR 0036. Each pass either finalizes or withdraws at least one
+        // candidate by name and re-plans, so the loop is bounded by the
+        // candidate count; the one extra pass is the synthesis pass, taken at
+        // most once.
+        let mut already_withheld: Vec<WithheldClosure> = Vec::new();
+        let mut synthesized: Option<synthesized_vetoes::SynthesizedCorpus> = None;
+        loop {
+            let configuration = synthesized
+                .as_ref()
+                .map(synthesized_vetoes::SynthesizedCorpus::configuration)
+                .or(probes);
+            let gated = self.recipe_gated_with(
+                configuration.map(ProbeHarnessConfiguration::recipe_corpus),
+                &already_withheld,
+            )?;
+            let plan = gated.plan();
+            let evidence = match type_facts::acquire_and_verify_export_values(plan, pin) {
+                Ok(evidence) => evidence,
+                Err(error) => match census_refusal_withholding(plan, &error) {
+                    Some(record) => {
+                        already_withheld.push(record);
+                        continue;
+                    }
+                    None => return Err(error.into()),
+                },
+            };
+            if synthesized.is_none()
+                && let Some(base) = probes
+                && let Some(corpus) =
+                    synthesized_vetoes::synthesize(plan, &evidence, base, gated.withheld())
+                        .map_err(|error| {
+                            Policy2FinalizationError::VetoSynthesis(error.to_string())
+                        })?
+            {
+                synthesized = Some(corpus);
+                continue;
+            }
+            let probe_gates = match finalization::authenticate_probe_gates(plan, configuration, pin)
+            {
+                Ok(gates) => gates,
+                Err(error) => match incomplete_gate_withholding(plan, &error) {
+                    Some(record) => {
+                        already_withheld.push(record);
+                        continue;
+                    }
+                    None => return Err(error),
+                },
+            };
+            return finalization::finalize_value_only(
+                plan,
+                canonical_proposal,
+                &evidence,
+                &probe_gates,
+                pin,
+                issuer,
+                revocation_epoch,
+            )
+            .map(|finalized| finalized.with_withheld_closures(gated.withheld().to_vec()));
+        }
     }
 
     /// Atomically publishes a final result against the exact resolved import
@@ -595,9 +642,100 @@ impl CertificationPlan {
     }
 }
 
+/// ADR 0036 § 1: the proposed closure candidate a Type Facts refusal names,
+/// when the refusal is the census declining to decide it — an unsupported or
+/// locally open `DomainExhaustiveness` demand whose subject is a proposable
+/// call-domain closure. Any other error is `None` and keeps refusing the row.
+fn census_refusal_withholding(
+    plan: &CertificationPlan,
+    error: &TypeFactsCertificationError,
+) -> Option<WithheldClosure> {
+    let mut error = error;
+    while let TypeFactsCertificationError::TransactionStage { source, .. }
+    | TypeFactsCertificationError::GraphNodeStage { source, .. } = error
+    {
+        error = source;
+    }
+    let (demand_id, reason) = match error {
+        TypeFactsCertificationError::UnsupportedDemand { demand, reason }
+        | TypeFactsCertificationError::FamilyOpen { demand, reason } => (demand, reason),
+        _ => return None,
+    };
+    let demand = plan
+        .demand_graph()
+        .demands()
+        .iter()
+        .find(|demand| demand.id().as_str() == demand_id.as_str())?;
+    if demand.family() != ProofFamily::DomainExhaustiveness {
+        return None;
+    }
+    let ProofDemandSubject::DomainClosure {
+        subject,
+        semantic_claim_id,
+    } = demand.subject()
+    else {
+        return None;
+    };
+    let SemanticClaimPath::Domain(ClaimPath::Call(domain)) = subject.path else {
+        return None;
+    };
+    if !domain.is_proposable() {
+        return None;
+    }
+    Some(WithheldClosure {
+        artifact_case: subject.artifact_case.clone(),
+        export: subject.export.clone(),
+        domain: type_facts::call_claim_domain_name(domain).to_owned(),
+        semantic_claim_id: semantic_claim_id.to_string(),
+        reason: format!("{WITHHELD_CLOSURE_CENSUS_REFUSED_PREFIX}{reason}"),
+    })
+}
+
+/// ADR 0036 § 2: the candidate whose mandatory veto ended in an error or a
+/// timeout. A contradiction is not this — it refuses the row — and so is every
+/// other probe error.
+fn incomplete_gate_withholding(
+    plan: &CertificationPlan,
+    error: &Policy2FinalizationError,
+) -> Option<WithheldClosure> {
+    let schedule = plan.probe_gate_schedule().ok()?;
+    let (gate, detail) = match error {
+        Policy2FinalizationError::Probe(ProbeGateError::IncompleteGate(gate_id)) => (
+            schedule.gates().iter().find(|gate| gate.id() == gate_id)?,
+            String::new(),
+        ),
+        Policy2FinalizationError::ProbeHarness(ProbeHarnessError::SessionTimeout { claim_id }) => (
+            schedule
+                .gates()
+                .iter()
+                .find(|gate| gate.semantic_claim_id() == claim_id)?,
+            " (the worker did not report within the policy budget)".to_owned(),
+        ),
+        _ => return None,
+    };
+    let gate_id = gate.id();
+    let subject = gate.subject();
+    let SemanticClaimPath::Domain(ClaimPath::Call(domain)) = subject.path else {
+        return None;
+    };
+    Some(WithheldClosure {
+        artifact_case: subject.artifact_case.clone(),
+        export: subject.export.clone(),
+        domain: type_facts::call_claim_domain_name(domain).to_owned(),
+        semantic_claim_id: gate.semantic_claim_id().to_owned(),
+        reason: format!("{WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX}{gate_id}{detail}"),
+    })
+}
+
 /// Finalizes a complete set of alternative artifact cases while sharing only
 /// immutable Type Facts setup. Evidence and receipts remain one-per-plan and
 /// each is checked against its own demand graph before this returns anything.
+///
+/// ADR 0036: the shared batch is the fast path. A plan the batch cannot take
+/// to a receipt as planned — a census refusal, an incomplete veto, or a
+/// candidate a synthesized veto could serve — is finalized on its own through
+/// [`CertificationPlan::certify_value_only`], whose passes withdraw and re-plan;
+/// the other plans keep their batch evidence.
 pub fn certify_value_only_case_set(
     plans: &[&CertificationPlan],
     canonical_proposal: &[u8],
@@ -607,21 +745,54 @@ pub fn certify_value_only_case_set(
     probes: Option<&ProbeHarnessConfiguration>,
 ) -> Result<Vec<FinalizedPolicy2Contract>, Policy2FinalizationError> {
     let recipe_corpus = probes.map(ProbeHarnessConfiguration::recipe_corpus);
+    let individually = |plan: &CertificationPlan| {
+        plan.certify_value_only(canonical_proposal, pin, issuer, revocation_epoch, probes)
+    };
     let gated = plans
         .iter()
         .map(|plan| plan.recipe_gated(recipe_corpus))
         .collect::<Result<Vec<_>, _>>()?;
     let gated_plans = gated.iter().map(RecipeGatedPlan::plan).collect::<Vec<_>>();
-    let evidence = type_facts::acquire_and_verify_export_values_batch(&gated_plans, pin)?;
+    let evidence = match type_facts::acquire_and_verify_export_values_batch(&gated_plans, pin) {
+        Ok(evidence) => evidence,
+        // A census refusal in the batch names one plan's candidate; the
+        // per-plan loop withdraws it and re-plans that plan, and re-acquires
+        // the others on their own.
+        Err(error)
+            if gated_plans
+                .iter()
+                .any(|plan| census_refusal_withholding(plan, &error).is_some()) =>
+        {
+            return plans.iter().map(|plan| individually(plan)).collect();
+        }
+        Err(error) => return Err(error.into()),
+    };
     gated
         .iter()
         .zip(evidence)
         .map(|(gated, evidence)| {
             let plan = gated.plan();
+            // A candidate withheld for want of a recipe may be served by a
+            // synthesized veto, which needs this plan re-gated: the per-plan
+            // loop does that.
+            if probes.is_some()
+                && gated.withheld().iter().any(|record| {
+                    record.reason == WITHHELD_CLOSURE_NO_RECIPE
+                        && evidence.call_signature(&record.export).is_some()
+                })
+            {
+                return individually(plan);
+            }
             // Each alternative artifact case derives, runs, and authenticates
             // its own veto set; a batch never shares one plan's probe
             // authority with another.
-            let probe_gates = finalization::authenticate_probe_gates(plan, probes, pin)?;
+            let probe_gates = match finalization::authenticate_probe_gates(plan, probes, pin) {
+                Ok(gates) => gates,
+                Err(error) if incomplete_gate_withholding(plan, &error).is_some() => {
+                    return individually(plan);
+                }
+                Err(error) => return Err(error),
+            };
             finalization::finalize_value_only(
                 plan,
                 canonical_proposal,
@@ -783,8 +954,18 @@ pub struct WithheldClosure {
     pub reason: String,
 }
 
-/// The one reason recipe-gated planning withholds a candidate today.
+/// The reason recipe-gated planning withholds a candidate no corpus addresses.
 pub const WITHHELD_CLOSURE_NO_RECIPE: &str = "no recipe in corpus";
+
+/// ADR 0036 § 1: the prefix of the reason a candidate carries when the
+/// implementation census could not decide it. The census's own refusal text
+/// follows the prefix.
+pub const WITHHELD_CLOSURE_CENSUS_REFUSED_PREFIX: &str = "census refused: ";
+
+/// ADR 0036 § 2: the prefix of the reason a candidate carries when its veto
+/// run ended in an error or a timeout. The gate id follows the prefix. A
+/// *contradiction* never withholds; it refuses the row.
+pub const WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX: &str = "veto did not complete: gate ";
 
 /// A plan re-derived under a recipe corpus, with the candidates it withheld.
 pub struct RecipeGatedPlan {
@@ -923,6 +1104,19 @@ impl CertificationPlan {
         &self,
         recipe_corpus: Option<&Path>,
     ) -> Result<RecipeGatedPlan, RecipeGatingError> {
+        self.recipe_gated_with(recipe_corpus, &[])
+    }
+
+    /// [`Self::recipe_gated`] with candidates the transaction has already
+    /// withdrawn for a reason of its own (ADR 0036: a census that could not
+    /// decide the candidate, a veto run that did not complete). A candidate
+    /// named there is withheld with *that* reason and is not asked for a
+    /// recipe.
+    pub fn recipe_gated_with(
+        &self,
+        recipe_corpus: Option<&Path>,
+        already_withheld: &[WithheldClosure],
+    ) -> Result<RecipeGatedPlan, RecipeGatingError> {
         let corpus = recipe_corpus
             .map(|directory| probe_harness::RecipeCorpus::load(directory, self))
             .transpose()?;
@@ -943,6 +1137,13 @@ impl CertificationPlan {
                     export: closure.export.clone(),
                     reason: error.to_string(),
                 })?;
+            if let Some(record) = already_withheld
+                .iter()
+                .find(|record| record.semantic_claim_id == claim_id.as_str())
+            {
+                withheld.push(record.clone());
+                continue;
+            }
             if corpus
                 .as_ref()
                 .is_some_and(|corpus| corpus.recipe_for(claim_id.as_str()).is_some())
@@ -8639,7 +8840,7 @@ export const value = phantom;
             "schemaVersion": 1,
             "policy": {
                 "repeatRuns": 2,
-                "timeoutMillis": 60000,
+                "timeoutMillis": 10000,
                 "maxMicrotaskTurns": 4,
                 "maxMacrotaskTurns": 1,
                 "maxEvents": 64,
@@ -9309,12 +9510,25 @@ export const value = phantom;
                     matches!(schedule.inspect_outcomes(outcomes), Err(super::ProbeGateError::IncompleteGate(id)) if id == gate.id()),
                     "the exact TS gate must remain incomplete"
                 );
-                let Err(error) = tracer_certify(&plan, &pin, &configuration) else {
-                    panic!("the TypeScript source gate must block certification");
-                };
+                // ADR 0036 § 2: the incomplete gate withholds its candidate by
+                // name and the row certifies with the domain open; a passed
+                // census still does not waive the gate.
+                let finalized =
+                    tracer_certify(&plan, &pin, &configuration).unwrap_or_else(|error| {
+                        panic!("{name}: an incomplete veto withholds, it does not refuse: {error}")
+                    });
+                let withheld = finalized
+                    .withheld_closures()
+                    .iter()
+                    .find(|record| record.semantic_claim_id == gate.semantic_claim_id())
+                    .expect("the TypeScript gate's candidate is withheld");
                 assert!(
-                    matches!(&error, super::Policy2FinalizationError::Probe(super::ProbeGateError::IncompleteGate(id)) if id == gate.id()),
-                    "{name}: a passed census must not waive the gate: {error}"
+                    withheld
+                        .reason
+                        .starts_with(super::WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX)
+                        && withheld.reason.contains(gate.id()),
+                    "{name}: {}",
+                    withheld.reason
                 );
                 let issuer =
                     ConfiguredReceiptIssuer::persistent_local("controlled-inert-test", [23; 32])
@@ -9691,7 +9905,7 @@ export const value = phantom;
             "schemaVersion": 1,
             "policy": {
                 "repeatRuns": 2,
-                "timeoutMillis": 60000,
+                "timeoutMillis": 10000,
                 "maxMicrotaskTurns": 4,
                 "maxMacrotaskTurns": 1,
                 "maxAnimationFrameTurns": 4,
@@ -10880,27 +11094,54 @@ export const value = phantom;
         Some((plan, outcome))
     }
 
-    /// The census refusal for `export`, which must be an unsupported Type Facts
-    /// demand whose reason contains every `needle`.
-    fn assert_census_refuses(export: &str, needles: &[&str]) {
+    /// The census's refusal of `export`'s `creates` candidate, which since
+    /// ADR 0036 withholds the candidate by name — reason `census refused: …`
+    /// carrying every `needle` — and leaves the row certified with the domain
+    /// open, rather than refusing the row.
+    fn assert_census_withholds(export: &str, needles: &[&str]) {
         let Some((_, outcome)) = census_certify(export, Some("refused-export.mjs")) else {
             return;
         };
-        let Err(error) = outcome else {
-            panic!("{export}: the census must refuse this export by name");
-        };
-        let rendered = error.to_string();
+        let finalized = outcome.unwrap_or_else(|error| {
+            panic!("{export}: a census refusal withholds the candidate, the row certifies: {error}")
+        });
+        assert_withheld_by_census(&finalized, export, "creates", needles);
+    }
+
+    /// One withheld record for (`export`, `domain`) whose reason is the census's
+    /// own refusal text, and the domain open in the canonical main.
+    fn assert_withheld_by_census(
+        finalized: &super::FinalizedPolicy2Contract,
+        export: &str,
+        domain: &str,
+        needles: &[&str],
+    ) {
+        let records = finalized
+            .withheld_closures()
+            .iter()
+            .filter(|record| record.export == export && record.domain == domain)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            records.len(),
+            1,
+            "{export}: exactly one withheld {domain} record"
+        );
+        let reason = &records[0].reason;
         assert!(
-            matches!(&error, super::Policy2FinalizationError::TypeFacts(_))
-                && rendered.contains("is unsupported"),
-            "{export}: the refusal must be an unsupported Type Facts demand: {rendered}"
+            reason.starts_with(super::WITHHELD_CLOSURE_CENSUS_REFUSED_PREFIX),
+            "{export}: the withholding must be the census's: {reason}"
         );
         for needle in needles {
             assert!(
-                rendered.contains(needle),
-                "{export}: the refusal must name {needle:?}: {rendered}"
+                reason.contains(needle),
+                "{export}: the reason must name {needle:?}: {reason}"
             );
         }
+        let closed = match domain {
+            "creates" => creates_is_closed_in(finalized.canonical_main(), export),
+            _ => returns_is_closed_in(finalized.canonical_main(), export),
+        };
+        assert!(!closed, "{export}: a withheld {domain} stays open");
     }
 
     // ADR 0035: the `returns` census fixture, planned the same way as the
@@ -11030,8 +11271,9 @@ export const value = phantom;
         }
     }
 
-    /// ADR 0035: every export that yields a value refuses by name — the
-    /// completion form, or the value-carrying site with its reach.
+    /// ADR 0035: every export that yields a value is refused by the census by
+    /// name — the completion form, or the value-carrying site with its reach —
+    /// which since ADR 0036 withholds the candidate and certifies the row.
     #[test]
     fn the_probe_gate_tracer_returns_census_refuses_every_value_yielding_completion() {
         for (export, needles) in [
@@ -11053,21 +11295,10 @@ export const value = phantom;
             let Some((_, outcome)) = returns_census_certify(export, "refused-export.mjs") else {
                 return;
             };
-            let Err(error) = outcome else {
-                panic!("{export}: the returns census must refuse this export by name");
-            };
-            let rendered = error.to_string();
-            assert!(
-                matches!(&error, super::Policy2FinalizationError::TypeFacts(_))
-                    && rendered.contains("is unsupported"),
-                "{export}: the refusal must be an unsupported Type Facts demand: {rendered}"
-            );
-            for needle in needles {
-                assert!(
-                    rendered.contains(needle),
-                    "{export}: must name {needle:?}: {rendered}"
-                );
-            }
+            let finalized = outcome.unwrap_or_else(|error| {
+                panic!("{export}: a census refusal withholds the candidate (ADR 0036): {error}")
+            });
+            assert_withheld_by_census(&finalized, export, "returns", needles);
         }
     }
 
@@ -11258,13 +11489,27 @@ export const value = phantom;
         ) else {
             return;
         };
-        let Err(error) = tracer_certify(&plan, &pin, &configuration) else {
-            panic!("a primitive the project cannot resolve refuses the census");
-        };
+        // The census refusal itself, at acquisition — this plan carries an
+        // accepted dependency edge, so value-only finalization is not where it
+        // would end; what is pinned is the refusal and, since ADR 0036, that
+        // it maps to a withholding of exactly this candidate.
+        let gated = plan
+            .recipe_gated(Some(configuration.recipe_corpus()))
+            .unwrap();
+        let error = super::type_facts::acquire_and_verify_export_values(gated.plan(), &pin)
+            .err()
+            .expect("a primitive the project cannot resolve refuses the census");
+        let withheld = super::census_refusal_withholding(gated.plan(), &error)
+            .expect("the census refusal names the creates candidate");
+        assert_eq!(withheld.semantic_claim_id, claim_id);
+        assert!(
+            withheld
+                .reason
+                .starts_with(super::WITHHELD_CLOSURE_CENSUS_REFUSED_PREFIX)
+        );
         let rendered = error.to_string();
         assert!(
-            matches!(&error, super::Policy2FinalizationError::TypeFacts(_))
-                && rendered.contains("is unsupported")
+            rendered.contains("is unsupported")
                 && rendered.contains("refuses an unresolved callee")
                 && rendered.contains("onSettled"),
             "the refusal must name the unresolved primitive: {rendered}"
@@ -11737,54 +11982,155 @@ export const value = phantom;
             finalized.bindings().probe_gate_root,
             super::finalization::empty_probe_gate_root(&plan)
         );
-        // ADR 0035: the valueless exports' `returns` candidates are withheld
-        // beside their `creates` ones, for the same want of a recipe.
-        let withheld_returns = finalized
-            .withheld_closures()
-            .iter()
-            .filter(|record| record.domain == "returns")
-            .map(|record| record.export.as_str())
-            .collect::<Vec<_>>();
-        assert_eq!(withheld_returns, CENSUS_FIXTURE_VALUELESS_EXPORTS);
-        let withheld = finalized
-            .withheld_closures()
-            .iter()
-            .filter(|record| record.domain == "creates")
-            .map(|record| record.export.as_str())
-            .collect::<Vec<_>>();
-        assert_eq!(
-            withheld,
-            [
-                "callLibraryOutsideTable",
-                "callNonLibraryReceiver",
-                "cycle",
-                "deep",
-                "labelledBreak",
-                "loopCall",
-                "memberParameterRooted",
-                "moduleReceiverRead",
-                "nestedCallableParameterRead",
-                "noRecipe",
-                "reassignedHelper",
-                "reflectApply",
-                "setterOnParameter",
-                "spreadArgs",
-                "spreadUntyped",
-                "stdlibRefInvoker",
-                "switchBreak",
-                "taggedTemplate",
-                "toStringTagViaCall",
-                "viaHelperChain",
-                "whileBreak",
-                "writtenAfterRead",
-                "writtenBeforeRead",
-            ],
-            "every sibling candidate is withheld for want of a recipe, by name"
-        );
-        for export in &withheld {
-            assert!(!creates_is_closed_in(finalized.canonical_main(), export));
+        // ADR 0036: every sibling candidate — `creates` and the valueless
+        // exports' `returns` alike — is served by a synthesized veto, so no
+        // record is withheld for want of a recipe. What remains withheld is
+        // withheld for the census's own reason, or because the synthesized run
+        // did not complete (`loopCall` loops forever on a truthy sample), and
+        // everything else closes.
+        let mut closed = std::collections::BTreeMap::<&str, Vec<&str>>::new();
+        let mut withheld = std::collections::BTreeMap::<&str, Vec<(&str, &str)>>::new();
+        for record in finalized.withheld_closures() {
+            assert_ne!(
+                record.reason,
+                super::WITHHELD_CLOSURE_NO_RECIPE,
+                "{}: a synthesized veto serves every callable candidate",
+                record.export
+            );
+            let kind = if record
+                .reason
+                .starts_with(super::WITHHELD_CLOSURE_CENSUS_REFUSED_PREFIX)
+            {
+                "census"
+            } else if record
+                .reason
+                .starts_with(super::WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX)
+            {
+                "veto"
+            } else {
+                panic!(
+                    "{}: unexpected withholding reason {}",
+                    record.export, record.reason
+                )
+            };
+            withheld
+                .entry(record.domain.as_str())
+                .or_default()
+                .push((record.export.as_str(), kind));
         }
+        let main = finalized.canonical_main();
+        for (domain, candidates) in [
+            ("creates", &CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES[..]),
+            ("returns", &CENSUS_FIXTURE_VALUELESS_EXPORTS[..]),
+        ] {
+            for export in candidates {
+                let is_closed = if domain == "creates" {
+                    creates_is_closed_in(main, export)
+                } else {
+                    returns_is_closed_in(main, export)
+                };
+                let is_withheld = withheld
+                    .get(domain)
+                    .is_some_and(|records| records.iter().any(|(name, _)| name == export));
+                assert!(
+                    is_closed != is_withheld,
+                    "{domain}:{export} is exactly one of closed and withheld"
+                );
+                if is_closed {
+                    closed.entry(domain).or_default().push(export);
+                }
+            }
+        }
+        for records in withheld.values_mut() {
+            records.sort();
+        }
+        assert_eq!(closed["creates"], CENSUS_FIXTURE_GENERATED_CREATES_CLOSED);
+        assert_eq!(
+            withheld["creates"],
+            CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD
+        );
+        assert_eq!(closed["returns"], CENSUS_FIXTURE_GENERATED_RETURNS_CLOSED);
+        assert_eq!(
+            withheld.get("returns").cloned().unwrap_or_default(),
+            CENSUS_FIXTURE_GENERATED_RETURNS_WITHHELD
+        );
     }
+
+    /// The census fixture's generated `creates` candidates (its function
+    /// exports except `unresolved` and `iife`, whose walks decline).
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 24] = [
+        "callLibraryOutsideTable",
+        "callNonLibraryReceiver",
+        "cycle",
+        "deep",
+        "labelledBreak",
+        "loopCall",
+        "memberParameterRooted",
+        "moduleReceiverRead",
+        "nestedCallableParameterRead",
+        "noRecipe",
+        "plain",
+        "reassignedHelper",
+        "reflectApply",
+        "setterOnParameter",
+        "spreadArgs",
+        "spreadUntyped",
+        "stdlibRefInvoker",
+        "switchBreak",
+        "taggedTemplate",
+        "toStringTagViaCall",
+        "viaHelperChain",
+        "whileBreak",
+        "writtenAfterRead",
+        "writtenBeforeRead",
+    ];
+    /// What the census fixture's generated candidates come to under ADR 0036:
+    /// the exports whose census passes and whose (hand or synthesized) veto
+    /// runs clean close; the ones the census refuses are withheld with its
+    /// reason (`census`); `loopCall`, whose body loops forever on any truthy
+    /// argument, is withheld because its synthesized run never reports
+    /// (`veto`). `deep` closes `returns` while its `creates` is refused at the
+    /// depth bound: the `returns` census reads the export's own completions
+    /// and recurses into no callee.
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 9] = [
+        "cycle",
+        "memberParameterRooted",
+        "noRecipe",
+        "plain",
+        "spreadArgs",
+        "switchBreak",
+        "toStringTagViaCall",
+        "viaHelperChain",
+        "whileBreak",
+    ];
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 15] = [
+        ("callLibraryOutsideTable", "census"),
+        ("callNonLibraryReceiver", "census"),
+        ("deep", "census"),
+        ("labelledBreak", "census"),
+        ("loopCall", "veto"),
+        ("moduleReceiverRead", "census"),
+        ("nestedCallableParameterRead", "census"),
+        ("reassignedHelper", "census"),
+        ("reflectApply", "census"),
+        ("setterOnParameter", "census"),
+        ("spreadUntyped", "census"),
+        ("stdlibRefInvoker", "census"),
+        ("taggedTemplate", "census"),
+        ("writtenAfterRead", "census"),
+        ("writtenBeforeRead", "census"),
+    ];
+    const CENSUS_FIXTURE_GENERATED_RETURNS_CLOSED: [&str; 7] = [
+        "cycle",
+        "deep",
+        "setterOnParameter",
+        "stdlibRefInvoker",
+        "switchBreak",
+        "viaHelperChain",
+        "whileBreak",
+    ];
+    const CENSUS_FIXTURE_GENERATED_RETURNS_WITHHELD: [(&str, &str); 2] =
+        [("labelledBreak", "census"), ("loopCall", "veto")];
 
     /// Recipe-gated planning, without a producer: a `creates` candidate with no
     /// recipe is planned into neither a demand nor a gate and is withheld by
@@ -12063,13 +12409,13 @@ export const value = phantom;
     /// (d) `deep`: nine hops, one past the bound.
     #[test]
     fn the_probe_gate_tracer_census_refuses_a_chain_past_the_depth_bound() {
-        assert_census_refuses("deep", &["exceeds 8 local-recursion hops"]);
+        assert_census_withholds("deep", &["exceeds 8 local-recursion hops"]);
     }
 
     /// (e) `unresolved`: an identifier no declaration binds.
     #[test]
     fn the_probe_gate_tracer_census_refuses_an_unresolved_callee_by_name() {
-        assert_census_refuses(
+        assert_census_withholds(
             "unresolved",
             &["refuses an unresolved callee", "externalGlobal"],
         );
@@ -12078,7 +12424,7 @@ export const value = phantom;
     /// (f) `taggedTemplate`: an invoking form the call census does not record.
     #[test]
     fn the_probe_gate_tracer_census_refuses_a_tagged_template_by_name() {
-        assert_census_refuses(
+        assert_census_withholds(
             "taggedTemplate",
             &["uncensused invoking form: tagged-template"],
         );
@@ -12093,7 +12439,7 @@ export const value = phantom;
     /// rather than clears.
     #[test]
     fn the_probe_gate_tracer_census_refuses_a_spread_of_an_unknown_operand() {
-        assert_census_refuses(
+        assert_census_withholds(
             "spreadUntyped",
             &["uncensused invoking form: iteration-protocol"],
         );
@@ -12199,7 +12545,7 @@ export const value = phantom;
     /// claim to have modelled.
     #[test]
     fn the_probe_gate_tracer_census_refuses_a_construct_whose_flow_is_unaccounted() {
-        assert_census_refuses(
+        assert_census_withholds(
             "labelledBreak",
             &[
                 "cannot account for a construct",
@@ -12217,7 +12563,7 @@ export const value = phantom;
     /// uncensused.
     #[test]
     fn the_probe_gate_tracer_census_refuses_a_standard_library_invoker_handed_a_reference() {
-        assert_census_refuses(
+        assert_census_withholds(
             "stdlibRefInvoker",
             &["`Array.forEach`", "argument 0", "reviewed invoker table"],
         );
@@ -12228,7 +12574,7 @@ export const value = phantom;
     /// qualified name whatever the slots prove.
     #[test]
     fn the_probe_gate_tracer_census_refuses_reflect_apply_by_name() {
-        assert_census_refuses("reflectApply", &["`Reflect.apply`", "by reference"]);
+        assert_census_withholds("reflectApply", &["`Reflect.apply`", "by reference"]);
     }
 
     /// (m) `reassignedHelper`: `function helper` is reassigned at module level
@@ -12237,7 +12583,7 @@ export const value = phantom;
     /// walk a declaration that is not proven to be the code that runs.
     #[test]
     fn the_probe_gate_tracer_census_refuses_a_reassigned_local_binding() {
-        assert_census_refuses(
+        assert_census_withholds(
             "reassignedHelper",
             &["local declaration `helper`", "written at"],
         );
@@ -12335,7 +12681,7 @@ export const value = phantom;
                 &["uncensused invoking form: property-access-unknown-accessor"][..],
             ),
         ] {
-            assert_census_refuses(export, needles);
+            assert_census_withholds(export, needles);
         }
     }
 
@@ -12349,43 +12695,36 @@ export const value = phantom;
     /// all, so there is no declaration, no parameter root, and no disposition.
     #[test]
     fn the_probe_gate_tracer_census_refuses_an_immediately_invoked_function() {
-        assert_census_refuses("iife", &["refuses an unresolved callee", "function ()"]);
+        assert_census_withholds("iife", &["refuses an unresolved callee", "function ()"]);
     }
 
     /// (h) `noRecipe`: byte-for-byte `plain`'s body, and no recipe for its
-    /// claim. Withheld by name before any demand exists; the row certifies
-    /// with `creates` open and the empty gate root.
+    /// claim. Since ADR 0036 the certifier synthesizes the veto from the
+    /// export's Type Facts call signature: the candidate is planned, the census
+    /// proves it, the synthesized run vetoes nothing, and the row certifies
+    /// with `creates` closed and a nonempty gate root — nothing is withheld.
+    /// (The no-harness case, where nothing can be synthesized and the candidate
+    /// is withheld for want of a recipe, is pinned by
+    /// `the_probe_gate_schedule_withholds_a_creates_candidate_with_no_recipe`.)
     #[test]
-    fn the_probe_gate_tracer_withholds_a_creates_candidate_with_no_recipe_and_certifies_open() {
+    fn the_probe_gate_tracer_synthesizes_a_veto_for_a_creates_candidate_with_no_recipe() {
         let Some((plan, outcome)) = census_certify("noRecipe", None) else {
             return;
         };
-        let finalized = outcome.expect("a withheld candidate leaves a certifiable row");
-        assert_eq!(finalized.withheld_closures().len(), 1);
-        let withheld = &finalized.withheld_closures()[0];
-        assert_eq!(
-            (withheld.export.as_str(), withheld.domain.as_str()),
-            ("noRecipe", "creates")
-        );
-        assert_eq!(withheld.reason, super::WITHHELD_CLOSURE_NO_RECIPE);
-        assert_eq!(
-            withheld.semantic_claim_id,
-            plan.probe_gate_schedule().unwrap().gates()[0].semantic_claim_id()
+        let finalized = outcome.expect("a synthesized veto carries the candidate through the gate");
+        assert!(
+            finalized.withheld_closures().is_empty(),
+            "nothing is withheld: {:?}",
+            finalized.withheld_closures()
         );
         assert!(
-            !creates_is_closed_in(finalized.canonical_main(), "noRecipe"),
-            "the certified contract leaves creates open"
+            creates_is_closed_in(finalized.canonical_main(), "noRecipe"),
+            "the census proved the closure and the synthesized veto did not contradict it"
         );
-        // No gate ran: the receipt binds the canonical empty root of the
-        // *gated* plan, whose demand graph is the one the receipt names.
-        let gated = plan.recipe_gated(None).unwrap();
-        assert_eq!(
+        assert_ne!(
             finalized.bindings().probe_gate_root,
-            super::finalization::empty_probe_gate_root(gated.plan())
-        );
-        assert_eq!(
-            finalized.bindings().demand_graph_root,
-            gated.plan().demand_graph().root().as_str()
+            super::finalization::empty_probe_gate_root(&plan),
+            "the synthesized gate ran"
         );
     }
 

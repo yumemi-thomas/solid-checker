@@ -1,5 +1,30 @@
 # Precision backlog
 
+## Undecided candidates withhold, and vetoes are synthesized (2026-09-05)
+
+ADR 0036. A proposed closure candidate the implementation census cannot decide
+is withheld by name with the census's reason and the row re-planned, instead of
+the row refusing; a candidate whose mandatory veto run does not complete is
+withheld the same way; a contradiction still refuses. For a candidate no hand
+recipe addresses, the checker synthesizes the veto from the export's Type Facts
+call signature, marked `provenance: synthesized`, with an exact `returns`
+observation and the hand corpora's own-global convention for `creates` — not an
+exact `create` observation, which stays named as the follow-up (a dialect
+primitive the audited table does not deny, seen through the worker's loader
+hook).
+
+Measured on the three-row baseline: all three rows certify (one did before);
+Kobalte alpha's eleven queued `creates` candidates all close through synthesized
+vetoes; i18n certifies with five census-refused candidates withheld; Kobalte
+0.9.2 certifies with one incomplete veto withheld. `exportsProven` stays 0.
+
+Recorded, not closed: the `creates` synthesized veto observes only own-global
+additions; a synthesized sample can hang an export that loops on any truthy
+argument (`loopCall`), which costs the policy timeout per run and withholds; a
+candidate whose export states no unique call signature (overloads, non-callable
+runtime kinds) still withholds for want of a recipe. See the dated
+[implementation report](2026-09-05-census-gated-withholding-and-synthesized-vetoes.md).
+
 ## Arrow-bound exports propose again (2026-09-05)
 
 The generator bound its `creates` and `returns` walk verdicts to a function's

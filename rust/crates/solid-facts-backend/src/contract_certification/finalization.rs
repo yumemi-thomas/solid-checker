@@ -470,6 +470,8 @@ pub enum Policy2FinalizationError {
     /// past the size Clippy's `result_large_err` accepts.
     #[error(transparent)]
     RecipeGating(Box<super::RecipeGatingError>),
+    #[error("synthesized veto corpus could not be prepared: {0}")]
+    VetoSynthesis(String),
     #[error(transparent)]
     DependencyComposition(#[from] DependencyReceiptCompositionError),
     #[error(transparent)]

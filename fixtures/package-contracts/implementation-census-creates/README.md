@@ -3,8 +3,13 @@
 The end-to-end tracer for the `creates` implementation census
 (`docs/adr/0008-implementation-census-for-creates.md`): a consuming package
 whose function exports all *propose* `creates: []`, and a certifier that proves
-the claim for some of them, refuses it by name for others, and withholds it by
-name for one.
+the claim for some of them, and — since ADR 0036 — withholds it by name for the
+others: a candidate the census cannot decide is withheld with the census's own
+reason (`census refused: …`) and a candidate whose veto run does not complete
+(`loopCall`, which loops forever on any truthy argument) is withheld as
+`veto did not complete: gate …`, while the row certifies with those domains
+open. Before ADR 0036 either outcome refused the whole row; a veto
+*contradiction* still does.
 
 It is a generator-corpus fixture (`corpus.json`), so `expected.json` and
 `expected-proposal.json` pin the generator's side of the story: every function
@@ -45,8 +50,12 @@ generate-then-certify path is exercised anywhere in the repository:
 its veto and its `DomainExhaustiveness` demand, and that all fourteen are
 withheld by name when no corpus is supplied) and
 `the_census_certifies_a_generated_creates_candidate_and_withholds_its_siblings`
-(one recipe, for `plain`, so recipe gating withholds the other thirteen and the
-census decides `plain`). They rebind exactly one field of the document, the
+(one hand recipe, for `plain`; since ADR 0036 every sibling candidate —
+`creates` and the valueless exports' `returns` alike — is served by a
+synthesized veto, and the test pins the resulting partition: nine `creates` and
+seven `returns` closures, fourteen `creates` candidates and one `returns`
+candidate withheld with the census's reason, and `loopCall` withheld in both
+domains because its synthesized run never reports). They rebind exactly one field of the document, the
 package integrity token, because the corpus generates `fixture:sha256:…` and a
 certification transaction requires the published archive's own integrity.
 
@@ -84,7 +93,7 @@ disposition, and the first call with none refuses the domain by name:
 | `taggedTemplate` | refuses: uncensused form | a `TaggedTemplateExpression` invokes its tag and appears in no `calls` row; the producer records it as `tagged-template` and the census refuses on it |
 | `spreadUntyped` | refuses: uncensused form | `joinAll(...items)` drives the iteration protocol on `items`, an unannotated ordinary parameter and therefore `any`. `any` enumerates no members, and "the checker could not find `[Symbol.iterator]`" is never "iterating this reaches no user code", so the producer records the `SpreadElement` as `iteration-protocol` (`docs/typefacts/adr/0026-…`) and the census refuses on it. **Arguments do not otherwise matter for `creates`** — a call is dispositioned by its callee — but a spread is an invoking form of its own, not an argument |
 | `spreadArgs` | **certifies** with a recipe | byte-identical to `spreadUntyped`'s body, and the pair that shows the iteration arm is decided by the operand's *type*: `args` is a **rest** parameter, so its own type is `any[]` however its elements are typed. Iterating an array drives `Array.prototype[Symbol.iterator]` and the array iterator it returns, both engine code, so no form is recorded and the census closes the domain. A census that classified iteration by syntax refused this |
-| `noRecipe` | **withheld** | byte-for-byte `plain`'s body; the corpus supplied to the transaction carries no recipe for *this* export's claim, so recipe-gated planning withholds the candidate by name, the domain stays open, and the row certifies with an empty probe-gate schedule |
+| `noRecipe` | certifies | byte-for-byte `plain`'s body, and no hand recipe for *this* export's claim. Since ADR 0036 the certifier synthesizes the veto from the export's Type Facts call signature, so the candidate is planned, the census proves it and the row certifies with `creates` closed; before ADR 0036 recipe-gated planning withheld it by name (`no recipe in corpus`), which is still what happens when no harness is configured at all |
 | `loopCall` | **certifies** with a recipe | a bare `while` with no jump in it. The producer cannot give a reachability *lower* bound inside a loop body, so it reports `iterationReachability` — classified `reachability-lower-bound` — and `mount(el)` is on the wire at `reach: unknown`, which the `MayExecute` floor admits. This is the shape ADR 0008 item 0 over-refused on real code (`@solid-primitives/i18n`'s `flatten` and `chainedTranslator`) |
 | `switchBreak` | **certifies** with a recipe | `mount(el); break;` inside a `switch` case. The `break`'s target is the `switch` that owns it, so the producer covers that construct as the region the jump makes non-universal and reduces the row's reach to `unknown` — it used to **drop** the row, and since a dropped `CallExpression` leaves no uncensused-form row either, the marker was the only trace. `mount` is now dispositioned by local recursion, which is what certifies it: never a relaxed marker |
 | `whileBreak` | **certifies** with a recipe | the same, with the `break` owned by a `while` |

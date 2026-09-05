@@ -393,6 +393,10 @@ impl TypeFactsCertificationSchedule {
 pub struct VerifiedTypeFactsEvidence {
     bindings: Vec<WitnessBinding>,
     session_evidence_root: String,
+    /// ADR 0036: the unique call signature of every scheduled export whose
+    /// transcript stated one, by export name. Read only by veto synthesis; a
+    /// signature here proves nothing and binds nothing.
+    call_signatures: std::collections::BTreeMap<String, typefacts::SelectedSignature>,
 }
 
 impl VerifiedTypeFactsEvidence {
@@ -421,6 +425,12 @@ impl VerifiedTypeFactsEvidence {
     }
 
     #[must_use]
+    /// The unique call signature the export-value transcript stated for
+    /// `export`, when it stated exactly one (ADR 0036).
+    pub(super) fn call_signature(&self, export: &str) -> Option<&typefacts::SelectedSignature> {
+        self.call_signatures.get(export)
+    }
+
     pub fn witness_bindings(&self) -> &[WitnessBinding] {
         &self.bindings
     }
@@ -2545,6 +2555,7 @@ pub(super) fn verify_live_answer(
     Ok(VerifiedTypeFactsEvidence {
         bindings,
         session_evidence_root: identity.evidence_root().to_owned(),
+        call_signatures: std::collections::BTreeMap::new(),
     })
 }
 
@@ -2754,8 +2765,18 @@ fn verify_live_export_value_answer_with_project_census(
     };
     let certification_sources_root = plan.certification_sources_root();
     let mut bindings = Vec::with_capacity(expected_ids.len());
+    let mut call_signatures = std::collections::BTreeMap::new();
     for (index, scheduled) in schedule.export_values.iter().enumerate() {
         let transcript = &answer.transcripts[index];
+        if let (Some(signature), Some(proof)) = (
+            transcript.call_signature.as_ref(),
+            scheduled.proof_demands.first(),
+        ) {
+            let (_, export) = proof_artifact_export(&proof.subject);
+            call_signatures
+                .entry(export.to_owned())
+                .or_insert_with(|| signature.clone());
+        }
         if transcript.location != scheduled.demand.location {
             let (expected, actual) = diagnostic_location_pair(
                 Some(&scheduled.demand.location),
@@ -2815,6 +2836,7 @@ fn verify_live_export_value_answer_with_project_census(
     Ok(VerifiedTypeFactsEvidence {
         bindings,
         session_evidence_root: identity.evidence_root().to_owned(),
+        call_signatures,
     })
 }
 

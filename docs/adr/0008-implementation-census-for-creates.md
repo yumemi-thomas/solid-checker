@@ -80,8 +80,9 @@ joins normalized meaning under its own digest domain
 (`wire-format.md` § `proposedClosures`, `semantic-model.md` § Digest families),
 so no contract that proposes nothing moves and no receipt for one document can
 authenticate the other. Only domains this verifier can decide are publishable —
-`ClaimDomain::PROPOSABLE`, today `creates` alone — because publishing a closure
-no census can decide refuses the row rather than proving anything; the
+`ClaimDomain::PROPOSABLE`, `creates` and since ADR 0035 `returns` — because
+publishing a closure no census can decide proves nothing (and, until ADR 0036
+made a census refusal withhold the candidate by name, refused the row); the
 generator's `reads`/`callbacks` candidates (and, until ADR 0035, `returns`) stay weakened and travel to
 the plan sidecar as measurement.
 
@@ -622,7 +623,9 @@ accessor-census disposition below; see
   the export's own walked span. The census refuses the row by name: the producer
   resolves its callee to nothing at all, so there is no declaration, no
   parameter root, and no disposition. Excusing it in the walk would propose a
-  candidate the census refuses, turning a certified row into a refused one.
+  candidate the census refuses — which, since ADR 0036, withholds the candidate
+  by name with the census's reason rather than refusing the row, but is still a
+  wasted gate and a misleading proposal, so the alignment obligation stands.
   Pinned both ways: `iife` in the census fixture, `expressionCallee` in the
   decline fixture.
 - **The actual next blocker on real rows: no Solid 2.0 negative row for

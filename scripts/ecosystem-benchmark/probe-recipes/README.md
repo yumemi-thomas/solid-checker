@@ -31,11 +31,16 @@ repository owns.
 
 A `claimId` binds the exact normalized claim — package, version, artifact case,
 export, domain. Anything that moves the emitted contract document for one of
-these packages moves the id, and the recipe then addresses nothing: the
-candidate is *withheld* ("no recipe in corpus") and the row certifies with the
-domain open, rather than failing loudly. Re-read the ids from a run's
-`…certification-audit.json` `withheldClosures` array after any generator change.
-Addressing that survives contract edits is ADR 0006 Stage 3.
+these packages moves the id, and the recipe then addresses nothing. Since
+ADR 0036 such a candidate is served by a *synthesized* veto derived from the
+export's Type Facts call signature (the run's material names it
+`provenance: synthesized`), and only a candidate no signature can drive stays
+*withheld* ("no recipe in corpus") with the domain open. Two more withholding
+reasons exist beside it: `census refused: …` (the implementation census could
+not decide the candidate) and `veto did not complete: gate …` (the run ended in
+an error or a timeout). None of them fails the row; a *contradiction* still
+does. Re-read the ids from a run's `…certification-audit.json`
+`withheldClosures` array after any generator change.
 
 ## The rule nothing here can check
 

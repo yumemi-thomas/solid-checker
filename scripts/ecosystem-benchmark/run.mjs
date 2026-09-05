@@ -296,6 +296,22 @@ export function readGeneratedEntrypointCount(contractPath) {
   }
 }
 
+
+// ADR 0036: the withheld records by the reason they carry. `noRecipe` is the
+// pre-ADR reason; `censusRefused` and `vetoIncomplete` are the two the
+// certifier withholds for instead of refusing the row.
+function withheldClosureReasons(audit) {
+  const counts = { noRecipe: 0, censusRefused: 0, vetoIncomplete: 0, other: 0 };
+  for (const record of Array.isArray(audit?.withheldClosures) ? audit.withheldClosures : []) {
+    const reason = typeof record?.reason === "string" ? record.reason : "";
+    if (reason === "no recipe in corpus") counts.noRecipe += 1;
+    else if (reason.startsWith("census refused: ")) counts.censusRefused += 1;
+    else if (reason.startsWith("veto did not complete: ")) counts.vetoIncomplete += 1;
+    else counts.other += 1;
+  }
+  return counts;
+}
+
 function packageInstallPath(projectDir, packageName) {
   return join(projectDir, "node_modules", ...packageName.split("/"));
 }
@@ -669,6 +685,8 @@ function readCertificationAttempt(
       // neither a demand nor a gate, and the row certifies with that domain
       // open. Read off the audit's `withheldClosures`; an older audit has none.
       withheldClosures: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures.length : 0,
+    withheldClosureReasons: withheldClosureReasons(audit),
+      withheldClosureReasons: withheldClosureReasons(audit),
       ordinaryAnalysis: audit?.ordinaryAnalysis ?? null
     };
   }
@@ -710,7 +728,8 @@ function readCertificationAttempt(
     artifactSatisfiedDemandsByFamily: countBy(artifactSatisfied, "family"),
     refusalCountsByFamily: countBy(refusals, "family"),
     refusalCountsByOwner: countBy(refusals, "owner"),
-    withheldClosures: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures.length : 0
+    withheldClosures: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures.length : 0,
+    withheldClosureReasons: withheldClosureReasons(audit)
   };
 }
 

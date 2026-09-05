@@ -126,11 +126,11 @@ The proof mode that decides a closed behavioral call domain from the demanded ex
 _Avoid_: Call scan, callee check, behavioral census, implementation walk (that is the generator's proposal walk)
 
 **Withheld closure candidate**:
-A proposed closed claim domain the certifier declined to plan, by name, before any demand or probe gate was derived from it — today a `creates` candidate whose semantic claim has no recipe in the supplied corpus. The domain is opened in the certified contract and the withholding is recorded in the certification audit. It is neither a refusal nor a certification of the closure.
+A proposed closed claim domain the certifier withdrew by name and re-planned without: a `creates` or `returns` candidate whose semantic claim no recipe (hand-authored or synthesized) can serve (`no recipe in corpus`), one the implementation census could not decide (`census refused: …`, ADR 0036), or one whose mandatory veto run ended in an error or a timeout (`veto did not complete: gate …`). The domain is opened in the certified contract and the withholding is recorded with its reason in the certification audit. It is neither a refusal nor a certification of the closure; a veto *contradiction* is never a withholding and refuses the row.
 _Avoid_: Skipped claim, dropped gate, waived probe, refused closure
 
 **Recipe corpus**:
-A directory of hand-authored, claim-addressed probe modules plus its manifest, supplied to one certification transaction and keyed by exact semantic claim id. It is an **input**, never a root of trust: omitting a scheduled gate refuses that gate, a vacuous recipe only fails to veto, and the verifier derives every module's construction digest from the bytes it copied. A corpus inside the analyzed package is refused outright.
+A directory of claim-addressed probe modules plus its manifest, supplied to one certification transaction and keyed by exact semantic claim id — hand-authored, or synthesized by the checker from an export's Type Facts call signature for a candidate no hand recipe addresses (ADR 0036; `provenance: synthesized`, a hand recipe always wins). It is an **input**, never a root of trust: omitting a scheduled gate refuses that gate, a vacuous recipe only fails to veto, and the verifier derives every module's construction digest from the bytes it copied. A corpus inside the analyzed package is refused outright.
 _Avoid_: Probe suite, test corpus, trusted recipes, probe fixtures
 
 **Detect-and-refuse isolation**:

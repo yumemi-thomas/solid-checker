@@ -849,8 +849,11 @@ rest of this section.
 
 ### Recipes
 
-Recipes stay hand-authored, claim-addressed modules, and their authors carry one
-obligation nothing here can check: **never hand `session` or `harness` to the
+Recipes are claim-addressed modules — hand-authored, or since ADR 0036
+synthesized by the checker from the export's Type Facts call signature for a
+candidate no hand recipe addresses (a hand recipe always wins) — and their
+authors carry one obligation nothing here can check: **never hand `session` or
+`harness` to the
 package under test** (see "The worker's realm is the package's realm"). A corpus
 is a directory holding `recipes.json` plus its modules, keyed by exact semantic
 claim id.

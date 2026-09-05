@@ -496,6 +496,15 @@ impl ProbeHarnessConfiguration {
         &self.recipe_corpus
     }
 
+    /// The same harness, Node and pins over a different corpus directory
+    /// (ADR 0036: the transaction's merged hand-plus-synthesized corpus).
+    #[must_use]
+    pub(crate) fn with_recipe_corpus(&self, recipe_corpus: impl Into<PathBuf>) -> Self {
+        let mut configuration = self.clone();
+        configuration.recipe_corpus = recipe_corpus.into();
+        configuration
+    }
+
     /// The pin this transaction verifies against: the build's, unless an
     /// in-crate test supplied its own.
     fn pin(&self) -> Result<ProbeHarnessPin, ProbeHarnessError> {
@@ -868,14 +877,27 @@ fn launch_every_session(
                 dependencies: subject.dependencies,
             }),
         )?;
-        let run = workspace.launch(
+        let run = match workspace.launch(
             node_executable,
             node_version,
             module,
             &session_bytes,
             session.policy().timeout_millis,
             subject,
-        )?;
+        ) {
+            Ok(run) => run,
+            Err(ProbeHarnessError::Timeout) => {
+                // The worker's whole process group is already dead (the
+                // launch drops it on every exit); the workspace census below
+                // still has to hold, or the run that follows reads a tampered
+                // tree.
+                workspace.verify_unchanged()?;
+                return Err(ProbeHarnessError::SessionTimeout {
+                    claim_id: claim_id.to_owned(),
+                });
+            }
+            Err(error) => return Err(error),
+        };
         workspace.verify_unchanged()?;
         runs.push(run);
     }
@@ -1592,6 +1614,13 @@ struct WireRecipeEntry {
     drain: Vec<WireRecipeDrainStep>,
     #[serde(default)]
     coverage_limitations: Vec<String>,
+    /// ADR 0036: who authored the module. Absent means hand-authored, as every
+    /// corpus before this field was; `synthesized` marks a module the checker
+    /// derived from the export's Type Facts call signature. Informational —
+    /// the construction digest still comes from the bytes either way.
+    #[serde(default)]
+    #[allow(dead_code)]
+    provenance: Option<String>,
 }
 
 #[derive(Clone, Copy, Deserialize)]
@@ -3894,6 +3923,13 @@ pub enum ProbeHarnessError {
     Protocol(String),
     #[error("the probe worker did not answer within its bounded policy timeout")]
     Timeout,
+    /// ADR 0036 § 2: one session's worker did not report within the policy
+    /// budget — a hung or looping sample call, most often — so the run for
+    /// `claim_id` observed nothing. Named so the transaction can withhold that
+    /// one candidate instead of refusing the row; every other session's
+    /// verdict is unaffected because launches are sequential.
+    #[error("the probe worker for claim {claim_id} did not report within the policy budget")]
+    SessionTimeout { claim_id: String },
     #[error(transparent)]
     Probe(#[from] RuntimeProbeError),
     #[error(transparent)]
