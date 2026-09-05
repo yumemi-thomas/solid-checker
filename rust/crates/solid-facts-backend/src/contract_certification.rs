@@ -559,13 +559,14 @@ impl CertificationPlan {
             let plan = gated.plan();
             let evidence = match type_facts::acquire_and_verify_export_values(plan, pin) {
                 Ok(evidence) => evidence,
-                Err(error) => match census_refusal_withholding(plan, &error) {
-                    Some(record) => {
-                        already_withheld.push(record);
-                        continue;
+                Err(error) => {
+                    let records = census_refusal_withholding(plan, &error);
+                    if records.is_empty() {
+                        return Err(error.into());
                     }
-                    None => return Err(error.into()),
-                },
+                    already_withheld.extend(records);
+                    continue;
+                }
             };
             if synthesized.is_none()
                 && let Some(base) = probes
@@ -646,55 +647,66 @@ impl CertificationPlan {
 /// when the refusal is the census declining to decide it — an unsupported or
 /// locally open `DomainExhaustiveness` demand whose subject is a proposable
 /// call-domain closure. Any other error is `None` and keeps refusing the row.
-fn census_refusal_withholding(
+pub(super) fn census_refusal_withholding(
     plan: &CertificationPlan,
     error: &TypeFactsCertificationError,
-) -> Option<WithheldClosure> {
+) -> Vec<WithheldClosure> {
     let mut error = error;
     while let TypeFactsCertificationError::TransactionStage { source, .. }
     | TypeFactsCertificationError::GraphNodeStage { source, .. } = error
     {
         error = source;
     }
-    let (demand_id, reason) = match error {
+    let refusals: Vec<(&str, &str)> = match error {
         TypeFactsCertificationError::UnsupportedDemand { demand, reason }
-        | TypeFactsCertificationError::FamilyOpen { demand, reason } => (demand, reason),
-        _ => return None,
+        | TypeFactsCertificationError::FamilyOpen { demand, reason } => {
+            vec![(demand.as_str(), reason.as_str())]
+        }
+        TypeFactsCertificationError::CensusRefused { refusals } => refusals
+            .iter()
+            .map(|refusal| (refusal.demand.as_str(), refusal.reason.as_str()))
+            .collect(),
+        _ => return Vec::new(),
     };
-    let demand = plan
-        .demand_graph()
-        .demands()
-        .iter()
-        .find(|demand| demand.id().as_str() == demand_id.as_str())?;
-    if demand.family() != ProofFamily::DomainExhaustiveness {
-        return None;
-    }
-    let ProofDemandSubject::DomainClosure {
-        subject,
-        semantic_claim_id,
-    } = demand.subject()
-    else {
-        return None;
-    };
-    let SemanticClaimPath::Domain(ClaimPath::Call(domain)) = subject.path else {
-        return None;
-    };
-    if !domain.is_proposable() {
-        return None;
-    }
-    Some(WithheldClosure {
-        artifact_case: subject.artifact_case.clone(),
-        export: subject.export.clone(),
-        domain: type_facts::call_claim_domain_name(domain).to_owned(),
-        semantic_claim_id: semantic_claim_id.to_string(),
-        reason: format!("{WITHHELD_CLOSURE_CENSUS_REFUSED_PREFIX}{reason}"),
-    })
+    refusals
+        .into_iter()
+        .filter_map(|(demand_id, reason)| {
+            let demand = plan
+                .demand_graph()
+                .demands()
+                .iter()
+                .find(|demand| demand.id().as_str() == demand_id)?;
+            if demand.family() != ProofFamily::DomainExhaustiveness {
+                return None;
+            }
+            let ProofDemandSubject::DomainClosure {
+                subject,
+                semantic_claim_id,
+            } = demand.subject()
+            else {
+                return None;
+            };
+            let SemanticClaimPath::Domain(ClaimPath::Call(domain)) = subject.path else {
+                return None;
+            };
+            if !domain.is_proposable() {
+                return None;
+            }
+            Some(WithheldClosure {
+                artifact_case: subject.artifact_case.clone(),
+                export: subject.export.clone(),
+                domain: type_facts::call_claim_domain_name(domain).to_owned(),
+                semantic_claim_id: semantic_claim_id.to_string(),
+                reason: format!("{WITHHELD_CLOSURE_CENSUS_REFUSED_PREFIX}{reason}"),
+            })
+        })
+        .collect()
 }
 
 /// ADR 0036 § 2: the candidate whose mandatory veto ended in an error or a
 /// timeout. A contradiction is not this — it refuses the row — and so is every
 /// other probe error.
-fn incomplete_gate_withholding(
+pub(super) fn incomplete_gate_withholding(
     plan: &CertificationPlan,
     error: &Policy2FinalizationError,
 ) -> Option<WithheldClosure> {
@@ -761,7 +773,7 @@ pub fn certify_value_only_case_set(
         Err(error)
             if gated_plans
                 .iter()
-                .any(|plan| census_refusal_withholding(plan, &error).is_some()) =>
+                .any(|plan| !census_refusal_withholding(plan, &error).is_empty()) =>
         {
             return plans.iter().map(|plan| individually(plan)).collect();
         }
@@ -966,6 +978,13 @@ pub const WITHHELD_CLOSURE_CENSUS_REFUSED_PREFIX: &str = "census refused: ";
 /// run ended in an error or a timeout. The gate id follows the prefix. A
 /// *contradiction* never withholds; it refuses the row.
 pub const WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX: &str = "veto did not complete: gate ";
+
+/// ADR 0036 in the graph lanes: the prefix of the reason a parent candidate
+/// carries when its closure composes from a dependency claim the dependency
+/// withheld. The dependency's claim id and package follow the prefix. The
+/// parent's domain is left open, which is exactly what is known.
+pub const WITHHELD_CLOSURE_DEPENDENCY_WITHHELD_PREFIX: &str =
+    "composed from a withheld dependency claim: ";
 
 /// A plan re-derived under a recipe corpus, with the candidates it withheld.
 pub struct RecipeGatedPlan {
@@ -11950,6 +11969,7 @@ export const value = phantom;
             .err()
             .expect("a primitive the project cannot resolve refuses the census");
         let withheld = super::census_refusal_withholding(gated.plan(), &error)
+            .pop()
             .expect("the census refusal names the creates candidate");
         assert_eq!(withheld.semantic_claim_id, claim_id);
         assert!(
@@ -13463,11 +13483,32 @@ export const value = phantom;
                 ConfiguredReceiptIssuer::persistent_local("independent-census", [43; 32]).unwrap();
             let result = graph.certify_value_only(&pin, &issuer, 1, Some(&probes));
             if runtime == "unsafe.js" {
-                let error = result
-                    .err()
-                    .expect("opaque imported execution must not acquire an independent census")
-                    .to_string();
-                assert!(error.contains("creates census"), "{error}");
+                // ADR 0036 in the graph lane: opaque imported execution still
+                // acquires no independent census, and the census's refusal
+                // now withholds the root's candidate by name instead of
+                // refusing the graph -- the row certifies with `creates` open,
+                // and the withheld record carries the census's reason.
+                let finalized = result.expect(
+                    "a census refusal withholds the graph node's candidate; the graph certifies",
+                );
+                let withheld = finalized.root().withheld_closures();
+                assert_eq!(withheld.len(), 1, "{withheld:?}");
+                assert_eq!(
+                    (withheld[0].export.as_str(), withheld[0].domain.as_str()),
+                    ("value", "creates")
+                );
+                assert!(
+                    withheld[0]
+                        .reason
+                        .starts_with(super::WITHHELD_CLOSURE_CENSUS_REFUSED_PREFIX)
+                        && withheld[0].reason.contains("creates census"),
+                    "{}",
+                    withheld[0].reason
+                );
+                assert!(!creates_is_closed_in(
+                    finalized.root().canonical_main(),
+                    "value"
+                ));
             } else if recipe == "contradiction.mjs" {
                 let error = result
                     .err()
@@ -13525,5 +13566,117 @@ export const value = phantom;
             "the leaf's certified contract leaves creates open"
         );
         assert!(finalized.root().withheld_closures().is_empty());
+    }
+
+    /// ADR 0036 in the graph lane: a graph node's `creates` candidate that no
+    /// hand recipe addresses is served by a synthesized veto derived from the
+    /// export's call signature, exactly as in the value-only lane. The root's
+    /// `value` carries `creates: []`, the corpus names no recipe for it, and
+    /// the finalized root closes `creates` with nothing withheld; the same
+    /// graph with no harness at all withholds the candidate by name.
+    #[test]
+    fn published_graph_synthesizes_a_veto_for_a_node_candidate_with_no_recipe() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let fixture =
+            repository_root().join("fixtures/package-contracts/independent-census-composition");
+        let bytes = |file: &str| std::fs::read(fixture.join(file)).unwrap();
+        let build = || {
+            let (leaf, leaf_archive, leaf_integrity) = synthetic_graph_certification_request_shaped(
+                "leaf-package",
+                "2.0.0",
+                "/project/node_modules/root-package/node_modules/leaf-package",
+                "/project/node_modules/root-package/dist/index.js",
+                &bytes("leaf.js"),
+                &bytes("leaf.d.ts"),
+                vec![],
+                ValueShape::Callable,
+                CallClaims::default(),
+            );
+            let leaf_plan = plan_certification(
+                leaf.clone(),
+                UntrustedArtifactEnvelope::Published(leaf_archive.clone()),
+            )
+            .unwrap();
+            let edge = AcceptedDependencyEdge {
+                specifier: "leaf-package".into(),
+                package_name: "leaf-package".into(),
+                artifact_case: leaf_plan.selected_artifact_case_id().into(),
+                accepted_contract_digest: leaf_plan
+                    .demand_graph()
+                    .candidate_semantic_digest()
+                    .as_str()
+                    .into(),
+            };
+            let (root, root_archive, root_integrity) = synthetic_graph_certification_request_shaped(
+                "root-package",
+                "1.0.0",
+                "/project/node_modules/root-package",
+                "/project/src/app.ts",
+                &bytes("root.js"),
+                &bytes("root.d.ts"),
+                vec![edge],
+                ValueShape::Callable,
+                CallClaims {
+                    creates: KnowledgeSet::complete(vec![]),
+                    ..CallClaims::default()
+                },
+            );
+            plan_published_contract_graph(
+                PublishedGraphNodeRequest::new(
+                    root,
+                    root_archive,
+                    graph_lock("root-package", "1.0.0", &root_integrity),
+                ),
+                [PublishedGraphNodeRequest::new(
+                    leaf,
+                    leaf_archive,
+                    graph_lock("leaf-package", "2.0.0", &leaf_integrity),
+                )],
+            )
+            .unwrap()
+        };
+        let issuer =
+            ConfiguredReceiptIssuer::persistent_local("graph-synthesis", [47; 32]).unwrap();
+
+        // No harness: withheld by name, creates open.
+        let graph = build();
+        let unvetoed = graph.certify_value_only(&pin, &issuer, 1, None).unwrap();
+        assert_eq!(unvetoed.root().withheld_closures().len(), 1);
+        assert_eq!(
+            unvetoed.root().withheld_closures()[0].reason,
+            super::WITHHELD_CLOSURE_NO_RECIPE
+        );
+        assert!(!creates_is_closed_in(
+            unvetoed.root().canonical_main(),
+            "value"
+        ));
+
+        // A harness whose hand corpus names no recipe for the claim: the
+        // graph lane synthesizes one from the root's call signature.
+        let graph = build();
+        let root_plan = graph.plan(graph.root_identity()).unwrap();
+        let scratch = TracerScratch::new("graph-synthesis");
+        let Some(probes) = tracer_configuration_from(&fixture, scratch.path(), "root", &[]) else {
+            return;
+        };
+        let finalized = graph
+            .certify_value_only(&pin, &issuer, 1, Some(&probes))
+            .expect("a synthesized veto carries the graph node's candidate through its gate");
+        assert!(
+            finalized.root().withheld_closures().is_empty(),
+            "nothing is withheld: {:?}",
+            finalized.root().withheld_closures()
+        );
+        assert!(creates_is_closed_in(
+            finalized.root().canonical_main(),
+            "value"
+        ));
+        assert_ne!(
+            finalized.root().bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(root_plan),
+            "the synthesized gate ran"
+        );
     }
 }

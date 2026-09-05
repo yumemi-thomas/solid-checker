@@ -301,12 +301,15 @@ export function readGeneratedEntrypointCount(contractPath) {
 // pre-ADR reason; `censusRefused` and `vetoIncomplete` are the two the
 // certifier withholds for instead of refusing the row.
 function withheldClosureReasons(audit) {
-  const counts = { noRecipe: 0, censusRefused: 0, vetoIncomplete: 0, other: 0 };
+  const counts = { noRecipe: 0, censusRefused: 0, vetoIncomplete: 0, dependencyWithheld: 0, other: 0 };
   for (const record of Array.isArray(audit?.withheldClosures) ? audit.withheldClosures : []) {
     const reason = typeof record?.reason === "string" ? record.reason : "";
     if (reason === "no recipe in corpus") counts.noRecipe += 1;
     else if (reason.startsWith("census refused: ")) counts.censusRefused += 1;
     else if (reason.startsWith("veto did not complete: ")) counts.vetoIncomplete += 1;
+    // A graph node whose closure composes from a dependency claim the
+    // dependency withheld (ADR 0036, graph lanes).
+    else if (reason.startsWith("composed from a withheld dependency claim: ")) counts.dependencyWithheld += 1;
     else counts.other += 1;
   }
   return counts;
@@ -1183,6 +1186,12 @@ async function certifyCompleteProbe(
       stderr: error?.stack ?? String(error),
       timedOut: false
     };
+  }
+  // A certified row keeps no stderr, so the checker's `SOLID_CHECKER_TIMINGS`
+  // lines (forwarded by the CLI) would vanish with it; echo them to the
+  // runner's own stderr when timings were asked for.
+  if (process.env.SOLID_CHECKER_TIMINGS && certificationResult?.stderr) {
+    process.stderr.write(certificationResult.stderr);
   }
   try {
     const durationMs = (hooks.now?.() ?? Date.now()) - certificationStart;

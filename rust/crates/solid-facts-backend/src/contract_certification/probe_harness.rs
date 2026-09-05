@@ -714,17 +714,22 @@ fn run_probe_gates_inner(
             "an empty probe schedule needs no harness launch".into(),
         ));
     }
+    let mut timing = ProbeGateBatchTiming::default();
+    let started = Instant::now();
     let pin = configuration.pin()?;
     let node = verify_node_executable(&configuration.node_executable, &pin)?;
     let image = verify_harness_image(&configuration.harness_root, &pin)?;
     let node_version = node_version(&configuration.node_executable, &node)?;
+    timing.pin_verification_ns = elapsed_ns(started);
 
     let corpus = RecipeCorpus::load(&configuration.recipe_corpus, plan)?;
     // What this plan's artifact case was resolved under, and what the pinned
     // interpreter actually applies. The second is measured, never assumed: the
     // two are not the same set, and the difference is what selects a file.
     let requested = requested_conditions(plan)?;
+    let conditions_started = Instant::now();
     let observed = observe_conditions(&configuration.node_executable, &node, &requested)?;
+    timing.conditions_ns = elapsed_ns(conditions_started);
     let environment = probe_environment(&node, &node_version, &requested, &observed);
     let runtime_plan = plan.runtime_probe_plan(schedule, &corpus, environment.clone())?;
     // Before anything is copied or launched: this interpreter has to select the
@@ -771,11 +776,13 @@ fn run_probe_gates_inner(
         requested_conditions: &requested,
         dependencies: &dependencies,
     };
+    let workspace_started = Instant::now();
     let workspace = if inert.is_some() {
         PrivateProbeWorkspace::create_with_inert(&workspace_inputs, inert)?
     } else {
         PrivateProbeWorkspace::create(&workspace_inputs)?
     };
+    timing.workspace_ns = elapsed_ns(workspace_started);
 
     let launched = launch_every_session(
         &workspace,
@@ -784,12 +791,18 @@ fn run_probe_gates_inner(
         &configuration.node_executable,
         &node_version,
         &plan.resolved_import.specifier,
+        &mut timing,
     );
+    let final_census_started = Instant::now();
     // The census runs on *every* exit path, a launch failure or timeout
     // included: a run that altered a producer input has to refuse the gate
     // rather than be reported as a mere launch problem, and an isolation
     // violation is the more serious of the two facts.
-    let runs = match (launched, workspace.verify_unchanged()) {
+    let final_census = workspace.verify_unchanged();
+    timing.census_ns += elapsed_ns(final_census_started);
+    timing.total_ns = elapsed_ns(started);
+    timing.emit(plan);
+    let runs = match (launched, final_census) {
         (_, Err(violation)) => return Err(violation),
         (Err(error), Ok(())) => return Err(error),
         (Ok(runs), Ok(())) => runs,
@@ -848,9 +861,11 @@ fn launch_every_session(
     node_executable: &Path,
     node_version: &str,
     specifier: &str,
+    timing: &mut ProbeGateBatchTiming,
 ) -> Result<Vec<ProbeRun>, ProbeHarnessError> {
     let mut runs = Vec::with_capacity(runtime_plan.sessions().len());
     for session in runtime_plan.sessions() {
+        timing.sessions += 1;
         let claim_id = session.claim_id().as_str();
         let recipe = corpus.recipe_for(claim_id).ok_or_else(|| {
             ProbeHarnessError::RecipeProvenance(format!(
@@ -877,14 +892,17 @@ fn launch_every_session(
                 dependencies: subject.dependencies,
             }),
         )?;
-        let run = match workspace.launch(
+        let launch_started = Instant::now();
+        let launched = workspace.launch(
             node_executable,
             node_version,
             module,
             &session_bytes,
             session.policy().timeout_millis,
             subject,
-        ) {
+        );
+        timing.launch_ns += elapsed_ns(launch_started);
+        let run = match launched {
             Ok(run) => run,
             Err(ProbeHarnessError::Timeout) => {
                 // The worker's whole process group is already dead (the
@@ -898,10 +916,54 @@ fn launch_every_session(
             }
             Err(error) => return Err(error),
         };
-        workspace.verify_unchanged()?;
+        let census_started = Instant::now();
+        let census = workspace.verify_unchanged();
+        timing.census_ns += elapsed_ns(census_started);
+        census?;
         runs.push(run);
     }
     Ok(runs)
+}
+
+/// What one probe-gate batch cost, by phase, reported under
+/// `SOLID_CHECKER_TIMINGS` so a slow veto is attributable to pin
+/// verification, condition observation, workspace materialization, the worker
+/// launches themselves, or the watched-input census between them.
+#[derive(Debug, Default)]
+struct ProbeGateBatchTiming {
+    pin_verification_ns: u64,
+    conditions_ns: u64,
+    workspace_ns: u64,
+    sessions: usize,
+    launch_ns: u64,
+    census_ns: u64,
+    total_ns: u64,
+}
+
+impl ProbeGateBatchTiming {
+    fn emit(&self, plan: &CertificationPlan) {
+        if std::env::var_os("SOLID_CHECKER_TIMINGS").is_none() {
+            return;
+        }
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "mode": "probe-gate-batch",
+                "specifier": plan.resolved_import.specifier,
+                "sessions": self.sessions,
+                "pinVerificationNs": self.pin_verification_ns,
+                "conditionsNs": self.conditions_ns,
+                "workspaceNs": self.workspace_ns,
+                "launchNs": self.launch_ns,
+                "censusNs": self.census_ns,
+                "totalNs": self.total_ns,
+            })
+        );
+    }
+}
+
+fn elapsed_ns(started: Instant) -> u64 {
+    u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 
 /// Every distinct import kind the scheduled gates' recipes declare.
@@ -2307,14 +2369,29 @@ impl PrivateProbeWorkspace {
     /// unreadable and the other silently authoritative.
     fn watch_digests(&self) -> Result<BTreeMap<String, String>, ProbeHarnessError> {
         let mut census = BTreeMap::new();
+        let timings = std::env::var_os("SOLID_CHECKER_TIMINGS").is_some();
+        let mut per_label = Vec::new();
         for (label, path) in &self.watched {
+            let started = Instant::now();
             let digest = watch_digest(path)?;
+            if timings {
+                per_label.push((label.clone(), elapsed_ns(started)));
+            }
             if census.insert(label.clone(), digest).is_some() {
                 return Err(ProbeHarnessError::IsolationViolation(format!(
                     "the watched probe input census names {label} twice, so one entry would be \
                      unreadable"
                 )));
             }
+        }
+        if timings {
+            eprintln!(
+                "{}",
+                serde_json::json!({
+                    "mode": "probe-census",
+                    "labelsNs": per_label.into_iter().collect::<BTreeMap<_, _>>(),
+                })
+            );
         }
         Ok(census)
     }

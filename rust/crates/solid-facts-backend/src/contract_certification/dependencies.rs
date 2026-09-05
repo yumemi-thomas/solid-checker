@@ -544,8 +544,22 @@ impl PublishedContractGraphPlan {
         revocation_epoch: u64,
         probes: Option<&super::ProbeHarnessConfiguration>,
     ) -> Result<FinalizedPolicy2Graph, PublishedGraphCertificationError> {
-        self.recipe_gated(probes.map(super::ProbeHarnessConfiguration::recipe_corpus))?
-            .certify_gated_value_only(pin, issuer, revocation_epoch, probes)
+        let mut finalized = certify_graphs_with_recipe_gating(
+            std::slice::from_ref(self),
+            pin,
+            issuer,
+            revocation_epoch,
+            probes,
+        )?;
+        finalized
+            .pop()
+            .ok_or(PublishedGraphCertificationError::EmptyCaseSet)
+    }
+
+    fn node(&self, digest: &str) -> Option<&PlannedGraphNode> {
+        self.nodes
+            .iter()
+            .find(|node| node.identity.digest() == digest)
     }
 
     /// The graph with every node's plan recipe-gated
@@ -569,17 +583,42 @@ impl PublishedContractGraphPlan {
     /// and composition instead proves that what the dependency's receipt
     /// certifies is exactly the accepted proposal with the withheld domains
     /// opened ([`authenticate_dependency_receipt`]).
+    /// One gating pass with a single corpus and nothing already withdrawn:
+    /// what the certification loop's first pass does, kept for the tests that
+    /// pin gating on its own.
+    #[cfg(test)]
     pub(super) fn recipe_gated(
         &self,
         recipe_corpus: Option<&Path>,
+    ) -> Result<Self, PublishedGraphCertificationError> {
+        self.recipe_gated_per_node(&BTreeMap::new(), recipe_corpus, &BTreeMap::new())
+    }
+
+    /// [`Self::recipe_gated`] with ADR 0036's per-node inputs: the corpus and
+    /// the already-withdrawn candidates are chosen *per node*, by canonical
+    /// identity digest, so one node's synthesized corpus and one node's census
+    /// or veto withdrawals never reach another node's gate.
+    pub(super) fn recipe_gated_per_node(
+        &self,
+        synthesized: &BTreeMap<String, super::synthesized_vetoes::SynthesizedCorpus>,
+        base_corpus: Option<&Path>,
+        already_withheld: &BTreeMap<String, Vec<super::WithheldClosure>>,
     ) -> Result<Self, PublishedGraphCertificationError> {
         let nodes = self
             .nodes
             .iter()
             .map(|node| {
+                let digest = node.identity.digest();
+                let corpus = synthesized
+                    .get(digest)
+                    .map(|corpus| corpus.configuration().recipe_corpus())
+                    .or(base_corpus);
                 let (plan, withheld) = node
                     .plan
-                    .recipe_gated(recipe_corpus)
+                    .recipe_gated_with(
+                        corpus,
+                        already_withheld.get(digest).map_or(&[], Vec::as_slice),
+                    )
                     .map_err(
                         |source| PublishedGraphCertificationError::RecipeGatingAtNode {
                             node: node.identity.digest().into(),
@@ -608,51 +647,6 @@ impl PublishedContractGraphPlan {
         })
     }
 
-    fn certify_gated_value_only(
-        &self,
-        pin: &TypeFactsProducerPin,
-        issuer: &ConfiguredReceiptIssuer,
-        revocation_epoch: u64,
-        probes: Option<&super::ProbeHarnessConfiguration>,
-    ) -> Result<FinalizedPolicy2Graph, PublishedGraphCertificationError> {
-        let type_facts_requests = self.type_facts_requests()?;
-        let root_plan = self.plan(self.root_identity()).ok_or_else(|| {
-            PublishedGraphCertificationError::MissingPlannedDependency(
-                self.root_identity().digest().into(),
-            )
-        })?;
-        let type_facts_evidence = super::type_facts::acquire_and_verify_graph_export_values(
-            root_plan,
-            &type_facts_requests
-                .iter()
-                .map(|(_, request)| super::type_facts::GraphExportValueRequest {
-                    plan: request.plan,
-                    dependencies: request.dependencies.clone(),
-                    sources: request.sources,
-                })
-                .collect::<Vec<_>>(),
-            pin,
-        )
-        .map_err(
-            |source| PublishedGraphCertificationError::TypeFactsForGraph {
-                graph: self.graph_root().into(),
-                source,
-            },
-        )?;
-        let type_facts_by_node = type_facts_requests
-            .into_iter()
-            .map(|(identity, _)| identity)
-            .zip(type_facts_evidence)
-            .collect::<BTreeMap<_, _>>();
-        self.finalize_value_only_with_type_facts(
-            &type_facts_by_node,
-            pin,
-            issuer,
-            revocation_epoch,
-            probes,
-        )
-    }
-
     fn type_facts_requests(
         &self,
     ) -> Result<
@@ -675,91 +669,119 @@ impl PublishedContractGraphPlan {
                         plan: &node.plan,
                         dependencies: self.transitive_dependency_plans(node)?,
                         sources: &node.source_dependencies,
+                        acquire: true,
                     },
                 ))
             })
             .collect()
     }
 
+    /// Finalizes every node bottom-up against the pass's evidence and the
+    /// gates the pre-pass authenticated. `Ok(Err(withdrawals))` is a pass that
+    /// could not finalize as gated: a parent's dependency-closure demand
+    /// required a child claim the child withheld, and the parent's own
+    /// candidate is withdrawn by name (ADR 0036, graph lanes); every node
+    /// above a withdrawn one is skipped this pass, so one pass collects every
+    /// such withdrawal the graph can reach.
     fn finalize_value_only_with_type_facts(
         &self,
         type_facts_by_node: &BTreeMap<String, super::type_facts::VerifiedTypeFactsEvidence>,
+        gates_by_node: &BTreeMap<String, (String, super::probe_gates::VerifiedProbeGateBatch)>,
         pin: &TypeFactsProducerPin,
         issuer: &ConfiguredReceiptIssuer,
         revocation_epoch: u64,
-        probes: Option<&super::ProbeHarnessConfiguration>,
-    ) -> Result<FinalizedPolicy2Graph, PublishedGraphCertificationError> {
+    ) -> Result<
+        Result<FinalizedPolicy2Graph, Vec<(String, super::WithheldClosure)>>,
+        PublishedGraphCertificationError,
+    > {
         let mut finalized = Vec::<FinalizedGraphNode>::with_capacity(self.nodes.len());
+        let mut withdrawals = Vec::<(String, super::WithheldClosure)>::new();
+        let mut skipped = BTreeSet::<String>::new();
         for node in &self.nodes {
+            let digest = node.identity.digest();
+            let package = format!(
+                "{}@{}",
+                node.identity.package_name, node.identity.package_version
+            );
+            if node
+                .dependencies
+                .iter()
+                .any(|dependency| skipped.contains(dependency.digest()))
+            {
+                skipped.insert(digest.to_owned());
+                continue;
+            }
             let proposal = crate::contract_document::encode(
                 &node.plan.selected_candidate,
                 &crate::contract_document::SidecarDigests::default(),
                 false,
             )?;
-            let type_facts = type_facts_by_node.get(node.identity.digest());
-            let dependency_evidence =
-                if node.dependencies.is_empty() && node.source_dependencies.is_empty() {
-                    None
-                } else {
-                    let receipts = node
-                        .dependencies
-                        .iter()
-                        .map(|dependency| {
-                            finalized
-                                .iter()
-                                .find(|candidate| &candidate.identity == dependency)
-                                .map(|candidate| (dependency, candidate.finalized.authenticated()))
-                                .ok_or_else(|| {
-                                    PublishedGraphCertificationError::MissingFinalizedDependency(
-                                        dependency.digest().into(),
-                                    )
-                                })
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-                    Some(self.authenticate_dependency_receipts_with_census(
-                        &node.identity,
-                        &receipts,
-                        issuer,
-                        revocation_epoch,
-                        type_facts,
-                    )?)
-                };
-            // Every graph node derives, runs, and authenticates its own veto
-            // set against its own snapshot and demand graph. A parent never
-            // inherits a child's probe authority.
-            let probe_gates = super::finalization::authenticate_probe_gates_with_dependencies(
-                &node.plan,
-                probes,
-                pin,
-                &self.transitive_dependency_plans(node)?,
-            )
-            .map_err(|source| {
-                PublishedGraphCertificationError::FinalizationAtNode {
-                    node: node.identity.digest().into(),
-                    package: format!(
-                        "{}@{}",
-                        node.identity.package_name, node.identity.package_version
-                    ),
-                    source,
+            let type_facts = type_facts_by_node.get(digest);
+            let dependency_evidence = if node.dependencies.is_empty()
+                && node.source_dependencies.is_empty()
+            {
+                None
+            } else {
+                let receipts = node
+                    .dependencies
+                    .iter()
+                    .map(|dependency| {
+                        finalized
+                            .iter()
+                            .find(|candidate| &candidate.identity == dependency)
+                            .map(|candidate| (dependency, candidate.finalized.authenticated()))
+                            .ok_or_else(|| {
+                                PublishedGraphCertificationError::MissingFinalizedDependency(
+                                    dependency.digest().into(),
+                                )
+                            })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                match self.authenticate_dependency_receipts_with_census(
+                    &node.identity,
+                    &receipts,
+                    issuer,
+                    revocation_epoch,
+                    type_facts,
+                ) {
+                    Ok(evidence) => Some(evidence),
+                    Err(DependencyReceiptCompositionError::MissingClosedClaim {
+                        demand_id,
+                        semantic_claim_id,
+                    }) => {
+                        let Some(record) =
+                            composed_from_withheld_dependency(node, &demand_id, &semantic_claim_id)
+                        else {
+                            return Err(DependencyReceiptCompositionError::MissingClosedClaim {
+                                demand_id,
+                                semantic_claim_id,
+                            }
+                            .into());
+                        };
+                        withdrawals.push((digest.to_owned(), record));
+                        skipped.insert(digest.to_owned());
+                        continue;
+                    }
+                    Err(error) => return Err(error.into()),
                 }
+            };
+            let (_, probe_gates) = gates_by_node.get(digest).ok_or_else(|| {
+                PublishedGraphCertificationError::MissingProbeGates(digest.to_owned())
             })?;
             let contract = super::finalization::finalize_value_only_with_dependencies(
                 &node.plan,
                 &proposal,
                 type_facts,
                 dependency_evidence.as_ref(),
-                &probe_gates,
+                probe_gates,
                 pin,
                 issuer,
                 revocation_epoch,
             )
             .map_err(|source| {
                 PublishedGraphCertificationError::FinalizationAtNode {
-                    node: node.identity.digest().into(),
-                    package: format!(
-                        "{}@{}",
-                        node.identity.package_name, node.identity.package_version
-                    ),
+                    node: digest.to_owned(),
+                    package: package.clone(),
                     source,
                 }
             })?;
@@ -768,12 +790,60 @@ impl PublishedContractGraphPlan {
                 finalized: contract.with_withheld_closures(node.withheld.clone()),
             });
         }
-        Ok(FinalizedPolicy2Graph {
+        if !withdrawals.is_empty() {
+            return Ok(Err(withdrawals));
+        }
+        Ok(Ok(FinalizedPolicy2Graph {
             graph_root: self.graph_root.clone(),
             root: self.root.clone(),
             nodes: finalized,
-        })
+        }))
     }
+}
+
+/// The parent candidate a `MissingClosedClaim` composition refusal is about,
+/// withheld by name: the parent's dependency-closure demand `demand_id` asked
+/// for `child_claim` closed in the dependency's certified contract, and the
+/// dependency withheld it, so the parent's own closure -- composed from that
+/// claim -- cannot be certified either. Withholding the parent leaves its
+/// domain open, which is exactly what is known. `None` when the demand is not
+/// a proposable dependency-closure demand of this node, in which case the
+/// refusal stands.
+fn composed_from_withheld_dependency(
+    node: &PlannedGraphNode,
+    demand_id: &str,
+    child_claim: &str,
+) -> Option<super::WithheldClosure> {
+    let demand = node
+        .plan
+        .demand_graph()
+        .demands()
+        .iter()
+        .find(|demand| demand.id().as_str() == demand_id)?;
+    let ProofDemandSubject::DependencyClosure {
+        dependency, parent, ..
+    } = demand.subject()
+    else {
+        return None;
+    };
+    let super::SemanticClaimPath::Domain(super::ClaimPath::Call(domain)) = &parent.path else {
+        return None;
+    };
+    if !domain.is_proposable() {
+        return None;
+    }
+    let semantic_claim_id = node.plan.candidates.proposal().claim_id(parent).ok()?;
+    Some(super::WithheldClosure {
+        artifact_case: parent.artifact_case.clone(),
+        export: parent.export.clone(),
+        domain: super::type_facts::call_claim_domain_name(*domain).to_owned(),
+        semantic_claim_id: semantic_claim_id.as_str().to_owned(),
+        reason: format!(
+            "{}{child_claim} of {}",
+            super::WITHHELD_CLOSURE_DEPENDENCY_WITHHELD_PREFIX,
+            dependency.package
+        ),
+    })
 }
 
 /// Certifies a complete root case-set through one Type Facts session and one
@@ -787,25 +857,416 @@ pub fn certify_published_contract_graph_case_set(
     revocation_epoch: u64,
     probes: Option<&super::ProbeHarnessConfiguration>,
 ) -> Result<Vec<FinalizedPolicy2Graph>, PublishedGraphCertificationError> {
-    // Recipe-gated before anything is acquired, for the same reason and with
-    // the same consequence as the single-graph lane: a node's `creates`
-    // candidate with no recipe is withheld by name rather than planned into a
-    // gate that would refuse the whole case set.
-    let recipe_corpus = probes.map(super::ProbeHarnessConfiguration::recipe_corpus);
-    let gated = graphs
-        .iter()
-        .map(|graph| graph.recipe_gated(recipe_corpus))
-        .collect::<Result<Vec<_>, _>>()?;
-    certify_gated_graph_case_set(&gated, pin, issuer, revocation_epoch, probes)
+    certify_graphs_with_recipe_gating(graphs, pin, issuer, revocation_epoch, probes)
 }
 
-fn certify_gated_graph_case_set(
+/// ADR 0036 for the graph lanes: recipe gating, census-refusal and
+/// incomplete-veto withholding, and synthesized vetoes, per node.
+///
+/// The value-only lane's bounded loop (`CertificationPlan::certify_value_only`)
+/// applied to every node of every graph in the case set at once. Each pass
+/// re-gates every node with the corpus and the already-withdrawn candidates
+/// chosen for *that* node, acquires exported-value evidence for the nodes whose
+/// gating changed since their evidence was taken, and then either withdraws one
+/// more candidate by name -- a census that could not decide it, a veto run that
+/// did not complete -- and goes again, or synthesizes a veto for every node's
+/// recipe-less candidate that stated a call signature (once, before the first
+/// gate runs), or finalizes. Every pass withdraws at least one candidate or is
+/// the one synthesis pass, so the loop is bounded by the number of closure
+/// candidates in the case set plus two.
+///
+/// A node's synthesized corpus and a node's withdrawals are keyed by its
+/// canonical identity digest, so nothing a child withheld or synthesized
+/// reaches a parent's gate, and canonical nodes two roots share are gated and
+/// acquired once. Evidence is re-acquired only for nodes whose own gating moved:
+/// a gate changes a node's demand graph, never its resolution, and a parent's
+/// dependency demands hash the accepted proposal digest the gate leaves alone.
+fn certify_graphs_with_recipe_gating(
     graphs: &[PublishedContractGraphPlan],
     pin: &TypeFactsProducerPin,
     issuer: &ConfiguredReceiptIssuer,
     revocation_epoch: u64,
     probes: Option<&super::ProbeHarnessConfiguration>,
 ) -> Result<Vec<FinalizedPolicy2Graph>, PublishedGraphCertificationError> {
+    let first_graph = graphs
+        .first()
+        .ok_or(PublishedGraphCertificationError::EmptyCaseSet)?;
+    let label = if graphs.len() == 1 {
+        first_graph.graph_root().to_owned()
+    } else {
+        "published-graph-case-set".to_owned()
+    };
+    let candidate_count = graphs
+        .iter()
+        .flat_map(|graph| graph.nodes.iter())
+        .map(|node| node.plan.candidates.closure_candidates().len())
+        .sum::<usize>();
+    let passes = candidate_count + 2;
+    let mut already_withheld = BTreeMap::<String, Vec<super::WithheldClosure>>::new();
+    let mut synthesized = BTreeMap::<String, super::synthesized_vetoes::SynthesizedCorpus>::new();
+    let mut synthesis_attempted = false;
+    let base_corpus = probes.map(super::ProbeHarnessConfiguration::recipe_corpus);
+    // Evidence and gates persist across passes, each entry keyed by the gating
+    // it was taken under: a node whose demand-graph root (and, for gates, whose
+    // corpus) did not move keeps both, so a pass costs only the nodes it moved.
+    let mut evidence_by_node =
+        BTreeMap::<String, super::type_facts::VerifiedTypeFactsEvidence>::new();
+    let mut evidence_roots = BTreeMap::<String, String>::new();
+    let mut gates_by_node =
+        BTreeMap::<String, (String, super::probe_gates::VerifiedProbeGateBatch)>::new();
+    let emit_timings = std::env::var_os("SOLID_CHECKER_TIMINGS").is_some();
+    for pass in 0..passes {
+        let mut timing = GraphGatingPassTiming {
+            pass,
+            ..GraphGatingPassTiming::default()
+        };
+        let pass_started = std::time::Instant::now();
+        let gated = graphs
+            .iter()
+            .map(|graph| graph.recipe_gated_per_node(&synthesized, base_corpus, &already_withheld))
+            .collect::<Result<Vec<_>, _>>()?;
+        // Every Type Facts node stays in the request set on every pass, and
+        // only the nodes whose demand-graph root moved are acquired again.
+        // Acquiring a subset of the *plans* was tried and is unsound: an
+        // export's runtime binding may belong to another node's snapshot (a
+        // re-export), and `export_implementation_location` finds that owner
+        // among the plans being acquired, so a subset left such an export
+        // bound to "an unplanned snapshot". Keeping every plan in the request
+        // while acquiring only the moved ones keeps the owner lookup whole.
+        timing.nodes = gated.iter().map(|graph| graph.nodes.len()).sum();
+        let acquisition_started = std::time::Instant::now();
+        let acquired = acquire_case_set_evidence(&gated, pin, &evidence_roots);
+        timing.acquisition_ns = elapsed_ns(acquisition_started);
+        match acquired {
+            Ok(fresh) => {
+                timing.acquired = fresh.len();
+                for (digest, evidence) in fresh {
+                    let root = gated
+                        .iter()
+                        .find_map(|graph| graph.node(&digest))
+                        .map(|node| node.plan.demand_graph().root().as_str().to_owned())
+                        .expect("fresh evidence names a gated node");
+                    evidence_roots.insert(digest.clone(), root);
+                    evidence_by_node.insert(digest, evidence);
+                }
+            }
+            Err(PublishedGraphCertificationError::TypeFactsForGraph { source, .. }) => {
+                // Every node's census refusals at once (`CensusRefused`
+                // carries them all), each withheld at its own node.
+                let mut seen = BTreeSet::new();
+                let mut withdrawn = 0_usize;
+                for node in gated.iter().flat_map(|graph| graph.nodes.iter()) {
+                    let digest = node.identity.digest();
+                    if !seen.insert(digest.to_owned()) {
+                        continue;
+                    }
+                    let records = super::census_refusal_withholding(&node.plan, &source);
+                    withdrawn += records.len();
+                    if !records.is_empty() {
+                        already_withheld
+                            .entry(digest.to_owned())
+                            .or_default()
+                            .extend(records);
+                    }
+                }
+                if withdrawn == 0 {
+                    return Err(PublishedGraphCertificationError::TypeFactsForGraph {
+                        graph: label,
+                        source,
+                    });
+                }
+                timing.withdrawn = withdrawn;
+                timing.emit(emit_timings, pass_started);
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
+        if !synthesis_attempted {
+            synthesis_attempted = true;
+            if let Some(base) = probes {
+                let synthesis_started = std::time::Instant::now();
+                let mut changed = false;
+                for node in gated.iter().flat_map(|graph| graph.nodes.iter()) {
+                    let digest = node.identity.digest();
+                    if synthesized.contains_key(digest) {
+                        continue;
+                    }
+                    let Some(evidence) = evidence_by_node.get(digest) else {
+                        continue;
+                    };
+                    let corpus = super::synthesized_vetoes::synthesize(
+                        &node.plan,
+                        evidence,
+                        base,
+                        &node.withheld,
+                    )
+                    .map_err(|error| {
+                        PublishedGraphCertificationError::FinalizationAtNode {
+                            node: digest.to_owned(),
+                            package: format!(
+                                "{}@{}",
+                                node.identity.package_name, node.identity.package_version
+                            ),
+                            source: super::Policy2FinalizationError::VetoSynthesis(
+                                error.to_string(),
+                            ),
+                        }
+                    })?;
+                    if let Some(corpus) = corpus {
+                        synthesized.insert(digest.to_owned(), corpus);
+                        changed = true;
+                        timing.synthesized += 1;
+                    }
+                }
+                timing.synthesis_ns = elapsed_ns(synthesis_started);
+                if changed {
+                    timing.emit(emit_timings, pass_started);
+                    continue;
+                }
+            }
+        }
+        // Gate pre-pass: every node's veto set runs now, so one pass collects
+        // every incomplete veto and every synthesized veto the interpreter
+        // cannot run, instead of one per pass.
+        let mut withdrawals = Vec::<(String, super::WithheldClosure)>::new();
+        let mut dropped_corpora = BTreeSet::<String>::new();
+        let mut gated_this_pass = BTreeSet::<String>::new();
+        for graph in &gated {
+            for node in &graph.nodes {
+                let digest = node.identity.digest();
+                if !gated_this_pass.insert(digest.to_owned()) || dropped_corpora.contains(digest) {
+                    continue;
+                }
+                if withdrawals.iter().any(|(withdrawn, _)| withdrawn == digest) {
+                    continue;
+                }
+                let package = format!(
+                    "{}@{}",
+                    node.identity.package_name, node.identity.package_version
+                );
+                let node_probes = synthesized
+                    .get(digest)
+                    .map(super::synthesized_vetoes::SynthesizedCorpus::configuration)
+                    .or(probes);
+                let gating_key = format!(
+                    "{}\0{}",
+                    node.plan.demand_graph().root().as_str(),
+                    node_probes.map_or_else(String::new, |configuration| {
+                        configuration.recipe_corpus().to_string_lossy().into_owned()
+                    })
+                );
+                if gates_by_node
+                    .get(digest)
+                    .is_some_and(|(key, _)| *key == gating_key)
+                {
+                    continue;
+                }
+                gates_by_node.remove(digest);
+                let dependencies = graph.transitive_dependency_plans(node)?;
+                let gate_started = std::time::Instant::now();
+                let authenticated = super::finalization::authenticate_probe_gates_with_dependencies(
+                    &node.plan,
+                    node_probes,
+                    pin,
+                    &dependencies,
+                );
+                timing.gate_runs += 1;
+                timing.gate_sessions += node
+                    .plan
+                    .probe_gate_schedule()
+                    .map_or(0, |schedule| schedule.gates().len());
+                timing.gate_ns += elapsed_ns(gate_started);
+                match authenticated {
+                    Ok(gates) => {
+                        gates_by_node.insert(digest.to_owned(), (gating_key, gates));
+                    }
+                    Err(source) => {
+                        if let Some(record) =
+                            super::incomplete_gate_withholding(&node.plan, &source)
+                        {
+                            withdrawals.push((digest.to_owned(), record));
+                            continue;
+                        }
+                        // A synthesized veto the pinned interpreter cannot run
+                        // for this artifact case -- an export condition it
+                        // cannot be given (`@tanstack/custom-condition`), or
+                        // one under which it would load a different file than
+                        // the witness read (`solid` selecting `dist/solid.js`
+                        // where Node selects `dist/server.js`). The hand corpus
+                        // named nothing for these candidates and the checker's
+                        // own veto cannot be executed, so they are withheld
+                        // with that reason and the node keeps the hand corpus.
+                        // A hand recipe that hits the same binding refuses as
+                        // it always did.
+                        let cannot_run = matches!(
+                            &source,
+                            super::Policy2FinalizationError::ProbeHarness(
+                                super::probe_harness::ProbeHarnessError::Configuration(_)
+                                    | super::probe_harness::ProbeHarnessError::ConditionMismatch(_)
+                            )
+                        );
+                        if cannot_run && synthesized.contains_key(digest) {
+                            let served = graphs
+                                .iter()
+                                .find_map(|original| original.node(digest))
+                                .map(|original| {
+                                    original.plan.recipe_gated_with(
+                                        base_corpus,
+                                        already_withheld.get(digest).map_or(&[], Vec::as_slice),
+                                    )
+                                })
+                                .transpose()
+                                .map_err(|gating| {
+                                    PublishedGraphCertificationError::RecipeGatingAtNode {
+                                        node: digest.to_owned(),
+                                        package: package.clone(),
+                                        source: Box::new(gating),
+                                    }
+                                })?
+                                .map(|gated| gated.into_parts().1)
+                                .unwrap_or_default();
+                            let schedule = node.plan.probe_gate_schedule().ok();
+                            let records = served
+                                .into_iter()
+                                .filter(|record| record.reason == super::WITHHELD_CLOSURE_NO_RECIPE)
+                                .map(|record| {
+                                    let gate_id = schedule
+                                        .as_ref()
+                                        .and_then(|schedule| {
+                                            schedule.gates().iter().find(|gate| {
+                                                gate.semantic_claim_id() == record.semantic_claim_id
+                                            })
+                                        })
+                                        .map_or_else(
+                                            || "unscheduled".to_owned(),
+                                            |gate| gate.id().to_owned(),
+                                        );
+                                    (
+                                        digest.to_owned(),
+                                        super::WithheldClosure {
+                                            reason: format!(
+                                                "{}{gate_id} (synthesized veto cannot run for this artifact case: {source})",
+                                                super::WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX
+                                            ),
+                                            ..record
+                                        },
+                                    )
+                                })
+                                .collect::<Vec<_>>();
+                            if !records.is_empty() {
+                                withdrawals.extend(records);
+                                dropped_corpora.insert(digest.to_owned());
+                                continue;
+                            }
+                        }
+                        return Err(PublishedGraphCertificationError::FinalizationAtNode {
+                            node: digest.to_owned(),
+                            package,
+                            source,
+                        });
+                    }
+                }
+            }
+        }
+        for digest in &dropped_corpora {
+            synthesized.remove(digest);
+        }
+        if !withdrawals.is_empty() {
+            timing.withdrawn = withdrawals.len();
+            for (digest, record) in withdrawals {
+                already_withheld.entry(digest).or_default().push(record);
+            }
+            timing.emit(emit_timings, pass_started);
+            continue;
+        }
+        let mut finalized = Vec::with_capacity(gated.len());
+        let mut composition_withdrawals = Vec::new();
+        for graph in &gated {
+            match graph.finalize_value_only_with_type_facts(
+                &evidence_by_node,
+                &gates_by_node,
+                pin,
+                issuer,
+                revocation_epoch,
+            )? {
+                Ok(contract) => finalized.push(contract),
+                Err(withdrawn) => composition_withdrawals.extend(withdrawn),
+            }
+        }
+        timing.withdrawn = composition_withdrawals.len();
+        timing.emit(emit_timings, pass_started);
+        if composition_withdrawals.is_empty() {
+            return Ok(finalized);
+        }
+        for (digest, record) in composition_withdrawals {
+            already_withheld.entry(digest).or_default().push(record);
+        }
+    }
+    Err(PublishedGraphCertificationError::WithholdingDidNotConverge { passes })
+}
+
+/// What one pass of [`certify_graphs_with_recipe_gating`] cost and moved,
+/// reported under `SOLID_CHECKER_TIMINGS` so a slow graph row is attributable
+/// to acquisition, synthesis, or gate launches rather than guessed at.
+#[derive(Debug, Default)]
+struct GraphGatingPassTiming {
+    pass: usize,
+    nodes: usize,
+    acquired: usize,
+    acquisition_ns: u64,
+    synthesized: usize,
+    synthesis_ns: u64,
+    gate_runs: usize,
+    gate_sessions: usize,
+    gate_ns: u64,
+    withdrawn: usize,
+}
+
+impl GraphGatingPassTiming {
+    fn emit(&self, enabled: bool, pass_started: std::time::Instant) {
+        if !enabled {
+            return;
+        }
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "mode": "graph-recipe-gating",
+                "pass": self.pass,
+                "nodes": self.nodes,
+                "acquired": self.acquired,
+                "acquisitionNs": self.acquisition_ns,
+                "synthesized": self.synthesized,
+                "synthesisNs": self.synthesis_ns,
+                "gateRuns": self.gate_runs,
+                "gateSessions": self.gate_sessions,
+                "gateNs": self.gate_ns,
+                "withdrawn": self.withdrawn,
+                "passNs": elapsed_ns(pass_started),
+            })
+        );
+    }
+}
+
+fn elapsed_ns(started: std::time::Instant) -> u64 {
+    u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX)
+}
+
+/// Exported-value evidence for the Type Facts nodes of the case set whose
+/// gating moved since `held` was taken, keyed by canonical identity digest;
+/// `held` maps a digest to the demand-graph root its evidence was acquired
+/// under, and a node whose root is unchanged is not acquired again. Every node
+/// still takes part in schedule derivation, so an export whose runtime binding
+/// belongs to another node's snapshot finds its owner. Canonical nodes shared
+/// by several roots are acquired once; the same digest naming two different
+/// identities is refused.
+fn acquire_case_set_evidence(
+    graphs: &[PublishedContractGraphPlan],
+    pin: &TypeFactsProducerPin,
+    held: &BTreeMap<String, String>,
+) -> Result<
+    BTreeMap<String, super::type_facts::VerifiedTypeFactsEvidence>,
+    PublishedGraphCertificationError,
+> {
     let first_graph = graphs
         .first()
         .ok_or(PublishedGraphCertificationError::EmptyCaseSet)?;
@@ -819,12 +1280,14 @@ fn certify_gated_graph_case_set(
     let mut requests = BTreeMap::new();
     let mut identities = BTreeMap::new();
     for graph in graphs {
-        for (identity, request) in graph.type_facts_requests()? {
+        for (identity, mut request) in graph.type_facts_requests()? {
             let node = graph
                 .nodes
                 .iter()
                 .find(|node| node.identity.digest() == identity)
                 .expect("Type Facts requests originate from retained graph nodes");
+            request.acquire =
+                held.get(&identity) != Some(&node.plan.demand_graph().root().as_str().to_owned());
             if identities
                 .insert(identity.clone(), node.identity.clone())
                 .is_some_and(|previous| previous != node.identity)
@@ -860,22 +1323,11 @@ fn certify_gated_graph_case_set(
                     source,
                 },
             )?;
-    let evidence_by_node = request_keys
+    Ok(request_keys
         .into_iter()
         .zip(evidence)
-        .collect::<BTreeMap<_, _>>();
-    graphs
-        .iter()
-        .map(|graph| {
-            graph.finalize_value_only_with_type_facts(
-                &evidence_by_node,
-                pin,
-                issuer,
-                revocation_epoch,
-                probes,
-            )
-        })
-        .collect()
+        .filter_map(|(digest, evidence)| evidence.map(|evidence| (digest, evidence)))
+        .collect())
 }
 
 /// The coordinates one case-set Type Facts request is ordered by, most
@@ -1050,6 +1502,13 @@ pub enum PublishedGraphCertificationError {
         #[source]
         source: Box<super::RecipeGatingError>,
     },
+    /// ADR 0036's withdraw-and-re-plan passes are bounded by the number of
+    /// closure candidates in the graph plus one synthesis pass; exceeding that
+    /// is a defect in the bookkeeping, not a property of the package.
+    #[error("recipe gating of the published graph did not converge within {passes} passes")]
+    WithholdingDidNotConverge { passes: usize },
+    #[error("graph node {0} reached finalization without an authenticated probe gate set")]
+    MissingProbeGates(String),
     #[error(transparent)]
     Contract(#[from] crate::contract_interface::ContractFailure),
 }

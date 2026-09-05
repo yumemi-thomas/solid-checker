@@ -30,6 +30,15 @@ import { fileURLToPath } from "node:url";
 const harnessRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 import { runNativeAsync } from "../bin/launcher.mjs";
+
+// The native checker's `SOLID_CHECKER_TIMINGS` lines go to its stderr, which
+// the launcher pipes and a successful exit would otherwise drop. Forward them
+// when timings were asked for, so a slow certification is attributable from
+// the CLI the same way it is from the binary.
+function forwardNativeTimings(child) {
+  if (!process.env.SOLID_CHECKER_TIMINGS || !child.stderr) return;
+  process.stderr.write(child.stderr);
+}
 import {
   ArtifactResolutionError,
   ArtifactResolutionSession,
@@ -684,6 +693,7 @@ async function planDemands({ options, generated, artifactSnapshot, scratch }) {
       { cwd: options.packageRoot, env: { SOLID_CHECKER_DAEMON: "0" } }
     );
     if (child.error) throw new Error(`could not start the native checker: ${child.error.message}`);
+  forwardNativeTimings(child);
     if (child.status !== 0) {
       throw new Error(
         child.stderr.trim() || child.stdout.trim() || `native checker exited ${child.status}`
@@ -1513,6 +1523,7 @@ async function executePreparedPublishedGraphs({
     { cwd: options.packageRoot, env: { SOLID_CHECKER_DAEMON: "0" } }
   );
   if (child.error) throw new Error(`could not start the native checker: ${child.error.message}`);
+  forwardNativeTimings(child);
   if (child.status !== 0) {
     const reason =
       child.stderr.trim() || child.stdout.trim() || `native checker exited ${child.status}`;
@@ -2349,6 +2360,7 @@ async function executeNativeCertification({
     { cwd: options.packageRoot, env: { SOLID_CHECKER_DAEMON: "0" } }
   );
   if (child.error) throw new Error(`could not start the native checker: ${child.error.message}`);
+  forwardNativeTimings(child);
   if (child.status !== 0) {
     const reason =
       child.stderr.trim() || child.stdout.trim() || `native checker exited ${child.status}`;

@@ -18248,10 +18248,71 @@ new one. Withheld `creates` candidates in the pin: 1697 `noRecipe`, 8
 failed to apply: every one of them sits on a published-graph node of a row that
 refused this morning and certifies now (`motion-solidjs` alone carries 1090,
 `@corvu/drawer` 184, the tanstack query rows and the corvu accordions the
-rest), and ADR 0036's synthesized vetoes run in the value-only lanes only —
-`recipe_gated` on a graph node withholds without synthesizing. Extending
-synthesis to graph nodes is the next step for that number; the rows' receipts
-are exact about the open domain either way.
+rest), and ADR 0036's synthesized vetoes ran in the value-only lanes only —
+`recipe_gated` on a graph node withheld without synthesizing. The graph-lane
+extension below is what moved that number; the rows' receipts are exact about
+the open domain either way.
+
+### The graph lanes withhold, synthesize, and re-plan too (2026-09-06)
+
+ADR 0036's amendment. `certify_graphs_with_recipe_gating` runs the census /
+incomplete-veto / synthesis loop per node of a published graph, keyed by
+canonical identity digest: a census refusal withdraws the named candidate at its
+node (every node's refusals in one pass), an incomplete veto withdraws at its
+node (every node's in one gate pre-pass), one synthesis pass derives a veto for
+every node's recipe-less candidate with a stated call signature, and a
+synthesized veto the pinned interpreter cannot run for a node's artifact case
+(a condition it cannot be given, or one that selects a different file than the
+witness read) withdraws the served candidates with the gate named instead of
+refusing the graph. A parent whose candidate composes over a dependency's
+withheld claim is withheld with `composed from a withheld dependency claim:`
+rather than refusing composition. Evidence and gate batches persist across
+passes keyed by the gating they were taken under, so a pass costs only the
+nodes it moved; every plan stays in the acquisition request so a re-export's
+owner is always among the plans.
+
+Measured on the two heaviest graph rows, release checker, `--probe-recipe-corpus`:
+
+| row | before (pinned) | after |
+| --- | --- | --- |
+| `@corvu-next/accordion@0.1.5` | certified, 8.6 s, 64 withheld (64 `noRecipe`) | certified, 19.2 s, 54 withheld (40 `censusRefused`, 14 `vetoIncomplete`, 0 `noRecipe`) |
+| `@corvu/drawer@0.2.4` | certified, 10.5 s, 184 withheld (184 `noRecipe`) | certified, 30.2 s, 166 withheld (106 `censusRefused`, 58 `vetoIncomplete`, 2 `noRecipe`) |
+
+The extra wall time is the vetoes actually running: 24 and 74 worker sessions
+that no recipe had asked for before. The two `noRecipe` left on the drawer are
+candidates whose export states no unique call signature, which synthesis does
+not serve. The `vetoIncomplete` bucket is almost entirely the cannot-run shape
+(`@corvu` artifacts resolved under the `solid` condition, where the pinned
+interpreter would load `dist/server.js`); its reason names the gate and the
+binding error.
+
+Two measurement facts worth keeping. First, `bin/solid-checker-rust` is a
+*debug* build (`build-rust` copies `rust/target/debug`), and the same rows took
+279 s and 502 s under it: the harness census hashes the pinned Node executable,
+the verifier's own image, and the Type Facts producer between every session
+(~263 MB), which the debug profile hashes at ~80 MB/s and release at
+~1.4 GB/s. The benchmark and regression targets already run
+`rust/target/release`, so the pin was never affected; a row timed with the
+`bin/` binary is not comparable to it. Second, the attribution came from a new
+`SOLID_CHECKER_TIMINGS` report — `graph-recipe-gating` per pass,
+`probe-gate-batch` per harness batch, `probe-census` per census with per-label
+nanoseconds — forwarded through the CLI and the ecosystem runner, which
+otherwise keep no stderr for a certified row.
+
+**Repinned (release checker, recipe corpus on both targets, 224 s wall against
+85 s):** 368 certified, 30 refused — not one row changed status against the
+previous pin, and the regression comparison saw nothing. Withheld `creates`
+candidates: 1367 against 1706, of which 57 `noRecipe` (was 1697), 1048
+`censusRefused`, 262 `vetoIncomplete`, 0 composed over a withheld dependency.
+The slowest row is `motion-solidjs@0.6.0` at 217 s (was 22 s with all 1090 of
+its candidates withheld unexamined); it now runs its synthesized vetoes and
+stays under the 600 s row budget. `exportsProven` is unchanged at 0 corpus-wide
+— what moved is *why* each candidate is open, from "nobody asked" to a census
+refusal or an incomplete veto with the gate named. The 57 remaining `noRecipe`
+are candidates whose export states no unique call signature; the 262
+`vetoIncomplete` are dominated by the cannot-run shape and are the next number
+to attack, with a harness that can be given the artifact case's own condition
+set. Phase 21 ledger regenerated; only the report digest pin moved.
 
 ### Exact remaining refusals in the traced set
 

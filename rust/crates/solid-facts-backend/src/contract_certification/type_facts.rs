@@ -931,6 +931,12 @@ pub(super) struct GraphExportValueRequest<'a> {
     pub(super) plan: &'a CertificationPlan,
     pub(super) dependencies: Vec<&'a CertificationPlan>,
     pub(super) sources: &'a [super::dependencies::VerifiedGraphSourcePackage],
+    /// Whether this node's exported values are acquired and verified in this
+    /// call. A node whose gating did not move since its evidence was taken
+    /// keeps that evidence (ADR 0036's graph loop); its plan still takes part
+    /// in schedule derivation, so an export whose runtime binding belongs to
+    /// this node's snapshot still finds its owner.
+    pub(super) acquire: bool,
 }
 
 /// Acquires all exported-value answers for one opaque graph through one pinned
@@ -942,7 +948,7 @@ pub(super) fn acquire_and_verify_graph_export_values(
     project_root: &CertificationPlan,
     requests: &[GraphExportValueRequest<'_>],
     pin: &TypeFactsProducerPin,
-) -> Result<Vec<VerifiedTypeFactsEvidence>, TypeFactsCertificationError> {
+) -> Result<Vec<Option<VerifiedTypeFactsEvidence>>, TypeFactsCertificationError> {
     if requests.is_empty() {
         return Ok(Vec::new());
     }
@@ -961,13 +967,19 @@ pub(super) fn acquire_and_verify_graph_export_values(
     let mut variant_keys: Vec<Vec<String>> = Vec::new();
     let mut representatives: Vec<&GraphExportValueRequest<'_>> = Vec::new();
     let mut representative_of = Vec::with_capacity(all_requests.len());
+    // A group is acquired when any of its variants asks to be.
+    let mut group_acquire: Vec<bool> = Vec::new();
     for request in all_requests {
         let key = importer_invariant_request_key(request);
         let position = match variant_keys.iter().position(|known| *known == key) {
-            Some(position) => position,
+            Some(position) => {
+                group_acquire[position] |= request.acquire;
+                position
+            }
             None => {
                 variant_keys.push(key);
                 representatives.push(request);
+                group_acquire.push(request.acquire);
                 representatives.len() - 1
             }
         };
@@ -1045,7 +1057,11 @@ pub(super) fn acquire_and_verify_graph_export_values(
     let evidence = requests
         .iter()
         .zip(&schedules)
-        .map(|(request, schedule)| {
+        .enumerate()
+        .map(|(position, (request, schedule))| {
+            if !group_acquire[position] {
+                return Ok(None);
+            }
             let live = session
                 .acquire_export_values(request.plan, schedule)
                 .map_err(|error| {
@@ -1085,8 +1101,10 @@ pub(super) fn acquire_and_verify_graph_export_values(
             .map_err(|error| {
                 error.at_graph_node(request.plan, "live graph export-value verification")
             })
+            .map(Some)
         })
-        .collect::<Result<Vec<_>, _>>();
+        .collect::<Vec<Result<_, _>>>();
+    let evidence = merge_graph_census_refusals(evidence);
     report_certification_timing(
         "live-export-value-acquisition-and-verification",
         started,
@@ -1112,6 +1130,43 @@ pub(super) fn acquire_and_verify_graph_export_values(
             .map(|position| evidence[*position].clone())
             .collect()
     })
+}
+
+/// Every node's verification result as one result: the evidence of every
+/// node when every node verified; otherwise the first error that is not a
+/// census refusal; otherwise one `CensusRefused` carrying every node's census
+/// refusals, so the caller withholds them all in one pass.
+fn merge_graph_census_refusals<T>(
+    results: Vec<Result<T, TypeFactsCertificationError>>,
+) -> Result<Vec<T>, TypeFactsCertificationError> {
+    let mut evidence = Vec::with_capacity(results.len());
+    let mut refusals = Vec::new();
+    for result in results {
+        match result {
+            Ok(verified) => evidence.push(verified),
+            Err(error) => {
+                let mut inner = &error;
+                while let TypeFactsCertificationError::TransactionStage { source, .. }
+                | TypeFactsCertificationError::GraphNodeStage { source, .. } = inner
+                {
+                    inner = source;
+                }
+                match inner {
+                    TypeFactsCertificationError::CensusRefused {
+                        refusals: node_refusals,
+                    } => {
+                        refusals.extend(node_refusals.iter().cloned());
+                    }
+                    _ => return Err(error),
+                }
+            }
+        }
+    }
+    if refusals.is_empty() {
+        Ok(evidence)
+    } else {
+        Err(TypeFactsCertificationError::CensusRefused { refusals })
+    }
 }
 
 /// What decides whether two graph nodes may share one exported-value
@@ -2874,6 +2929,7 @@ fn verify_live_export_value_answer_with_project_census(
     let certification_sources_root = plan.certification_sources_root();
     let mut bindings = Vec::with_capacity(expected_ids.len());
     let mut call_signatures = std::collections::BTreeMap::new();
+    let mut census_refusals = Vec::<CensusRefusal>::new();
     for (index, scheduled) in schedule.export_values.iter().enumerate() {
         let transcript = &answer.transcripts[index];
         if let (Some(signature), Some(proof)) = (
@@ -2905,7 +2961,7 @@ fn verify_live_export_value_answer_with_project_census(
         let transcript_root = format!("sha256:{:x}", Sha256::digest(&transcript_bytes));
         for proof in &scheduled.proof_demands {
             verify_export_value_subject(plan, proof, transcript, dependencies)?;
-            let mut sites = verify_export_value_family(
+            let mut sites = match verify_export_value_family(
                 plan,
                 proof,
                 transcript,
@@ -2914,7 +2970,20 @@ fn verify_live_export_value_answer_with_project_census(
                     transcripts: &answer.transcripts,
                 },
                 census,
-            )?;
+            ) {
+                Ok(sites) => sites,
+                // A census that could not decide a proposable closure
+                // candidate is recorded and the next demand is read: the
+                // caller withholds every recorded candidate at once and
+                // re-plans, and the evidence of this answer is not returned.
+                Err(error) => {
+                    if let Some(refusal) = proposable_census_refusal(proof, &error) {
+                        census_refusals.push(refusal);
+                        continue;
+                    }
+                    return Err(error);
+                }
+            };
             sites.extend(source_sites.iter().cloned());
             sites.sort();
             sites.dedup();
@@ -2941,10 +3010,50 @@ fn verify_live_export_value_answer_with_project_census(
             ));
         }
     }
+    if !census_refusals.is_empty() {
+        return Err(TypeFactsCertificationError::CensusRefused {
+            refusals: census_refusals,
+        });
+    }
     Ok(VerifiedTypeFactsEvidence {
         bindings,
         session_evidence_root: identity.evidence_root().to_owned(),
         call_signatures,
+    })
+}
+
+/// `error` as the census refusal of `proof`, when `proof` is a
+/// domain-exhaustiveness demand on a proposable call domain and the error is
+/// the census saying it cannot decide it -- the pair ADR 0036 withholds on.
+/// Anything else is `None` and refuses as before.
+fn proposable_census_refusal(
+    proof: &ScheduledProofDemand,
+    error: &TypeFactsCertificationError,
+) -> Option<CensusRefusal> {
+    if proof.family != ProofFamily::DomainExhaustiveness {
+        return None;
+    }
+    let ProofDemandSubject::DomainClosure { subject, .. } = &proof.subject else {
+        return None;
+    };
+    let SemanticClaimPath::Domain(ClaimPath::Call(domain)) = &subject.path else {
+        return None;
+    };
+    if !domain.is_proposable() {
+        return None;
+    }
+    let (demand, reason) = match error {
+        TypeFactsCertificationError::UnsupportedDemand { demand, reason }
+        | TypeFactsCertificationError::FamilyOpen { demand, reason } => (demand, reason),
+        _ => return None,
+    };
+    if demand != &proof.id {
+        return None;
+    }
+    Some(CensusRefusal {
+        demand: demand.clone(),
+        reason: reason.clone(),
+        rendered: error.to_string(),
     })
 }
 
@@ -9823,6 +9932,31 @@ fn set_execution_permissions(_path: &Path) -> Result<(), TypeFactsCertificationE
     ))
 }
 
+/// One proposable closure candidate's census refusal: the demand, the reason
+/// the withheld record carries, and the refusal as it would have rendered on
+/// its own.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CensusRefusal {
+    pub demand: String,
+    pub reason: String,
+    pub rendered: String,
+}
+
+fn render_census_refusals(refusals: &[CensusRefusal]) -> String {
+    let mut rendered = format!(
+        "Type Facts census refused {} proposable closure candidate(s): ",
+        refusals.len()
+    );
+    rendered.push_str(
+        &refusals
+            .iter()
+            .map(|refusal| refusal.rendered.as_str())
+            .collect::<Vec<_>>()
+            .join("; "),
+    );
+    rendered
+}
+
 #[derive(Debug, Error)]
 pub enum TypeFactsCertificationError {
     #[error("Type Facts certification failed during {stage}: {source}")]
@@ -9861,6 +9995,13 @@ pub enum TypeFactsCertificationError {
     FamilyOpen { demand: String, reason: String },
     #[error("Type Facts demand {demand} is unsupported: {reason}")]
     UnsupportedDemand { demand: String, reason: String },
+    /// Every proposable closure candidate whose implementation census could
+    /// not decide it in this acquisition, collected rather than stopping at
+    /// the first (ADR 0036): a census refusal withholds the candidate by name
+    /// and the transaction re-plans, so one refusal per acquisition made a
+    /// graph with dozens of such candidates take dozens of passes.
+    #[error("{}", render_census_refusals(refusals))]
+    CensusRefused { refusals: Vec<CensusRefusal> },
     #[error("Type Facts demand {demand} does not match its exact export subject: {reason}")]
     SubjectMismatch { demand: String, reason: String },
     #[error(transparent)]

@@ -27,6 +27,9 @@ use super::ProbeHarnessConfiguration;
 use super::type_facts::VerifiedTypeFactsEvidence;
 use super::{CertificationPlan, WITHHELD_CLOSURE_NO_RECIPE, WithheldClosure};
 
+static SYNTHESIZED_CORPUS_COUNTER: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(1);
+
 /// The transaction's merged corpus. Removed with the value.
 pub(crate) struct SynthesizedCorpus {
     directory: PathBuf,
@@ -94,12 +97,17 @@ pub(crate) fn synthesize(
     let mut identity = Sha256::new();
     identity.update(plan.demand_graph().root().as_str().as_bytes());
     identity.update(base_dir.as_os_str().as_encoded_bytes());
+    // The name carries a process-unique counter beside the identity: two graph
+    // nodes that are importer variants of one artifact share a demand-graph
+    // root, and a name keyed on the root alone made the second synthesis wipe
+    // the first node's directory and the first drop delete the second node's
+    // corpus from under its gate.
     let directory = std::env::temp_dir().join(format!(
-        "solid-checker-synthesized-corpus-{}-{:.16x}",
+        "solid-checker-synthesized-corpus-{}-{}-{:.16x}",
         std::process::id(),
+        SYNTHESIZED_CORPUS_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         identity.finalize()
     ));
-    let _ = std::fs::remove_dir_all(&directory);
     create_private_directory(&directory)?;
 
     // Every hand module and entry, verbatim.

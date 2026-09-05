@@ -199,3 +199,72 @@ row's eleven queued candidates all close through synthesized vetoes.
   `returns` observation both ways.
 - **Not changed.** Receipt identity for rows that certify today without any
   withheld candidate; every controlled execution profile; the census itself.
+
+## Amendment (2026-09-05, evening): the graph lanes
+
+The implementation above ran the § 1–§ 3 loop in the value-only lanes only. A
+published-graph node was recipe-gated once, before acquisition, and then
+finalized as gated: a candidate no recipe named stayed withheld with
+`no recipe in corpus`, a census that could not decide a node's candidate
+refused the *graph*, and an incomplete veto at a node refused the graph. The
+first full-corpus pin taken with a recipe corpus made the gap visible — 1697
+`noRecipe` withholdings, every one on a graph node of a row that had only just
+started certifying, and none of them a candidate the corpus had actually been
+asked about.
+
+The same loop now runs for the graph lanes, in
+`certify_graphs_with_recipe_gating` (`contract_certification/dependencies.rs`),
+which both `PublishedContractGraphPlan::certify_value_only` and the case-set
+entry point delegate to:
+
+- Every node is re-gated each pass with the corpus and the already-withdrawn
+  candidates chosen for *that* node, keyed by canonical identity digest, so a
+  child's synthesized corpus or withdrawals never reach a parent's gate, and a
+  canonical node two roots share is gated and acquired once.
+- A census refusal during acquisition withdraws the named candidate at its node
+  (§ 1) and the pass repeats; an incomplete veto at a node's gate withdraws that
+  candidate (§ 2) and the pass repeats; a contradiction still refuses the graph.
+- Before the first gate runs, one synthesis pass (§ 3) derives a veto for every
+  node's recipe-less candidate whose export stated a call signature, from that
+  node's own evidence, into a merged corpus private to that node.
+- A synthesized veto the pinned interpreter cannot run for a node's artifact
+  case — an export condition it cannot be given (`@tanstack/custom-condition`),
+  or one under which it would load a different file than the witness read (the
+  `solid` condition selecting `dist/solid.js` where Node selects
+  `dist/server.js`) — withdraws the candidates that synthesis served, with the
+  incomplete-veto reason naming the gate and the binding error, and the node
+  keeps the hand corpus. A hand recipe that hits the same binding refuses as it
+  always did: the operator wrote a veto that cannot run. The first graph rows
+  measured hit exactly these two shapes.
+- Every Type Facts node stays in the acquisition *request* on every pass, and
+  only the nodes whose demand-graph root moved are acquired again. Acquiring a
+  subset of the plans was tried and is unsound as the acquisition stands: an
+  export's runtime binding may belong to another node's snapshot (a re-export),
+  and the implementation location is resolved among the plans being acquired,
+  so a subset left such an export bound to "an unplanned snapshot". Keeping
+  every plan in the request while flagging which ones to acquire
+  (`GraphExportValueRequest::acquire`) keeps the owner lookup whole; a node's
+  verified evidence is kept across passes keyed by the root it was taken under,
+  and its authenticated gate batch likewise, keyed by root and corpus path, so a
+  pass costs only the nodes it moved. The passes are few — one, one synthesis
+  pass, one per round of withdrawals — and the loop is bounded by the number of
+  closure candidates in the case set plus two, refusing with
+  `WithholdingDidNotConverge` past that.
+- Under `SOLID_CHECKER_TIMINGS` each pass reports what it acquired, synthesized,
+  gated, and withdrew (`graph-recipe-gating`), and each harness batch reports
+  its phases (`probe-gate-batch`: pin verification, condition observation,
+  workspace materialization, launches, the watched-input census). The first
+  measurement attributed a graph row's wall time to the census — sha256 over
+  the materialized tree and the pinned Node executable between sessions — and
+  not to the launches, which is the fact that decides where a speed-up may be
+  sought without weakening what the census proves. The CLI and the ecosystem
+  runner forward the checker's timing lines when the variable is set; a
+  certified row otherwise keeps no stderr.
+
+Pinned by `published_graph_synthesizes_a_veto_for_a_node_candidate_with_no_recipe`
+(root candidate, no recipe: withheld without a harness, closed through a
+synthesized veto with one) and by the `unsafe.js` arm of
+`independent_census_graph_requires_complete_evidence_and_its_own_veto`, whose
+expectation moves from "the graph refuses" to "the candidate is withheld with
+the census's reason and the graph certifies" — the same move § 1 made for the
+value-only lane.
