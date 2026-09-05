@@ -285,10 +285,20 @@ calls its export with no arguments; the import-free profile replays the exact
 recipe that selected the closure. Every repeat uses a fresh worker. No function
 or acceptance token escapes into a caller's runtime.
 
+ADR 0033 adds `chromium-headless-shell-cdp-pipe-esm-v1`: the same
+authenticated `.ts` graph, still stripped by the native parser and reproduced
+by pinned Node, executed by a pinned headless-shell browser over a
+launcher-owned CDP pipe. Every request is answered from memory through an
+exact URL map or refuses the launch; the browser's profile directory is a
+named unwatched carve-out inside the private workspace; a new bounded
+`animation-frames` drain step exists for it. The build pins the browser only
+when `PROBE_BROWSER` names one.
+
 The Rust API is `CertificationPlan::certify_and_execute`. The native
 `--execute-contract-certification <request.json>` boundary supports inert
-execution request version **6**, import-free request version **7**, and
-relative-graph request version **8**, each
+execution request version **6**, import-free request version **7**,
+relative-graph request version **8**, and browser request version **9**
+(which additionally needs `probeBrowserExecutable`), each
 with one `planning` and the corresponding `executionProfile`. The planning, archive,
 Type Facts, issuer and probe-corpus inputs are the same authenticated inputs
 as a version-1 single-case certification request. The profile is a request;

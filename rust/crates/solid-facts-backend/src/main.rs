@@ -280,7 +280,7 @@ fn prove_declared_applicability(
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ContractCertificationExecutionRequest {
     schema_version: u16,
-    /// Versions 6 and 7 only: a controlled invocation, never an accepted catalog.
+    /// Versions 6 through 9 only: a controlled invocation, never an accepted catalog.
     #[serde(default)]
     execution_profile: Option<String>,
     #[serde(default)]
@@ -312,6 +312,11 @@ struct ContractCertificationExecutionRequest {
     probe_node_executable: String,
     #[serde(default)]
     probe_recipe_corpus: String,
+    /// ADR 0033: the real path of the pinned headless-shell executable. Read
+    /// only by execution request version 9; every other version ignores it, and
+    /// a version-9 request without it refuses by name inside the transaction.
+    #[serde(default)]
+    probe_browser_executable: String,
 }
 
 #[derive(Clone, Deserialize)]
@@ -953,9 +958,10 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
                     8,
                     Some(solid_facts_backend::RELATIVE_GRAPH_EXECUTION_PROFILE)
                 )
+                | (9, Some(solid_facts_backend::BROWSER_EXECUTION_PROFILE))
         );
     if request.execution_profile.is_some() && !is_controlled {
-        return Err("unsupported execution profile; controlled execution requires version 6/inert, version 7/import-free, or version 8/relative TypeScript graph and one planning".into());
+        return Err("unsupported execution profile; controlled execution requires version 6/inert, version 7/import-free, version 8/relative TypeScript graph, or version 9/browser CDP pipe and one planning".into());
     }
     let is_single = request.schema_version == 1
         && request.planning.is_some()
@@ -998,7 +1004,7 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
         && !is_controlled
     {
         return Err(
-            "certification execution version 1 requires one planning; version 2 requires at least two plannings; version 3 requires one finite graph; version 4 requires at least two finite graphs; version 5 requires one deduplicated finite graph case-set; version 6 requires one planning and executionProfile node-strip-inert-esm-v1; version 7 requires one planning and executionProfile node-strip-import-free-esm-v1; version 8 requires one planning and executionProfile node-strip-relative-ts-graph-esm-v1"
+            "certification execution version 1 requires one planning; version 2 requires at least two plannings; version 3 requires one finite graph; version 4 requires at least two finite graphs; version 5 requires one deduplicated finite graph case-set; version 6 requires one planning and executionProfile node-strip-inert-esm-v1; version 7 requires one planning and executionProfile node-strip-import-free-esm-v1; version 8 requires one planning and executionProfile node-strip-relative-ts-graph-esm-v1; version 9 requires one planning and executionProfile chromium-headless-shell-cdp-pipe-esm-v1"
                 .into(),
         );
     }
@@ -1211,12 +1217,17 @@ fn probe_harness_configuration(
                 .into(),
         );
     }
-    let configuration = solid_facts_backend::ProbeHarnessConfiguration::new(
+    let mut configuration = solid_facts_backend::ProbeHarnessConfiguration::new(
         Path::new(&request.probe_harness_root),
         Path::new(&request.probe_node_executable),
         Path::new(&request.probe_recipe_corpus),
     )
     .map_err(|error| format!("probe harness configuration is invalid: {error}"))?;
+    if !request.probe_browser_executable.is_empty() {
+        configuration = configuration
+            .with_browser_executable(Path::new(&request.probe_browser_executable))
+            .map_err(|error| format!("probe harness configuration is invalid: {error}"))?;
+    }
     Ok(Some(configuration))
 }
 

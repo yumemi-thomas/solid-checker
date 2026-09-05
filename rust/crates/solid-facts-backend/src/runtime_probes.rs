@@ -40,6 +40,9 @@ const MAX_REPEATS: u16 = 16;
 const MAX_TIMEOUT_MILLIS: u64 = 120_000;
 const MAX_MICROTASK_TURNS: u16 = 4_096;
 const MAX_MACROTASK_TURNS: u16 = 256;
+/// Animation-frame turns are only drainable under the browser profile (ADR
+/// 0033); at 60 Hz this bound is about one second of frames.
+const MAX_ANIMATION_FRAME_TURNS: u16 = 64;
 const MAX_EVENTS: u32 = 65_536;
 const MAX_STRING_BYTES: usize = 16 * 1024;
 
@@ -93,6 +96,11 @@ pub struct ProbePolicy {
     pub timeout_millis: u64,
     pub max_microtask_turns: u16,
     pub max_macrotask_turns: u16,
+    /// ADR 0033: the bound on `animation-frames` drain turns. Zero — the
+    /// default for every corpus written before the browser profile — admits no
+    /// such step, and a zero bound leaves every digest this policy enters
+    /// byte-identical.
+    pub max_animation_frame_turns: u16,
     pub max_events: u32,
 }
 
@@ -106,6 +114,7 @@ impl ProbePolicy {
         }
         if self.max_microtask_turns > MAX_MICROTASK_TURNS
             || self.max_macrotask_turns > MAX_MACROTASK_TURNS
+            || self.max_animation_frame_turns > MAX_ANIMATION_FRAME_TURNS
             || self.max_events == 0
             || self.max_events > MAX_EVENTS
         {
@@ -134,8 +143,18 @@ pub enum ProbeScenario {
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum DrainStep {
     Flush,
-    Microtasks { max_turns: u16 },
-    Macrotasks { max_turns: u16 },
+    Microtasks {
+        max_turns: u16,
+    },
+    Macrotasks {
+        max_turns: u16,
+    },
+    /// Bounded `requestAnimationFrame` turns. Only the browser profile can
+    /// drain these; the Node worker refuses the step as unknown, which refuses
+    /// the gate rather than pretending a frame elapsed.
+    AnimationFrames {
+        max_turns: u16,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -577,6 +596,9 @@ pub struct ProbeRun {
     pub isolation: IsolationIdentity,
     pub drained_microtasks: u16,
     pub drained_macrotasks: u16,
+    /// Zero for every Node worker frame; the browser bootstrap reports what it
+    /// actually drained under an `animation-frames` step.
+    pub drained_animation_frames: u16,
     pub outcome: ProbeRunOutcome,
 }
 
@@ -840,8 +862,12 @@ fn evaluate_mode(
                 "worker environment does not match the exact artifact-mode matrix",
             ));
         }
-        let (microtask_limit, macrotask_limit) = drain_limits(&session.drain);
-        if run.drained_microtasks > microtask_limit || run.drained_macrotasks > macrotask_limit {
+        let (microtask_limit, macrotask_limit, animation_frame_limit) =
+            drain_limits(&session.drain);
+        if run.drained_microtasks > microtask_limit
+            || run.drained_macrotasks > macrotask_limit
+            || run.drained_animation_frames > animation_frame_limit
+        {
             return Ok(refused_mode(
                 "worker exceeded the recipe's bounded semantic drain",
             ));
@@ -1146,6 +1172,7 @@ fn validate_drain(drain: &[DrainStep], policy: ProbePolicy) -> Result<(), Runtim
     }
     let mut microtasks = 0_u32;
     let mut macrotasks = 0_u32;
+    let mut animation_frames = 0_u32;
     for step in drain {
         match step {
             DrainStep::Flush => {}
@@ -1155,20 +1182,25 @@ fn validate_drain(drain: &[DrainStep], policy: ProbePolicy) -> Result<(), Runtim
             DrainStep::Macrotasks { max_turns } if *max_turns > 0 => {
                 macrotasks += u32::from(*max_turns);
             }
+            DrainStep::AnimationFrames { max_turns } if *max_turns > 0 => {
+                animation_frames += u32::from(*max_turns);
+            }
             _ => return invalid_plan("drain steps must have non-zero semantic turn bounds"),
         }
     }
     if microtasks > u32::from(policy.max_microtask_turns)
         || macrotasks > u32::from(policy.max_macrotask_turns)
+        || animation_frames > u32::from(policy.max_animation_frame_turns)
     {
         return invalid_plan("probe recipe exceeds the configured drain policy");
     }
     Ok(())
 }
 
-fn drain_limits(drain: &[DrainStep]) -> (u16, u16) {
+fn drain_limits(drain: &[DrainStep]) -> (u16, u16, u16) {
     let mut microtasks = 0_u16;
     let mut macrotasks = 0_u16;
+    let mut animation_frames = 0_u16;
     for step in drain {
         match step {
             DrainStep::Flush => {}
@@ -1178,9 +1210,12 @@ fn drain_limits(drain: &[DrainStep]) -> (u16, u16) {
             DrainStep::Macrotasks { max_turns } => {
                 macrotasks = macrotasks.saturating_add(*max_turns);
             }
+            DrainStep::AnimationFrames { max_turns } => {
+                animation_frames = animation_frames.saturating_add(*max_turns);
+            }
         }
     }
-    (microtasks, macrotasks)
+    (microtasks, macrotasks, animation_frames)
 }
 
 fn validate_environment(environment: &mut EnvironmentIdentity) -> Result<(), RuntimeProbeError> {
@@ -1280,6 +1315,10 @@ fn recipe_digest(claim_id: &SemanticClaimId, recipe: &ProbeRecipe) -> Digest {
                 hash_field(&mut hasher, "macrotasks");
                 hash_field(&mut hasher, &max_turns.to_string());
             }
+            DrainStep::AnimationFrames { max_turns } => {
+                hash_field(&mut hasher, "animation-frames");
+                hash_field(&mut hasher, &max_turns.to_string());
+            }
         }
     }
     for limitation in &recipe.coverage_limitations {
@@ -1302,6 +1341,12 @@ fn plan_digest(
     hash_field(&mut hasher, &policy.max_microtask_turns.to_string());
     hash_field(&mut hasher, &policy.max_macrotask_turns.to_string());
     hash_field(&mut hasher, &policy.max_events.to_string());
+    // Appended only when nonzero, so every plan digest computed before ADR
+    // 0033 — and every receipt binding one — is byte-identical.
+    if policy.max_animation_frame_turns > 0 {
+        hash_field(&mut hasher, "max-animation-frame-turns");
+        hash_field(&mut hasher, &policy.max_animation_frame_turns.to_string());
+    }
     for mode in &matrix.modes {
         hash_field(&mut hasher, &mode.artifact_case);
         hash_field(&mut hasher, &mode.name);
@@ -1487,7 +1532,15 @@ struct WireTranscriptRun<'a> {
     module_instance: &'a str,
     drained_microtasks: u16,
     drained_macrotasks: u16,
+    /// Omitted at zero so every transcript written before ADR 0033 keeps its
+    /// digest.
+    #[serde(skip_serializing_if = "is_zero_u16")]
+    drained_animation_frames: u16,
     events: Vec<WireProbeEvent<'a>>,
+}
+
+fn is_zero_u16(value: &u16) -> bool {
+    *value == 0
 }
 
 #[derive(Serialize)]
@@ -1626,6 +1679,7 @@ fn emit_transcript(
                 module_instance: &run.isolation.module_instance,
                 drained_microtasks: run.drained_microtasks,
                 drained_macrotasks: run.drained_macrotasks,
+                drained_animation_frames: run.drained_animation_frames,
                 events: events.iter().map(WireProbeEvent::from).collect(),
             }
         })

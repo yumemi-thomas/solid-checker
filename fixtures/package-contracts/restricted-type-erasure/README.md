@@ -56,7 +56,9 @@ for the shared harness. `relative-root.ts` and `dependency.ts` pin the positive
 extensionless-import graph. The production tracer checks exact native-replayed
 edges, source/output/profile mutations, an unmapped import, ordinary-consumer
 refusal, and `relative-derived-veto.mjs`'s derived-byte contradiction. Browser
-execution remains explicitly withheld by ADR 0031.
+execution remains explicitly withheld by ADR 0031; ADR 0032 reserves the
+profile name `chromium-headless-shell-cdp-pipe-esm-v1`, and the same tracer
+pins that it is refused as an unknown controlled profile.
 
 This directory has no package manifest or generated main document. It is read
 by native regression tests and does not increase phase19's stable-main count.

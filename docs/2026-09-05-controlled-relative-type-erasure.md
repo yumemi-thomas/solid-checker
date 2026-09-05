@@ -135,6 +135,8 @@ three refuse earlier (`focusWithoutScrolling` on `instanceof`, both
 profile because the repository has no compiled browser/driver/module-transform
 trust boundary that preserves the harness contract. Vitest browser mode and
 ambient Playwright caches do not supply it, and no fake globals were added.
+ADR 0032 subsequently measured what such a boundary would be and retained the
+refusal; see `docs/2026-09-05-browser-probe-boundary-measurement.md`.
 
 ## Ordinary three-row comparison
 

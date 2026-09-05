@@ -532,6 +532,13 @@ source and derived output is bound and watched, and the worker resolves only an
 exact `(importer URL, literal specifier, target URL)` edge map produced by the
 native authenticated snapshot resolver. Controlled receipt version 5 and worker
 protocol v5 carry the graph; ordinary consumers continue to refuse it.
+ADR 0033 adds a *sibling* scheme rather than a version 11 of this one: the
+browser profile's policy vector (`scheme-version:11`,
+`scheme-family:browser-cdp-pipe`) describes a boundary with no Node resolver,
+a request-stage exact URL map and a named unwatched profile-directory
+carve-out, so it is digested separately and this vector is byte-identical.
+Controlled receipt version 6 carries both families; ordinary consumers refuse
+both.
 
 #### ESM (`ESM_RESOLVE`)
 
@@ -572,6 +579,7 @@ protocol v5 carry the graph; ordinary consumers continue to refuse it.
 | step | input it consults | disposition |
 | --- | --- | --- |
 | ADR 0026/0028/0030 controlled ESM profiles | native complete syntax whitelist, authenticated source graph, native expected outputs, native replayed relative edges and compiled Node/harness pins | **CONTAINED / REFUSED / WATCHED** — the trusted worker alone installs strip-only format overrides for exact selected `.ts` URLs, after primordial capture/freeze and before recipe import. Node output must equal every native expected output and watched derived file. The inert profile calls its sole export directly; the import-free and relative-graph profiles replay one selected recipe. The relative profile accepts only its receipt-bound exact edge map. Unmapped imports, URL variants and CommonJS refuse. Every frame echoes the binding and confirms the root source was loaded and the controlled consumer completed. No hook is installed for ordinary certification; controlled receipt v5 cannot enter the policy-2 consumer |
+| ADR 0033 controlled browser profile (`chromium-headless-shell-cdp-pipe-esm-v1`) | compiled browser bundle pin, pinned-Node reproduction of every derived module, the checker's exact URL map, a Rust-authored page bootstrap | **CONTAINED / REFUSED / CARVE-OUT** — a separate scheme (`scheme-version:11`, family `browser-cdp-pipe`, `BROWSER_SANDBOX_POLICY_FIELDS`), not a change to this table's Node scheme. The browser has no package resolver: every request is intercepted at request stage and answered from authenticated derived bytes or fails *and refuses the launch*, and the requested URL set must equal the served map. The browser's own `--user-data-dir` is a named subtree inside the private directory whose contents are deliberately unwatched. Workers, iframes, service workers, downloads and network are refused by CSP, auto-attach and flags the pinned browser enforces — denial by the instrument, stated as such. `probe_harness/browser.rs` carries the browser's own disposition table |
 | `NODE_OPTIONS` (`--import`, `--require`, `--loader`, `--experimental-loader`, `--conditions`, `--preserve-symlinks`) | the environment | **REFUSED** — `env_clear()` plus an explicitly emptied `NODE_OPTIONS`. This one matters most: `--import` runs a module *before* the worker evaluates, which is before its primordials are captured and before the intrinsic prototypes are frozen |
 | command-line flags | `argv` | **CONTAINED** — Rust builds the whole argument vector: one `--conditions=<name>` flag per requested export condition (each validated as a plain condition name first), then the worker path. Nothing else, and nothing from the environment |
 | `--env-file`, `--env-file-if-exists` | `argv`, then the named file | **REFUSED** — by argv, not by the environment: these are flags, so `env_clear()` does not bear on them, and the vector above contains no flag but `--conditions`. `NODE_OPTIONS` cannot smuggle one either (it is emptied, and Node disallows `--env-file` there) |

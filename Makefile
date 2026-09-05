@@ -29,7 +29,19 @@ PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(p
 PROBE_HARNESS_ENV = \
 	PROBE_NODE="$(PROBE_NODE)" \
 	SOLID_CHECKER_PROBE_HARNESS_SHA256="sha256:$$(node scripts/probe-harness-source-identity.mjs --build-id "$(SOLID_CHECKER_BUILD_ID)" --write-stamp --digest)" \
-	SOLID_CHECKER_PROBE_NODE_SHA256="sha256:$$(shasum -a 256 "$(PROBE_NODE)" | awk '{print $$1}')"
+	SOLID_CHECKER_PROBE_NODE_SHA256="sha256:$$(shasum -a 256 "$(PROBE_NODE)" | awk '{print $$1}')" \
+	$(PROBE_BROWSER_ENV)
+
+# ADR 0033: the optional browser pin for the controlled browser execution
+# profile. `PROBE_BROWSER` names the *real path* of a headless-shell executable
+# (`make PROBE_BROWSER=/path/to/chrome-headless-shell …`); the pin compiled into
+# the verifier is the tree digest of its directory, in `hash_tree`'s framing
+# (scripts/probe-browser-identity.mjs). Empty by default: a build without it
+# refuses the browser profile only, and every Node profile is unaffected. The
+# browser tracers skip when it is unset and fail loudly under
+# `SOLID_CHECKER_EXPECT_BROWSER_PIN=1`, which is set only when it is.
+PROBE_BROWSER ?=
+PROBE_BROWSER_ENV = $(if $(PROBE_BROWSER),PROBE_BROWSER="$(PROBE_BROWSER)" SOLID_CHECKER_PROBE_BROWSER_SHA256="sha256:$$(node scripts/probe-browser-identity.mjs "$(PROBE_BROWSER)")" SOLID_CHECKER_EXPECT_BROWSER_PIN=1,)
 
 CERTIFICATION_ENV = $(TYPEFACTS_CERTIFICATION_ENV) $(PROBE_HARNESS_ENV)
 

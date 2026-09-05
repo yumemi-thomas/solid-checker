@@ -1076,6 +1076,115 @@ fn a_report_that_exceeds_its_byte_budget_is_refused() {
 }
 
 #[test]
+fn the_probe_browser_sandbox_policy_digest_names_its_carve_out_and_refusals() {
+    // ADR 0033. A sibling of the Node vector, not a successor: the second copy
+    // is deliberate, so a field cannot move without the diff naming it.
+    const EXPECTED: [&str; 30] = [
+        "scheme-version:11",
+        "scheme-family:browser-cdp-pipe",
+        "profile:chromium-headless-shell-cdp-pipe-esm,explicit-controlled-consumer,ordinary-acceptance-refused",
+        "browser:bundle-tree-digest-reasserted-against-build-pin,version-asked-of-pinned-bytes-and-echoed",
+        "driver:checker-owned-cdp-client,launcher-owned-descriptors-3-and-4,no-debugging-port,no-npm-driver",
+        "transform:pinned-node-strip-only,parser-runtime-token-preservation,all-derived-outputs-reproduced-by-pinned-node,browser-transforms-nothing",
+        "module-supply:request-stage-fulfilment-from-authenticated-derived-bytes,synthetic-origin,exact-url-map",
+        "resolution:checker-exact-url-map,import-map-from-plan-resolution-and-authenticated-relative-edges,no-interpreter-resolver,no-export-conditions",
+        "resolution:unmapped-request-fails-and-refuses-launch",
+        "resolution:requested-url-set-must-equal-served-map",
+        "enforcement:detect-and-refuse-plus-browser-enforced-denials",
+        "private-directory-mode:0700",
+        "cwd:private-directory",
+        "environment:allowlisted-not-inherited",
+        "argv:launcher-built-flags-only",
+        "profile-directory:named-carve-out-inside-private-directory,contents-unwatched,presence-watched",
+        "csp:default-src-none,script-src-synthetic-origin-plus-import-map-nonce,connect-worker-child-frame-object-src-none,base-uri-none,form-action-none",
+        "targets:auto-attached-new-target-refuses-launch",
+        "network:refused-at-request-stage,host-resolver-not-found",
+        "downloads:denied",
+        "permissions:prompts-denied",
+        "service-workers:feature-disabled-and-unmapped",
+        "storage:not-denied,discarded-with-carve-out",
+        "renderer-sandbox:chromium-own,not-verified-here",
+        "report:runtime-binding,exactly-one-startup-and-one-run-frame,main-world-context-only",
+        "startup-frame:protocol+nonce+browser-version+ready-state-loading",
+        "process-group:own-group-killed-on-every-exit",
+        "watched:private-directory-entries,browser-bundle,node-executable,type-facts-image,verifier-image",
+        "watched-when:before-first-launch,between-launches,every-exit-path",
+        "in-realm-intrinsic-mutation:frozen-prototypes-only",
+    ];
+    assert_eq!(
+        BROWSER_SANDBOX_POLICY_FIELDS, EXPECTED,
+        "the receipt-visible browser sandbox policy changed: update ADR 0033 and copy the new \
+         vector here"
+    );
+    assert!(BROWSER_SANDBOX_POLICY_FIELDS.contains(&"storage:not-denied,discarded-with-carve-out"));
+    assert!(
+        BROWSER_SANDBOX_POLICY_FIELDS.contains(&"renderer-sandbox:chromium-own,not-verified-here")
+    );
+    // The Node scheme is untouched by the browser profile.
+    assert_eq!(SANDBOX_POLICY_FIELDS[0], "scheme-version:10");
+}
+
+#[test]
+fn the_probe_browser_bundle_identity_script_matches_the_native_tree_digest() {
+    // The build computes the browser pin with scripts/probe-browser-identity.mjs
+    // and the verifier recomputes it with `hash_tree`; the two framings must
+    // agree byte for byte or every browser launch refuses the pinned bundle.
+    let Some(node) = resolution_node() else {
+        return;
+    };
+    let scratch = Scratch::new("browser-bundle-identity");
+    let bundle = scratch.path().join("bundle");
+    fs::create_dir_all(bundle.join("resources").join("nested")).unwrap();
+    fs::write(
+        bundle.join("chrome-headless-shell"),
+        b"not a browser, only bytes",
+    )
+    .unwrap();
+    fs::write(bundle.join("icudtl.dat"), vec![7_u8; 3_000]).unwrap();
+    fs::write(bundle.join("resources").join("nested").join("a.pak"), b"").unwrap();
+    fs::write(bundle.join("resources").join("z.json"), b"{}\n").unwrap();
+    let executable = bundle.join("chrome-headless-shell");
+    let (native, directory) = browser_bundle_digest(&executable).expect("a tree of regular files");
+    assert_eq!(directory, bundle);
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    let output = Command::new(&node)
+        .arg(repository.join("scripts/probe-browser-identity.mjs"))
+        .arg(&executable)
+        .env_clear()
+        .stdin(Stdio::null())
+        .output()
+        .expect("run the identity script");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let scripted = format!("sha256:{}", String::from_utf8_lossy(&output.stdout).trim());
+    assert_eq!(scripted, native, "the two bundle-digest framings diverged");
+
+    // A symlink inside the bundle refuses on both sides.
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(bundle.join("icudtl.dat"), bundle.join("link")).unwrap();
+        assert!(browser_bundle_digest(&executable).is_err());
+        let output = Command::new(&node)
+            .arg(repository.join("scripts/probe-browser-identity.mjs"))
+            .arg(&executable)
+            .env_clear()
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+    }
+}
+
+#[test]
 fn a_build_that_must_carry_probe_pins_carries_them() {
     // `option_env!` is read at *compile* time, so a test binary built without
     // the pins turns every production-path tracer into a silent early return

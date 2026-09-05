@@ -186,6 +186,14 @@ export SOLID_CHECKER_EXPECT_PROBE_PINS
 # rather than re-resolving `node` from `PATH`.
 PROBE_NODE="$probe_node"
 export PROBE_NODE
+# ADR 0033: the optional browser pin. Only when the operator names a
+# headless-shell executable; otherwise the browser profile refuses and its
+# tracers skip, exactly as on a machine without one.
+if [ -n "${PROBE_BROWSER:-}" ]; then
+  SOLID_CHECKER_PROBE_BROWSER_SHA256="sha256:$(node scripts/probe-browser-identity.mjs "$PROBE_BROWSER")"
+  SOLID_CHECKER_EXPECT_BROWSER_PIN=1
+  export PROBE_BROWSER SOLID_CHECKER_PROBE_BROWSER_SHA256 SOLID_CHECKER_EXPECT_BROWSER_PIN
+fi
 
 # The product-owned corpus carries exact checker expectations and per-finding
 # TypeScript ownership for every retained former parity case.

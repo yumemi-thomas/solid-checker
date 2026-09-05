@@ -1,4 +1,4 @@
-//! ADRs 0026, 0028 and 0030: execution-bound consumers with no ordinary acceptance token.
+//! ADRs 0026, 0028, 0030 and 0033: execution-bound consumers with no ordinary acceptance token.
 
 use std::collections::BTreeSet;
 
@@ -16,10 +16,16 @@ use super::{
 pub const INERT_EXECUTION_PROFILE: &str = "node-strip-inert-esm-v1";
 pub const IMPORT_FREE_EXECUTION_PROFILE: &str = "node-strip-import-free-esm-v1";
 pub const RELATIVE_GRAPH_EXECUTION_PROFILE: &str = "node-strip-relative-ts-graph-esm-v1";
+/// ADR 0033: the same authenticated `.ts` graph, executed by the pinned
+/// headless shell through the checker's exact URL map instead of by Node.
+pub const BROWSER_EXECUTION_PROFILE: &str = "chromium-headless-shell-cdp-pipe-esm-v1";
 const INERT_PROOF_IDENTITY: &str = "policy-2-with-inert-erasure-v1";
 const IMPORT_FREE_PROOF_IDENTITY: &str = "policy-2-with-import-free-erasure-v1";
 const RELATIVE_GRAPH_PROOF_IDENTITY: &str = "policy-2-with-relative-ts-graph-erasure-v1";
-const SIGNATURE_DOMAIN: &[u8] = b"solid-checker:controlled-execution-receipt:v5\0";
+const BROWSER_PROOF_IDENTITY: &str = "policy-2-with-browser-cdp-pipe-erasure-v1";
+/// Receipt version 6 (ADR 0033): the browser profile joins the closed pair set.
+const RECEIPT_VERSION: u16 = 6;
+const SIGNATURE_DOMAIN: &[u8] = b"solid-checker:controlled-execution-receipt:v6\0";
 
 pub(super) fn signature_message(payload: &[u8]) -> Vec<u8> {
     [SIGNATURE_DOMAIN, payload].concat()
@@ -50,6 +56,11 @@ pub(super) struct DerivedModule {
     pub source_digest: String,
     pub output_digest: String,
     pub output: String,
+    /// The authenticated source bytes, kept so the browser launcher can ask
+    /// pinned Node to reproduce the derived output. Excluded from the
+    /// serialized graph identity, which binds the digests above.
+    #[serde(skip)]
+    pub source: String,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -126,8 +137,8 @@ impl InertModule {
                     "parser-runtime-token-preservation-v1",
                 )
             }
-            RELATIVE_GRAPH_EXECUTION_PROFILE => {
-                return Self::from_relative_graph(plan, path, target);
+            RELATIVE_GRAPH_EXECUTION_PROFILE | BROWSER_EXECUTION_PROFILE => {
+                return Self::from_relative_graph(plan, path, target, profile);
             }
             _ => {
                 return Err(ControlledExecutionError::Unsupported(
@@ -152,7 +163,17 @@ impl InertModule {
         plan: &CertificationPlan,
         root_path: &str,
         target: &str,
+        profile: &str,
     ) -> Result<Self, ControlledExecutionError> {
+        let profile: &'static str = match profile {
+            RELATIVE_GRAPH_EXECUTION_PROFILE => RELATIVE_GRAPH_EXECUTION_PROFILE,
+            BROWSER_EXECUTION_PROFILE => BROWSER_EXECUTION_PROFILE,
+            _ => {
+                return Err(ControlledExecutionError::Unsupported(
+                    "unknown controlled execution profile",
+                ));
+            }
+        };
         use super::module_closure::{LocalResolution, ModuleAxis, resolve_local};
         use crate::artifact_resolution::ClosureFileRole;
 
@@ -244,6 +265,7 @@ impl InertModule {
                 source_digest: digest(source),
                 output_digest: digest(erased.output.as_bytes()),
                 output: erased.output,
+                source: source_text.to_owned(),
             });
         }
         if visited != runtime_paths {
@@ -263,7 +285,7 @@ impl InertModule {
             output: root.output.clone(),
             export_name: target.to_owned(),
             source_path: root_path.to_owned(),
-            profile: RELATIVE_GRAPH_EXECUTION_PROFILE,
+            profile,
             modules,
             edges,
             preservation: "parser-runtime-token-preservation-v1",
@@ -278,8 +300,13 @@ impl InertModule {
             format!("derived:{}", self.output_digest),
             format!("export:{}", self.export_name),
             format!(
-                "module-format:esm;url:exact-private-source;runtime-imports:{};consumer:{}",
-                if self.profile == RELATIVE_GRAPH_EXECUTION_PROFILE {
+                "module-format:esm;url:{};runtime-imports:{};consumer:{}",
+                if self.profile == BROWSER_EXECUTION_PROFILE {
+                    "synthetic-origin-exact-url-map"
+                } else {
+                    "exact-private-source"
+                },
+                if self.is_graph() {
                     "authenticated-exact-relative-edge-map"
                 } else {
                     "none"
@@ -295,7 +322,7 @@ impl InertModule {
                 self.preservation
             ),
         ];
-        if self.profile == RELATIVE_GRAPH_EXECUTION_PROFILE {
+        if self.is_graph() {
             binding.push(format!(
                 "derived-module-graph:{}",
                 digest(&serde_json::to_vec(&self.modules).expect("derived modules serialize"))
@@ -306,7 +333,25 @@ impl InertModule {
             ));
             binding.push("resolver:native-authenticated-snapshot-runtime-v1".into());
         }
+        if self.profile == BROWSER_EXECUTION_PROFILE {
+            binding.push(
+                "module-supply:request-stage-fulfilment-from-authenticated-derived-bytes;unmapped-request-refused;requested-set-equals-served-map"
+                    .into(),
+            );
+            binding
+                .push("browser-resolver:checker-exact-url-map-request-stage-fulfilment-v1".into());
+        }
         binding
+    }
+
+    /// Whether this module carries ADR 0030's explicit derived graph. The
+    /// browser profile (ADR 0033) always does, an import-free module being its
+    /// one-node case.
+    pub(super) fn is_graph(&self) -> bool {
+        matches!(
+            self.profile,
+            RELATIVE_GRAPH_EXECUTION_PROFILE | BROWSER_EXECUTION_PROFILE
+        )
     }
 
     fn proof_identity(&self) -> &'static str {
@@ -314,6 +359,7 @@ impl InertModule {
             INERT_EXECUTION_PROFILE => INERT_PROOF_IDENTITY,
             IMPORT_FREE_EXECUTION_PROFILE => IMPORT_FREE_PROOF_IDENTITY,
             RELATIVE_GRAPH_EXECUTION_PROFILE => RELATIVE_GRAPH_PROOF_IDENTITY,
+            BROWSER_EXECUTION_PROFILE => BROWSER_PROOF_IDENTITY,
             _ => unreachable!("constructed profiles are closed"),
         }
     }
@@ -397,7 +443,27 @@ pub(super) fn assert_receipt_refusals(
             "{prefix}"
         );
     }
-    if expected.profile == RELATIVE_GRAPH_EXECUTION_PROFILE {
+    if expected.profile == BROWSER_EXECUTION_PROFILE {
+        for prefix in ["browser-bundle:", "browser-version:", "browser-protocol:"] {
+            let mut changed = receipt.clone();
+            let fields = changed["payload"]["executionBinding"]
+                .as_array_mut()
+                .unwrap();
+            let field = fields
+                .iter_mut()
+                .find(|field| field.as_str().unwrap().starts_with(prefix))
+                .unwrap();
+            *field = format!("{prefix}mismatch").into();
+            assert!(
+                authenticate(&canonical_signed(changed), expected, issuer).is_err(),
+                "{prefix}"
+            );
+        }
+    }
+    if matches!(
+        expected.profile.as_str(),
+        RELATIVE_GRAPH_EXECUTION_PROFILE | BROWSER_EXECUTION_PROFILE
+    ) {
         for prefix in ["derived-module-graph:", "relative-edge-map:", "resolver:"] {
             let mut changed = receipt.clone();
             let fields = changed["payload"]["executionBinding"]
@@ -507,8 +573,14 @@ impl CertificationPlan {
         let evidence = type_facts::acquire_and_verify_export_values(plan, pin)
             .map_err(super::Policy2FinalizationError::from)?;
         let schedule = plan.probe_gate_schedule()?;
-        let (evaluation, identity) =
-            probe_harness::run_inert_gates(plan, &schedule, probes, pin, &module, false)?;
+        let run_gates = |module: &InertModule, consumer: bool| {
+            if module.profile == BROWSER_EXECUTION_PROFILE {
+                probe_harness::run_browser_gates(plan, &schedule, probes, pin, module, consumer)
+            } else {
+                probe_harness::run_inert_gates(plan, &schedule, probes, pin, module, consumer)
+            }
+        };
+        let (evaluation, identity) = run_gates(&module, false)?;
         let inspected =
             schedule.inspect_outcomes(schedule.outcomes_from_evaluation(&evaluation)?)?;
         let gates = schedule.authenticate_with_harness(inspected, &identity)?;
@@ -540,7 +612,7 @@ impl CertificationPlan {
         let payload_bytes = serde_json::to_vec(&payload)?;
         let receipt = Receipt {
             format: "solid-checker-controlled-execution-receipt".into(),
-            receipt_version: 5,
+            receipt_version: RECEIPT_VERSION,
             signature: STANDARD.encode(issuer.sign_controlled_execution(&payload_bytes)),
             payload: payload.clone(),
         };
@@ -550,8 +622,7 @@ impl CertificationPlan {
         // rechecks all pins, copies, transformer bytes and resolution, and executes
         // the export itself (not a caller's consumer-compatibility assertion).
         let consumer_module = InertModule::from_plan(plan, profile)?;
-        let (_, consumer_identity) =
-            probe_harness::run_inert_gates(plan, &schedule, probes, pin, &consumer_module, true)?;
+        let (_, consumer_identity) = run_gates(&consumer_module, true)?;
         if consumer_identity != identity {
             return Err(ControlledExecutionError::Mismatch(
                 "consumer execution identity differs from the authenticated receipt",
@@ -583,7 +654,7 @@ fn authenticate(
         return Err(ControlledExecutionError::Mismatch("receipt byte budget"));
     }
     let receipt: Receipt = serde_json::from_slice(bytes)?;
-    if receipt.receipt_version != 5
+    if receipt.receipt_version != RECEIPT_VERSION
         || receipt.format != "solid-checker-controlled-execution-receipt"
         || receipt.payload != *expected
         || !matches!(
@@ -597,6 +668,7 @@ fn authenticate(
                     RELATIVE_GRAPH_EXECUTION_PROFILE,
                     RELATIVE_GRAPH_PROOF_IDENTITY
                 )
+                | (BROWSER_EXECUTION_PROFILE, BROWSER_PROOF_IDENTITY)
         )
         || serde_json::to_vec(&receipt)? != bytes
     {

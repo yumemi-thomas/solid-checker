@@ -379,6 +379,11 @@ pub struct ProbeHarnessConfiguration {
     harness_root: PathBuf,
     node_executable: PathBuf,
     recipe_corpus: PathBuf,
+    /// ADR 0033: the real path of the pinned headless-shell executable, when
+    /// the operator supplied one. Only the browser profile reads it; every
+    /// Node profile ignores it, and a request for the browser profile without
+    /// it refuses by name.
+    browser_executable: Option<PathBuf>,
     /// A pin supplied by an in-crate test instead of the build.
     ///
     /// Private, and settable only through a `#[cfg(test)]` constructor, so a
@@ -388,6 +393,9 @@ pub struct ProbeHarnessConfiguration {
     /// a plain `cargo test`.
     #[cfg(test)]
     pin: Option<ProbeHarnessPin>,
+    /// The browser bundle digest a test supplies, mirroring `pin`.
+    #[cfg(test)]
+    browser_pin: Option<String>,
 }
 
 impl ProbeHarnessConfiguration {
@@ -400,8 +408,11 @@ impl ProbeHarnessConfiguration {
             harness_root: harness_root.into(),
             node_executable: node_executable.into(),
             recipe_corpus: recipe_corpus.into(),
+            browser_executable: None,
             #[cfg(test)]
             pin: None,
+            #[cfg(test)]
+            browser_pin: None,
         };
         for (label, path) in [
             ("probe harness root", &configuration.harness_root),
@@ -415,6 +426,67 @@ impl ProbeHarnessConfiguration {
             }
         }
         Ok(configuration)
+    }
+
+    /// Names the pinned headless-shell executable for ADR 0033's browser
+    /// profile. The path must be absolute and is verified — as a regular
+    /// non-symlink file whose directory hashes to the compiled-in bundle pin —
+    /// at launch, never here.
+    pub fn with_browser_executable(
+        mut self,
+        browser_executable: impl Into<PathBuf>,
+    ) -> Result<Self, ProbeHarnessError> {
+        let path = browser_executable.into();
+        if !path.is_absolute() {
+            return Err(ProbeHarnessError::Configuration(
+                "probe browser executable must be an absolute path".into(),
+            ));
+        }
+        self.browser_executable = Some(path);
+        Ok(self)
+    }
+
+    /// The browser executable this configuration names, or a refusal saying
+    /// the browser profile was requested without one.
+    pub(super) fn browser_executable(&self) -> Result<&Path, ProbeHarnessError> {
+        self.browser_executable.as_deref().ok_or_else(|| {
+            ProbeHarnessError::Configuration(
+                "the browser execution profile requires a pinned browser executable \
+                 (probeBrowserExecutable), and none was supplied"
+                    .into(),
+            )
+        })
+    }
+
+    /// The browser bundle pin this transaction verifies against: the build's,
+    /// unless an in-crate test supplied its own.
+    pub(super) fn browser_bundle_pin(&self) -> Result<String, ProbeHarnessError> {
+        #[cfg(test)]
+        if let Some(pin) = &self.browser_pin {
+            return Ok(pin.clone());
+        }
+        let pin = option_env!("SOLID_CHECKER_PROBE_BROWSER_SHA256").ok_or_else(|| {
+            ProbeHarnessError::PinUnavailable(
+                "verifier build has no configured probe browser bundle digest",
+            )
+        })?;
+        if Digest::parse(pin).is_err() {
+            return Err(ProbeHarnessError::Configuration(
+                "configured probe browser bundle digest is not a canonical sha256 digest".into(),
+            ));
+        }
+        Ok(pin.to_owned())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_test_browser_pin(
+        mut self,
+        browser_executable: impl Into<PathBuf>,
+        browser_bundle_sha256: &str,
+    ) -> Result<Self, ProbeHarnessError> {
+        self = self.with_browser_executable(browser_executable)?;
+        self.browser_pin = Some(browser_bundle_sha256.to_owned());
+        Ok(self)
     }
 
     /// The directory holding `recipes.json` and its modules — the corpus
@@ -1488,6 +1560,11 @@ struct WireRecipePolicy {
     timeout_millis: u64,
     max_microtask_turns: u16,
     max_macrotask_turns: u16,
+    /// ADR 0033: admits `animation-frames` drain steps, which only the browser
+    /// profile can honour. Defaulted so every existing corpus decodes unchanged
+    /// and, at zero, leaves its corpus root byte-identical.
+    #[serde(default)]
+    max_animation_frame_turns: u16,
     max_events: u32,
 }
 
@@ -1545,6 +1622,7 @@ enum WireRecipeDrainStep {
     Flush,
     Microtasks { max_turns: u16 },
     Macrotasks { max_turns: u16 },
+    AnimationFrames { max_turns: u16 },
 }
 
 /// One hand-authored, claim-addressed recipe module plus the bytes Rust read
@@ -1622,6 +1700,7 @@ impl RecipeCorpus {
             timeout_millis: manifest.policy.timeout_millis,
             max_microtask_turns: manifest.policy.max_microtask_turns,
             max_macrotask_turns: manifest.policy.max_macrotask_turns,
+            max_animation_frame_turns: manifest.policy.max_animation_frame_turns,
             max_events: manifest.policy.max_events,
         };
         let mut recipes = Vec::with_capacity(manifest.recipes.len());
@@ -1746,6 +1825,9 @@ impl From<WireRecipeDrainStep> for DrainStep {
             WireRecipeDrainStep::Flush => Self::Flush,
             WireRecipeDrainStep::Microtasks { max_turns } => Self::Microtasks { max_turns },
             WireRecipeDrainStep::Macrotasks { max_turns } => Self::Macrotasks { max_turns },
+            WireRecipeDrainStep::AnimationFrames { max_turns } => {
+                Self::AnimationFrames { max_turns }
+            }
         }
     }
 }
@@ -1758,6 +1840,14 @@ fn corpus_root(policy: &ProbePolicy, recipes: &[CorpusRecipe]) -> Digest {
         format!("max-macrotask-turns:{}", policy.max_macrotask_turns),
         format!("max-events:{}", policy.max_events),
     ];
+    // Appended only when nonzero (ADR 0033), so every corpus root — and every
+    // receipt binding one — computed before the browser profile is unchanged.
+    if policy.max_animation_frame_turns > 0 {
+        values.push(format!(
+            "max-animation-frame-turns:{}",
+            policy.max_animation_frame_turns
+        ));
+    }
     for recipe in recipes {
         values.push(format!(
             "recipe:{}:{}:{}:{}",
@@ -3811,6 +3901,11 @@ pub enum ProbeHarnessError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }
+
+mod browser;
+pub(crate) use browser::run_browser_gates;
+#[cfg(test)]
+pub(crate) use browser::{BROWSER_SANDBOX_POLICY_FIELDS, browser_bundle_digest};
 
 #[cfg(test)]
 mod tests;

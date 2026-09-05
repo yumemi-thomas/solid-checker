@@ -400,6 +400,7 @@ fn runtime_probe_plan_accepts_only_witness_and_closure_subjects_from_the_proposa
             timeout_millis: 5_000,
             max_microtask_turns: 4,
             max_macrotask_turns: 0,
+            max_animation_frame_turns: 0,
             max_events: 128,
         },
     )

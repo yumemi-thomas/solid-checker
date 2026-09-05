@@ -1,5 +1,65 @@
 # Precision backlog
 
+## Controlled browser execution admits the three census-complete browser candidates (2026-09-05)
+
+ADR 0033 adds `chromium-headless-shell-cdp-pipe-esm-v1`. The lead took the
+operator decision ADR 0032 named — a browser pinned as Node is pinned, whatever
+bytes `PROBE_BROWSER` names at build time, hashed as a tree — and the ADR takes
+the two policy decisions: the browser's own profile directory is a named
+unwatched carve-out inside the private workspace, and request-stage fulfilment
+from authenticated derived bytes through an exact URL map replaces the
+resolver echo, with every request enumerated and the requested set required to
+equal the served map. Pinned Node still reproduces every derived module before a
+byte is served; the browser transforms nothing. Controlled receipt v6, a
+sibling browser sandbox scheme (`scheme-version:11`,
+`scheme-family:browser-cdp-pipe`), execution request schema 9 and a bounded
+`animation-frames` drain step carry the new meaning; the Node scheme-10 vector,
+every existing plan digest, corpus root and transcript digest are byte-identical.
+
+Measured in production: Kobalte 0.9.2 and alpha `getScrollParent` and 0.9.2
+`runAfterTransition` complete census, veto and fresh browser replay — **3 of 3**,
+zero real contradictions, three scoped closures. Across the original 40
+TypeScript candidates, **23 now complete a controlled profile** (26 of 43 with
+published JS). The 17 native census refusals are unchanged; `exportsProven`
+stays 0 because no controlled receipt enters ordinary analysis. Vitest browser
+mode was offered and declined: esbuild's reformatting cannot match the
+byte-preserving witness, and its dev server, runner protocol and Playwright
+provider would sit unpinned on the report path. See the dated
+[implementation report](2026-09-05-controlled-browser-execution.md).
+
+## Browser probe boundary measured; refusal retained with six named premises (2026-09-05)
+
+ADR 0032 answers the question ADR 0031 left open: whether an actual pinned
+browser boundary can carry the harness guarantees. A read-only measurement
+with the ambient headless shell as an instrument — never as authority — shows
+the mechanics exist: CDP over launcher-owned descriptors, a pre-document
+bootstrap that captures the report binding and freezes intrinsics before any
+module, every request fulfilled from memory with unmapped requests refused,
+`document`/`getComputedStyle`/`requestAnimationFrame` present with frames
+firing headless, exactly two nonce-bearing frames, and a process group of five
+reaped by `killpg`. Both `getScrollParent` and `runAfterTransition` behave as
+their census assumed.
+
+Admission is nevertheless withheld, for premises the measurement cannot supply:
+no browser build input or provenance-bearing pin exists in this repository; the
+browser wrote 51 files into its own profile directory in one run, so
+detect-and-refuse cannot cover it without a scheme-meaning decision (carve-out
+or Stage 2 denial); a browser has no package resolver, so ADR 0025's
+resolution-independence premise has no analogue and needs a reviewed
+replacement; `blob:`/`data:` workers, iframes and helper processes widen the
+realm and their denial would be the browser's, not the checker's; the derived
+bytes would still be Node-strip output executed by Chromium; and animation-frame
+drains change the evaluator's determinism premise. The name
+`chromium-headless-shell-cdp-pipe-esm-v1` is reserved and pinned as refused.
+
+Counts are unchanged: 20 of 40 TypeScript candidates complete a controlled
+profile (23 of 43 with published JS), 0 real contradictions, `exportsProven` 0.
+The seventeen native census refusals are classified from source in the dated
+[measurement report](2026-09-05-browser-probe-boundary-measurement.md): each is
+a possible user-code or host-accessor invocation the census cannot exclude, not
+a bug and not an observed contradiction; a browser executor cannot waive any of
+them, and no accessor trust was broadened.
+
 ## Authenticated relative TypeScript graphs add two scoped closures; browser profile withheld (2026-09-05)
 
 ADR 0030 adds `node-strip-relative-ts-graph-esm-v1`. The native snapshot

@@ -54,8 +54,8 @@ pub use compiler_facts::{
     LiveCompilerEvidenceBatch, VerifiedCompilerEvidence,
 };
 pub use controlled_execution::{
-    ControlledExecution, ControlledExecutionError, IMPORT_FREE_EXECUTION_PROFILE,
-    INERT_EXECUTION_PROFILE, RELATIVE_GRAPH_EXECUTION_PROFILE,
+    BROWSER_EXECUTION_PROFILE, ControlledExecution, ControlledExecutionError,
+    IMPORT_FREE_EXECUTION_PROFILE, INERT_EXECUTION_PROFILE, RELATIVE_GRAPH_EXECUTION_PROFILE,
 };
 pub use dependencies::{
     CanonicalDependencyNodeIdentity, DependencyCompositionError, DependencyCompositionRequirement,
@@ -9496,6 +9496,28 @@ export const value = phantom;
             .is_err(),
             "the import-free profile must not absorb a relative graph"
         );
+        // ADR 0033: the browser profile admits the same authenticated graph as
+        // its module supply, but it is a distinct profile with its own proof
+        // identity — the receipt refusal controls below cross the two.
+        let browser_graph = super::controlled_execution::InertModule::from_plan(
+            &plan,
+            super::BROWSER_EXECUTION_PROFILE,
+        )
+        .expect("the browser profile admits the exact two-module graph as its module supply");
+        assert_eq!(browser_graph.profile, super::BROWSER_EXECUTION_PROFILE);
+        assert_eq!(browser_graph.modules.len(), 2);
+        assert!(
+            matches!(
+                super::controlled_execution::InertModule::from_plan(
+                    &plan,
+                    "vitest-browser-mode-v1"
+                ),
+                Err(super::ControlledExecutionError::Unsupported(
+                    "unknown controlled execution profile"
+                ))
+            ),
+            "an unadmitted profile name is refused before any census or launch"
+        );
         let graph = super::controlled_execution::InertModule::from_plan(
             &plan,
             super::RELATIVE_GRAPH_EXECUTION_PROFILE,
@@ -9585,6 +9607,343 @@ export const value = phantom;
             )
             .err()
             .expect("a contradiction observed in the derived graph vetoes closure");
+        assert!(
+            matches!(
+                error,
+                super::ControlledExecutionError::Gate(super::ProbeGateError::Contradiction { .. })
+            ),
+            "{error}"
+        );
+    }
+
+    /// The pinned headless-shell executable for ADR 0033's browser tracer, by
+    /// real path, with its bundle digest. `None` skips: the browser is an
+    /// optional build input, and a machine without one runs no browser tracer.
+    ///
+    /// Under `SOLID_CHECKER_EXPECT_BROWSER_PIN=1` — which the Makefile sets
+    /// exactly when `PROBE_BROWSER` is — that absence is a loud failure, for the
+    /// same reason the Node tracers fail loudly under
+    /// `SOLID_CHECKER_EXPECT_PROBE_PINS=1`.
+    fn tracer_browser() -> Option<(std::path::PathBuf, String)> {
+        let expected = std::env::var("SOLID_CHECKER_EXPECT_BROWSER_PIN").as_deref() == Ok("1");
+        let configured = std::env::var_os("SOLID_CHECKER_PROBE_BROWSER")
+            .or_else(|| std::env::var_os("PROBE_BROWSER"));
+        let Some(configured) = configured else {
+            assert!(
+                !expected,
+                "SOLID_CHECKER_EXPECT_BROWSER_PIN=1, but PROBE_BROWSER is unset: the browser \
+                 tracer would skip and the browser profile would leave the gate silently"
+            );
+            eprintln!("browser tracer skipped: PROBE_BROWSER is unset");
+            return None;
+        };
+        let real = std::fs::canonicalize(&configured).unwrap_or_else(|error| {
+            panic!("PROBE_BROWSER={configured:?} does not resolve: {error}")
+        });
+        let (digest, _) = super::probe_harness::browser_bundle_digest(&real)
+            .expect("the pinned browser bundle hashes as a tree of regular files");
+        Some((real, digest))
+    }
+
+    /// A recipe corpus for the browser profile: ESM recipes addressed by claim
+    /// id, with an `animation-frames` drain step the policy admits. Written
+    /// separately from [`tracer_corpus_with_dependencies`] so that helper's
+    /// corpus root — which every Node tracer's receipt binds — stays
+    /// byte-identical.
+    fn tracer_browser_corpus(
+        fixture: &std::path::Path,
+        scratch: &std::path::Path,
+        label: &str,
+        entries: &[(&str, &str)],
+    ) -> std::path::PathBuf {
+        let corpus = scratch.join(format!("corpus-{label}"));
+        std::fs::create_dir_all(&corpus).expect("corpus directory");
+        let recipes = entries
+            .iter()
+            .map(|(claim_id, module)| {
+                std::fs::copy(
+                    fixture.join("probe-recipes").join(module),
+                    corpus.join(module),
+                )
+                .unwrap_or_else(|error| panic!("copy recipe {module}: {error}"));
+                serde_json::json!({
+                    "claimId": claim_id,
+                    "module": module,
+                    "importKind": "esm",
+                    "scenario": "operation",
+                    "expectedEvent": { "marker": "undeclared-alternative", "class": "callback" },
+                    "drain": [{ "kind": "animation-frames", "maxTurns": 1 }],
+                    "coverageLimitations": [
+                        "one pinned headless-shell bundle, one artifact case, browser-enforced denials not verified here",
+                        "one exact URL map: sibling conditional targets are unprobed",
+                        "frozen intrinsic prototypes can refuse a benign package that writes to one",
+                    ],
+                })
+            })
+            .collect::<Vec<_>>();
+        let manifest = serde_json::json!({
+            "format": "solid-checker-probe-recipe-corpus",
+            "schemaVersion": 1,
+            "policy": {
+                "repeatRuns": 2,
+                "timeoutMillis": 60000,
+                "maxMicrotaskTurns": 4,
+                "maxMacrotaskTurns": 1,
+                "maxAnimationFrameTurns": 4,
+                "maxEvents": 64,
+            },
+            "recipes": recipes,
+        });
+        std::fs::write(
+            corpus.join("recipes.json"),
+            format!(
+                "{}\n",
+                serde_json::to_string_pretty(&manifest).expect("corpus manifest")
+            ),
+        )
+        .expect("write the corpus manifest");
+        corpus
+    }
+
+    /// ADR 0033 end to end: a DOM-reading TypeScript graph that no Node profile
+    /// can complete without fake globals passes the census, the mandatory veto
+    /// and the fresh recipe replay inside the pinned headless shell over a
+    /// launcher-owned CDP pipe, and every named premise refuses when broken.
+    #[test]
+    fn the_probe_controlled_browser_profile_executes_a_dom_dependent_graph_over_a_cdp_pipe() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let Some((node, _)) = tracer_node() else {
+            return;
+        };
+        let Some((browser, browser_digest)) = tracer_browser() else {
+            return;
+        };
+        let repository = repository_root();
+        let name = "probe-browser-source-only";
+        let fixture = repository.join("fixtures/package-contracts/probe-source-disposition");
+        let package = fixture.join("browser-only");
+        let manifest = std::fs::read(package.join("package.json")).unwrap();
+        let runtime = std::fs::read(package.join("index.ts")).unwrap();
+        let dom = std::fs::read(package.join("dom.ts")).unwrap();
+        let declarations = std::fs::read(package.join("index.d.ts")).unwrap();
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.ts", runtime.as_slice()),
+                ("package/dom.ts", dom.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let root = format!("/project/node_modules/{name}");
+        let plan = plan_for_test_package_closing(
+            &archive,
+            name,
+            "1.0.0",
+            &root,
+            &manifest,
+            &["import"],
+            &[(
+                "scrollRoot",
+                ("index.ts", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root.as_str(),
+            )],
+            &[("scrollRoot", ClaimDomain::Creates)],
+            &|_| ValueShape::Callable,
+        );
+        plan.acquire_and_verify_export_value_type_facts(&pin)
+            .expect("the implementation census closes a DOM-reading export before any launch");
+        let schedule = plan.probe_gate_schedule().unwrap();
+        let gate = &schedule.gates()[0];
+        let scratch = TracerScratch::new("browser-cdp-pipe");
+        let corpus = tracer_browser_corpus(
+            &fixture,
+            scratch.path(),
+            "browser-only",
+            &[(gate.semantic_claim_id(), "browser-only.mjs")],
+        );
+        let configuration = super::ProbeHarnessConfiguration::new(&repository, &node, &corpus)
+            .unwrap()
+            .with_test_browser_pin(&browser, &browser_digest)
+            .unwrap();
+
+        // No fake globals: the Node relative-graph profile loads the same graph
+        // and its recipe fails on `document`, so the gate stays incomplete.
+        let node_module = super::controlled_execution::InertModule::from_plan(
+            &plan,
+            super::RELATIVE_GRAPH_EXECUTION_PROFILE,
+        )
+        .expect("the Node graph profile admits the same module supply");
+        let node_corpus = tracer_corpus_from(
+            &fixture,
+            scratch.path(),
+            "browser-only-under-node",
+            &[(gate.semantic_claim_id(), "browser-only.mjs")],
+        );
+        let node_configuration =
+            super::ProbeHarnessConfiguration::new(&repository, &node, node_corpus).unwrap();
+        let (node_evaluation, _) = super::probe_harness::run_inert_gates(
+            &plan,
+            &schedule,
+            &node_configuration,
+            &pin,
+            &node_module,
+            false,
+        )
+        .expect("a DOM reference under Node is a recorded run error, not a launch failure");
+        let node_outcomes = schedule.outcomes_from_evaluation(&node_evaluation).unwrap();
+        assert!(
+            matches!(
+                schedule.inspect_outcomes(node_outcomes),
+                Err(super::ProbeGateError::IncompleteGate(id)) if id == gate.id()
+            ),
+            "the Node worker must not synthesize `document`"
+        );
+
+        let module = super::controlled_execution::InertModule::from_plan(
+            &plan,
+            super::BROWSER_EXECUTION_PROFILE,
+        )
+        .expect("the browser profile admits the two-module DOM graph");
+        assert_eq!(module.modules.len(), 2);
+        assert_eq!(module.edges.len(), 1);
+        assert_eq!(module.edges[0].specifier, "./dom");
+
+        let issuer =
+            ConfiguredReceiptIssuer::persistent_local("controlled-browser-test", [31; 32]).unwrap();
+        let proposal = crate::contract_document::encode(
+            &plan.selected_candidate,
+            &crate::contract_document::SidecarDigests::default(),
+            false,
+        )
+        .unwrap();
+        let result = plan
+            .certify_and_execute(
+                super::BROWSER_EXECUTION_PROFILE,
+                &proposal,
+                &pin,
+                &issuer,
+                &configuration,
+            )
+            .expect(
+                "census, pinned-Node reproduction, browser veto and fresh browser replay complete",
+            );
+        let report = serde_json::to_value(&result).unwrap();
+        assert_eq!(report["profile"], super::BROWSER_EXECUTION_PROFILE);
+        assert_eq!(report["acceptedClosures"], 1);
+        assert_eq!(report["consumerOutcome"], "completed-replayed-recipe");
+        assert_eq!(report["receipt"]["receiptVersion"], 6);
+        let binding = report["receipt"]["payload"]["executionBinding"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|field| field.as_str().unwrap().to_owned())
+            .collect::<Vec<_>>();
+        assert!(
+            binding
+                .iter()
+                .any(|field| field == &format!("browser-bundle:{browser_digest}")),
+            "{binding:?}"
+        );
+        assert!(
+            binding
+                .iter()
+                .any(|field| field.starts_with("browser-resolver:"))
+        );
+        super::controlled_execution::assert_receipt_refusals(&result, &issuer);
+
+        // A bundle that is not the pinned bytes refuses before any launch.
+        let wrong_pin = super::ProbeHarnessConfiguration::new(&repository, &node, &corpus)
+            .unwrap()
+            .with_test_browser_pin(&browser, &format!("sha256:{}", "0".repeat(64)))
+            .unwrap();
+        assert!(
+            matches!(
+                super::probe_harness::run_browser_gates(
+                    &plan, &schedule, &wrong_pin, &pin, &module, false
+                ),
+                Err(super::ProbeHarnessError::HarnessProvenance(_))
+            ),
+            "a browser bundle digest mismatch must refuse at gate time"
+        );
+        // The browser profile without a browser refuses by name.
+        assert!(
+            matches!(
+                super::probe_harness::run_browser_gates(
+                    &plan,
+                    &schedule,
+                    &node_configuration,
+                    &pin,
+                    &module,
+                    false
+                ),
+                Err(super::ProbeHarnessError::Configuration(_))
+            ),
+            "the browser profile without probeBrowserExecutable must refuse by name"
+        );
+        // Derived bytes pinned Node does not reproduce refuse before serving.
+        let mut bad = module.clone();
+        bad.modules[1].output_digest = format!("sha256:{}", "0".repeat(64));
+        assert!(
+            super::probe_harness::run_browser_gates(
+                &plan,
+                &schedule,
+                &configuration,
+                &pin,
+                &bad,
+                false
+            )
+            .is_err(),
+            "a derived-output mismatch must refuse before the browser is launched"
+        );
+
+        // A request outside the served exact URL map refuses the launch.
+        let unmapped_corpus = tracer_browser_corpus(
+            &fixture,
+            scratch.path(),
+            "browser-unmapped",
+            &[(gate.semantic_claim_id(), "browser-unmapped.mjs")],
+        );
+        let unmapped = super::ProbeHarnessConfiguration::new(&repository, &node, unmapped_corpus)
+            .unwrap()
+            .with_test_browser_pin(&browser, &browser_digest)
+            .unwrap();
+        assert!(
+            matches!(
+                super::probe_harness::run_browser_gates(
+                    &plan, &schedule, &unmapped, &pin, &module, false
+                ),
+                Err(super::ProbeHarnessError::ConditionMismatch(_))
+            ),
+            "an unmapped request must refuse the launch"
+        );
+
+        // A contradiction observed in the derived bytes the browser executes
+        // vetoes closure; no receipt is issued.
+        let veto_corpus = tracer_browser_corpus(
+            &fixture,
+            scratch.path(),
+            "browser-derived-veto",
+            &[(gate.semantic_claim_id(), "browser-derived-veto.mjs")],
+        );
+        let veto = super::ProbeHarnessConfiguration::new(&repository, &node, veto_corpus)
+            .unwrap()
+            .with_test_browser_pin(&browser, &browser_digest)
+            .unwrap();
+        let error = plan
+            .certify_and_execute(
+                super::BROWSER_EXECUTION_PROFILE,
+                &proposal,
+                &pin,
+                &issuer,
+                &veto,
+            )
+            .err()
+            .expect("a contradiction observed in the browser vetoes closure");
         assert!(
             matches!(
                 error,

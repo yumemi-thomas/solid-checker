@@ -126,6 +126,7 @@ enum WireDrainStep {
     Flush,
     Microtasks { max_turns: u16 },
     Macrotasks { max_turns: u16 },
+    AnimationFrames { max_turns: u16 },
 }
 
 #[derive(Clone, Copy, Deserialize, Serialize)]
@@ -135,7 +136,15 @@ struct WirePolicy {
     timeout_millis: u64,
     max_microtask_turns: u16,
     max_macrotask_turns: u16,
+    /// ADR 0033. Defaulted and omitted at zero, so a session document for a
+    /// Node worker is byte-identical to one written before the field existed.
+    #[serde(default, skip_serializing_if = "is_zero_u16")]
+    max_animation_frame_turns: u16,
     max_events: u32,
+}
+
+fn is_zero_u16(value: &u16) -> bool {
+    *value == 0
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -584,6 +593,9 @@ struct WireRun {
     isolation: WireIsolation,
     drained_microtasks: u16,
     drained_macrotasks: u16,
+    /// Absent from every Node worker frame; the browser bootstrap reports it.
+    #[serde(default)]
+    drained_animation_frames: u16,
     outcome: WireRunOutcome,
     /// Absent on the audit path, whose sessions ask for no resolution.
     #[serde(default)]
@@ -841,6 +853,7 @@ fn probe_run(run: WireRun) -> Result<ProbeRun, RuntimeProbeWireError> {
         },
         drained_microtasks: run.drained_microtasks,
         drained_macrotasks: run.drained_macrotasks,
+        drained_animation_frames: run.drained_animation_frames,
         outcome: match run.outcome {
             WireRunOutcome::Completed { events } => ProbeRunOutcome::Completed {
                 events: events
@@ -1008,6 +1021,7 @@ impl From<WireDrainStep> for crate::DrainStep {
             WireDrainStep::Flush => Self::Flush,
             WireDrainStep::Microtasks { max_turns } => Self::Microtasks { max_turns },
             WireDrainStep::Macrotasks { max_turns } => Self::Macrotasks { max_turns },
+            WireDrainStep::AnimationFrames { max_turns } => Self::AnimationFrames { max_turns },
         }
     }
 }
@@ -1018,6 +1032,7 @@ impl From<crate::DrainStep> for WireDrainStep {
             crate::DrainStep::Flush => Self::Flush,
             crate::DrainStep::Microtasks { max_turns } => Self::Microtasks { max_turns },
             crate::DrainStep::Macrotasks { max_turns } => Self::Macrotasks { max_turns },
+            crate::DrainStep::AnimationFrames { max_turns } => Self::AnimationFrames { max_turns },
         }
     }
 }
@@ -1029,6 +1044,7 @@ impl From<WirePolicy> for ProbePolicy {
             timeout_millis: value.timeout_millis,
             max_microtask_turns: value.max_microtask_turns,
             max_macrotask_turns: value.max_macrotask_turns,
+            max_animation_frame_turns: value.max_animation_frame_turns,
             max_events: value.max_events,
         }
     }
@@ -1041,6 +1057,7 @@ impl From<ProbePolicy> for WirePolicy {
             timeout_millis: value.timeout_millis,
             max_microtask_turns: value.max_microtask_turns,
             max_macrotask_turns: value.max_macrotask_turns,
+            max_animation_frame_turns: value.max_animation_frame_turns,
             max_events: value.max_events,
         }
     }

@@ -80,6 +80,7 @@ fn policy() -> ProbePolicy {
         timeout_millis: 5_000,
         max_microtask_turns: 8,
         max_macrotask_turns: 4,
+        max_animation_frame_turns: 0,
         max_events: 128,
     }
 }
@@ -188,6 +189,7 @@ fn runs_with(
             },
             drained_microtasks: 2,
             drained_macrotasks: 1,
+            drained_animation_frames: 0,
             outcome: ProbeRunOutcome::Completed {
                 events: events(session),
             },
