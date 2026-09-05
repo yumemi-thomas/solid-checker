@@ -242,6 +242,7 @@ func (p *project) exportImplementationTranscriptLocked(
 		transcript.OpenReasons = append(transcript.OpenReasons, "declarationUnavailable")
 		return transcript
 	}
+	transcript.CompletionForm = implementationCompletionForm(implementation)
 	selected := p.selectedSignatureLocked(
 		signatures[0], selectedDeclaration, target, typefacts.CallKindCall, callableDepth,
 	)
@@ -366,6 +367,7 @@ func (p *project) localDeclarationImplementationTranscriptLocked(
 		transcript.OpenReasons = append(transcript.OpenReasons, "declarationUnavailable")
 		return transcript
 	}
+	transcript.CompletionForm = implementationCompletionForm(implementation)
 	// The identity binding. Location is the demand echoed back, so it proves
 	// nothing by itself; this is the comparison that does, because the resolved
 	// declaration's own location comes from the checker rather than from the
@@ -945,4 +947,38 @@ func exportValueDemandDigest(demands []typefacts.ExportValueDemand) string {
 		hashField(hash, strconv.Itoa(demand.CallableDepth))
 	}
 	return "sha256:" + hex.EncodeToString(hash.Sum(nil))
+}
+
+// implementationCompletionForm classifies how a function-like implementation
+// completes to its caller, from its own syntax (ADR 0035): the `async`
+// modifier and the asterisk token on the declaration itself. Only the four
+// function-like kinds a call signature's implementation can be are reviewed;
+// anything else is Unclassified, which a consumer refuses.
+func implementationCompletionForm(implementation *ast.Node) typefacts.ImplementationCompletionForm {
+	if implementation == nil {
+		return typefacts.CompletionUnclassified
+	}
+	generator := false
+	switch {
+	case ast.IsFunctionDeclaration(implementation):
+		generator = implementation.AsFunctionDeclaration().AsteriskToken != nil
+	case ast.IsFunctionExpression(implementation):
+		generator = implementation.AsFunctionExpression().AsteriskToken != nil
+	case ast.IsMethodDeclaration(implementation):
+		generator = implementation.AsMethodDeclaration().AsteriskToken != nil
+	case ast.IsArrowFunction(implementation):
+	default:
+		return typefacts.CompletionUnclassified
+	}
+	async := ast.HasSyntacticModifier(implementation, ast.ModifierFlagsAsync)
+	switch {
+	case async && generator:
+		return typefacts.CompletionAsyncGenerator
+	case async:
+		return typefacts.CompletionAsync
+	case generator:
+		return typefacts.CompletionGenerator
+	default:
+		return typefacts.CompletionPlain
+	}
 }

@@ -1663,3 +1663,52 @@ void make;
 		t.Fatalf("catch-parameter default call = %#v, want a reachable-or-unknown row", found)
 	}
 }
+
+// TestExportImplementationTranscriptStatesItsCompletionForm pins ADR 0035's
+// producer fact: the completion form is read from the implementation's own
+// syntax — the `async` modifier and the asterisk token — and stated on every
+// transcript that reached its implementation. An expression-bodied arrow is
+// still a plain callable; its value-carrying completion is the return site.
+func TestExportImplementationTranscriptStatesItsCompletionForm(t *testing.T) {
+	cases := []struct {
+		name string
+		decl string
+		want typefacts.ImplementationCompletionForm
+	}{
+		{"plain", "export function subject(): void {}", typefacts.CompletionPlain},
+		{"async", "export async function subject(): Promise<void> {}", typefacts.CompletionAsync},
+		{"generator", "export function* subject(): Generator<number> { yield 1; }", typefacts.CompletionGenerator},
+		{"asyncGenerator", "export async function* subject(): AsyncGenerator<number> { yield 1; }", typefacts.CompletionAsyncGenerator},
+		{"arrowExpression", "export const subject = (value: number): number => value;", typefacts.CompletionPlain},
+		{"asyncArrow", "export const subject = async (): Promise<void> => {};", typefacts.CompletionAsync},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			source := tc.decl + "\nvoid subject;\n"
+			writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+			opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer opened.Close()
+			analyzer := opened.(typefacts.ExportValueAnalyzer)
+			path := filepath.Join(dir, "facts.ts")
+			queryStart := strings.LastIndex(source, "void subject") + len("void ")
+			implementationStart := strings.Index(source, "subject")
+			location := typefacts.Location{Path: path, StartByte: queryStart, EndByte: queryStart + len("subject")}
+			implementation := typefacts.Location{Path: path, StartByte: implementationStart, EndByte: implementationStart + len("subject")}
+			demands := []typefacts.ExportValueDemand{{Location: location, ImplementationLocation: &implementation}}
+			answer, err := analyzer.ExportValueTranscripts(context.Background(), demands)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(answer.Transcripts) != 1 || answer.Transcripts[0].Implementation == nil {
+				t.Fatalf("transcripts = %#v, want one with an implementation", answer.Transcripts)
+			}
+			if got := answer.Transcripts[0].Implementation.CompletionForm; got != tc.want {
+				t.Fatalf("completion form = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

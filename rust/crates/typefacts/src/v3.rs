@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:b8b7f607b2d8937711d3b222a99e79e5f6efbb20f449a248b20f023f5e91c73c";
+    "sha256:b3a63564488672c921e6647e9b7351dccd5b9175d62cc3344f745784456ab678";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -138,12 +138,16 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
+// Protocol 19 states an implementation transcript's completion form — plain,
+// async, generator, async generator — so a `returns` census can refuse a
+// callable that hands its caller a promise or an iterator whatever its body
+// does (ADR 0035). An absent form on an older producer is not "plain".
 // Protocol 18 lets an uncensused form and a `.call`/`.apply` row state the
 // parameter their subject is rooted at (ADR 0034); an absent fact on an older
 // producer is never "not rooted".
 // Protocol 17 includes exact-null loose equality in the positive
 // uncensused-form classifier. Protocol 16 added unchanged-parameter identity.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 18;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 19;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

@@ -4,7 +4,11 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 18: an uncensused form and a `.call`/`.apply`
+// TypeFactsHandshakeProtocol is 19: an implementation transcript states its
+// completion form — plain, async, generator, async generator — so a `returns`
+// census can refuse a callable that hands its caller a promise or an iterator
+// whatever its body does (ADR 0035); an absent form on an older producer must
+// not be read as plain. Protocol 18: an uncensused form and a `.call`/`.apply`
 // row can state the parameter their subject is rooted at (ADR 0034), and an
 // absent fact on an older producer must not be read as "not rooted".
 // Protocol 17: the uncensused-form census states the
@@ -103,8 +107,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // Protocol 11 separated the members a value declares from the members it
 // carries only through the compiler's apparent-type augmentation.
 const (
-	TypeFactsHandshakeProtocol uint64 = 18
-	TypeFactsSchemaSHA256             = "sha256:b8b7f607b2d8937711d3b222a99e79e5f6efbb20f449a248b20f023f5e91c73c"
+	TypeFactsHandshakeProtocol uint64 = 19
+	TypeFactsSchemaSHA256             = "sha256:b3a63564488672c921e6647e9b7351dccd5b9175d62cc3344f745784456ab678"
 )
 
 type ServiceHandshake struct {

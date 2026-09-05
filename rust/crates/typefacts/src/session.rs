@@ -3678,6 +3678,7 @@ mod tests {
             target: "".into(),
             declaration: None,
             signature: None,
+            completion_form: None,
             parameter_uses: Vec::new(),
             control_flow: None,
             callable_returns: Vec::new(),

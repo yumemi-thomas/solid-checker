@@ -256,14 +256,36 @@ type ExportValueTranscript struct {
 	OpenReasons      []string                        `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
 }
 
+// ImplementationCompletionForm classifies, from syntax alone, what an
+// implementation hands its caller when it completes (ADR 0035). A plain
+// callable completes with whatever its return sites carry — nothing, for a
+// bare `return;` or a body that falls off its end. An `async` function hands
+// back a promise on every completion, a generator an iterator, and an async
+// generator an async iterator, whatever the body does. Unclassified is the
+// default for a declaration kind this classifier does not review, so a
+// consumer refuses it rather than reading it as plain.
+type ImplementationCompletionForm string
+
+const (
+	CompletionPlain          ImplementationCompletionForm = "plain"
+	CompletionAsync          ImplementationCompletionForm = "async"
+	CompletionGenerator      ImplementationCompletionForm = "generator"
+	CompletionAsyncGenerator ImplementationCompletionForm = "async-generator"
+	CompletionUnclassified   ImplementationCompletionForm = "unclassified"
+)
+
 type ExportImplementationTranscript struct {
-	Location      Location             `cbor:"location" json:"location"`
-	QueryName     string               `cbor:"queryName,omitempty" json:"queryName,omitempty"`
-	Target        SymbolID             `cbor:"target,omitempty" json:"target,omitempty"`
-	Declaration   *ResolvedDeclaration `cbor:"declaration,omitempty" json:"declaration,omitempty"`
-	Signature     *SelectedSignature   `cbor:"signature,omitempty" json:"signature,omitempty"`
-	ParameterUses []ParameterUse       `cbor:"parameterUses,omitempty" json:"parameterUses,omitempty"`
-	ControlFlow   *ControlFlowCensus   `cbor:"controlFlow,omitempty" json:"controlFlow,omitempty"`
+	Location    Location             `cbor:"location" json:"location"`
+	QueryName   string               `cbor:"queryName,omitempty" json:"queryName,omitempty"`
+	Target      SymbolID             `cbor:"target,omitempty" json:"target,omitempty"`
+	Declaration *ResolvedDeclaration `cbor:"declaration,omitempty" json:"declaration,omitempty"`
+	Signature   *SelectedSignature   `cbor:"signature,omitempty" json:"signature,omitempty"`
+	// CompletionForm is stated on every transcript that reached its
+	// implementation, beside Declaration; a consumer never reads its absence
+	// as plain (handshake protocol 19).
+	CompletionForm ImplementationCompletionForm `cbor:"completionForm,omitempty" json:"completionForm,omitempty"`
+	ParameterUses  []ParameterUse               `cbor:"parameterUses,omitempty" json:"parameterUses,omitempty"`
+	ControlFlow    *ControlFlowCensus           `cbor:"controlFlow,omitempty" json:"controlFlow,omitempty"`
 	// CallableReturns records the return-carry edges owned by each nested
 	// callable in this implementation. The top-level implementation's return
 	// sites remain in ControlFlow; these rows let a consumer compose a returned

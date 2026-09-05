@@ -372,6 +372,23 @@ pub struct ExportValueTranscript {
     pub open_reasons: Vec<Arc<str>>,
 }
 
+/// What a function-like implementation hands its caller when it completes,
+/// classified from the `async` modifier and the asterisk token on the
+/// declaration itself (ADR 0035). A plain callable completes with whatever its
+/// return sites carry; an `async` function always hands back a promise, a
+/// generator an iterator, an async generator an async iterator, whatever the
+/// body does. `Unclassified` is the producer's default for a declaration kind
+/// its classifier does not review, and a consumer refuses it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ImplementationCompletionForm {
+    Plain,
+    Async,
+    Generator,
+    AsyncGenerator,
+    Unclassified,
+}
+
 /// Exact runtime implementation selected independently of the declaration
 /// expression used by [`ExportValueTranscript`]. This is not an invented
 /// invocation: the producer inspects the snapshot-replayed binding itself.
@@ -387,6 +404,12 @@ pub struct ExportImplementationTranscript {
     pub declaration: Option<ResolvedDeclaration>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<SelectedSignature>,
+    /// How this implementation completes to its caller, from its own syntax
+    /// (ADR 0035, handshake protocol 19). Stated beside [`Self::declaration`]
+    /// on every transcript that reached its implementation; a consumer never
+    /// reads its absence as [`ImplementationCompletionForm::Plain`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_form: Option<ImplementationCompletionForm>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub parameter_uses: Vec<ParameterUse>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
