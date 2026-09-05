@@ -215,9 +215,10 @@ the profile reads. The scoped closures those profiles measured are unaffected.
 - **Fixtures.** `implementation-census-returns`: four certifying exports through
   a checked recipe, five refusing by name (`value-carrying completion` with
   reach `reachable` or `unknown`, `async implementation`, `generator
-  implementation`); the `const` arrow export records the pre-existing generator
-  limit that a `const` binding proposes nothing. `implementation-census-creates`'s
-  nine void exports now also propose `returns: []`.
+  implementation`). `implementation-census-creates`'s nine void exports now
+  also propose `returns: []`. (The `const` arrow export first exposed that the
+  generator bound walk verdicts to function declarations only; that binding
+  gap was fixed the same day, see `docs/precision-backlog.md`.)
 
 Measured on the ordinary three-row baseline
 (`three-row-adr0035/after.json`, SHA-256

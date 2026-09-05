@@ -1,5 +1,25 @@
 # Precision backlog
 
+## Arrow-bound exports propose again (2026-09-05)
+
+The generator bound its `creates` and `returns` walk verdicts to a function's
+own name node, so `export const f = () => …` and `const g = function () {}`
+never proposed a closure in any domain however clean their bodies. Measured
+before the fix: 9 callable arrow-bound exports across the corpus were silent
+beside 204 proposing declarations; on the real rows the gap is small — Kobalte
+alpha's nine function exports are all declarations, Kobalte 0.9.2 has one arrow
+export (`getPrecision`). The binding now also goes through a single-identifier
+declarator whose initializer is the callable, and 7 of the 9 propose
+`creates: []` (`arrow-export-attribution`'s `Arrowed` and `Direct`,
+`esm-barrel`'s `createLocal`, `torture-runtime-namespace`'s `stable`,
+`unresolved-callee-callback`'s `mapParam` and `noMember`,
+`implementation-census-returns`' `expressionArrow`), each checked against its
+body. The two that stay silent are recorded, not excused:
+`open-dynamic-import-attribution`'s `loadLater` reaches a dynamic import, and
+`published-export-entity`'s `runtimeArrow` is bound in a file the entity index
+does not tie to the declarator. A destructured, aliased or call-initialized
+binding is deliberately not "this function under this name" and stays silent.
+
 ## The `returns` census decides valueless completion (2026-09-05)
 
 ADR 0035 makes `returns` the second behavioral call domain the implementation

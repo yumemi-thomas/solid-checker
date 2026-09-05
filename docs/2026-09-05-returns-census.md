@@ -83,9 +83,10 @@ The unreachable-value admission is pinned on a synthesized transcript by
 generator's walk has no reachability and never proposes such an export. The
 generator side is pinned by
 `the_generated_returns_fixture_carries_its_valueless_candidates_into_planning`:
-four `returns` candidates, eight `creates` candidates, twelve gates. The
-`const` arrow export proposes nothing in either domain, a pre-existing
-generator limit the fixture records.
+four `returns` candidates, nine `creates` candidates, thirteen gates. (The
+`const` arrow export first exposed that the generator bound walk verdicts to
+function declarations only — fixed the same day; see the backlog entry on
+arrow-bound exports.)
 
 ## Measurement
 

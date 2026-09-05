@@ -6514,6 +6514,53 @@ fn generated_owner_requirements_by_symbol(
                 Some(canonical_symbol(&entity.symbol, aliases)),
             );
         }
+        // An anonymous callable bound by a plain `const`/`let` declarator —
+        // `export const f = () => …`, `const g = function () {}` — has no name
+        // node of its own, so the loop above never reaches it and every walk
+        // verdict for its body was lost: the export proposed nothing in any
+        // domain, however clean the body. The binding fact names the symbol
+        // instead. Only a single-identifier pattern whose initializer *is* a
+        // callable qualifies; a destructured, aliased or call-initialized
+        // binding is not "this function under this name", and stays silent.
+        for binding in &file.ast.bindings {
+            if binding.shape != solid_facts::ast::BindingShape::Identifier
+                || !binding.initializer_function
+                || binding.names.len() != 1
+            {
+                continue;
+            }
+            let Some(initializer) = binding.initializer else {
+                continue;
+            };
+            let Some(function) = file
+                .ast
+                .functions
+                .iter()
+                .filter(|function| initializer.contains(function.span))
+                .max_by_key(|function| function.span.end - function.span.start)
+            else {
+                continue;
+            };
+            let name = &binding.names[0];
+            let key = (
+                file.path.to_string(),
+                u64::from(name.span.start),
+                u64::from(name.span.end),
+            );
+            let Some(entity) = entities.get(&key) else {
+                continue;
+            };
+            if entity.symbol.is_empty() {
+                continue;
+            }
+            function_symbols
+                .entry((
+                    file.path.to_string(),
+                    function.span.start,
+                    function.span.end,
+                ))
+                .or_insert_with(|| Some(canonical_symbol(&entity.symbol, aliases)));
+        }
     }
 
     let mut indexed = GeneratedOwnerRequirements::default();

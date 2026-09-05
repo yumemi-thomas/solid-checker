@@ -2,8 +2,27 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:6ad843f966df16744c067c377c0c7fb2d306d2eb818936bec19f081b2a4f5282",
+  "semanticDigest": "sha256:b4c634cdde123b8cb4cfbbabb24d5537fd2d734acfe1192f6b932aee02fbbcf4",
   "closureCandidates": [
+    {
+      "claimId": "claim:v1:sha256:1375480b9663e50d8c30241b435f7a769dfc75992ff2f5394680afd8932bba3f",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.mjs",
+        "runtimeDigest": "sha256:23117759da8e21468bb4901f94964f272d14fe70793ba7b47875a8da46ee9d9b",
+        "declarationsPath": "./index.d.mts",
+        "declarationsDigest": "sha256:17cd27d928a303281246012890cd96b5d1038f02ebf0cb4420f2bb511fa5ad59",
+        "closureDigest": "sha256:54f52a372c748968b87737e1879773c5d3aaff1b7022cadbf80ef6bc9f8eb018"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:301645e00da4b5201492722d7960d46023325cdb50e616ee465cbe0142bc386c",
+        "export": "createLocal",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
+        }
+      }
+    },
     {
       "claimId": "claim:v1:sha256:29b806ce8c2fb67986566860961a03600e4763fc6836e8578265a427215f146f",
       "artifact": {
@@ -250,25 +269,6 @@
         "path": {
           "kind": "call",
           "domain": "disposals"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:1375480b9663e50d8c30241b435f7a769dfc75992ff2f5394680afd8932bba3f",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.mjs",
-        "runtimeDigest": "sha256:23117759da8e21468bb4901f94964f272d14fe70793ba7b47875a8da46ee9d9b",
-        "declarationsPath": "./index.d.mts",
-        "declarationsDigest": "sha256:17cd27d928a303281246012890cd96b5d1038f02ebf0cb4420f2bb511fa5ad59",
-        "closureDigest": "sha256:54f52a372c748968b87737e1879773c5d3aaff1b7022cadbf80ef6bc9f8eb018"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:301645e00da4b5201492722d7960d46023325cdb50e616ee465cbe0142bc386c",
-        "export": "createLocal",
-        "path": {
-          "kind": "call",
-          "domain": "creates"
         }
       }
     },

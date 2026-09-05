@@ -11145,24 +11145,14 @@ export const value = phantom;
             ],
             "the valueless-completion walk's proposals, and only those"
         );
-        // `expressionArrow` is a `const` arrow export: the generator binds walk
-        // verdicts to function declarations and proposes nothing for it, in
-        // either domain. Every other export is a function declaration whose
-        // `creates` walk is clean.
+        // Every export — the `const` arrow included, since the generator binds
+        // an anonymous callable's walk verdicts through its declarator — has a
+        // clean `creates` walk and proposes.
         assert_eq!(
             candidates_for(ClaimDomain::Creates),
-            [
-                "asyncVoid",
-                "bareCompletion",
-                "bareReturnInLoop",
-                "earlyBareReturn",
-                "generatorVoid",
-                "nestedReturnsValue",
-                "returnsValue",
-                "valueReturnInLoop",
-            ]
+            RETURNS_FIXTURE_EXPORTS
         );
-        assert_eq!(plan.probe_gate_schedule().unwrap().gates().len(), 12);
+        assert_eq!(plan.probe_gate_schedule().unwrap().gates().len(), 13);
     }
 
     /// The sibling package `primitive-consumer/`, whose one export calls a real
