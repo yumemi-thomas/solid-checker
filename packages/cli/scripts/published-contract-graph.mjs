@@ -13,7 +13,9 @@ import {
   resolvePackageArtifactClosure
 } from "./artifact-resolution.mjs";
 
-const MAX_GRAPH_NODES = 256;
+// Matches POLICY_2_GRAPH_NODE_LIMIT in the native planner: a node is one
+// (artifact, importing module) pair, and importer variants share their work.
+const MAX_GRAPH_NODES = 1024;
 const MAX_GRAPH_DEPTH = 64;
 
 export class PublishedGraphAcquisitionRefusal extends Error {

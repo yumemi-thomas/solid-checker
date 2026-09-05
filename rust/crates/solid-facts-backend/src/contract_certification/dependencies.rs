@@ -21,7 +21,14 @@ use super::{
     policy2_resolved_import_root,
 };
 
-const POLICY_2_GRAPH_NODE_LIMIT: usize = 256;
+// 1024, from 256: a node is one (artifact, importing module) pair, so a package
+// with many entrypoints multiplies its dependencies by its importers and an
+// umbrella package (`corvu`) crossed 256 without adding an artifact. Importer
+// variants share generation and exported-value acquisition, so the cost this
+// bounds grows with distinct artifacts, not with the node count. The CLI's
+// discovery bound (`certify-contract.mjs`, `published-contract-graph.mjs`) is
+// the same number.
+const POLICY_2_GRAPH_NODE_LIMIT: usize = 1024;
 const POLICY_2_GRAPH_DEPTH_LIMIT: usize = 64;
 
 /// Package-manager selection compared with independently authenticated

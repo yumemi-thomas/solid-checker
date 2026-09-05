@@ -37,6 +37,9 @@ use super::CertificationPlan;
 
 static EXECUTION_IMAGE_COUNTER: AtomicU64 = AtomicU64::new(1);
 static PRIVATE_PROJECT_COUNTER: AtomicU64 = AtomicU64::new(1);
+/// How many leftover `(pid, counter)` directories a process skips past before
+/// giving up on naming its private project.
+const PRIVATE_PROJECT_NAME_ATTEMPTS: u32 = 1024;
 
 // Retained for the opaque transaction that will derive schedules in Slice 7.
 #[allow(dead_code)]
@@ -390,6 +393,10 @@ impl TypeFactsCertificationSchedule {
 /// Authority-bearing, family-checked Type Facts evidence. The contained
 /// bindings can participate in structural coverage only because this value was
 /// constructed from a direct live-session answer by [`CertificationPlan`].
+// `Clone` exists for importer variants of one graph node, which share their
+// representative's live-verified evidence inside the same transaction; it never
+// crosses a process or a session boundary.
+#[derive(Clone)]
 pub struct VerifiedTypeFactsEvidence {
     bindings: Vec<WitnessBinding>,
     session_evidence_root: String,
@@ -939,6 +946,34 @@ pub(super) fn acquire_and_verify_graph_export_values(
     if requests.is_empty() {
         return Ok(Vec::new());
     }
+    // Importer variants share one acquisition. Discovery keys a graph node by
+    // the module that imported it, so one package's many entrypoints put the
+    // same `solid-js` into the graph once per importing module
+    // (`@corvu/drawer`'s graph carries it about forty times). Two such nodes
+    // are the same snapshot, the same proposal, and the same materialized
+    // root, and the demand graph hashes none of the importer -- the roots are
+    // equal -- so the evidence one acquisition binds to that (snapshot,
+    // demand-graph) pair is the evidence every variant's receipt needs. The
+    // group also requires the same dependency set and source set up to the
+    // same importer-invariant key, so a variant whose authenticated
+    // descendants differ is acquired on its own.
+    let all_requests = requests;
+    let mut variant_keys: Vec<Vec<String>> = Vec::new();
+    let mut representatives: Vec<&GraphExportValueRequest<'_>> = Vec::new();
+    let mut representative_of = Vec::with_capacity(all_requests.len());
+    for request in all_requests {
+        let key = importer_invariant_request_key(request);
+        let position = match variant_keys.iter().position(|known| *known == key) {
+            Some(position) => position,
+            None => {
+                variant_keys.push(key);
+                representatives.push(request);
+                representatives.len() - 1
+            }
+        };
+        representative_of.push(position);
+    }
+    let requests = representatives.as_slice();
     let plans = requests
         .iter()
         .map(|request| request.plan)
@@ -1055,7 +1090,11 @@ pub(super) fn acquire_and_verify_graph_export_values(
     report_certification_timing(
         "live-export-value-acquisition-and-verification",
         started,
-        serde_json::json!({ "plans": requests.len(), "graph": true }),
+        serde_json::json!({
+            "plans": requests.len(),
+            "importerVariants": all_requests.len(),
+            "graph": true
+        }),
     );
     let started = std::time::Instant::now();
     drop(session);
@@ -1065,7 +1104,47 @@ pub(super) fn acquire_and_verify_graph_export_values(
         started,
         serde_json::json!({ "graph": true }),
     );
-    evidence
+    // Back to one answer per requested node, importer variants sharing their
+    // representative's evidence.
+    evidence.map(|evidence| {
+        representative_of
+            .iter()
+            .map(|position| evidence[*position].clone())
+            .collect()
+    })
+}
+
+/// What decides whether two graph nodes may share one exported-value
+/// acquisition: the snapshot, the demand graph, the materialized root, and the
+/// same for every authenticated descendant and source. The importing module is
+/// deliberately absent -- it is the one coordinate importer variants differ in.
+fn importer_invariant_request_key(request: &GraphExportValueRequest<'_>) -> Vec<String> {
+    fn plan_key(plan: &CertificationPlan) -> String {
+        format!(
+            "{}\0{}\0{}",
+            plan.snapshot_root(),
+            plan.demand_graph().root().as_str(),
+            plan.resolved_import.package_root
+        )
+    }
+    let mut dependencies = request
+        .dependencies
+        .iter()
+        .map(|dependency| plan_key(dependency))
+        .collect::<Vec<_>>();
+    dependencies.sort();
+    dependencies.dedup();
+    let mut sources = request
+        .sources
+        .iter()
+        .map(|source| source.identity.clone())
+        .collect::<Vec<_>>();
+    sources.sort();
+    vec![
+        plan_key(request.plan),
+        dependencies.join("\n"),
+        sources.join("\n"),
+    ]
 }
 
 struct PrivateTypeFactsProject {
@@ -1098,12 +1177,32 @@ impl PrivateTypeFactsProject {
         program_plans: &[&CertificationPlan],
         sources: &[&super::dependencies::VerifiedGraphSourcePackage],
     ) -> Result<Self, TypeFactsCertificationError> {
-        let requested = std::env::temp_dir().join(format!(
-            "solid-checker-typefacts-project-{}-{}",
-            std::process::id(),
-            PRIVATE_PROJECT_COUNTER.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir(&requested)?;
+        // The name is (pid, counter), and a pid is reused: a certification the
+        // runner killed on its timeout never dropped its project, so its
+        // directory is still there when a later process draws the same pid and
+        // `create_dir` reports "File exists" for a directory this process never
+        // made. Skip past such a leftover rather than fail; nothing is ever
+        // written into a directory this process did not create.
+        let requested = {
+            let mut attempts = 0;
+            loop {
+                let candidate = std::env::temp_dir().join(format!(
+                    "solid-checker-typefacts-project-{}-{}",
+                    std::process::id(),
+                    PRIVATE_PROJECT_COUNTER.fetch_add(1, Ordering::Relaxed)
+                ));
+                match fs::create_dir(&candidate) {
+                    Ok(()) => break candidate,
+                    Err(error)
+                        if error.kind() == std::io::ErrorKind::AlreadyExists
+                            && attempts < PRIVATE_PROJECT_NAME_ATTEMPTS =>
+                    {
+                        attempts += 1;
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+            }
+        };
         set_directory_permissions(&requested)?;
         let root = fs::canonicalize(&requested)?;
         let package_root = root.join("node_modules").join(plan.snapshot.package_name());
@@ -1583,6 +1682,15 @@ fn build_materialized_store_entry(
                 ))
             })?,
         )?;
+        // Another certification may have published this same content-addressed
+        // entry while ours was staged. An entry that is exact *now* is the one
+        // to keep -- a sibling process may already have linked its project to
+        // it, and retiring it from under that link would cost that
+        // certification its sources -- so re-check before replacing, and
+        // replace only an entry that is still not exact.
+        if entry.exists() && materialized_store_entry_is_exact(entry, snapshot, expected) {
+            return Ok(());
+        }
         if entry.exists() {
             let retired = parent.join(format!(
                 ".{}.retired-{}-{nonce}",
@@ -10266,6 +10374,22 @@ mod tests {
 
         // Linking the same snapshot to the same target again is idempotent.
         assert!(link_snapshot_from_store(&store, &snapshot, &target).unwrap());
+
+        // A sibling certification that staged the same entry and finds it
+        // already published exact keeps the published one: nothing is retired
+        // from under a project that may already link to it.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let published = fs::metadata(&entry).unwrap().ino();
+            let expected = loadable_snapshot_files(&snapshot);
+            build_materialized_store_entry(&entry, &snapshot, &expected).unwrap();
+            assert_eq!(fs::metadata(&entry).unwrap().ino(), published);
+            assert_eq!(
+                fs::read(target.join("dist/index.d.ts")).unwrap(),
+                b"export declare const value: 1;"
+            );
+        }
 
         // A tampered entry is rebuilt from the snapshot before it is linked.
         fs::remove_file(entry.join("dist/index.d.ts")).unwrap();

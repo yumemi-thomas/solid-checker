@@ -1856,7 +1856,10 @@ async function preparePublishedGraphFallback({
       if (!state) {
         let preparation = pendingByKey.get(key);
         if (!preparation) {
-          if (byKey.size + pendingByKey.size >= 256 || ancestry.length > 64) {
+          // 1024 nodes, matching POLICY_2_GRAPH_NODE_LIMIT: a node is one
+          // (artifact, importing module) pair, and importer variants share
+          // their generation, so the bound is on discovery, not on work.
+          if (byKey.size + pendingByKey.size >= 1024 || ancestry.length > 64) {
             throw new Error("published dependency graph exceeds policy-2 node/depth limits");
           }
           const nextAncestry = [...ancestry, key];
@@ -1938,6 +1941,19 @@ async function preparePublishedGraphFallback({
     Math.round((performance.now() - graphAcquisitionStartedAt) * 100) / 100;
   const pendingGeneration = new Set(byKey.values());
   let proposalGenerations = 0;
+  let proposalGenerationsShared = 0;
+  // Importer variants of one artifact generate once. A node is keyed by the
+  // module that imported it, so one package's many entrypoints put the same
+  // `solid-js` into the graph once per importing module; every such variant is
+  // the same package root, integrity, entrypoint and conditions over the same
+  // dependency variants, and the generator's `--certification-importer` changes
+  // nothing in the emitted document -- only `certificationInputs[].resolution.
+  // importer` names it. The first variant generates; the others take its
+  // document with their own importer written back into the resolution, and
+  // native certification still replays each variant's resolution from its own
+  // importer before anything is trusted. Keyed as a promise so two variants in
+  // one frontier share a single in-flight generation.
+  const generationByVariantKey = new Map();
   const proposalFrontiers = [];
   while (pendingGeneration.size > 0) {
     const ready = [...pendingGeneration]
@@ -1980,21 +1996,55 @@ async function preparePublishedGraphFallback({
         if (explicitConditions.length) {
           generationArguments.push("--conditions", explicitConditions.join(","));
         }
+        const variantKey = JSON.stringify([
+          state.node.packageRoot,
+          state.node.integrity,
+          state.node.entrypoint,
+          state.node.conditions,
+          dependencies
+            .map(dependency => [dependency.viaSpecifier, dependency.variantKey ?? dependency.node.key])
+            .sort((left, right) => left[0].localeCompare(right[0]) || left[1].localeCompare(right[1]))
+        ]);
+        state.variantKey = variantKey;
         let generated;
-        try {
-          generated = await generatePackageContract(generationArguments, {
+        const shared = generationByVariantKey.get(variantKey);
+        if (shared) {
+          let representative;
+          try {
+            representative = await shared;
+          } catch (error) {
+            throw new Error(
+              `published dependency graph node ${state.node.packageName}@${state.node.packageVersion} ` +
+              `${state.node.entrypoint} [${state.node.conditions.join(",")}] refused: ${error.message}`,
+              { cause: error }
+            );
+          }
+          proposalGenerationsShared += 1;
+          generated = {
+            ...representative,
+            certificationInputs: representative.certificationInputs.map(input => ({
+              ...input,
+              resolution: { ...input.resolution, importer: state.node.importer }
+            }))
+          };
+        } else {
+          const generation = generatePackageContract(generationArguments, {
             quiet: true,
             proposalDependencies: merged.proposalDependencies,
             proposalDependencyCatalog: merged.catalog,
             privateGraphPreparation: true,
             exactConditions: explicitConditions
           });
-        } catch (error) {
-          throw new Error(
-            `published dependency graph node ${state.node.packageName}@${state.node.packageVersion} ` +
-            `${state.node.entrypoint} [${state.node.conditions.join(",")}] refused: ${error.message}`,
-            { cause: error }
-          );
+          generationByVariantKey.set(variantKey, generation);
+          try {
+            generated = await generation;
+          } catch (error) {
+            throw new Error(
+              `published dependency graph node ${state.node.packageName}@${state.node.packageVersion} ` +
+              `${state.node.entrypoint} [${state.node.conditions.join(",")}] refused: ${error.message}`,
+              { cause: error }
+            );
+          }
         }
         const plannings = certificationPlannings(generated, state.artifactSnapshot, options);
         if (plannings.length !== 1) {
@@ -2034,6 +2084,9 @@ async function preparePublishedGraphFallback({
       resolutionSession: graphResolutionSession.statistics(),
       compilerSourceClosureCensus: compilerSourceClosureCount(),
       proposalGenerations,
+      // Nodes that took an importer variant's document instead of generating;
+      // `proposalGenerations - proposalGenerationsShared` generators ran.
+      proposalGenerationsShared,
       proposalFrontiers,
       graphNodeReferences: preparedCases.reduce((total, item) => total + item.nodes.length, 0),
       nativeCertificationTransactions: 1,
