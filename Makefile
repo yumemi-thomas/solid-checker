@@ -269,10 +269,19 @@ ecosystem-sentinel:
 # Certification children share rust/target/registry-cache so the measured
 # wall time is the checker's, not the registry's; --no-registry-cache
 # restores fetch-everything-fresh acquisition.
+# Both certifying targets hand the runner the checked-in recipe corpus
+# (scripts/ecosystem-benchmark/probe-recipes): a `creates` candidate whose claim
+# a recipe names is vetoed and closed, one no recipe names is served by a
+# synthesized veto or withheld by name (ADR 0036). Without it every candidate in
+# the corpus was withheld as `noRecipe` (1664 on 2026-09-05) and the pinned
+# report described no closure at all.
+ECOSYSTEM_PROBE_RECIPES := scripts/ecosystem-benchmark/probe-recipes
+
 ecosystem-benchmark: build-checker-release
 	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
 	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 600 --attempt-certification \
+	  --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" \
 	  --thresholds scripts/ecosystem-benchmark/phase16-thresholds.json
 
 # The certification regression gate: the same full run as ecosystem-benchmark,
@@ -289,6 +298,7 @@ ecosystem-regression: build-checker-release
 	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
 	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 600 --attempt-certification \
+	  --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" \
 	  --baseline benchmarks/ecosystem/report.json \
 	  --thresholds scripts/ecosystem-benchmark/certification-regression-thresholds.json \
 	  --json "$(CURDIR)/rust/target/ecosystem-regression/report.json" \

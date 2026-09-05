@@ -17,7 +17,10 @@ make ecosystem-regression  # every row against the pinned report; exit 1 on any 
 compared with `--baseline benchmarks/ecosystem/report.json` under
 `certification-regression-thresholds.json` (`maxCertificationRegressions: 0`),
 writing under `rust/target/ecosystem-regression/` so it never moves the pin.
-See "Discovery and execution" in `docs/ecosystem-benchmark.md`.
+Both it and `ecosystem-benchmark` pass `--probe-recipe-corpus probe-recipes`, so
+`creates` candidates are vetoed against the checked-in recipes rather than all
+withheld as `noRecipe`. See "Discovery and execution" in
+`docs/ecosystem-benchmark.md`.
 
 `ecosystem-discover` is the only one of these that touches the network on its
 own account; `ecosystem-sentinel`, `ecosystem-benchmark` and

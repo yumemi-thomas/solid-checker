@@ -1,8 +1,8 @@
 # Ecosystem Benchmark Report
 
-- Started: 2026-09-04T08:03:49.620Z
-- Finished: 2026-09-04T08:05:02.561Z
-- Duration: 72941 ms
+- Started: 2026-09-05T12:00:27.887Z
+- Finished: 2026-09-05T12:01:52.925Z
+- Duration: 85038 ms
 - Checker native binary: /Users/thomas/Documents/Github/solid-checker/rust/target/release/solid-checker-rust
 - Type Facts binary: /Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts
 - Registry cache for certification: /Users/thomas/Documents/Github/solid-checker/rust/target/registry-cache
@@ -11,7 +11,7 @@
 - Materialized source store: /Users/thomas/Documents/Github/solid-checker/rust/target/materialized-store
 - Manifest generated at: 2026-08-26T14:21:49.573Z (rows: 307, probes: 418)
 - Scope: full corpus (418 probes run)
-- Verified: 357/397 attempted -- 306 complete, 51 partial (31 with the root); 471 certified entrypoints
+- Verified: 368/398 attempted -- 317 complete, 51 partial (31 with the root); 537 certified entrypoints
 
 ## Solid 1.x
 
@@ -87,14 +87,14 @@ Failure details:
 - Generated entrypoints: 95
 - Refused entrypoints (partial contracts): 0
 - Refused artifact cases (partial contracts): 3
-- Inapplicable artifact cases (recorded, not refused): 85
+- Inapplicable artifact cases (recorded, not refused): 87
 - Success (complete contracts): 92/97 (94.85%)
 - Partial contracts: 2
 - Failures: 3
 - Certification attempted: 94
-- Verified (receipt issued): 90 -- 88 complete, 2 partial (0 of those with the root)
-- Certified entrypoints (measured): 91
-- Exact certification refusals: 4
+- Verified (receipt issued): 91 -- 89 complete, 2 partial (0 of those with the root)
+- Certified entrypoints (measured): 92
+- Exact certification refusals: 3
 - Proposal lanes: 94 reused-proposal
 
 | Package | Version | Probe | Outcome | Class | Verified |
@@ -130,7 +130,7 @@ Failure details:
 | @solid-primitives/flux-store | 0.1.1 | only | success | success | complete 1 of 1 (root) |
 | @solid-primitives/fullscreen | 1.3.5 | only | success | success | complete 1 of 1 (root) |
 | @solid-primitives/geolocation | 1.5.5 | only | success | success | complete 1 of 1 (root) |
-| @solid-primitives/gestures | 1.2.1 | only | success | success | refused |
+| @solid-primitives/gestures | 1.2.1 | only | success | success | complete 1 of 1 (root) |
 | @solid-primitives/graphql | 3.0.0-next.0 | only | success | success | complete 1 of 1 (root) |
 | @solid-primitives/history | 0.2.5 | only | success | success | complete 1 of 1 (root) |
 | @solid-primitives/i18n | 2.2.1 | only | success | success | complete 1 of 1 (root) |
@@ -141,7 +141,7 @@ Failure details:
 | @solid-primitives/jsx-parser | 0.2.0 | only | success | success | complete 1 of 1 (root) |
 | @solid-primitives/jsx-tokenizer | 1.1.4 | only | success | success | complete 1 of 1 (root) |
 | @solid-primitives/keyboard | 1.3.7 | only | success | success | complete 1 of 1 (root) |
-| @solid-primitives/keyed | 1.5.3 | only | success | success | refused |
+| @solid-primitives/keyed | 1.5.3 | only | success | success | complete 1 of 1 (root) |
 | @solid-primitives/lifecycle | 0.1.2 | only | success | success | complete 1 of 1 (root) |
 | @solid-primitives/list | 0.1.2 | only | success | success | complete 1 of 1 (root) |
 | @solid-primitives/local-store | 1.1.4 | only | success | success | refused |
@@ -193,7 +193,7 @@ Failure details:
 | @solid-primitives/upload | 0.1.5 | only | success | success | complete 1 of 1 (root) |
 | @solid-primitives/utils | 6.4.1 | only | partial-success | partial-success | partial 1 of 2 (no root) |
 | @solid-primitives/virtual | 0.2.5 | only | success | success | complete 1 of 1 (root) |
-| @solid-primitives/visibility-observer | 2.0.1 | only | success | success | complete 1 of 1 (root) |
+| @solid-primitives/visibility-observer | 2.0.1 | only | success | success | refused |
 | @solid-primitives/websocket | 1.4.0 | only | success | success | complete 1 of 1 (root) |
 | @solid-primitives/workers | 0.4.3 | only | failure | missing-closure-module | - |
 
@@ -220,9 +220,9 @@ Failure details:
 - Partial contracts: 0
 - Failures: 4
 - Certification attempted: 11
-- Verified (receipt issued): 11 -- 9 complete, 2 partial (1 of those with the root)
-- Certified entrypoints (measured): 35
-- Exact certification refusals: 0
+- Verified (receipt issued): 9 -- 8 complete, 1 partial (1 of those with the root)
+- Certified entrypoints (measured): 25
+- Exact certification refusals: 2
 - Proposal lanes: 4 published-graph, 7 reused-proposal
 
 | Package | Version | Probe | Outcome | Class | Verified |
@@ -233,11 +233,11 @@ Failure details:
 | @corvu/disclosure | 0.2.2 | only | success | success | complete 1 of 1 (root) |
 | @corvu/drawer | 0.2.4 | only | failure | dependency-contract-obligation | complete 1 of 1 (root) |
 | @corvu/otp-field | 0.1.4 | only | success | success | complete 1 of 1 (root) |
-| @corvu/popover | 0.2.0 | only | failure | dependency-contract-obligation | complete 1 of 1 (root) |
+| @corvu/popover | 0.2.0 | only | failure | dependency-contract-obligation | refused |
 | @corvu/resizable | 0.2.5 | only | success | success | complete 1 of 1 (root) |
 | @corvu/tooltip | 0.2.2 | only | success | success | complete 1 of 1 (root) |
 | @corvu/utils | 0.4.2 | only | success | success | partial 17 certified, 4 declared via wildcard (root) |
-| corvu | 0.7.2 | only | failure | dependency-contract-obligation | partial 9 certified, 1 declared via wildcard (no root) |
+| corvu | 0.7.2 | only | failure | dependency-contract-obligation | refused |
 
 Failure groups:
 - 2x dependency-contract-obligation: no certifiable artifact case; 2 case(s) refused; first refusal: .: accepted dependency @corvu/dialog has no exact runtime binding for export Portal (packages: @corvu/drawer, @corvu/popover)
@@ -263,10 +263,10 @@ Failure details:
 - Partial contracts: 4
 - Failures: 10
 - Certification attempted: 35
-- Verified (receipt issued): 29 -- 5 complete, 24 partial (17 of those with the root)
+- Verified (receipt issued): 29 -- 6 complete, 23 partial (16 of those with the root)
 - Certified entrypoints (measured): 47
 - Exact certification refusals: 6
-- Proposal lanes: 1 generated-proposal, 8 published-graph, 26 reused-proposal
+- Proposal lanes: 2 generated-proposal, 7 published-graph, 26 reused-proposal
 
 | Package | Version | Probe | Outcome | Class | Verified |
 | --- | --- | --- | --- | --- | --- |
@@ -287,11 +287,11 @@ Failure details:
 | @tanstack/solid-devtools | 0.8.12 | only | success | success | partial 1 of 2 (root) |
 | @tanstack/solid-form | 2.0.0-alpha.2 | only | failure | dependency-contract-obligation | refused |
 | @tanstack/solid-form-devtools | 1.0.0-alpha.2 | only | success | success | partial 1 of 2 (root) |
-| @tanstack/solid-hotkeys | 0.10.0 | only | failure | dependency-contract-obligation | partial 1 of 2 (root) |
+| @tanstack/solid-hotkeys | 0.10.0 | only | failure | dependency-contract-obligation | refused |
 | @tanstack/solid-hotkeys-devtools | 0.7.0 | only | success | success | partial 1 of 2 (root) |
 | @tanstack/solid-pacer | 0.22.0 | only | partial-success | partial-success | partial 1 of 15 (no root) |
 | @tanstack/solid-pacer-devtools | 0.14.0 | only | success | success | partial 2 of 3 (root) |
-| @tanstack/solid-query | 5.102.5 | only | failure | dependency-contract-obligation | refused |
+| @tanstack/solid-query | 5.102.5 | only | failure | dependency-contract-obligation | complete 1 of 1 (root) |
 | @tanstack/solid-query-devtools | 5.102.5 | only | success | success | complete 1 of 1 (root) |
 | @tanstack/solid-query-persist-client | 5.102.5 | only | failure | dependency-contract-obligation | complete 1 of 1 (root) |
 | @tanstack/solid-router | 1.170.30 | only | partial-success | partial-success | partial 1 of 4 (no root) |
@@ -336,18 +336,18 @@ Failure details:
 - Compatible packages: 12
 - Probes run: 12
 - Declared entrypoints: 21
-- Generated entrypoints: 19
+- Generated entrypoints: 23
 - Refused entrypoints (partial contracts): 0
-- Refused artifact cases (partial contracts): 43
-- Inapplicable artifact cases (recorded, not refused): 44
-- Success (complete contracts): 6/12 (50%)
-- Partial contracts: 4
+- Refused artifact cases (partial contracts): 38
+- Inapplicable artifact cases (recorded, not refused): 53
+- Success (complete contracts): 7/12 (58.33%)
+- Partial contracts: 3
 - Failures: 2
-- Certification attempted: 7
+- Certification attempted: 8
 - Verified (receipt issued): 5 -- 4 complete, 1 partial (1 of those with the root)
 - Certified entrypoints (measured): 5
-- Exact certification refusals: 2
-- Proposal lanes: 7 reused-proposal
+- Exact certification refusals: 3
+- Proposal lanes: 8 reused-proposal
 
 | Package | Version | Probe | Outcome | Class | Verified |
 | --- | --- | --- | --- | --- | --- |
@@ -356,7 +356,7 @@ Failure details:
 | @solid-devtools/ext-adapter | 0.17.0 | only | failure | no-exported-surface | - |
 | @solid-devtools/extension-adapter | 0.12.1 | only | success | success | complete 1 of 0 (root) |
 | @solid-devtools/frontend | 0.15.4 | only | success | success | partial 1 of 2 (root) |
-| @solid-devtools/locator | 0.16.7 | only | partial-success | partial-success | - |
+| @solid-devtools/locator | 0.16.7 | only | success | success | refused |
 | @solid-devtools/logger | 0.9.11 | only | success | success | complete 1 of 1 (root) |
 | @solid-devtools/overlay | 0.33.5 | only | success | success | complete 1 of 1 (root) |
 | @solid-devtools/shared | 0.20.0 | only | partial-success | partial-success | - |
@@ -406,14 +406,14 @@ Failure details:
 - Partial contracts: 0
 - Failures: 1
 - Certification attempted: 1
-- Verified (receipt issued): 0 -- 0 complete, 0 partial (0 of those with the root)
-- Certified entrypoints (measured): 0
-- Exact certification refusals: 1
+- Verified (receipt issued): 1 -- 1 complete, 0 partial (0 of those with the root)
+- Certified entrypoints (measured): 2
+- Exact certification refusals: 0
 - Proposal lanes: 1 published-graph
 
 | Package | Version | Probe | Outcome | Class | Verified |
 | --- | --- | --- | --- | --- | --- |
-| motion-solidjs | 0.6.0 | only | failure | dependency-contract-obligation | refused |
+| motion-solidjs | 0.6.0 | only | failure | dependency-contract-obligation | complete 2 of 2 (root) |
 
 Failure groups:
 - 1x dependency-contract-obligation: no certifiable artifact case; 2 case(s) refused; first refusal: .: accepted dependency motion-utils has no exact runtime binding for export MotionGlobalConfig (packages: motion-solidjs)
@@ -421,7 +421,7 @@ Failure groups:
 Failure details:
 - **motion-solidjs@0.6.0** (only, dependency-contract-obligation): solid-checker: no certifiable artifact case; 2 case(s) refused; first refusal: .: accepted dependency motion-utils has no exact runtime binding for export MotionGlobalConfig
 
-**Solid 1.x totals:** 131/168 (77.98%) complete, 15 partial, 22 failed
+**Solid 1.x totals:** 132/168 (78.57%) complete, 14 partial, 22 failed
 
 ## Solid 2.x
 
@@ -438,9 +438,9 @@ Failure details:
 - Partial contracts: 5
 - Failures: 1
 - Certification attempted: 12
-- Verified (receipt issued): 8 -- 5 complete, 3 partial (2 of those with the root)
-- Certified entrypoints (measured): 10
-- Exact certification refusals: 4
+- Verified (receipt issued): 9 -- 5 complete, 4 partial (3 of those with the root)
+- Certified entrypoints (measured): 11
+- Exact certification refusals: 3
 - Proposal lanes: 1 published-graph, 11 reused-proposal
 
 | Package | Version | Probe | Outcome | Class | Verified |
@@ -452,7 +452,7 @@ Failure details:
 | @solidjs/meta | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
 | @solidjs/meta | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
 | @solidjs/router | 2.0.0-next.18 | only | success | success | refused |
-| @solidjs/signals | 2.0.0-rc.3 | only | success | success | refused |
+| @solidjs/signals | 2.0.0-rc.3 | only | success | success | partial 1 of 2 (root) |
 | @solidjs/start-devtools | 1.0.0-next.4 | floor | success | success | complete 1 of 1 (root) |
 | @solidjs/start-devtools | 1.0.0-next.4 | head | success | success | complete 1 of 1 (root) |
 | @solidjs/universal | 2.0.0-rc.3 | only | success | success | partial 1 certified, 2 declared via wildcard (root) |
@@ -480,14 +480,14 @@ Failure details:
 - Partial contracts: 1
 - Failures: 0
 - Certification attempted: 2
-- Verified (receipt issued): 1 -- 0 complete, 1 partial (1 of those with the root)
-- Certified entrypoints (measured): 7
-- Exact certification refusals: 1
+- Verified (receipt issued): 2 -- 0 complete, 2 partial (1 of those with the root)
+- Certified entrypoints (measured): 66
+- Exact certification refusals: 0
 - Proposal lanes: 2 reused-proposal
 
 | Package | Version | Probe | Outcome | Class | Verified |
 | --- | --- | --- | --- | --- | --- |
-| @kobalte/core | 2.0.0-alpha.0 | only | partial-success | partial-success | refused |
+| @kobalte/core | 2.0.0-alpha.0 | only | partial-success | partial-success | partial 59 certified, 1 declared via wildcard (no root) |
 | @kobalte/utils | 2.0.0-alpha.0 | only | success | success | partial 7 certified, 2 declared via wildcard (root) |
 
 ### Solid Primitives
@@ -498,14 +498,14 @@ Failure details:
 - Generated entrypoints: 202
 - Refused entrypoints (partial contracts): 0
 - Refused artifact cases (partial contracts): 8
-- Inapplicable artifact cases (recorded, not refused): 206
+- Inapplicable artifact cases (recorded, not refused): 210
 - Success (complete contracts): 182/194 (93.81%)
 - Partial contracts: 6
 - Failures: 6
 - Certification attempted: 188
-- Verified (receipt issued): 174 -- 172 complete, 2 partial (0 of those with the root)
-- Certified entrypoints (measured): 184
-- Exact certification refusals: 14
+- Verified (receipt issued): 180 -- 178 complete, 2 partial (0 of those with the root)
+- Certified entrypoints (measured): 194
+- Exact certification refusals: 8
 - Proposal lanes: 4 published-graph, 184 reused-proposal
 
 | Package | Version | Probe | Outcome | Class | Verified |
@@ -576,22 +576,22 @@ Failure details:
 | @solid-primitives/gestures | 3.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
 | @solid-primitives/history | 1.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
 | @solid-primitives/history | 1.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
-| @solid-primitives/i18n | 3.0.0-next.4 | floor | success | success | refused |
-| @solid-primitives/i18n | 3.0.0-next.4 | head | success | success | refused |
+| @solid-primitives/i18n | 3.0.0-next.4 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/i18n | 3.0.0-next.4 | head | success | success | complete 1 of 1 (root) |
 | @solid-primitives/idle | 1.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
 | @solid-primitives/idle | 1.0.0-next.3 | head | success | success | complete 1 of 1 (root) |
-| @solid-primitives/input-mask | 1.0.0-next.2 | floor | success | success | refused |
-| @solid-primitives/input-mask | 1.0.0-next.2 | head | success | success | refused |
+| @solid-primitives/input-mask | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/input-mask | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
 | @solid-primitives/interaction | 1.0.0-next.4 | floor | success | success | complete 1 of 1 (root) |
 | @solid-primitives/interaction | 1.0.0-next.4 | head | success | success | complete 1 of 1 (root) |
-| @solid-primitives/intersection-observer | 3.0.0-next.3 | floor | failure | dependency-contract-obligation | complete 1 of 1 (root) |
-| @solid-primitives/intersection-observer | 3.0.0-next.3 | head | failure | dependency-contract-obligation | complete 1 of 1 (root) |
+| @solid-primitives/intersection-observer | 3.0.0-next.3 | floor | failure | dependency-contract-obligation | refused |
+| @solid-primitives/intersection-observer | 3.0.0-next.3 | head | failure | dependency-contract-obligation | refused |
 | @solid-primitives/jsx-tokenizer | 3.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
 | @solid-primitives/jsx-tokenizer | 3.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
 | @solid-primitives/keyboard | 2.0.0-next.5 | floor | success | success | complete 1 of 1 (root) |
 | @solid-primitives/keyboard | 2.0.0-next.5 | head | success | success | complete 1 of 1 (root) |
-| @solid-primitives/keyed | 3.0.0-next.2 | floor | success | success | refused |
-| @solid-primitives/keyed | 3.0.0-next.2 | head | success | success | refused |
+| @solid-primitives/keyed | 3.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
+| @solid-primitives/keyed | 3.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
 | @solid-primitives/lifecycle | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
 | @solid-primitives/lifecycle | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
 | @solid-primitives/list | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
@@ -692,8 +692,8 @@ Failure details:
 | @solid-primitives/upload | 1.0.0-next.4 | head | success | success | complete 1 of 1 (root) |
 | @solid-primitives/url | 0.2.0-next.2 | floor | success | success | complete 1 of 1 (root) |
 | @solid-primitives/url | 0.2.0-next.2 | head | success | success | complete 1 of 1 (root) |
-| @solid-primitives/utils | 7.0.0-next.4 | floor | success | success | refused |
-| @solid-primitives/utils | 7.0.0-next.4 | head | success | success | refused |
+| @solid-primitives/utils | 7.0.0-next.4 | floor | success | success | complete 3 of 3 (root) |
+| @solid-primitives/utils | 7.0.0-next.4 | head | success | success | complete 3 of 3 (root) |
 | @solid-primitives/vibrate | 1.0.0-next.2 | floor | success | success | complete 1 of 1 (root) |
 | @solid-primitives/vibrate | 1.0.0-next.2 | head | success | success | complete 1 of 1 (root) |
 | @solid-primitives/video | 1.0.0-next.3 | floor | success | success | complete 1 of 1 (root) |
@@ -731,9 +731,9 @@ Failure details:
 - Partial contracts: 0
 - Failures: 2
 - Certification attempted: 17
-- Verified (receipt issued): 17 -- 16 complete, 1 partial (1 of those with the root)
-- Certified entrypoints (measured): 33
-- Exact certification refusals: 0
+- Verified (receipt issued): 16 -- 15 complete, 1 partial (1 of those with the root)
+- Certified entrypoints (measured): 32
+- Exact certification refusals: 1
 - Proposal lanes: 2 published-graph, 15 reused-proposal
 
 | Package | Version | Probe | Outcome | Class | Verified |
@@ -748,7 +748,7 @@ Failure details:
 | @corvu-next/list | 0.1.5 | only | success | success | complete 1 of 1 (root) |
 | @corvu-next/otp-field | 0.1.5 | only | success | success | complete 1 of 1 (root) |
 | @corvu-next/persistent | 0.1.5 | only | success | success | complete 1 of 1 (root) |
-| @corvu-next/popover | 0.1.5 | only | failure | dependency-contract-obligation | complete 1 of 1 (root) |
+| @corvu-next/popover | 0.1.5 | only | failure | dependency-contract-obligation | refused |
 | @corvu-next/presence | 0.1.5 | only | success | success | complete 1 of 1 (root) |
 | @corvu-next/prevent-scroll | 0.1.5 | only | success | success | complete 1 of 1 (root) |
 | @corvu-next/resizable | 0.1.5 | only | success | success | complete 1 of 1 (root) |
@@ -777,19 +777,19 @@ Failure details:
 - Partial contracts: 4
 - Failures: 6
 - Certification attempted: 18
-- Verified (receipt issued): 12 -- 2 complete, 10 partial (6 of those with the root)
-- Certified entrypoints (measured): 20
-- Exact certification refusals: 6
-- Proposal lanes: 6 generated-proposal, 12 reused-proposal
+- Verified (receipt issued): 16 -- 6 complete, 10 partial (6 of those with the root)
+- Certified entrypoints (measured): 24
+- Exact certification refusals: 2
+- Proposal lanes: 2 generated-proposal, 4 published-graph, 12 reused-proposal
 
 | Package | Version | Probe | Outcome | Class | Verified |
 | --- | --- | --- | --- | --- | --- |
-| @tanstack/solid-query | 6.0.0-rc.0 | floor | failure | dependency-contract-obligation | refused |
-| @tanstack/solid-query | 6.0.0-rc.0 | head | failure | dependency-contract-obligation | refused |
+| @tanstack/solid-query | 6.0.0-rc.0 | floor | failure | dependency-contract-obligation | complete 1 of 1 (root) |
+| @tanstack/solid-query | 6.0.0-rc.0 | head | failure | dependency-contract-obligation | complete 1 of 1 (root) |
 | @tanstack/solid-query-devtools | 6.0.0-rc.0 | floor | success | success | complete 1 of 1 (root) |
 | @tanstack/solid-query-devtools | 6.0.0-rc.0 | head | success | success | complete 1 of 1 (root) |
-| @tanstack/solid-query-persist-client | 6.0.0-rc.0 | floor | failure | dependency-contract-obligation | refused |
-| @tanstack/solid-query-persist-client | 6.0.0-rc.0 | head | failure | dependency-contract-obligation | refused |
+| @tanstack/solid-query-persist-client | 6.0.0-rc.0 | floor | failure | dependency-contract-obligation | complete 1 of 1 (root) |
+| @tanstack/solid-query-persist-client | 6.0.0-rc.0 | head | failure | dependency-contract-obligation | complete 1 of 1 (root) |
 | @tanstack/solid-router | 2.0.0-rc.2 | floor | partial-success | partial-success | partial 1 of 4 (no root) |
 | @tanstack/solid-router | 2.0.0-rc.2 | head | partial-success | partial-success | partial 1 of 4 (no root) |
 | @tanstack/solid-router-devtools | 2.0.0-rc.2 | floor | success | success | partial 1 of 2 (root) |
@@ -925,41 +925,41 @@ None.
 - Probes fully proven (no unknown claim, no refused entrypoint, no closure note): 0/381 (0%)
 - Packages fully proven (every one of their probes): 0/190 (0%)
 - Probes with at least one unknown claim: 381
-- Probes with at least one refused entrypoint: 33
+- Probes with at least one refused entrypoint: 32
 - Probes with at least one inapplicable artifact case: 318
 - Probes with at least one closure note: 0
-- Exports proven: 0/8847 (0%) (with unknown: 8847, without a summary: 0)
-- Of those unknown exports: 37 unknown in every measured domain (the generator said nothing about them at all), 0 unknown only inside a conditional variant (the default resolution is fully claimed)
-- Entrypoints: 1128 emitted, 0 refused; 282 artifact cases refused, 548 artifact cases inapplicable
+- Exports proven: 0/8950 (0%) (with unknown: 8950, without a summary: 0)
+- Of those unknown exports: 54 unknown in every measured domain (the generator said nothing about them at all), 0 unknown only inside a conditional variant (the default resolution is fully claimed)
+- Entrypoints: 1132 emitted, 0 refused; 277 artifact cases refused, 563 artifact cases inapplicable
 - Closure notes (block byte-attested verification): 0
 - Attested closure notes (record complete, runtime unbounded): 0
-- Declined `creates` closure proposals (blocking call sites): 41957 -- 20450 unresolved-callee, 13341 refusing-callee-fixpoint, 8166 dialect-silent
+- Declined `creates` closure proposals (blocking call sites): 40051 -- 18760 unresolved-callee, 12378 refusing-callee-fixpoint, 8913 dialect-silent
 
 ### Dialect-silent blockers (what an audit row would unblock)
 
 | Package | Export | Consumer exports blocked | Probes |
 | --- | --- | ---: | ---: |
-| solid-js | useContext | 485 | 13 |
-| solid-js | createEffect | 279 | 57 |
-| solid-js | splitProps | 232 | 5 |
-| solid-js | mergeProps | 129 | 5 |
-| solid-js | on | 86 | 9 |
-| solid-js | omit | 69 | 5 |
-| solid-js | merge | 68 | 4 |
-| solid-js | onMount | 63 | 11 |
-| solid-js | runWithOwner | 54 | 18 |
-| solid-js | createRenderEffect | 42 | 19 |
+| solid-js | useContext | 663 | 29 |
+| solid-js | createEffect | 361 | 83 |
+| solid-js | splitProps | 245 | 5 |
+| solid-js | mergeProps | 158 | 6 |
+| solid-js | merge | 110 | 6 |
+| solid-js | omit | 103 | 7 |
+| solid-js | on | 101 | 14 |
+| solid-js | onMount | 71 | 15 |
+| solid-js | runWithOwner | 69 | 20 |
+| solid-js | createRenderEffect | 59 | 19 |
 
 ### Unresolved-callee shapes (what the unresolved callees are)
 
 | Shape | Consumer exports blocked | Call sites | Probes |
 | --- | ---: | ---: | ---: |
-| parameter-rooted | 384 | 5218 | 123 |
-| member-property-unresolved | 381 | 14733 | 96 |
-| computed-member | 68 | 152 | 36 |
-| expression-callee | 52 | 136 | 30 |
-| member-receiver-unresolved | 26 | 163 | 19 |
-| other | 2 | 48 | 1 |
+| member-property-unresolved | 569 | 15490 | 131 |
+| parameter-rooted | 290 | 2668 | 112 |
+| expression-callee | 97 | 204 | 36 |
+| computed-member | 78 | 180 | 45 |
+| member-receiver-unresolved | 29 | 167 | 20 |
+| other | 5 | 51 | 4 |
 
 The concrete spellings behind each shape stay on every row's own `contractContent.unresolvedCalleeShapes`; `bun scripts/dialect-audit-yield.mjs` ranks them across a whole report.
 
@@ -967,11 +967,11 @@ The concrete spellings behind each shape stay on every row's own `contractConten
 
 | Artifact | Samples | p50 bytes | p95 bytes | max bytes |
 | --- | ---: | ---: | ---: | ---: |
-| Pretty main | 381 | 2149 | 12864 | 681431 |
-| Canonical minified main | 381 | 1626 | 9961 | 506012 |
-| Proposal plan (not evidence) | 381 | 49252 | 540062 | 20327179 |
-| Canonical bytes per export | 381 | 353.67 | 1081 | 1567 |
-| Canonical bytes per operation | 90 | 931 | 2633 | 16867.07 |
+| Pretty main | 381 | 2161 | 13571 | 680909 |
+| Canonical minified main | 381 | 1637 | 10967 | 505789 |
+| Proposal plan (not evidence) | 381 | 49252 | 595337 | 20295235 |
+| Canonical bytes per export | 381 | 354.29 | 1081 | 1750 |
+| Canonical bytes per operation | 89 | 960.5 | 2733 | 20231.56 |
 
 Proposal-plan bytes are construction obligations, not proof evidence and not acceptance authority. Proof-transcript and receipt bytes are measured separately by the Phase 16 accepted-corpus gate.
 
@@ -979,43 +979,43 @@ Proposal-plan bytes are construction obligations, not proof evidence and not acc
 
 | Domain | Exports carrying an unknown |
 | --- | --- |
-| callbacks | 8847 |
-| reads | 8847 |
-| writes | 8847 |
-| creates | 8742 |
-| invalidates | 8847 |
-| throws | 8847 |
-| returns | 8847 |
-| cleanups | 8847 |
-| disposals | 8847 |
-| recursiveValue | 37 |
-| **total** | **79555** |
+| callbacks | 8950 |
+| reads | 8950 |
+| writes | 8950 |
+| creates | 8706 |
+| invalidates | 8950 |
+| throws | 8950 |
+| returns | 8906 |
+| cleanups | 8950 |
+| disposals | 8950 |
+| recursiveValue | 54 |
+| **total** | **80316** |
 
-Read the domain columns together, not separately: 37 of the 8847 unknown exports are unknown in every measured domain at once, so the same export can contribute to several columns.
+Read the domain columns together, not separately: 54 of the 8950 unknown exports are unknown in every measured domain at once, so the same export can contribute to several columns.
 
 ### Positive behavioral rows (what a probe step would have to drive)
 
 | Row kind | Count |
 | --- | --- |
-| invoke | 413 |
-| return | 290 |
-| read | 168 |
+| invoke | 148 |
+| return | 273 |
+| read | 166 |
 | write | 0 |
 | invalidate | 0 |
 | create | 0 |
-| cleanup | 33 |
+| cleanup | 65 |
 | dispose | 0 |
 
 ### Contract content by family
 
 | Family | Contracts | Fully proven | With unknowns | With refusals | Exports proven | Unknown claims |
 | --- | --- | --- | --- | --- | --- | --- |
-| Official Solid | 19 | 0/19 (0%) | 19 | 7 | 0/1638 (0%) | 14761 |
-| Kobalte | 5 | 0/5 (0%) | 5 | 4 | 0/3558 (0%) | 31962 |
-| Solid Primitives | 282 | 0/282 (0%) | 282 | 8 | 0/1935 (0%) | 17426 |
-| Corvu | 22 | 0/22 (0%) | 22 | 0 | 0/292 (0%) | 2632 |
+| Official Solid | 19 | 0/19 (0%) | 19 | 7 | 0/1638 (0%) | 14747 |
+| Kobalte | 5 | 0/5 (0%) | 5 | 4 | 0/3558 (0%) | 31935 |
+| Solid Primitives | 282 | 0/282 (0%) | 282 | 8 | 0/1935 (0%) | 17412 |
+| Corvu | 22 | 0/22 (0%) | 22 | 0 | 0/292 (0%) | 2592 |
 | TanStack | 38 | 0/38 (0%) | 38 | 8 | 0/271 (0%) | 2439 |
-| Solid Devtools | 10 | 0/10 (0%) | 10 | 4 | 0/278 (0%) | 2460 |
+| Solid Devtools | 10 | 0/10 (0%) | 10 | 3 | 0/381 (0%) | 3316 |
 | Solid Recharts | 3 | 0/3 (0%) | 3 | 0 | 0/545 (0%) | 4905 |
 | Motion for Solid | 2 | 0/2 (0%) | 2 | 2 | 0/330 (0%) | 2970 |
 
@@ -1023,21 +1023,21 @@ Read the domain columns together, not separately: 37 of the 8847 unknown exports
 
 | Package | Solid | Unknown claims | Exports with unknown / total | All five domains | Variant-only | Dominant cause |
 | --- | --- | --- | --- | --- | --- | --- |
-| @kobalte/core@0.13.13 | solid1 | 21148 | 2352/2352 | 0 | 0 | callbacks |
-| @kobalte/core@2.0.0-alpha.0 | solid2 | 8748 | 972/972 | 0 | 0 | callbacks |
-| solid-js@1.9.14 | solid1 | 5742 | 636/636 | 18 | 0 | callbacks |
+| @kobalte/core@0.13.13 | solid1 | 21141 | 2352/2352 | 0 | 0 | callbacks |
+| @kobalte/core@2.0.0-alpha.0 | solid2 | 8746 | 972/972 | 0 | 0 | callbacks |
+| solid-js@1.9.14 | solid1 | 5736 | 636/636 | 12 | 0 | callbacks |
 | @solidjs/web@2.0.0-rc.3 | solid2 | 4347 | 483/483 | 0 | 0 | callbacks |
 | solid-recharts@1.0.1 | solid1 | 2943 | 327/327 | 0 | 0 | callbacks |
 | @solidjs/signals@2.0.0-rc.3 | solid2 | 1647 | 183/183 | 0 | 0 | callbacks |
 | motion-solidjs@0.7.0-beta.4 | solid2 | 1485 | 165/165 | 0 | 0 | callbacks |
 | motion-solidjs@0.7.0-beta.4 | solid2 | 1485 | 165/165 | 0 | 0 | callbacks |
-| @kobalte/solidbase@0.6.13 | solid1 | 1296 | 144/144 | 0 | 0 | callbacks |
-| @solid-devtools/shared@0.20.0 | solid1 | 1182 | 136/136 | 0 | 0 | callbacks |
+| @solid-devtools/shared@0.20.0 | solid1 | 1464 | 174/174 | 0 | 0 | callbacks |
+| @kobalte/solidbase@0.6.13 | solid1 | 1290 | 144/144 | 0 | 0 | callbacks |
+| @solid-devtools/debugger@0.28.1 | solid1 | 1027 | 116/116 | 14 | 0 | callbacks |
 | solid-recharts@2.0.0-beta.1 | solid2 | 981 | 109/109 | 0 | 0 | callbacks |
 | solid-recharts@2.0.0-beta.1 | solid2 | 981 | 109/109 | 0 | 0 | callbacks |
 | @solid-primitives/utils@7.0.0-next.4 | solid2 | 891 | 99/99 | 0 | 0 | callbacks |
 | @solid-primitives/utils@7.0.0-next.4 | solid2 | 891 | 99/99 | 0 | 0 | callbacks |
-| @solidjs/start@2.0.3 | solid1 | 747 | 83/83 | 0 | 0 | callbacks |
 
 These figures describe the GENERATED DRAFT, not consumer findings. An unknown claim becomes a finding only when a consumer actually touches that surface, so a package with many unknowns on exports nobody imports costs a real project nothing. Nothing here has been reviewed or probed: every claim counted as proven is still inferred evidence awaiting review, and a closure note means the contract cannot be byte-attested at all.
 
@@ -1045,8 +1045,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Worker timings
 
-- Worker time: 1020299 ms
-- Phases: install 58819 ms, generation 414456 ms, harness 547024 ms
+- Worker time: 1259537 ms
+- Phases: install 63566 ms, generation 430891 ms, harness 765080 ms
 
 ### Top failure signatures
 
@@ -1083,9 +1083,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 - @kobalte/core@2.0.0-alpha.0 (kobalte): 59 entrypoint(s) generated, 0 entrypoint(s) and 4 artifact case(s) refused
 - @kobalte/solidbase@0.6.13 (kobalte): 33 entrypoint(s) generated, 0 entrypoint(s) and 33 artifact case(s) refused
 - @kobalte/utils@0.9.2 (kobalte): 20 entrypoint(s) generated, 0 entrypoint(s) and 4 artifact case(s) refused
-- @solid-devtools/debugger@0.28.1 (solid-devtools): 4 entrypoint(s) generated, 0 entrypoint(s) and 30 artifact case(s) refused
-- @solid-devtools/locator@0.16.7 (solid-devtools): 1 entrypoint(s) generated, 0 entrypoint(s) and 1 artifact case(s) refused
-- @solid-devtools/shared@0.20.0 (solid-devtools): 4 entrypoint(s) generated, 0 entrypoint(s) and 5 artifact case(s) refused
+- @solid-devtools/debugger@0.28.1 (solid-devtools): 6 entrypoint(s) generated, 0 entrypoint(s) and 28 artifact case(s) refused
+- @solid-devtools/shared@0.20.0 (solid-devtools): 5 entrypoint(s) generated, 0 entrypoint(s) and 4 artifact case(s) refused
 - @solid-primitives/controlled-props@1.0.0-next.3 (solid-primitives): 1 entrypoint(s) generated, 0 entrypoint(s) and 1 artifact case(s) refused
 - @solid-primitives/controlled-props@1.0.0-next.3 (solid-primitives): 1 entrypoint(s) generated, 0 entrypoint(s) and 1 artifact case(s) refused
 - @solid-primitives/sse@0.0.103 (solid-primitives): 1 entrypoint(s) generated, 0 entrypoint(s) and 2 artifact case(s) refused
@@ -1109,7 +1108,7 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 - @tanstack/solid-table@9.1.2 (tanstack): 1 entrypoint(s) generated, 0 entrypoint(s) and 6 artifact case(s) refused
 - motion-solidjs@0.7.0-beta.4 (motion-solidjs): 1 entrypoint(s) generated, 0 entrypoint(s) and 2 artifact case(s) refused
 - motion-solidjs@0.7.0-beta.4 (motion-solidjs): 1 entrypoint(s) generated, 0 entrypoint(s) and 2 artifact case(s) refused
-- solid-devtools@0.34.5 (solid-devtools): 1 entrypoint(s) generated, 0 entrypoint(s) and 7 artifact case(s) refused
+- solid-devtools@0.34.5 (solid-devtools): 2 entrypoint(s) generated, 0 entrypoint(s) and 6 artifact case(s) refused
 - solid-js@1.9.14 (official-solid): 18 entrypoint(s) generated, 0 entrypoint(s) and 38 artifact case(s) refused
 - solid-js@2.0.0-rc.3 (official-solid): 1 entrypoint(s) generated, 0 entrypoint(s) and 12 artifact case(s) refused
 
@@ -1141,7 +1140,7 @@ None.
 | Solid Primitives | 92/97 (94.85%) | 182/194 (93.81%) |
 | Corvu | 7/11 (63.64%) | 15/17 (88.24%) |
 | TanStack | 22/36 (61.11%) | 8/18 (44.44%) |
-| Solid Devtools | 6/12 (50%) | 0/0 (no probes run) |
+| Solid Devtools | 7/12 (58.33%) | 0/0 (no probes run) |
 | Solid Recharts | 1/1 (100%) | 2/2 (100%) |
 | Motion for Solid | 0/1 (0%) | 0/2 (0%) |
 

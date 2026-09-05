@@ -273,6 +273,17 @@ generator, or this runner; repinning remains a deliberate
 `--baseline` rather than passing it, since a ceiling on lost receipts means
 nothing without the pin.
 
+Both certifying targets pass `--probe-recipe-corpus
+scripts/ecosystem-benchmark/probe-recipes` (`ECOSYSTEM_PROBE_RECIPES` in the
+Makefile), so a `creates` candidate whose claim a checked-in recipe names is
+vetoed and closed, and one no recipe names is served by a synthesized veto or
+withheld by name (ADR 0036). Until 2026-09-05 neither target passed it: every
+candidate in the corpus was withheld as `noRecipe` (1664 on the run that
+measured it), rows certified with the domain open, and the pinned report
+described no closure at all. The pin taken with the corpus is the first that
+does; `withheldClosureReasons` on each row says what the corpus still cannot
+decide.
+
 Reports are named for the scope that produced them. Only an unfiltered run
 writes the canonical `benchmarks/ecosystem/report.json` and `report.md`;
 `--sentinel`, `--family`, and `--solid` each derive their own name

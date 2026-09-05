@@ -152,11 +152,13 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
   // @tanstack/solid-query-persist-client 5.102.5 and @solid-primitives/db-store 1.1.4;
   // the destructured-return-slot generator fix (2026-09-03) adds exactly
   // @solid-primitives/spring 0.1.2; callee provenance plus composed-operation
-  // provenance (2026-09-03) add exactly the two @solid-primitives/timer 1.4.5 Solid 2 rows.
+  // provenance (2026-09-03) add exactly the two @solid-primitives/timer 1.4.5 Solid 2 rows;
+  // the 2026-09-05 repin (recipe corpus handed to the runner, release binary)
+  // moves exactly @solid-devtools/locator 0.16.7 from partial to complete.
   assert.deepEqual(ledger.summary.proposalStates, {
-    complete: 348,
+    complete: 349,
     "fully-refused": 37,
-    partial: 33
+    partial: 32
   });
   // The verified split (2026-09-03) is additive: `verified` is the sum of the
   // complete, partial, and coverage-unmeasured halves. The dialect-defining-
@@ -165,11 +167,15 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
   // the corpus was re-run with `certificationAttempt.coverage` recorded, so no
   // row is unmeasured. A partial row certified fewer entrypoints than the
   // catalog declares, or certified without its root.
+  // The 2026-09-05 repin: 357 -> 368 verified. Eighteen receipts gained and six
+  // lost against the previous pin, every loss an honest open fact
+  // (docs/precision-backlog.md, 2026-09-05); locator is attempted for the first
+  // time (21 -> 20 not attempted).
   assert.deepEqual(ledger.summary.certificationStates, {
-    "exact-refusal": 40,
-    "not-attempted": 21,
-    verified: 357,
-    "verified-complete": 306,
+    "exact-refusal": 30,
+    "not-attempted": 20,
+    verified: 368,
+    "verified-complete": 317,
     "verified-partial": 51,
     "verified-coverage-unmeasured": 0
   });
@@ -186,7 +192,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
     geolocationExportKindConflict: 0
   });
   assert.equal(ledger.summary.classifierCorrections, 0);
-  assert.equal(ledger.summary.verifiedRows, 357);
+  assert.equal(ledger.summary.verifiedRows, 368);
   assert.deepEqual(
     ledger.rows.filter(row => row.certification.state === "verified").map(row => row.probeId),
     [
@@ -200,7 +206,6 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@corvu-next/list@0.1.5|solid2|only",
       "@corvu-next/otp-field@0.1.5|solid2|only",
       "@corvu-next/persistent@0.1.5|solid2|only",
-      "@corvu-next/popover@0.1.5|solid2|only",
       "@corvu-next/presence@0.1.5|solid2|only",
       "@corvu-next/prevent-scroll@0.1.5|solid2|only",
       "@corvu-next/resizable@0.1.5|solid2|only",
@@ -213,10 +218,10 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@corvu/disclosure@0.2.2|solid1|only",
       "@corvu/drawer@0.2.4|solid1|only",
       "@corvu/otp-field@0.1.4|solid1|only",
-      "@corvu/popover@0.2.0|solid1|only",
       "@corvu/resizable@0.2.5|solid1|only",
       "@corvu/tooltip@0.2.2|solid1|only",
       "@corvu/utils@0.4.2|solid1|only",
+      "@kobalte/core@2.0.0-alpha.0|solid2|only",
       "@kobalte/utils@0.9.2|solid1|only",
       "@kobalte/utils@2.0.0-alpha.0|solid2|only",
       "@solid-devtools/extension-adapter@0.12.1|solid1|only",
@@ -305,6 +310,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/geolocation@1.5.5|solid1|only",
       "@solid-primitives/geolocation@3.0.0-next.2|solid2|floor",
       "@solid-primitives/geolocation@3.0.0-next.2|solid2|head",
+      "@solid-primitives/gestures@1.2.1|solid1|only",
       "@solid-primitives/gestures@3.0.0-next.3|solid2|floor",
       "@solid-primitives/gestures@3.0.0-next.3|solid2|head",
       "@solid-primitives/graphql@3.0.0-next.0|solid1|only",
@@ -312,16 +318,18 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/history@1.0.0-next.3|solid2|floor",
       "@solid-primitives/history@1.0.0-next.3|solid2|head",
       "@solid-primitives/i18n@2.2.1|solid1|only",
+      "@solid-primitives/i18n@3.0.0-next.4|solid2|floor",
+      "@solid-primitives/i18n@3.0.0-next.4|solid2|head",
       "@solid-primitives/idle@0.2.3|solid1|only",
       "@solid-primitives/idle@1.0.0-next.3|solid2|floor",
       "@solid-primitives/idle@1.0.0-next.3|solid2|head",
       "@solid-primitives/immutable@2.0.0-next.0|solid1|only",
       "@solid-primitives/input-mask@0.3.1|solid1|only",
+      "@solid-primitives/input-mask@1.0.0-next.2|solid2|floor",
+      "@solid-primitives/input-mask@1.0.0-next.2|solid2|head",
       "@solid-primitives/interaction@1.0.0-next.4|solid2|floor",
       "@solid-primitives/interaction@1.0.0-next.4|solid2|head",
       "@solid-primitives/intersection-observer@2.2.5|solid1|only",
-      "@solid-primitives/intersection-observer@3.0.0-next.3|solid2|floor",
-      "@solid-primitives/intersection-observer@3.0.0-next.3|solid2|head",
       "@solid-primitives/jsx-parser@0.2.0|solid1|only",
       "@solid-primitives/jsx-tokenizer@1.1.4|solid1|only",
       "@solid-primitives/jsx-tokenizer@3.0.0-next.2|solid2|floor",
@@ -329,6 +337,9 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/keyboard@1.3.7|solid1|only",
       "@solid-primitives/keyboard@2.0.0-next.5|solid2|floor",
       "@solid-primitives/keyboard@2.0.0-next.5|solid2|head",
+      "@solid-primitives/keyed@1.5.3|solid1|only",
+      "@solid-primitives/keyed@3.0.0-next.2|solid2|floor",
+      "@solid-primitives/keyed@3.0.0-next.2|solid2|head",
       "@solid-primitives/lifecycle@0.1.2|solid1|only",
       "@solid-primitives/lifecycle@1.0.0-next.2|solid2|floor",
       "@solid-primitives/lifecycle@1.0.0-next.2|solid2|head",
@@ -477,12 +488,13 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/url@0.2.0-next.2|solid2|floor",
       "@solid-primitives/url@0.2.0-next.2|solid2|head",
       "@solid-primitives/utils@6.4.1|solid1|only",
+      "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "@solid-primitives/utils@7.0.0-next.4|solid2|head",
       "@solid-primitives/vibrate@1.0.0-next.2|solid2|floor",
       "@solid-primitives/vibrate@1.0.0-next.2|solid2|head",
       "@solid-primitives/video@1.0.0-next.3|solid2|floor",
       "@solid-primitives/video@1.0.0-next.3|solid2|head",
       "@solid-primitives/virtual@0.2.5|solid1|only",
-      "@solid-primitives/visibility-observer@2.0.1|solid1|only",
       "@solid-primitives/websocket@1.4.0|solid1|only",
       "@solid-primitives/websocket@2.0.0-next.3|solid2|floor",
       "@solid-primitives/websocket@2.0.0-next.3|solid2|head",
@@ -495,6 +507,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solidjs/meta@1.0.0-next.2|solid2|floor",
       "@solidjs/meta@1.0.0-next.2|solid2|head",
       "@solidjs/router@1.0.0|solid1|only",
+      "@solidjs/signals@2.0.0-rc.3|solid2|only",
       "@solidjs/start@2.0.3|solid1|only",
       "@solidjs/start-devtools@1.0.0-next.4|solid2|floor",
       "@solidjs/start-devtools@1.0.0-next.4|solid2|head",
@@ -512,14 +525,18 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@tanstack/solid-charts@0.15.0|solid1|only",
       "@tanstack/solid-devtools@0.8.12|solid1|only",
       "@tanstack/solid-form-devtools@1.0.0-alpha.2|solid1|only",
-      "@tanstack/solid-hotkeys@0.10.0|solid1|only",
       "@tanstack/solid-hotkeys-devtools@0.7.0|solid1|only",
       "@tanstack/solid-pacer@0.22.0|solid1|only",
       "@tanstack/solid-pacer-devtools@0.14.0|solid1|only",
+      "@tanstack/solid-query@5.102.5|solid1|only",
+      "@tanstack/solid-query@6.0.0-rc.0|solid2|floor",
+      "@tanstack/solid-query@6.0.0-rc.0|solid2|head",
       "@tanstack/solid-query-devtools@5.102.5|solid1|only",
       "@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|floor",
       "@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|head",
       "@tanstack/solid-query-persist-client@5.102.5|solid1|only",
+      "@tanstack/solid-query-persist-client@6.0.0-rc.0|solid2|floor",
+      "@tanstack/solid-query-persist-client@6.0.0-rc.0|solid2|head",
       "@tanstack/solid-router@1.170.30|solid1|only",
       "@tanstack/solid-router@2.0.0-rc.2|solid2|floor",
       "@tanstack/solid-router@2.0.0-rc.2|solid2|head",
@@ -540,7 +557,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@tanstack/solid-table-devtools@9.2.0|solid1|only",
       "@tanstack/solid-virtual@3.13.37|solid1|only",
       "@tanstack/table-devtools@9.2.0|solid1|only",
-      "corvu@0.7.2|solid1|only",
+      "motion-solidjs@0.6.0|solid1|only",
       "motion-solidjs@0.7.0-beta.4|solid2|floor",
       "motion-solidjs@0.7.0-beta.4|solid2|head",
       "solid-js@2.0.0-rc.3|solid2|only",

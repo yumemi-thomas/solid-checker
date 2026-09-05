@@ -73,7 +73,7 @@ test("the frozen Phase 20 cohort remains the exact authority for the Phase 21 le
   // passes against the rewritten ledger.
   assert.deepEqual(ledger.authority.currentReport, {
     path: "benchmarks/ecosystem/report.json",
-    sha256: "1399dcf1196fb7f021d3130240b5a7a00d419874ef8fb68115774fbe12cf4c30"
+    sha256: "01f80476c24e166ec8056bb5a9328d574fb48581b9d97a2ee10b75f94ef26051"
   });
   assert.equal(ledger.rows.filter(row => row.phase21Disposition == null).length, 0);
   // One row moved, `@solid-primitives/geolocation@1.5.5|solid1|only`:
@@ -109,9 +109,16 @@ test("the frozen Phase 20 cohort remains the exact authority for the Phase 21 le
   // primitive-string root of `Hotkey | (string & {})`; the ordinary policy-2
   // receipt now verifies, while this historical disposition function has no
   // verified case for that row.
+  // 2026-09-05 repin: the four tanstack query Solid 2 rows and
+  // @tanstack/solid-query 5.102.5 certify through the graph lane while their
+  // plain-lane generation still refuses, so the historical disposition function
+  // books them as pending-phase21-checker-work (5 -> 1 authenticated-layout,
+  // 3 -> 3 semantic-model with hotkeys and 5.102.5 swapping); corvu@0.7.2 moves
+  // verified -> pending on the @floating-ui/utils open fact (none -> 0,
+  // checker-dependency-composition 1).
   assert.deepEqual(ledger.summary.dispositionStates, {
     "confirmed-upstream-declaration-defect": 1,
-    "exact-refusal-authenticated-layout": 5,
+    "exact-refusal-authenticated-layout": 1,
     "exact-refusal-package-import-resolution": 3,
     // @tanstack/solid-query-persist-client 5.102.5 left the semantic-model
     // refusal set on 2026-09-03 (declaration-owner harness fix) and certifies
@@ -119,17 +126,16 @@ test("the frozen Phase 20 cohort remains the exact authority for the Phase 21 le
     // it as pending-phase21-checker-work rather than verified.
     "exact-refusal-semantic-model": 3,
     "exact-refusal-type-facts-capability": 1,
-    "pending-phase21-checker-work": 4,
+    "pending-phase21-checker-work": 9,
     "retained-unsupported-runtime-model": 7,
-    "retained-upstream-missing-bytes": 5,
-    "verified-through-ordinary-receipt-load": 1
+    "retained-upstream-missing-bytes": 5
   });
   assert.deepEqual(ledger.summary.remainingOwners, {
     "authenticated-dependency-layout": 5,
+    "checker-dependency-composition": 1,
     "checker-resolver": 3,
     "checker-semantic-model": 6,
     "checker-type-facts": 2,
-    none: 1,
     "runtime-model": 7,
     "upstream-package": 6
   });

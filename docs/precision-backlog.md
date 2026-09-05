@@ -18233,10 +18233,25 @@ Against the pin: 18 receipts gained, 6 lost, and every one of the six is an
 honest open fact listed below (`@corvu-next/popover`, `@corvu/popover`,
 `corvu@0.7.2`, `@solid-primitives/intersection-observer` floor and head,
 `@tanstack/solid-hotkeys`). The generation comparison saw no regression at all,
-which is the point of the new gate. Withheld `creates` candidates: 1664, all
-`noRecipe`, because neither `ecosystem-benchmark` nor the gate passes
-`--probe-recipe-corpus`; `exportsProven` stays 0 corpus-wide because only
-`creates` and `returns` have a census.
+which is the point of the new gate. `exportsProven` stays 0 corpus-wide because
+only `creates` and `returns` have a census.
+
+**Repinned the same evening** with the release binary and, for the first time,
+`--probe-recipe-corpus` on both certifying targets (`ECOSYSTEM_PROBE_RECIPES`
+in the Makefile): 368 certified, 30 refused, 85 s wall (warm caches). The one
+row that differs from the debug run is `@solid-primitives/visibility-observer`,
+which certified there and refuses here with the declaration-selection subject
+mismatch recorded above — the row is nondeterministic, presumably in which
+artifact case the case set selects, and the flip is the same open defect, not a
+new one. Withheld `creates` candidates in the pin: 1697 `noRecipe`, 8
+`censusRefused`, 1 `vetoIncomplete`. The `noRecipe` count is not a corpus that
+failed to apply: every one of them sits on a published-graph node of a row that
+refused this morning and certifies now (`motion-solidjs` alone carries 1090,
+`@corvu/drawer` 184, the tanstack query rows and the corvu accordions the
+rest), and ADR 0036's synthesized vetoes run in the value-only lanes only —
+`recipe_gated` on a graph node withholds without synthesizing. Extending
+synthesis to graph nodes is the next step for that number; the rows' receipts
+are exact about the open domain either way.
 
 ### Exact remaining refusals in the traced set
 

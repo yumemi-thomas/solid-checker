@@ -1,11 +1,11 @@
 # Phase 21 ecosystem refusal-reduction ledger
 
 - Baseline fully refused rows: 30
-- Current report SHA-256: 1399dcf1196fb7f021d3130240b5a7a00d419874ef8fb68115774fbe12cf4c30
+- Current report SHA-256: 01f80476c24e166ec8056bb5a9328d574fb48581b9d97a2ee10b75f94ef26051
 - Upstream missing-byte controls: 5
 - CJS/no-ESM controls: 7
 - Checker-addressable rows: 18
-- Newly verified rows: 9
+- Newly verified rows: 12
 - Confirmed upstream declaration defects: 1
 
 ## Current terminal classes
@@ -23,15 +23,14 @@
 
 | State | Rows |
 | --- | ---: |
+| pending-phase21-checker-work | 9 |
 | retained-unsupported-runtime-model | 7 |
-| exact-refusal-authenticated-layout | 5 |
 | retained-upstream-missing-bytes | 5 |
-| pending-phase21-checker-work | 4 |
 | exact-refusal-package-import-resolution | 3 |
 | exact-refusal-semantic-model | 3 |
 | confirmed-upstream-declaration-defect | 1 |
+| exact-refusal-authenticated-layout | 1 |
 | exact-refusal-type-facts-capability | 1 |
-| verified-through-ordinary-receipt-load | 1 |
 
 ## Remaining owners
 
@@ -43,7 +42,7 @@
 | authenticated-dependency-layout | 5 |
 | checker-resolver | 3 |
 | checker-type-facts | 2 |
-| none | 1 |
+| checker-dependency-composition | 1 |
 
 ## Row disposition
 
@@ -66,16 +65,16 @@
 | @solidjs/testing-library@0.8.10\|solid1\|only | exact-refusal-authenticated-layout | authenticated-dependency-layout | dependency-contract-obligation |
 | @tanstack/solid-db@0.2.40\|solid1\|only | exact-refusal-semantic-model | checker-semantic-model | dependency-contract-obligation |
 | @tanstack/solid-form@2.0.0-alpha.2\|solid1\|only | exact-refusal-semantic-model | checker-semantic-model | dependency-contract-obligation |
-| @tanstack/solid-hotkeys@0.10.0\|solid1\|only | pending-phase21-checker-work | checker-semantic-model | dependency-contract-obligation |
-| @tanstack/solid-query@5.102.5\|solid1\|only | exact-refusal-semantic-model | checker-semantic-model | dependency-contract-obligation |
-| @tanstack/solid-query@6.0.0-rc.0\|solid2\|floor | exact-refusal-authenticated-layout | authenticated-dependency-layout | dependency-contract-obligation |
-| @tanstack/solid-query@6.0.0-rc.0\|solid2\|head | exact-refusal-authenticated-layout | authenticated-dependency-layout | dependency-contract-obligation |
+| @tanstack/solid-hotkeys@0.10.0\|solid1\|only | exact-refusal-semantic-model | checker-semantic-model | dependency-contract-obligation |
+| @tanstack/solid-query@5.102.5\|solid1\|only | pending-phase21-checker-work | checker-semantic-model | dependency-contract-obligation |
+| @tanstack/solid-query@6.0.0-rc.0\|solid2\|floor | pending-phase21-checker-work | authenticated-dependency-layout | dependency-contract-obligation |
+| @tanstack/solid-query@6.0.0-rc.0\|solid2\|head | pending-phase21-checker-work | authenticated-dependency-layout | dependency-contract-obligation |
 | @tanstack/solid-query-persist-client@5.102.5\|solid1\|only | pending-phase21-checker-work | checker-semantic-model | dependency-contract-obligation |
-| @tanstack/solid-query-persist-client@6.0.0-rc.0\|solid2\|floor | exact-refusal-authenticated-layout | authenticated-dependency-layout | dependency-contract-obligation |
-| @tanstack/solid-query-persist-client@6.0.0-rc.0\|solid2\|head | exact-refusal-authenticated-layout | authenticated-dependency-layout | dependency-contract-obligation |
+| @tanstack/solid-query-persist-client@6.0.0-rc.0\|solid2\|floor | pending-phase21-checker-work | authenticated-dependency-layout | dependency-contract-obligation |
+| @tanstack/solid-query-persist-client@6.0.0-rc.0\|solid2\|head | pending-phase21-checker-work | authenticated-dependency-layout | dependency-contract-obligation |
 | @tanstack/solid-start-server@1.167.36\|solid1\|only | exact-refusal-package-import-resolution | checker-resolver | dependency-contract-obligation |
 | @tanstack/solid-start-server@2.0.0-rc.2\|solid2\|floor | exact-refusal-package-import-resolution | checker-resolver | dependency-contract-obligation |
 | @tanstack/solid-start-server@2.0.0-rc.2\|solid2\|head | exact-refusal-package-import-resolution | checker-resolver | dependency-contract-obligation |
 | @tanstack/solid-store@0.11.1\|solid1\|only | exact-refusal-type-facts-capability | checker-type-facts | dependency-contract-obligation |
 | @tanstack/solid-virtual@3.13.37\|solid1\|only | pending-phase21-checker-work | checker-type-facts | dependency-contract-obligation |
-| corvu@0.7.2\|solid1\|only | verified-through-ordinary-receipt-load | none | dependency-contract-obligation |
+| corvu@0.7.2\|solid1\|only | pending-phase21-checker-work | checker-dependency-composition | dependency-contract-obligation |
