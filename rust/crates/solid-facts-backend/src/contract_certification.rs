@@ -7676,6 +7676,456 @@ export const value = phantom;
         ));
     }
 
+    /// One published package with several subpath exports, so a graph test
+    /// can plan more than one node of the same archive.
+    struct SyntheticSubpathPackage<'a> {
+        name: &'a str,
+        version: &'a str,
+        package_root: &'a str,
+        /// `(entrypoint, runtime path, declarations path)` per export;
+        /// paths are package-relative without the leading `./`.
+        exports: &'a [(&'a str, &'a str, &'a str)],
+        /// Every file of the archive besides the manifest, package-relative.
+        files: &'a [(&'a str, &'a [u8])],
+    }
+
+    impl SyntheticSubpathPackage<'_> {
+        fn manifest(&self) -> String {
+            let exports = self
+                .exports
+                .iter()
+                .map(|(entrypoint, runtime, declarations)| {
+                    format!(
+                        r#""{entrypoint}":{{"types":"./{declarations}","import":"./{runtime}"}}"#
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!(
+                r#"{{"name":"{}","version":"{}","exports":{{{exports}}}}}"#,
+                self.name, self.version
+            )
+        }
+
+        fn file(&self, path: &str) -> &[u8] {
+            self.files
+                .iter()
+                .find(|(candidate, _)| *candidate == path)
+                .map(|(_, bytes)| *bytes)
+                .unwrap_or_else(|| panic!("synthetic package has no file {path}"))
+        }
+
+        /// The graph node for `entrypoint` as imported from `importer`, whose
+        /// runtime closure is `closure_runtime` (package-relative, the entry
+        /// module included) and whose one export `value` is proposed plain.
+        fn request(
+            &self,
+            entrypoint: &str,
+            importer: &str,
+            closure_runtime: &[&str],
+            dependencies: Vec<AcceptedDependencyEdge>,
+        ) -> (CertificationRequest, PublishedArchive, String) {
+            let manifest = self.manifest();
+            let mut members = vec![("package/package.json".to_owned(), manifest.as_bytes())];
+            members.extend(
+                self.files
+                    .iter()
+                    .map(|(path, bytes)| (format!("package/{path}"), *bytes)),
+            );
+            let members = members
+                .iter()
+                .map(|(path, bytes)| (path.as_str(), *bytes))
+                .collect::<Vec<_>>();
+            let archive = published_archive_for(self.name, self.version, &members);
+            let snapshot =
+                ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+            let (_, runtime_path, declarations_path) = *self
+                .exports
+                .iter()
+                .find(|(candidate, _, _)| *candidate == entrypoint)
+                .unwrap_or_else(|| panic!("synthetic package has no export {entrypoint}"));
+            let runtime = self.file(runtime_path);
+            let declarations = self.file(declarations_path);
+            let runtime_file = resolved_file(self.package_root, runtime_path, runtime);
+            let declaration_file =
+                resolved_file(self.package_root, declarations_path, declarations);
+            let mut entries = vec![
+                closure_entry(
+                    ClosureFileRole::Manifest,
+                    "package.json",
+                    manifest.as_bytes(),
+                ),
+                closure_entry(
+                    ClosureFileRole::ResolutionInput,
+                    "package.json",
+                    manifest.as_bytes(),
+                ),
+                closure_entry(
+                    ClosureFileRole::Declaration,
+                    declarations_path,
+                    declarations,
+                ),
+            ];
+            entries.extend(
+                closure_runtime
+                    .iter()
+                    .map(|path| closure_entry(ClosureFileRole::Runtime, path, self.file(path))),
+            );
+            let closure = ClosureManifest::new(entries, dependencies, Vec::new()).unwrap();
+            let specifier = format!("{}{}", self.name, entrypoint.trim_start_matches('.'));
+            let request = ImportRequest {
+                specifier: specifier.clone(),
+                importer: importer.into(),
+                export_conditions: vec!["import".into()],
+            };
+            let exports = BTreeMap::from([(
+                "value".into(),
+                ResolvedExportBinding {
+                    runtime: ResolvedExportTarget {
+                        module: runtime_file.clone(),
+                        export_name: "value".into(),
+                    },
+                    declarations: ResolvedExportTarget {
+                        module: declaration_file.clone(),
+                        export_name: "value".into(),
+                    },
+                },
+            )]);
+            let pointer = format!(
+                "/exports/{}",
+                entrypoint.replace('~', "~0").replace('/', "~1")
+            );
+            let trace = |condition: &str, target: &str| ResolutionTrace {
+                branch: format!("{pointer}/{condition}"),
+                steps: vec![
+                    ResolutionTraceStep {
+                        condition: "subpath".into(),
+                        target: entrypoint.into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: condition.into(),
+                        target: pointer.clone(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "target".into(),
+                        target: format!("./{target}"),
+                    },
+                ],
+            };
+            let resolved = ResolvedImport {
+                specifier,
+                importer: importer.into(),
+                requested_entrypoint: entrypoint.into(),
+                package_name: self.name.into(),
+                package_version: self.version.into(),
+                package_integrity: snapshot.package_integrity().into(),
+                package_root: self.package_root.into(),
+                package_real_root: None,
+                package_manifest: resolved_file(
+                    self.package_root,
+                    "package.json",
+                    manifest.as_bytes(),
+                ),
+                runtime: runtime_file,
+                declarations: declaration_file,
+                runtime_trace: trace("import", runtime_path),
+                declaration_trace: trace("types", declarations_path),
+                closure,
+                transform: None,
+                exports,
+                declaration_exports: BTreeSet::new(),
+                authority: ResolutionAuthority::Host,
+            };
+            let (package, mut artifact_case) =
+                crate::artifact_resolution::proposal_identity(&resolved).unwrap();
+            artifact_case.exports.insert(
+                "value".into(),
+                ExportSemantics {
+                    identity: ExportIdentity {
+                        entrypoint: artifact_case.entrypoint.clone(),
+                        public_name: "value".into(),
+                        runtime: ExportTargetIdentity {
+                            module: artifact_case.runtime.clone(),
+                            export_name: "value".into(),
+                        },
+                        declarations: ExportTargetIdentity {
+                            module: artifact_case.declarations.clone(),
+                            export_name: "value".into(),
+                        },
+                    },
+                    shape: ValueShape::Plain,
+                    stability: StabilityKnowledge::Unknown,
+                    call: CallSemantics::new(
+                        CallClaims::default(),
+                        vec![],
+                        vec![],
+                        vec![],
+                        GuardPartition {
+                            cases: KnowledgeSet::Unknown,
+                        },
+                    ),
+                },
+            );
+            let candidate = ContractProposal::new(package, vec![artifact_case])
+                .normalize()
+                .unwrap();
+            (
+                CertificationRequest::new(candidate, request, resolved),
+                archive,
+                snapshot.package_integrity().into(),
+            )
+        }
+    }
+
+    fn accepted_edge(
+        specifier: &str,
+        package_name: &str,
+        request: &CertificationRequest,
+        archive: &PublishedArchive,
+    ) -> AcceptedDependencyEdge {
+        let plan = plan_certification(
+            request.clone(),
+            UntrustedArtifactEnvelope::Published(archive.clone()),
+        )
+        .unwrap();
+        AcceptedDependencyEdge {
+            specifier: specifier.into(),
+            package_name: package_name.into(),
+            artifact_case: plan.selected_artifact_case_id().into(),
+            accepted_contract_digest: plan
+                .demand_graph()
+                .candidate_semantic_digest()
+                .as_str()
+                .into(),
+        }
+    }
+
+    const IMPORTER_VARIANT_LEAF: SyntheticSubpathPackage<'static> = SyntheticSubpathPackage {
+        name: "leaf-package",
+        version: "2.0.0",
+        package_root: "/project/node_modules/leaf-package",
+        exports: &[(".", "dist/index.js", "types/index.d.ts")],
+        files: &[
+            ("dist/index.js", b"export const value = 1;"),
+            ("types/index.d.ts", b"export declare const value: number;"),
+        ],
+    };
+
+    /// `mid-package` reaches `leaf-package` from two of its modules: `dist/p.js`,
+    /// the entry of `./p`, imports it directly and through `dist/shared.js`;
+    /// `dist/q.js`, the entry of `./q`, reaches it through `dist/shared.js`
+    /// only. Discovery keys a dependency node by its importing module, so the
+    /// graph carries two `leaf-package` nodes -- one imported from `dist/p.js`
+    /// and one from `dist/shared.js` -- and both importers are members of the
+    /// `./p` node's closure.
+    const IMPORTER_VARIANT_MID: SyntheticSubpathPackage<'static> = SyntheticSubpathPackage {
+        name: "mid-package",
+        version: "1.0.0",
+        package_root: "/project/node_modules/mid-package",
+        exports: &[
+            ("./p", "dist/p.js", "types/p.d.ts"),
+            ("./q", "dist/q.js", "types/q.d.ts"),
+        ],
+        files: &[
+            (
+                "dist/p.js",
+                b"import './shared.js'; import { value as leafValue } from 'leaf-package'; export const value = leafValue;",
+            ),
+            ("dist/q.js", b"import './shared.js'; export const value = 2;"),
+            ("dist/shared.js", b"import 'leaf-package';"),
+            (
+                "types/p.d.ts",
+                b"import { value as leafValue } from 'leaf-package'; export declare const value: typeof leafValue;",
+            ),
+            ("types/q.d.ts", b"export declare const value: number;"),
+        ],
+    };
+
+    const IMPORTER_VARIANT_APP: SyntheticSubpathPackage<'static> = SyntheticSubpathPackage {
+        name: "app-package",
+        version: "1.0.0",
+        package_root: "/project/node_modules/app-package",
+        exports: &[(".", "dist/index.js", "types/index.d.ts")],
+        files: &[
+            (
+                "dist/index.js",
+                b"import 'mid-package/q'; import { value as p } from 'mid-package/p'; export const value = p;",
+            ),
+            (
+                "types/index.d.ts",
+                b"import { value as p } from 'mid-package/p'; export declare const value: typeof p;",
+            ),
+        ],
+    };
+
+    /// The five-node graph above, plus one `leaf-package` node per extra
+    /// importer in `extra_leaf_importers`.
+    fn importer_variant_graph(
+        extra_leaf_importers: &[&str],
+    ) -> (PublishedGraphNodeRequest, Vec<PublishedGraphNodeRequest>) {
+        let leaf_node = |importer: &str| {
+            let (request, archive, integrity) =
+                IMPORTER_VARIANT_LEAF.request(".", importer, &["dist/index.js"], Vec::new());
+            PublishedGraphNodeRequest::new(
+                request,
+                archive,
+                graph_lock("leaf-package", "2.0.0", &integrity),
+            )
+        };
+        let (leaf_request, leaf_archive, _) = IMPORTER_VARIANT_LEAF.request(
+            ".",
+            "/project/node_modules/mid-package/dist/p.js",
+            &["dist/index.js"],
+            Vec::new(),
+        );
+        let leaf_edge = accepted_edge("leaf-package", "leaf-package", &leaf_request, &leaf_archive);
+        let app_importer = "/project/node_modules/app-package/dist/index.js";
+        let (p_request, p_archive, mid_integrity) = IMPORTER_VARIANT_MID.request(
+            "./p",
+            app_importer,
+            &["dist/p.js", "dist/shared.js"],
+            vec![leaf_edge.clone()],
+        );
+        let (q_request, q_archive, _) = IMPORTER_VARIANT_MID.request(
+            "./q",
+            app_importer,
+            &["dist/q.js", "dist/shared.js"],
+            vec![leaf_edge],
+        );
+        let (app_request, app_archive, app_integrity) = IMPORTER_VARIANT_APP.request(
+            ".",
+            "/project/src/app.ts",
+            &["dist/index.js"],
+            vec![
+                accepted_edge("mid-package/p", "mid-package", &p_request, &p_archive),
+                accepted_edge("mid-package/q", "mid-package", &q_request, &q_archive),
+            ],
+        );
+        let mut dependencies = vec![
+            PublishedGraphNodeRequest::new(
+                p_request,
+                p_archive,
+                graph_lock("mid-package", "1.0.0", &mid_integrity),
+            ),
+            PublishedGraphNodeRequest::new(
+                q_request,
+                q_archive,
+                graph_lock("mid-package", "1.0.0", &mid_integrity),
+            ),
+            leaf_node("/project/node_modules/mid-package/dist/p.js"),
+            leaf_node("/project/node_modules/mid-package/dist/shared.js"),
+        ];
+        dependencies.extend(
+            extra_leaf_importers
+                .iter()
+                .map(|importer| leaf_node(importer)),
+        );
+        (
+            PublishedGraphNodeRequest::new(
+                app_request,
+                app_archive,
+                graph_lock("app-package", "1.0.0", &app_integrity),
+            ),
+            dependencies,
+        )
+    }
+
+    #[test]
+    fn native_published_graph_binds_each_parent_to_the_dependency_node_its_own_module_imported() {
+        // `@corvu/drawer`'s shape: `@corvu/utils` has many entrypoints in one
+        // graph and every one of them imports `solid-js`, so the graph carries
+        // one `solid-js` node per importing module of `@corvu/utils`. Matching
+        // an edge by "importer anywhere inside the parent's package root" saw
+        // all of them from every `@corvu/utils` node and refused the graph as
+        // ambiguous; matching by membership in the parent's replayed closure,
+        // and taking the first-sorted importer when several members are the
+        // same node, binds each parent to the node discovery created for it.
+        let (root, dependencies) = importer_variant_graph(&[]);
+        let graph = plan_published_contract_graph(root, dependencies).unwrap();
+        let order = graph.dependency_first_identities();
+        assert_eq!(order.len(), 5);
+        let leaves = order
+            .iter()
+            .filter(|identity| identity.package_name == "leaf-package")
+            .map(|identity| identity.importer.as_str())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            leaves,
+            BTreeSet::from([
+                "/project/node_modules/mid-package/dist/p.js",
+                "/project/node_modules/mid-package/dist/shared.js",
+            ]),
+            "both importer variants stay distinct, reachable nodes"
+        );
+        let position = |package: &str, entrypoint: &str, importer: &str| {
+            order
+                .iter()
+                .position(|identity| {
+                    identity.package_name == package
+                        && identity.entrypoint == entrypoint
+                        && identity.importer == importer
+                })
+                .unwrap_or_else(|| panic!("graph plans {package} {entrypoint} from {importer}"))
+        };
+        let app_importer = "/project/node_modules/app-package/dist/index.js";
+        for (parent_entrypoint, leaf_importer) in [
+            ("./p", "/project/node_modules/mid-package/dist/p.js"),
+            ("./q", "/project/node_modules/mid-package/dist/shared.js"),
+        ] {
+            assert!(
+                position("leaf-package", ".", leaf_importer)
+                    < position("mid-package", parent_entrypoint, app_importer),
+                "{parent_entrypoint} is planned after the leaf variant its own module imported"
+            );
+        }
+        assert_eq!(graph.root_identity().package_name, "app-package");
+
+        // A `leaf-package` node imported from a module of `mid-package` that no
+        // planned node's closure contains is inside the package root but bound
+        // to nothing: it is refused as unreachable, never matched by
+        // containment.
+        let (root, dependencies) =
+            importer_variant_graph(&["/project/node_modules/mid-package/dist/other.js"]);
+        assert!(matches!(
+            plan_published_contract_graph(root, dependencies),
+            Err(PublishedGraphPlanningError::UnreachableNodes(extras)) if extras.len() == 1
+        ));
+    }
+
+    #[test]
+    fn native_published_graph_keeps_a_tie_between_different_dependency_nodes_refused() {
+        // The two `leaf-package` importers of `./p`'s closure now resolve to
+        // different installed copies -- `dist/shared.js` to a nested
+        // `leaf-package@2.0.1`. Those nodes are not the same dependency, so the
+        // first-sorted importer must not be taken as the answer.
+        let nested_leaf = SyntheticSubpathPackage {
+            name: "leaf-package",
+            version: "2.0.1",
+            package_root: "/project/node_modules/mid-package/node_modules/leaf-package",
+            exports: &[(".", "dist/index.js", "types/index.d.ts")],
+            files: &[
+                ("dist/index.js", b"export const value = 3;"),
+                ("types/index.d.ts", b"export declare const value: number;"),
+            ],
+        };
+        let (root, mut dependencies) = importer_variant_graph(&[]);
+        let shared_importer = "/project/node_modules/mid-package/dist/shared.js";
+        // `importer_variant_graph` lists the `dist/shared.js` leaf node last.
+        let position = dependencies.len() - 1;
+        let (request, archive, integrity) =
+            nested_leaf.request(".", shared_importer, &["dist/index.js"], Vec::new());
+        dependencies[position] = PublishedGraphNodeRequest::new(
+            request,
+            archive,
+            graph_lock("leaf-package", "2.0.1", &integrity),
+        );
+        assert!(matches!(
+            plan_published_contract_graph(root, dependencies),
+            Err(PublishedGraphPlanningError::AmbiguousDependency { specifier, .. })
+                if specifier == "leaf-package"
+        ));
+    }
+
     #[test]
     fn native_published_graph_authenticates_an_external_export_all_target() {
         let root_runtime_path = "/project/node_modules/root-package/dist/index.js";

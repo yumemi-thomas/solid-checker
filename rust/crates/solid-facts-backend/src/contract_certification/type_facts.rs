@@ -6278,38 +6278,56 @@ fn verify_snapshot_source_census(
             expected.sha256
         ));
     }
-    for entry in &plan.verified_closure.manifest().entries {
-        if entry.role != ClosureFileRole::Declaration {
-            continue;
-        }
-        let relative = entry.path.trim_start_matches("./").replace('\\', "/");
-        let suffix = format!("{package_marker}{relative}");
-        let matches = sources
-            .iter()
-            .filter(|source| source.path.replace('\\', "/").ends_with(&suffix))
-            .collect::<Vec<_>>();
-        if matches.len() != 1 || matches[0].sha256.as_ref() != entry.digest.as_str() {
-            let observed = matches
-                .iter()
-                .take(4)
-                .map(|source| format!("{}:{}", source.path, source.sha256))
-                .collect::<Vec<_>>();
-            return Err(TypeFactsCertificationError::SourceCensus(format!(
-                "declaration {relative} is absent, duplicated, or stale; expected {}; observed(count={}, sample={observed:?})",
-                entry.digest,
-                matches.len(),
-            )));
-        }
-        // `suffix` is exactly this declaration's project-relative path.
-        sites.push(format!("typefacts-source:{suffix}:{}", matches[0].sha256));
-    }
-
     let source_roots =
         snapshot_source_roots(plan, dependencies, graph_sources, project, &package_marker)?;
     let source_root_paths = source_roots
         .iter()
         .map(|root| root.path.clone())
         .collect::<Vec<_>>();
+
+    // A declaration of this package is looked up under the roots materialized
+    // from *this node's snapshot*, never by path suffix. A graph materializes
+    // one package name at several coordinates: a nested copy of another version
+    // under some dependency's `node_modules` ends in the same
+    // `/node_modules/<name>/<relative>` suffix and the suffix census read it as a
+    // duplicate; and the same snapshot can stand at a hoisted coordinate and a
+    // nested one at once, with the program reading whichever the specifier
+    // resolves to, so the node's own root alone is too narrow. Every root of
+    // the same snapshot holds the same bytes, and each match is still held to
+    // the closure's digest. The site string keeps the package-marker form, so
+    // every evidence root that already passed is unchanged.
+    let snapshot_roots = source_roots
+        .iter()
+        .filter(|root| root.snapshot.root() == plan.snapshot.root())
+        .map(|root| root.path.as_str())
+        .collect::<Vec<_>>();
+    for entry in &plan.verified_closure.manifest().entries {
+        if entry.role != ClosureFileRole::Declaration {
+            continue;
+        }
+        let relative = entry.path.trim_start_matches("./").replace('\\', "/");
+        let suffix = format!("{package_marker}{relative}");
+        let matches = declaration_sources_under_roots(sources, &snapshot_roots, &relative);
+        if matches.is_empty()
+            || matches
+                .iter()
+                .any(|source| source.sha256.as_ref() != entry.digest.as_str())
+        {
+            let observed = matches
+                .iter()
+                .take(4)
+                .map(|source| format!("{}:{}", source.path, source.sha256))
+                .collect::<Vec<_>>();
+            return Err(TypeFactsCertificationError::SourceCensus(format!(
+                "declaration {relative} is absent or stale under {snapshot_roots:?}; expected {}; observed(count={}, sample={observed:?})",
+                entry.digest,
+                matches.len(),
+            )));
+        }
+        // `suffix` is this declaration's path in package-marker form; for a
+        // hoisted copy that is also its project-relative path.
+        sites.push(format!("typefacts-source:{suffix}:{}", matches[0].sha256));
+    }
 
     reject_unauthenticated_external_sources(&source_root_paths, sources)?;
 
@@ -6448,6 +6466,27 @@ fn strip_materialized_source_root<'a>(
 /// conservative one.
 /// The path prefix a source of the artifact under certification occupies
 /// inside the private project, and the fallback evidence prefix for it.
+/// The reported sources that stand at `relative` directly under one of
+/// `roots` (each a normalized root ending in `/`). Membership is by exact
+/// root, so a copy of the same package name materialized at another
+/// coordinate -- nested under some other dependency, or hoisted beside it --
+/// is never mistaken for this one by the suffix its path shares.
+fn declaration_sources_under_roots<'a>(
+    sources: &'a [typefacts::TranscriptSourceDigest],
+    roots: &[&str],
+    relative: &str,
+) -> Vec<&'a typefacts::TranscriptSourceDigest> {
+    sources
+        .iter()
+        .filter(|source| {
+            let normalized = source.path.replace('\\', "/");
+            roots
+                .iter()
+                .any(|root| normalized.strip_prefix(root) == Some(relative))
+        })
+        .collect()
+}
+
 fn snapshot_package_marker(plan: &CertificationPlan) -> String {
     format!(
         "/node_modules/{}/",
@@ -14137,6 +14176,49 @@ mod tests {
                 &pnpm_roots,
             )
             .is_none()
+        );
+    }
+
+    #[test]
+    fn declaration_census_selects_by_exact_snapshot_root_not_by_suffix() {
+        let source = |path: &str, seed: u64| typefacts::TranscriptSourceDigest {
+            path: path.into(),
+            sha256: format!("sha256:{seed:064x}").try_into().unwrap(),
+        };
+        // `@corvu/drawer`'s graph: `@corvu/utils@0.4.2` hoisted and
+        // `@corvu/utils@0.3.2` nested under `solid-transition-size`. Both end
+        // in `/node_modules/@corvu/utils/dist/dom/index.d.ts`.
+        let sources = vec![
+            source("/p/node_modules/@corvu/utils/dist/dom/index.d.ts", 1),
+            source(
+                "/p/node_modules/solid-transition-size/node_modules/@corvu/utils/dist/dom/index.d.ts",
+                2,
+            ),
+            source("/p/node_modules/@corvu/utils/dist/dom/index.js", 3),
+        ];
+        let hoisted = ["/p/node_modules/@corvu/utils/"];
+        let nested = ["/p/node_modules/solid-transition-size/node_modules/@corvu/utils/"];
+        let hoisted_matches =
+            declaration_sources_under_roots(&sources, &hoisted, "dist/dom/index.d.ts");
+        assert_eq!(hoisted_matches.len(), 1);
+        assert_eq!(hoisted_matches[0].path, sources[0].path);
+        let nested_matches =
+            declaration_sources_under_roots(&sources, &nested, "dist/dom/index.d.ts");
+        assert_eq!(nested_matches.len(), 1);
+        assert_eq!(nested_matches[0].path, sources[1].path);
+        // The same snapshot at two coordinates yields both files, and the
+        // census then holds every match to the closure's digest rather than
+        // refusing the count.
+        let both = [hoisted[0], nested[0]];
+        assert_eq!(
+            declaration_sources_under_roots(&sources, &both, "dist/dom/index.d.ts").len(),
+            2
+        );
+        // A root that shares a name prefix never matches.
+        let prefix_sibling = ["/p/node_modules/@corvu/util/"];
+        assert!(
+            declaration_sources_under_roots(&sources, &prefix_sibling, "dist/dom/index.d.ts")
+                .is_empty()
         );
     }
 

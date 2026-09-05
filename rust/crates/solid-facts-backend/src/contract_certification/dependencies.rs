@@ -329,6 +329,39 @@ impl CanonicalDependencyNodeIdentity {
     pub fn digest(&self) -> &str {
         &self.digest
     }
+
+    /// Every field of the identity except the importing module and the two
+    /// values derived from it (`resolved_import_root`, which hashes the
+    /// resolved import that names the importer, and the digest), for
+    /// [`select_importer_variant`]: two identities with equal keys are the same
+    /// archive, lock selection, resolution result, closure, proposal, and
+    /// source set, reached from different modules of the same consuming
+    /// package.
+    fn importer_invariant_key(&self) -> Vec<&str> {
+        let mut key = vec![
+            self.registry_origin.as_str(),
+            self.package_manager.as_str(),
+            self.package_name.as_str(),
+            self.package_version.as_str(),
+            self.integrity.as_str(),
+            self.lockfile_digest.as_str(),
+            self.lock_locator.as_str(),
+            self.entrypoint.as_str(),
+            self.resolution_kind.as_str(),
+            self.runtime_target.as_str(),
+            self.runtime_digest.as_str(),
+            self.declarations_target.as_str(),
+            self.declarations_digest.as_str(),
+            self.closure_root.as_str(),
+            self.snapshot_root.as_str(),
+            self.provenance_root.as_str(),
+            self.artifact_case.as_str(),
+            self.semantic_digest.as_str(),
+            self.source_dependencies_root.as_str(),
+        ];
+        key.extend(self.conditions.iter().map(String::as_str));
+        key
+    }
 }
 
 #[derive(Clone)]
@@ -1123,32 +1156,8 @@ fn plan_published_contract_graph_with_limits(
                 })
                 .map(|candidate| candidate.identity.clone())
                 .collect::<Vec<_>>();
-            match matches.as_slice() {
-                [identity] => {
-                    for (field, supplied, replayed) in [
-                        (
-                            "artifact case",
-                            edge.artifact_case.as_str(),
-                            identity.artifact_case.as_str(),
-                        ),
-                        (
-                            "semantic digest",
-                            edge.accepted_contract_digest.as_str(),
-                            identity.semantic_digest.as_str(),
-                        ),
-                    ] {
-                        if supplied != replayed {
-                            identity_disagreements.push((
-                                planned[parent_index].identity.digest.clone(),
-                                edge.specifier.clone(),
-                                field,
-                                supplied.to_owned(),
-                                replayed.to_owned(),
-                            ));
-                        }
-                    }
-                    resolved.push(identity.clone());
-                }
+            let identity = match matches.as_slice() {
+                [identity] => identity.clone(),
                 [] => {
                     return Err(PublishedGraphPlanningError::MissingDependency {
                         parent: planned[parent_index].identity.digest.clone(),
@@ -1156,12 +1165,49 @@ fn plan_published_contract_graph_with_limits(
                     });
                 }
                 _ => {
-                    return Err(PublishedGraphPlanningError::AmbiguousDependency {
-                        parent: planned[parent_index].identity.digest.clone(),
-                        specifier: edge.specifier,
-                    });
+                    let variants = matches
+                        .iter()
+                        .map(|identity| {
+                            (
+                                identity.importer_invariant_key(),
+                                identity.importer.as_str(),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    match select_importer_variant(&variants) {
+                        Some(position) => matches[position].clone(),
+                        None => {
+                            return Err(PublishedGraphPlanningError::AmbiguousDependency {
+                                parent: planned[parent_index].identity.digest.clone(),
+                                specifier: edge.specifier,
+                            });
+                        }
+                    }
+                }
+            };
+            for (field, supplied, replayed) in [
+                (
+                    "artifact case",
+                    edge.artifact_case.as_str(),
+                    identity.artifact_case.as_str(),
+                ),
+                (
+                    "semantic digest",
+                    edge.accepted_contract_digest.as_str(),
+                    identity.semantic_digest.as_str(),
+                ),
+            ] {
+                if supplied != replayed {
+                    identity_disagreements.push((
+                        planned[parent_index].identity.digest.clone(),
+                        edge.specifier.clone(),
+                        field,
+                        supplied.to_owned(),
+                        replayed.to_owned(),
+                    ));
                 }
             }
+            resolved.push(identity);
         }
         resolved.sort();
         resolved.dedup();
@@ -1234,13 +1280,55 @@ fn plan_published_contract_graph_with_limits(
     })
 }
 
-/// True when `importer` lies anywhere inside `package_root`. Node resolves an
-/// external import from the importing module, which may be any module of the
-/// parent package rather than only its entry, so package-root containment is
-/// the sound relation for ordering unplanned graph requests. Comparison is
-/// component-wise, so a sibling directory sharing a name prefix does not match.
-fn importer_within_package_root(importer: &str, package_root: &str) -> bool {
-    Path::new(importer).starts_with(Path::new(package_root))
+/// Selects, among several nodes that all match one dependency edge of a parent,
+/// the node the parent's discovery bound to that edge.
+///
+/// Discovery keys a dependency node by the module that imports it, and a
+/// package with many entrypoints reaches the same dependency from many of its
+/// modules, so a parent's closure can contain the importers of several nodes
+/// that are the same artifact, resolution, and proposal and differ only in
+/// which of the package's modules imported them. Those nodes are
+/// interchangeable as a dependency, and the one discovery bound to *this*
+/// parent is the one whose importer sorts first: discovery binds a parent to
+/// the first of its importing modules in the same byte order, and every node
+/// whose importer is a member of the parent's closure is one of those modules.
+/// Nodes that differ in anything beyond the importer are not interchangeable,
+/// and the tie stays refused. Returns the position of the selected variant.
+fn select_importer_variant<K: PartialEq>(variants: &[(K, &str)]) -> Option<usize> {
+    let (first_key, _) = variants.first()?;
+    if variants.iter().any(|(key, _)| key != first_key) {
+        return None;
+    }
+    variants
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, (_, importer))| *importer)
+        .map(|(position, _)| position)
+}
+
+/// Everything an unplanned graph request's replayed resolution names except
+/// the importing module, for [`select_importer_variant`].
+fn request_importer_invariant_key(certification: &CertificationRequest) -> Vec<String> {
+    let resolved = &certification.resolved_import;
+    let mut conditions = certification.import_request.export_conditions.clone();
+    conditions.sort();
+    conditions.dedup();
+    let mut key = vec![
+        certification.import_request.specifier.clone(),
+        resolved.package_name.clone(),
+        resolved.package_version.clone(),
+        resolved.package_integrity.clone(),
+        resolved.package_root.clone(),
+        resolved.requested_entrypoint.clone(),
+        resolved.runtime.path.clone(),
+        resolved.runtime.digest.clone(),
+        resolved.declarations.path.clone(),
+        resolved.declarations.digest.clone(),
+        resolved.closure.digest.clone(),
+        format!("{:?}", resolved.authority),
+    ];
+    key.extend(conditions);
+    key
 }
 
 /// True when `importer` is exactly one runtime- or declaration-role module of
@@ -1278,6 +1366,10 @@ fn graph_request_edges(
     let mut graph = vec![Vec::new(); requests.len()];
     for (parent_index, parent) in requests.iter().enumerate() {
         let parent_root = &parent.certification.resolved_import.package_root;
+        // The supplied closure is untrusted here and only orders planning;
+        // `plan_published_contract_graph_with_limits` re-derives every edge
+        // against the replayed, digest-pinned closure with the same matcher.
+        let parent_entries = &parent.certification.resolved_import.closure.entries;
         let mut parent_conditions = parent
             .certification
             .import_request
@@ -1296,9 +1388,10 @@ fn graph_request_edges(
                     child_conditions.dedup();
                     child.certification.resolved_import.package_name == edge.package_name
                         && child.certification.import_request.specifier == edge.specifier
-                        && importer_within_package_root(
+                        && importer_is_closure_entry_module(
                             &child.certification.import_request.importer,
                             parent_root,
+                            parent_entries,
                         )
                         && child_conditions == parent_conditions
                 })
@@ -1310,8 +1403,8 @@ fn graph_request_edges(
                 parent.certification.resolved_import.package_version,
                 parent.certification.resolved_import.requested_entrypoint
             );
-            match matches.as_slice() {
-                [index] => graph[parent_index].push(*index),
+            let selected = match matches.as_slice() {
+                [index] => *index,
                 [] => {
                     return Err(PublishedGraphPlanningError::MissingDependency {
                         parent: parent_label,
@@ -1319,12 +1412,28 @@ fn graph_request_edges(
                     });
                 }
                 _ => {
-                    return Err(PublishedGraphPlanningError::AmbiguousDependency {
-                        parent: parent_label,
-                        specifier: edge.specifier.clone(),
-                    });
+                    let variants = matches
+                        .iter()
+                        .map(|index| {
+                            let certification = &requests[*index].certification;
+                            (
+                                request_importer_invariant_key(certification),
+                                certification.import_request.importer.as_str(),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    match select_importer_variant(&variants) {
+                        Some(position) => matches[position],
+                        None => {
+                            return Err(PublishedGraphPlanningError::AmbiguousDependency {
+                                parent: parent_label,
+                                specifier: edge.specifier.clone(),
+                            });
+                        }
+                    }
                 }
-            }
+            };
+            graph[parent_index].push(selected);
         }
         graph[parent_index].sort_unstable();
         graph[parent_index].dedup();

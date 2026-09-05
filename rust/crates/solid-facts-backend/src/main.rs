@@ -23,9 +23,9 @@ use solid_facts_backend::{
     default_typefacts_executable, dialect,
     encode_inferred_entrypoint_workflow_with_external_targets,
     external_package_contract_requirements, merge_contract_proposals, merge_plans,
-    read_external_contract_catalog_with_trust, read_policy2_trust_configuration,
-    read_proposal_dependency_catalog_for_generation, review_contract_document,
-    semantic_demand_options_for_enablement, validate_contract_document,
+    read_accepted_contract_catalog_with_trust, read_external_contract_catalog_with_trust,
+    read_policy2_trust_configuration, read_proposal_dependency_catalog_for_generation,
+    review_contract_document, semantic_demand_options_for_enablement, validate_contract_document,
 };
 use solid_reactive_ir::{RuntimeBuild, RuntimeEnvironment, RuntimeRendering, RuntimeTarget};
 
@@ -1965,7 +1965,13 @@ fn verify_policy2_discovery(request_path: &Path) -> Result<(), Box<dyn std::erro
     }
     .ok_or("single-case or graph discovery request has no root planning")?;
     let catalog = catalog_root.join("accepted-contracts.json");
-    let index = read_external_contract_catalog_with_trust(&catalog, Some(&trust))?;
+    // The full reader, not the external-only one ordinary analysis uses: this
+    // check authenticates the catalog *this* certification wrote, and a core
+    // runtime package's own entry is exactly what the external-only reader
+    // withholds (ordinary analysis answers those imports from the built-in
+    // foundation, ADR 0027), so a core package's self-certification could never
+    // discover itself.
+    let index = read_accepted_contract_catalog_with_trust(&catalog, Some(&trust))?;
     let importer = &planning.resolution.importer;
     let specifier = &planning.resolution.specifier;
     let selected = index
@@ -2015,7 +2021,9 @@ fn verify_policy2_case_set_discovery(
             &case.catalog_digest,
             "policy-2 case-set catalog",
         )?;
-        let index = read_external_contract_catalog_with_trust(&catalog, Some(trust))?;
+        // Full reader, for the same reason as the single-case check above: a
+        // core runtime package's own entry must be discoverable here.
+        let index = read_accepted_contract_catalog_with_trust(&catalog, Some(trust))?;
         let selected =
             index
                 .semantic_identity()
