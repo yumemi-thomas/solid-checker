@@ -45,6 +45,18 @@ body. The two that stay silent are recorded, not excused:
 does not tie to the declarator. A destructured, aliased or call-initialized
 binding is deliberately not "this function under this name" and stays silent.
 
+One real row moved the other way, correctly: `@solid-primitives/visibility-observer@2.0.1`
+certified before only because its arrow-bound exports carried no claims. The
+walk verdicts and owner requirements now reach them, the server artifact case
+demands transcripts for `createPageVisibility`, and the certifier refuses that
+case by name: the package's `node`/`import` branch names `dist/server.js` as
+both runtime and declaration target while the compiler resolves the export's
+declaration to `dist/index.d.ts`, so the transcript describes a declaration the
+snapshot did not select. That is a fail-closed refusal of a claim the earlier
+certificate never made, and the fix belongs to artifact-case declaration
+selection (a branch without a `types` target should not name its runtime file as
+the declaration surface), not to the census.
+
 ## The `returns` census decides valueless completion (2026-09-05)
 
 ADR 0035 makes `returns` the second behavioral call domain the implementation
@@ -18033,3 +18045,223 @@ binary.
    stub's `onSettled(callback: () => void | (() => void))` matches the audited
    `@solidjs/signals@2.0.0-rc.3` declaration's parameter name and type (the
    audited signature is recorded in this file's stub-looseness table).
+
+## 2026-09-05 — Twelve receipts lost with every gate green, and what recovered them
+
+The full corpus had not been re-run since the 2026-09-04 pin (357 certified of
+397 attempted). Measured at `01b84ada`, the commit that landed ADRs 0009–0033,
+it certified 323 rows; measured at `9cea5613` (ADRs 0034–0036 on top) it
+certified 354 of 398. Against the pin that is fourteen rows lost and eleven
+gained, and every one of the losses came from the `01b84ada` cut: the
+three-row contract corpus, `make verify`, and the ecosystem *generation*
+baseline comparison all stayed green, because none of them compares receipts
+across the corpus. The losses were traced row by row; five were fixable
+defects, the rest are honest open facts the larger graph now reaches.
+
+### Graph planning bound one package's many entrypoints to every importer variant
+
+`01b84ada` widened the published graph's edges from re-exports to every static
+runtime import (`staticRuntimeDependencies` in `certify-contract.mjs`), so a
+graph now carries a node for every `solid-js` import of every entrypoint of
+`@corvu/utils`, keyed by the importing module. `graph_request_edges`
+(`contract_certification/dependencies.rs`) matched a parent's edge to a child
+by "importer anywhere inside the parent's package root", which from
+`@corvu/utils:./create/controllableSignal` saw every `solid-js` node any
+`@corvu/utils` entrypoint had created and refused the graph as ambiguous
+(`graph node … has multiple exact dependency nodes for "solid-js"`). Six rows
+refused there: `@corvu-next/accordion`, `@corvu-next/popover`,
+`@corvu/accordion`, `@corvu/drawer`, `@corvu/popover`,
+`@tanstack/solid-query-persist-client@5.102.5`.
+
+The matcher now uses closure membership — the importer must be a runtime or
+declaration module of the parent's replayed closure, the relation the planned
+edge already used (`importer_is_closure_entry_module`) — and when several
+members remain and are the same node in everything but the importing module
+(`CanonicalDependencyNodeIdentity::importer_invariant_key`: same archive, lock
+selection, resolution result, closure, proposal and source set), it takes the
+one whose importer sorts first, which is the node discovery bound to that
+parent: discovery binds a parent to the first of its importing modules in the
+same byte order, and every closure member that imports the specifier is one of
+those modules. Nodes that differ in anything else stay refused as ambiguous,
+and a node no parent's closure claims is refused as unreachable rather than
+matched by containment. Pinned by
+`native_published_graph_binds_each_parent_to_the_dependency_node_its_own_module_imported`
+and `…keeps_a_tie_between_different_dependency_nodes_refused`, over a synthetic
+package with two subpath entrypoints (`SyntheticSubpathPackage`).
+
+### The Type Facts source census read a nested twin as a duplicate
+
+With planning past, three of those rows refused one stage later: `declaration
+dist/dom/index.d.ts is absent, duplicated, or stale`. The census located a
+node's declaration by path *suffix* (`/node_modules/@corvu/utils/dist/…`), and
+a graph that materializes `@corvu/utils@0.4.2` hoisted and `@corvu/utils@0.3.2`
+nested under `solid-transition-size` has two files with that suffix. The
+census now looks under the roots materialized from *this node's snapshot*
+(`declaration_sources_under_roots`), which also covers the second shape the
+corpus produced — the same snapshot standing at a hoisted and a nested
+coordinate at once, with the program reading whichever the specifier resolved
+to — and holds every match to the closure's digest. The evidence-site string
+keeps its package-marker form, so no receipt that already issued changes.
+
+### A core runtime package could not discover its own certification
+
+`solid-js@2.0.0-rc.3` and `@solidjs/signals@2.0.0-rc.3` refused with `ordinary
+policy-2 discovery selected 0 entries`. The fresh-process discovery check read
+the written catalog through `read_external_contract_catalog_with_trust`, which
+withholds core runtime entries because ordinary analysis answers those imports
+from the built-in foundation (ADR 0027). The check authenticates the catalog
+this certification wrote, so it now uses the full reader; the withholding
+remains an analysis-consumption policy.
+
+### `claimElement`: a walked loop is not incomplete flow (ADR 0016 amended)
+
+`@solidjs/web`'s `claimElement` loops over its handlers and returns its
+parameter. The verifier refused any control-flow incompleteness at all for the
+returned-parameter identity fact, though the producer classifies a walked loop
+as `reachability-lower-bound` and the fact is flow-insensitive (no assignment to
+the parameter's symbol anywhere in the implementation). The verifier now
+accepts a census whose every incompleteness row is a walked construct and
+refuses `flow-unaccounted` rows and unclassified markers as before. This
+unblocked `@solid-primitives/form` (floor and head) and moved
+`@solid-primitives/intersection-observer` and `@solidjs/element` to their own
+open facts (below).
+
+### `withMeta`: a throw guard does not make the return conditional (producer)
+
+`@solidjs/web`'s `withMeta` is `if (!metadata) throw …; return fn;`. The
+producer's census gave the statement after any `if` an `unknown` carry
+strength whenever an arm could fail to complete normally, so the return never
+had an unconditional value-return edge. An arm that leaves by `throw` alone
+(no `return` of the enclosing function inside it) contributes no competing
+value-return edge, and every normal completion still passes the return; the
+census now keeps the entry carry strength across such a guard when the other
+arm is absent or always completes normally. Pinned by
+`TestThrowGuardKeepsTheSuccessorReturnUnconditional`; ADR 0016 records both
+amendments.
+
+### The runner's Solid 2 environment lacked `@solidjs/web`
+
+`@tanstack/solid-query@6.0.0-rc.0` and its persist-client import `@solidjs/web`
+and declare only `solid-js` as a peer; the runner installed the declared pin
+alone and the checker refused all four rows with "`@solidjs/web` is not
+installed above …", a statement about the benchmark's environment.
+`solidRuntimeCompletion` (`run.mjs`) now completes a Solid 2 probe with the
+same-version `@solidjs/web` when the manifest's release catalog lists it, and
+records the addition under `runtimeCompletion`. `@solid-primitives/favicon` and
+`drag-drop` are the refusals it does not touch: they import `solid-js/web`,
+which `solid-js@2` no longer exports.
+
+### The gate that was missing
+
+`make ecosystem-regression` runs the full corpus against the pinned report with
+`certification-regression-thresholds.json` (`maxCertificationRegressions: 0`)
+and fails on any row the pin certified that the commit does not; the report's
+`combined.baseline.certificationRegressions` is the new comparison, separate
+from the generation-outcome regressions because a row can keep emitting a
+complete contract while its receipt is refused. It writes under `rust/target`,
+so a gate run never moves the pin. See docs/ecosystem-benchmark.md.
+
+### Two races the gate's first run exposed
+
+The gate's first full run refused `@tanstack/solid-query-devtools@6.0.0-rc.0`
+(head) with `private project materialization: File exists`, a row that
+certifies alone. Two concurrency defects, both fixed: the private project
+directory is named `(pid, counter)`, and a certification the runner killed on
+its timeout never removed its directory, so a later process that drew the same
+pid met a leftover it never made — `materialize_with_source_refs` now skips
+past such a name rather than failing. And `build_materialized_store_entry`
+retired-and-replaced an existing store entry whenever *it* had found the entry
+absent before staging, which under two concurrent certifications deleted a good
+entry from under a project already linked to it; it now re-checks exactness at
+publication and keeps an entry that is exact. Pinned in
+`materialized_store_entries_hold_exactly_the_loadable_files_and_are_repaired_when_wrong`.
+
+### Importer variants share their work; the node limit is 1024
+
+A graph node is one (artifact, importing module) pair, so `@corvu/drawer`'s
+122-node graph held about thirty distinct artifacts and `solid-js` some forty
+times. Two nodes that differ only in the importing module are the same
+snapshot, proposal, materialized root, and — because the demand graph hashes
+none of the importer — the same demand-graph root, so one exported-value
+acquisition binds evidence every variant's receipt needs.
+`acquire_and_verify_graph_export_values` now groups requests by
+`importer_invariant_request_key` (plan, dependency set, source set, each up to
+the importer) and acquires once per group; the CLI's frontier
+(`preparePublishedGraphFallback`) generates once per the same key and hands
+variants the representative's document with their own importer written back
+into `certificationInputs[].resolution`, which native certification replays
+from that importer before trusting anything. `@corvu/drawer`: 70 s → 42 s
+(generation 29 s → 10 s, witness acquisition 41 s → 32 s; 72 of 122 generations
+shared). With the cost bound by distinct artifacts, the discovery limit moved
+from 256 to 1024 nodes on both sides (`POLICY_2_GRAPH_NODE_LIMIT`,
+`certify-contract.mjs`, `published-contract-graph.mjs`): `corvu@0.7.2` now plans
+its 343-node graph (223 shared) in 54 s and reaches the honest
+`@floating-ui/utils` open fact below instead of the limit.
+
+### Protocol 20: an implementation transcript may name whose body it walked
+
+`@tanstack/query-core` exports `const defaultScheduler = systemSetTimeoutZero`,
+importing that name from a sibling module of a package that ships declarations
+beside its runtime. Module resolution takes the import to `timeoutManager.d.ts`,
+which has no body, and the producer refused the binding as
+`implementationUnavailable`; the same alias with no sibling `.d.ts` silently
+*misnamed* the transcript's declaration after the aliased function. The
+producer now follows an exact alias — an identifier initializer through
+identity-preserving wrappers, the binding never assigned in its file, the
+aliased function never assigned in its own — to its body: a local function, or
+for an import the runtime module the relative specifier denotes (the file at
+that path in the accepted program, never a declaration file) and that module's
+export of the imported name, which is what the import binds at runtime.
+`Declaration` stays the demanded binding, so the verifier's name and module
+checks are unchanged, and the new `implementationOf` states whose body was
+walked; handshake protocol 19 → 20, schema digest moved on both sides,
+`bin/solid-typefacts` rebuilt. Pinned by
+`TestExportImplementationFollowsAnExactAliasToTheRuntimeBody`, whose refused
+shapes are a reassigned binding, a reassigned target, a call initializer, and a
+body-less target. No ADR was written for this bump; this entry and the protocol
+comments in `v3.rs` and `protocolv3.go` are the record.
+
+### Measured (full corpus, debug binary, 566 s, not repinned)
+
+| run | attempted | certified | refused |
+| --- | ---: | ---: | ---: |
+| pinned 2026-09-04 | 397 | 357 | 40 |
+| `9cea5613` (this morning) | 398 | 354 | 44 |
+| this worktree | 398 | 369 | 29 |
+
+Against the pin: 18 receipts gained, 6 lost, and every one of the six is an
+honest open fact listed below (`@corvu-next/popover`, `@corvu/popover`,
+`corvu@0.7.2`, `@solid-primitives/intersection-observer` floor and head,
+`@tanstack/solid-hotkeys`). The generation comparison saw no regression at all,
+which is the point of the new gate. Withheld `creates` candidates: 1664, all
+`noRecipe`, because neither `ecosystem-benchmark` nor the gate passes
+`--probe-recipe-corpus`; `exportsProven` stays 0 corpus-wide because only
+`creates` and `returns` have a census.
+
+### Exact remaining refusals in the traced set
+
+- `@corvu-next/popover`, `@corvu/popover`, `corvu@0.7.2`: `@floating-ui/utils@0.2.12`
+  `getOppositeAlignmentPlacement`, `recursive-value-shape`: "operation value
+  root shape has no verifiable premise … the producer's root observation is
+  open". The same premise refuses `@tanstack/store@0.11.1` `shallow<T>(objA: T,
+  objB: T)` (`@tanstack/solid-store`, `@tanstack/solid-hotkeys`) and
+  `component-register@0.8.8` `hot` (`@solidjs/element`): the operation's root
+  value is a bare type parameter, so the producer's observation of it is open
+  by construction and the IR's shape claim about it cannot be discharged from
+  the declaration. Deciding these needs an implementation-side premise or a
+  narrower proposal, not a verifier relaxation; unchanged.
+- `@tanstack/solid-query@6.0.0-rc.0` (floor, head),
+  `@tanstack/solid-query-persist-client@5.102.5` and
+  `@tanstack/solid-query-persist-client@6.0.0-rc.0` (head): certified once
+  protocol 20 followed `defaultScheduler` to its body (above); recorded here
+  because the 2026-09-04 pin certified them and this morning's HEAD did not.
+- `@solid-primitives/intersection-observer` (floor, head):
+  `makeIntersectionObserver`, `operation-cardinality`: "callback parameter has
+  no exact direct-call or resolved-argument flow"; its own open fact, reached
+  once `claimElement` certified.
+- `@solid-devtools/locator@0.16.7`: `certification invocation context must
+  name a nonempty unique demand set` — one artifact case of its case set has no
+  Type Facts-owned demand and the batch still schedules an acquisition for it.
+  Not a regression (the pin never attempted the row); open.
+- `@solid-primitives/visibility-observer@2.0.1`: recorded above (artifact-case
+  declaration selection); open.

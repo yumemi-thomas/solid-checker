@@ -44,7 +44,8 @@ one undecidable candidate costs a row everything it did prove.
 ### 1. A candidate the census cannot decide is withheld, not refused
 
 When Type Facts verification refuses a `DomainExhaustiveness` demand whose
-subject is a proposed closure candidate with `UnsupportedDemand`, the certifier
+subject is a proposed closure candidate with `UnsupportedDemand` or `FamilyOpen`
+(the transcript it needs is locally open), the certifier
 withdraws **that candidate** by name — a `WithheldClosure` whose `reason` is
 `census refused: ` followed by the census's own refusal text — re-derives the
 plan through the same `withheld_weakening` recipe gating uses, and acquires
