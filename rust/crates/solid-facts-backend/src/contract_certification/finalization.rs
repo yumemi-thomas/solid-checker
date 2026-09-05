@@ -97,7 +97,25 @@ pub(super) fn authenticate_probe_gates_with_dependencies(
     let (evaluation, identity) =
         probe_harness::run_probe_gates(plan, &schedule, configuration, pin, dependencies)?;
     let outcomes = schedule.outcomes_from_evaluation(&evaluation)?;
-    let inspected = schedule.inspect_outcomes(outcomes)?;
+    let inspected = match schedule.inspect_outcomes(outcomes) {
+        Ok(inspected) => inspected,
+        // The gate says only that it did not complete; the evaluation knows
+        // why. Carry that with the gate so the withheld record can say it
+        // (ADR 0036) instead of naming a gate digest and nothing else.
+        Err(super::ProbeGateError::IncompleteGate(gate_id)) => {
+            let detail = schedule
+                .gates()
+                .iter()
+                .find(|gate| gate.id() == gate_id)
+                .and_then(|gate| evaluation.incompletion(gate.semantic_claim_id()))
+                .map_or_else(
+                    || "the evaluation recorded no completion for the gate".to_owned(),
+                    str::to_owned,
+                );
+            return Err(Policy2FinalizationError::IncompleteGate { gate_id, detail });
+        }
+        Err(error) => return Err(error.into()),
+    };
     Ok(schedule.authenticate_with_harness(inspected, &identity)?)
 }
 
@@ -463,6 +481,11 @@ pub enum Policy2FinalizationError {
     TypeFacts(#[from] TypeFactsCertificationError),
     #[error(transparent)]
     Probe(#[from] super::ProbeGateError),
+    /// A mandatory veto that ended in an error, a timeout, or a refused run,
+    /// with the evaluation's account of why. `Probe(IncompleteGate)` is the
+    /// same fact without it, from a path that never saw the evaluation.
+    #[error("mandatory probe gate {gate_id} did not complete: {detail}")]
+    IncompleteGate { gate_id: String, detail: String },
     #[error(transparent)]
     ProbeHarness(#[from] ProbeHarnessError),
     /// Boxed: the gating error carries a whole planning error, and unboxed it

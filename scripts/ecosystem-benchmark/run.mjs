@@ -298,15 +298,42 @@ export function readGeneratedEntrypointCount(contractPath) {
 
 
 // ADR 0036: the withheld records by the reason they carry. `noRecipe` is the
-// pre-ADR reason; `censusRefused` and `vetoIncomplete` are the two the
-// certifier withholds for instead of refusing the row.
+// pre-ADR reason; the census and veto buckets are what the certifier withholds
+// for instead of refusing the row. A veto that did not complete is split by
+// the parenthesized account the certifier attaches: `vetoUnreproducible` is a
+// synthesized veto the pinned interpreter cannot run for the artifact case
+// (Node's own `node` condition would load `dist/server.js` where the witness
+// read `dist/solid.js`), `vetoThrew` / `vetoTimedOut` / `vetoRunRefused` are
+// the worker's own failure, budget, and refusal, and `vetoIncomplete` is a
+// record with no account at all.
+export const WITHHELD_CLOSURE_REASON_BUCKETS = Object.freeze([
+  "noRecipe",
+  "censusRefused",
+  "vetoUnreproducible",
+  "vetoThrew",
+  "vetoTimedOut",
+  "vetoRunRefused",
+  "vetoIncomplete",
+  "dependencyWithheld",
+  "other"
+]);
+
 function withheldClosureReasons(audit) {
-  const counts = { noRecipe: 0, censusRefused: 0, vetoIncomplete: 0, dependencyWithheld: 0, other: 0 };
+  const counts = Object.fromEntries(WITHHELD_CLOSURE_REASON_BUCKETS.map((bucket) => [bucket, 0]));
   for (const record of Array.isArray(audit?.withheldClosures) ? audit.withheldClosures : []) {
     const reason = typeof record?.reason === "string" ? record.reason : "";
     if (reason === "no recipe in corpus") counts.noRecipe += 1;
     else if (reason.startsWith("census refused: ")) counts.censusRefused += 1;
-    else if (reason.startsWith("veto did not complete: ")) counts.vetoIncomplete += 1;
+    else if (reason.startsWith("veto did not complete: ")) {
+      // The account follows the gate digest in parentheses and is prefixed
+      // by the probe mode that did not complete (`certification-probe: the
+      // worker threw: …`), so the markers are matched anywhere in it.
+      if (reason.includes("synthesized veto cannot run for this artifact case:")) counts.vetoUnreproducible += 1;
+      else if (reason.includes("the worker threw")) counts.vetoThrew += 1;
+      else if (reason.includes("the worker did not report within")) counts.vetoTimedOut += 1;
+      else if (reason.includes("the run was refused:")) counts.vetoRunRefused += 1;
+      else counts.vetoIncomplete += 1;
+    }
     // A graph node whose closure composes from a dependency claim the
     // dependency withheld (ADR 0036, graph lanes).
     else if (reason.startsWith("composed from a withheld dependency claim: ")) counts.dependencyWithheld += 1;

@@ -73,7 +73,7 @@ test("the frozen Phase 20 cohort remains the exact authority for the Phase 21 le
   // passes against the rewritten ledger.
   assert.deepEqual(ledger.authority.currentReport, {
     path: "benchmarks/ecosystem/report.json",
-    sha256: "d51b5baae2942aafa5de9d001f5258f4f36746f3384858246f7508d7a28223d1"
+    sha256: "af7bae0f2cda392c9223c56322e22fd01657e87a631c946b83128c21a9c63a51"
   });
   assert.equal(ledger.rows.filter(row => row.phase21Disposition == null).length, 0);
   // One row moved, `@solid-primitives/geolocation@1.5.5|solid1|only`:

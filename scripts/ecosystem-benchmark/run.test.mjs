@@ -333,7 +333,17 @@ test("complete proposals retain an exact policy-2 certification refusal when att
       refusalCountsByOwner: {},
       // The audit fixture names no withheld closure candidate.
       withheldClosures: 0,
-      withheldClosureReasons: { noRecipe: 0, censusRefused: 0, vetoIncomplete: 0, dependencyWithheld: 0, other: 0 }
+      withheldClosureReasons: {
+        noRecipe: 0,
+        censusRefused: 0,
+        vetoUnreproducible: 0,
+        vetoThrew: 0,
+        vetoTimedOut: 0,
+        vetoRunRefused: 0,
+        vetoIncomplete: 0,
+        dependencyWithheld: 0,
+        other: 0
+      }
     });
   } finally {
     rmSync(temporary, { recursive: true, force: true });

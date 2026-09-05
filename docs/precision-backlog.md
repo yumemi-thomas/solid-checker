@@ -18314,6 +18314,75 @@ are candidates whose export states no unique call signature; the 262
 to attack, with a harness that can be given the artifact case's own condition
 set. Phase 21 ledger regenerated; only the report digest pin moved.
 
+
+### Incomplete vetoes say why, gate batches run side by side, and the wall-time budget is a host fact (2026-09-06)
+
+Three follow-ups to the graph-lane extension above.
+
+**The withheld record carries the evaluation's account.** A veto that did not
+complete was recorded as `veto did not complete: gate <digest>` and nothing
+else. `RuntimeProbeEvaluation` now keeps, per `Incomplete` claim, one line per
+mode that did not complete — the timeout budget, the worker's bounded one-line
+failure summary (new in the run frame beside the stack digest, never in
+evidence), or the refusal reason — and `authenticate_probe_gates_with_dependencies`
+hands it to the withheld record through `Policy2FinalizationError::IncompleteGate
+{ gate_id, detail }`. The ecosystem runner splits `vetoIncomplete` by that
+account: `vetoUnreproducible`, `vetoThrew`, `vetoTimedOut`, `vetoRunRefused`,
+with `vetoIncomplete` left for a record with no account. On the repinned
+corpus the 262 are 237 `vetoUnreproducible` and 25 `vetoThrew`, 0 without an
+account. The 237 are `refuse_unreproducible_artifact_case` applied to the graph
+dependency `solid-js`: the graph certified its `.` as `dist/solid.js` (the
+`import` branch, what a bundler or TypeScript selects) and the pinned Node
+applies its own `node` condition and would load `dist/server.js` — not the
+`solid` condition, as the previous entry guessed. The 25 are `TypeError:
+Unknown file extension ".jsx"`: under `solid`, `@corvu/utils` and
+`@corvu-next/utils` select `dist/index.jsx`, JSX source for the Solid compiler.
+Neither can run under any Node profile (Node cannot be asked to drop `node`),
+and ADR 0033's browser profile admits no dependency closure; the open design
+question is an executor that applies the artifact case's own condition set to
+its authenticated dependency closure, and it is now stated by 262 records
+rather than inferred.
+
+**The gate pre-pass runs its batches side by side.** `certify_graphs_with_recipe_gating`
+resolves every node's gate job first, runs the batches on a bounded pool
+(`contract_certification/parallel.rs`, one worker per available core) and
+applies the results in node order; a process-wide spawn lock in
+`probe_harness` closes the `pipe`/close-on-exec window that being
+single-threaded used to close; each census hashes its watched labels side by
+side. Nothing hashes one byte less and no session shares a workspace.
+`motion-solidjs@0.6.0` alone: 88 s to 31 s, gate pre-pass 72 s to 15 s,
+identical audit (792 withheld: 750 `censusRefused`, 42 `vetoUnreproducible`).
+
+**The wall-time budget.** `scripts/ecosystem-benchmark/performance-budget.test.mjs`
+holds the pinned report under 150 s, and the 224 s pin above failed it; `make
+verify` does not run the runner's suite (`bun-test` is the CLI's), so nothing
+said so. Measured today on the authority host — on battery, in Low Power Mode
+(`pmset -g` reports `powermode 1`), which is the fact that decides these
+numbers:
+
+| binary | wall | CPU (user + sys) |
+| --- | --- | --- |
+| previous pin's binary (`4c2edb41`), warm caches, today | 172 s | 1,755 s |
+| this change, today (the pin) | 197 s | 2,008 s |
+| previous pin as recorded (2026-09-05, same binary) | 85 s | — |
+
+The same binary that pinned 85 s takes 172 s on this host today, so the ceiling
+cannot be judged from today's runs; this change costs about 15 % of wall and
+14 % of CPU over the previous binary, most of it the vetoes that now actually
+run. Of the roughly 2,000 CPU-seconds, the probe gates are about 400 thread-
+seconds (census hashing 209, of which the pinned Node executable 121; launches
+202) plus the Node sessions' own CPU; the remainder is acquisition, proposal
+generation and finalization, as before. The pin was retaken with this change
+(statuses unchanged, 368 certified / 30 refused; the buckets above) and records
+today's wall; it has to be retaken on mains power before the budget test can
+pass, and the runner's suite should then join `make verify` — a step was drafted
+and withdrawn from this change because it would fail on the host state, not on
+the code. What would move the CPU itself is a census policy question, not a
+tuning one: hashing the three pinned images (263 MB) between every session is
+what the census promises, and hashing them once per batch or dropping the
+producer image (re-verified against its pin before every producer launch
+anyway) changes the policy digest and belongs in an ADR.
+
 ### Exact remaining refusals in the traced set
 
 - `@corvu-next/popover`, `@corvu/popover`, `corvu@0.7.2`: `@floating-ui/utils@0.2.12`

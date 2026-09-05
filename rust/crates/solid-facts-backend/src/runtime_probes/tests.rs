@@ -427,6 +427,7 @@ fn finite_absence_timeout_error_and_inconsistent_repeats_never_promote_negative_
     let mut error_runs = runs_with(&plan, |_| operation_events(&operation, "required"));
     error_runs[0].outcome = ProbeRunOutcome::Error {
         details: digest('6'),
+        summary: Some("ReferenceError: document is not defined".into()),
     };
     let error = evaluate_runtime_probes(&plan, error_runs, tool("runner", '5')).unwrap();
     assert_eq!(
@@ -434,6 +435,25 @@ fn finite_absence_timeout_error_and_inconsistent_repeats_never_promote_negative_
         ProbeOutcome::Error {
             details: digest('6')
         }
+    );
+    // The summary explains the incomplete verdict and reaches nothing else:
+    // the observation above carries only the digest.
+    let claim_id = plan.targets[0].claim_id.as_str();
+    assert_eq!(
+        error.incompletion(claim_id),
+        Some(format!(
+            "{}: the worker threw: ReferenceError: document is not defined",
+            plan.sessions[0].mode.name
+        ))
+        .as_deref()
+    );
+    assert_eq!(
+        timeout.incompletion(claim_id),
+        Some(format!(
+            "{}: the worker did not report within the policy budget of 5000 ms",
+            plan.sessions[0].mode.name
+        ))
+        .as_deref()
     );
 
     let mut inconsistent = runs_with(&plan, |_| operation_events(&operation, "required"));
@@ -446,6 +466,14 @@ fn finite_absence_timeout_error_and_inconsistent_repeats_never_promote_negative_
         inconsistent.claim_material()[0].observations[0].outcome,
         ProbeOutcome::Refused { .. }
     ));
+    assert_eq!(
+        inconsistent.incompletion(claim_id),
+        Some(format!(
+            "{}: the run was refused: semantic event transcripts differ across isolated repeat runs",
+            plan.sessions[0].mode.name
+        ))
+        .as_deref()
+    );
 }
 
 #[test]

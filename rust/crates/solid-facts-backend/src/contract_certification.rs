@@ -42,6 +42,7 @@ mod dependencies;
 mod export_bindings;
 mod finalization;
 mod module_closure;
+mod parallel;
 mod policy2_receipt;
 mod probe_gates;
 mod probe_harness;
@@ -715,6 +716,10 @@ pub(super) fn incomplete_gate_withholding(
         Policy2FinalizationError::Probe(ProbeGateError::IncompleteGate(gate_id)) => (
             schedule.gates().iter().find(|gate| gate.id() == gate_id)?,
             String::new(),
+        ),
+        Policy2FinalizationError::IncompleteGate { gate_id, detail } => (
+            schedule.gates().iter().find(|gate| gate.id() == gate_id)?,
+            format!(" ({detail})"),
         ),
         Policy2FinalizationError::ProbeHarness(ProbeHarnessError::SessionTimeout { claim_id }) => (
             schedule

@@ -583,10 +583,20 @@ pub struct ProbeEvent {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProbeRunOutcome {
-    Completed { events: Vec<ProbeEvent> },
-    Error { details: Digest },
+    Completed {
+        events: Vec<ProbeEvent>,
+    },
+    Error {
+        details: Digest,
+        /// The worker's bounded one-line summary of what was thrown, when the
+        /// harness reported one. It explains an incomplete veto in the
+        /// withheld record and goes nowhere else: evidence keeps the digest.
+        summary: Option<String>,
+    },
     Timeout,
-    Refused { reason: String },
+    Refused {
+        reason: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -685,6 +695,11 @@ pub struct RuntimeProbeEvaluation {
     transcripts: Vec<ProbeTranscript>,
     contradictions: Vec<ProbeContradictionRecord>,
     verdicts: BTreeMap<SemanticClaimId, ProbeTargetVerdict>,
+    /// Why each `Incomplete` verdict is incomplete, one line per mode that
+    /// did not complete: the timeout budget, the worker's failure summary, or
+    /// the refusal reason. Read by the certifier to explain a withheld
+    /// candidate (ADR 0036); never serialized into evidence.
+    incompletions: BTreeMap<SemanticClaimId, String>,
 }
 
 impl RuntimeProbeEvaluation {
@@ -707,6 +722,15 @@ impl RuntimeProbeEvaluation {
     /// or `None` when the claim was not a probe target at all.
     pub(crate) fn verdict(&self, claim_id: &SemanticClaimId) -> Option<ProbeTargetVerdict> {
         self.verdicts.get(claim_id).copied()
+    }
+
+    /// Why the claim's verdict is `Incomplete`, or `None` when it is not.
+    #[must_use]
+    pub fn incompletion(&self, claim_id: &str) -> Option<&str> {
+        self.incompletions
+            .iter()
+            .find(|(id, _)| id.as_str() == claim_id)
+            .map(|(_, reason)| reason.as_str())
     }
 }
 
@@ -761,6 +785,7 @@ pub fn evaluate_runtime_probes(
     let mut transcripts = Vec::new();
     let mut contradictions = Vec::new();
     let mut verdicts = BTreeMap::<SemanticClaimId, ProbeTargetVerdict>::new();
+    let mut incompletions = BTreeMap::<SemanticClaimId, String>::new();
     for target in &plan.targets {
         let mut observations = Vec::new();
         let modes = plan
@@ -784,6 +809,20 @@ pub fn evaluate_runtime_probes(
                 .entry(target.claim_id.clone())
                 .and_modify(|existing| *existing = existing.join(evaluated.verdict))
                 .or_insert(evaluated.verdict);
+            if evaluated.verdict == ProbeTargetVerdict::Incomplete
+                && let Some(reason) = &evaluated.incompletion
+            {
+                let line = format!("{}: {reason}", mode.name);
+                incompletions
+                    .entry(target.claim_id.clone())
+                    .and_modify(|existing| {
+                        if !existing.split("; ").any(|known| known == line) {
+                            existing.push_str("; ");
+                            existing.push_str(&line);
+                        }
+                    })
+                    .or_insert(line);
+            }
             if let Some(transcript) = evaluated.transcript {
                 if matches!(evaluated.outcome, ProbeOutcome::Falsification { .. }) {
                     contradictions.push(ProbeContradictionRecord {
@@ -819,6 +858,7 @@ pub fn evaluate_runtime_probes(
         transcripts,
         contradictions,
         verdicts,
+        incompletions,
     })
 }
 
@@ -826,6 +866,8 @@ struct EvaluatedMode {
     outcome: ProbeOutcome,
     transcript: Option<ProbeTranscript>,
     verdict: ProbeTargetVerdict,
+    /// Why `verdict` is `Incomplete`; `None` for every other verdict.
+    incompletion: Option<String>,
 }
 
 fn evaluate_mode(
@@ -885,16 +927,27 @@ fn evaluate_mode(
             },
             transcript: None,
             verdict: ProbeTargetVerdict::Incomplete,
+            incompletion: Some(format!(
+                "the worker did not report within the policy budget of {} ms",
+                plan.policy.timeout_millis
+            )),
         });
     }
-    if let Some(details) = runs.iter().find_map(|(_, run)| match &run.outcome {
-        ProbeRunOutcome::Error { details } => Some(details.clone()),
+    if let Some((details, summary)) = runs.iter().find_map(|(_, run)| match &run.outcome {
+        ProbeRunOutcome::Error { details, summary } => Some((details.clone(), summary.clone())),
         _ => None,
     }) {
+        if let Some(summary) = &summary {
+            validate_string(summary, "probe error summary")?;
+        }
         return Ok(EvaluatedMode {
             outcome: ProbeOutcome::Error { details },
             transcript: None,
             verdict: ProbeTargetVerdict::Incomplete,
+            incompletion: Some(summary.map_or_else(
+                || "the worker threw (no summary reported)".to_owned(),
+                |summary| format!("the worker threw: {summary}"),
+            )),
         });
     }
     if let Some(reason) = runs.iter().find_map(|(_, run)| match &run.outcome {
@@ -937,13 +990,17 @@ fn evaluate_mode(
         // not evidence: the observation stays `Refused` in probe evidence
         // material, because finite silence can never support a claim. Only
         // the separate gate verdict records that nothing contradicted.
-        let verdict = match target.authority {
-            ProbeAuthority::ClosureFalsification => ProbeTargetVerdict::CleanNonObservation,
-            ProbeAuthority::PossiblePositiveWitness => ProbeTargetVerdict::Incomplete,
-        };
-        return Ok(EvaluatedMode {
-            verdict,
-            ..refused_mode("finite execution did not witness the planned positive marker")
+        let refused = refused_mode("finite execution did not witness the planned positive marker");
+        return Ok(match target.authority {
+            ProbeAuthority::ClosureFalsification => EvaluatedMode {
+                verdict: ProbeTargetVerdict::CleanNonObservation,
+                incompletion: None,
+                ..refused
+            },
+            ProbeAuthority::PossiblePositiveWitness => EvaluatedMode {
+                verdict: ProbeTargetVerdict::Incomplete,
+                ..refused
+            },
         });
     }
 
@@ -966,14 +1023,15 @@ fn evaluate_mode(
         outcome,
         transcript: Some(transcript),
         verdict,
+        incompletion: None,
     })
 }
 
 fn refused_mode(reason: impl Into<String>) -> EvaluatedMode {
+    let reason = reason.into();
     EvaluatedMode {
-        outcome: ProbeOutcome::Refused {
-            reason: reason.into(),
-        },
+        incompletion: Some(format!("the run was refused: {reason}")),
+        outcome: ProbeOutcome::Refused { reason },
         transcript: None,
         verdict: ProbeTargetVerdict::Incomplete,
     }

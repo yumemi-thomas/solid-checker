@@ -183,7 +183,7 @@ use std::{
     path::{Component, Path, PathBuf},
     process::{Child, ChildStderr, Command, Stdio},
     sync::{
-        OnceLock,
+        Mutex, OnceLock, PoisonError,
         atomic::{AtomicU64, Ordering},
         mpsc,
     },
@@ -366,6 +366,19 @@ pub(crate) const HARNESS_MANIFEST_FILES: [&str; 8] = [
 ];
 
 static PRIVATE_HARNESS_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+/// Serializes every process launch this module performs.
+///
+/// A launch creates descriptors that must not be inherited by any *other*
+/// child: the report pipe is created by `pipe` and made close-on-exec in a
+/// second call (macOS has no `pipe2`), and the standard library's own
+/// `Stdio::piped` ends have the same window. A concurrent fork in that window
+/// inherits the write end and the reader waits for an EOF that never comes
+/// until that unrelated child exits. Gate batches for different graph nodes
+/// now run on several threads (`parallel::run_each`), so the window is closed
+/// by construction rather than by there being one thread: the lock is held
+/// from the first descriptor's creation through `spawn`.
+static SPAWN_LOCK: Mutex<()> = Mutex::new(());
 
 /// Where the harness image, the Node executable, and the hand-authored recipe
 /// corpus live for one certification transaction.
@@ -1186,7 +1199,11 @@ fn observe_conditions_in(
         .env("LC_ALL", "C")
         .env("NODE_OPTIONS", "")
         .stdin(Stdio::null());
-    let output = command.output().map_err(|error| {
+    let output = {
+        let _spawning = SPAWN_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+        command.output()
+    }
+    .map_err(|error| {
         ProbeHarnessError::NodeProvenance(format!(
             "could not ask the pinned Node executable which export conditions it applies: {error}"
         ))
@@ -1597,16 +1614,19 @@ fn node_version(path: &Path, node_sha256: &str) -> Result<String, ProbeHarnessEr
     {
         return Ok(version.clone());
     }
-    let output = Command::new(path)
-        .arg("--version")
-        .env_clear()
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|error| {
-            ProbeHarnessError::NodeProvenance(format!(
-                "could not ask the pinned Node executable for its version: {error}"
-            ))
-        })?;
+    let output = {
+        let _spawning = SPAWN_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+        Command::new(path)
+            .arg("--version")
+            .env_clear()
+            .stdin(Stdio::null())
+            .output()
+    }
+    .map_err(|error| {
+        ProbeHarnessError::NodeProvenance(format!(
+            "could not ask the pinned Node executable for its version: {error}"
+        ))
+    })?;
     if !output.status.success() {
         return Err(ProbeHarnessError::NodeProvenance(
             "the pinned Node executable did not report a version".into(),
@@ -2371,11 +2391,22 @@ impl PrivateProbeWorkspace {
         let mut census = BTreeMap::new();
         let timings = std::env::var_os("SOLID_CHECKER_TIMINGS").is_some();
         let mut per_label = Vec::new();
-        for (label, path) in &self.watched {
-            let started = Instant::now();
-            let digest = watch_digest(path)?;
+        // Each label is a read of bytes nothing in this process writes, so the
+        // labels are hashed side by side: the census then costs its largest
+        // input (the pinned Node executable) rather than the sum of all of
+        // them, without one byte fewer being hashed.
+        let digests = super::parallel::run_each(
+            &self.watched,
+            super::parallel::workers_for(self.watched.len()),
+            |(_, path)| {
+                let started = Instant::now();
+                (watch_digest(path), elapsed_ns(started))
+            },
+        );
+        for ((label, _), (digest, elapsed)) in self.watched.iter().zip(digests) {
+            let digest = digest?;
             if timings {
-                per_label.push((label.clone(), elapsed_ns(started)));
+                per_label.push((label.clone(), elapsed));
             }
             if census.insert(label.clone(), digest).is_some() {
                 return Err(ProbeHarnessError::IsolationViolation(format!(
@@ -2699,6 +2730,8 @@ fn spawn_reporting_worker(command: &mut Command) -> Result<(Child, File), ProbeH
         unix::process::CommandExt as _,
     };
 
+    // Held through `spawn` below: see `SPAWN_LOCK`.
+    let _spawning = SPAWN_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let mut descriptors = [0_i32; 2];
     // SAFETY: `pipe` fills the two-element array it is given.
     if unsafe { libc::pipe(descriptors.as_mut_ptr()) } != 0 {
@@ -2714,13 +2747,13 @@ fn spawn_reporting_worker(command: &mut Command) -> Result<(Child, File), ProbeH
     let read_raw = read.as_raw_fd();
     let write_raw = write.as_raw_fd();
     // Close-on-exec on both ends, immediately. `pipe2(O_CLOEXEC)` would be the
-    // one-call form, but macOS has no `pipe2`, so the flag is set here — still
-    // before any other thread can spawn. Without it any concurrent
-    // `Command::spawn` in this process (another launch, the Type Facts
-    // producer) inherits the write end and holds the pipe open, and the reader
-    // below then waits for an EOF that never comes. The child's own end is
-    // exempted in `pre_exec`: `dup2` clears the flag on the descriptor it
-    // creates.
+    // one-call form, but macOS has no `pipe2`, so the flag is set here — and
+    // every launch this module performs holds `SPAWN_LOCK`, so no other launch
+    // forks in between. Without both, a concurrent `Command::spawn` in this
+    // process (another batch's session, the Type Facts producer) inherits the
+    // write end and holds the pipe open, and the reader below then waits for
+    // an EOF that never comes. The child's own end is exempted in `pre_exec`:
+    // `dup2` clears the flag on the descriptor it creates.
     for descriptor in [read_raw, write_raw] {
         set_close_on_exec(descriptor).map_err(|error| {
             ProbeHarnessError::Launch(format!(

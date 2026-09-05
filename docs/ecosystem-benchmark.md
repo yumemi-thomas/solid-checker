@@ -282,7 +282,15 @@ candidate in the corpus was withheld as `noRecipe` (1664 on the run that
 measured it), rows certified with the domain open, and the pinned report
 described no closure at all. The pin taken with the corpus is the first that
 does; `withheldClosureReasons` on each row says what the corpus still cannot
-decide.
+decide: `noRecipe` (no recipe and no stated call signature to synthesize one
+from), `censusRefused` (the implementation census declined the candidate),
+`vetoUnreproducible` (a synthesized veto the pinned interpreter cannot run for
+the artifact case — chiefly a graph dependency such as `solid-js` whose `.`
+Node's own `node` condition resolves to `dist/server.js` where the witness read
+`dist/solid.js`), `vetoThrew` / `vetoTimedOut` / `vetoRunRefused` (the worker's
+own failure, budget, or refusal, with the account in the record's reason),
+`vetoIncomplete` (a record with no account), and `dependencyWithheld` (a parent
+composing over a dependency's withheld claim).
 
 Reports are named for the scope that produced them. Only an unfiltered run
 writes the canonical `benchmarks/ecosystem/report.json` and `report.md`;
@@ -397,6 +405,20 @@ Two other engine-side experiments were measured and not kept: writing the
 private project from eight threads raised system time from 3 s to 11 s per
 certification on APFS with no wall gain, and deferring its removal to a thread
 joined at process exit moved nothing off the slot.
+
+Two later facts about these numbers (2026-09-06). First, they depend on the
+host's power state: the binary that pinned 85 s on 2026-09-05 measured 172 s
+and 1,755 CPU-seconds the next day on the same host on battery in Low Power
+Mode, so a wall time is only comparable to the pin when `pmset -g` shows the
+same `powermode`. Second, with the recipe corpus the graph lanes run one
+probe-gate batch per node, and a batch's cost is its sessions (about 0.1 s of
+launch each) plus a census between sessions that hashes the pinned Node
+executable, the verifier image and the Type Facts image (263 MB); the batches
+of a pass now run side by side and each census hashes its labels side by side
+(`docs/adr/0036-…`, 2026-09-06 amendment), which took `motion-solidjs@0.6.0`
+from 88 s to 31 s alone. Corpus-wide the gates are about 400 thread-seconds of
+a roughly 2,000 CPU-second run; the census is a policy choice, not a tuning
+knob, and is discussed in docs/precision-backlog.md.
 
 `contract certify` no longer regenerates the proposal inside the benchmark:
 generation runs under the probe's certification importer and its emission

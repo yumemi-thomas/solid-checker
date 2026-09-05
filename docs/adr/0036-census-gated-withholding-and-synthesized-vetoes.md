@@ -268,3 +268,60 @@ synthesized veto with one) and by the `unsafe.js` arm of
 expectation moves from "the graph refuses" to "the candidate is withheld with
 the census's reason and the graph certifies" — the same move § 1 made for the
 value-only lane.
+
+## Amendment (2026-09-06): what an incomplete veto says, and what a wide graph costs
+
+The first full-corpus pin with the graph lanes left two things unsaid. A veto
+that did not complete was recorded as `veto did not complete: gate <digest>`
+and nothing else — the gate's evaluation knew whether the worker threw, timed
+out, or refused the run, and the certifier dropped it at the gate boundary.
+And the same pin took 224 s of wall against the 150 s ceiling the project
+holds itself to, because a wide graph row ran one probe-gate batch per node,
+one after another, and each batch hashed every watched input between sessions,
+one label after another.
+
+- **The reason carries the evaluation's account.** `RuntimeProbeEvaluation`
+  keeps, per claim whose verdict is `Incomplete`, one line per mode that did
+  not complete: `the worker did not report within the policy budget of N ms`,
+  `the worker threw: <summary>`, or `the run was refused: <reason>`.
+  `authenticate_probe_gates_with_dependencies` turns the gate's
+  `IncompleteGate` into `Policy2FinalizationError::IncompleteGate { gate_id,
+  detail }`, and § 2's withheld record reads `veto did not complete: gate
+  <digest> (<detail>)`. The worker's `<summary>` is the bounded first line of
+  what was thrown (`ReferenceError: document is not defined`), reported beside
+  the digest of the whole stack it already sent. Evidence is unchanged: the
+  observation keeps the digest and never the summary, and a frame an older
+  harness wrote decodes without one. The ecosystem runner splits its
+  `vetoIncomplete` bucket by that account into `vetoUnreproducible` (a
+  synthesized veto the pinned interpreter cannot run for the artifact case),
+  `vetoThrew`, `vetoTimedOut`, `vetoRunRefused`, with `vetoIncomplete` left for
+  a record with no account.
+- **What the attribution says.** Corpus-wide, 237 of the 262 incomplete vetoes
+  are the reproducibility refusal of `refuse_unreproducible_artifact_case`
+  applied to a graph *dependency*: the graph certified `solid-js`'s `.` as
+  `dist/solid.js` — the `import` branch a bundler or TypeScript selects — while
+  the pinned Node applies its own `node` condition and would load
+  `dist/server.js`. Not the `solid` condition, as the first amendment guessed:
+  Node cannot be asked to drop `node`, so no Node profile can run these vetoes
+  faithfully, and the browser profile of ADR 0033 admits no dependency closure.
+  The other 25 are the worker throwing `TypeError: Unknown file extension
+  ".jsx"`: under the `solid` condition `@corvu/utils` and `@corvu-next/utils`
+  select `dist/index.jsx`, JSX source for the Solid compiler, which no
+  interpreter runs unlowered. Both are now named in the record instead of
+  guessed at, and both point the same way: these vetoes need an executor that
+  applies the artifact case's own condition set to its dependency closure.
+- **The gate pre-pass runs its batches side by side.** The batches of one pass
+  are independent — each has its own private workspace, corpus, evidence, and
+  census — so `certify_graphs_with_recipe_gating` resolves every node's job
+  first, runs them on a bounded pool (`contract_certification/parallel.rs`,
+  one worker per available core), and applies the results in node order, so
+  withdrawals, cache entries, and the first reported error land exactly where
+  the sequential loop put them. A process-wide spawn lock in `probe_harness`
+  is held from a launch's first descriptor to its `spawn`, closing the
+  `pipe`/close-on-exec window that the single thread used to close by being
+  alone. Within a census the watched labels are hashed side by side, so a
+  census costs its largest input rather than the sum. Nothing hashes one byte
+  less and no session shares a workspace; sessions within a batch remain
+  sequential with a census between them. `motion-solidjs@0.6.0` alone went from
+  88 s to 31 s (gate pre-pass 72 s to 15 s) with an identical audit; the
+  timing report gains `gateWorkers`.

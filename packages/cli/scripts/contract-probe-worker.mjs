@@ -101,6 +101,11 @@ const stripTypes = moduleRuntime.stripTypeScriptTypes;
 const apply = Reflect.apply;
 const hasOwn = Object.hasOwn;
 const ownKeys = Object.keys;
+// The string methods the failure summary needs, captured as functions so a
+// recipe that patched `String.prototype` cannot rewrite what the worker says
+// about the failure it caused.
+const stringSlice = String.prototype.slice;
+const stringIndexOf = String.prototype.indexOf;
 
 // Nothing after this line may add a property to an intrinsic prototype, and
 // nothing here needs to. A package top level that tries — the
@@ -126,6 +131,26 @@ freeze(Function.prototype);
 
 function digest(value) {
   return `sha256:${hash("sha256").update(value).digest("hex")}`;
+}
+
+// The bounded first line of what was thrown -- `ReferenceError: document is
+// not defined` -- so a mandatory veto that did not complete can say why. The
+// digest above stays the outcome's identity in evidence; Rust carries this
+// summary no further than the withheld record's reason (ADR 0036).
+const SUMMARY_LIMIT = 240;
+function summarizeFailure(error) {
+  let text;
+  if (error instanceof ErrorConstructor) {
+    const name = asString(error.name ?? "Error");
+    const message = asString(error.message ?? "");
+    text = message === "" ? name : `${name}: ${message}`;
+  } else {
+    text = asString(error);
+  }
+  const newline = apply(stringIndexOf, text, ["\n"]);
+  if (newline !== -1) text = apply(stringSlice, text, [0, newline]);
+  if (text.length > SUMMARY_LIMIT) text = `${apply(stringSlice, text, [0, SUMMARY_LIMIT])}\u2026`;
+  return text === "" ? "Error" : text;
 }
 
 function report(frame) {
@@ -360,6 +385,7 @@ try {
   outcome.details = digest(
     error instanceof ErrorConstructor ? (error.stack ?? error.message) : asString(error)
   );
+  outcome.summary = summarizeFailure(error);
 }
 const run = createFrameRecord();
 run.session = sessionId;

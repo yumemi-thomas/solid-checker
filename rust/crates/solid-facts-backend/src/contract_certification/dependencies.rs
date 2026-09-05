@@ -1027,23 +1027,21 @@ fn certify_graphs_with_recipe_gating(
         }
         // Gate pre-pass: every node's veto set runs now, so one pass collects
         // every incomplete veto and every synthesized veto the interpreter
-        // cannot run, instead of one per pass.
+        // cannot run, instead of one per pass. The batches are independent —
+        // each has its own private workspace, corpus, and evidence — so they
+        // run side by side (`parallel::run_each`) and are applied afterwards
+        // in node order, which keeps every withdrawal, every cache entry, and
+        // the first reported error where the sequential loop put them.
         let mut withdrawals = Vec::<(String, super::WithheldClosure)>::new();
         let mut dropped_corpora = BTreeSet::<String>::new();
         let mut gated_this_pass = BTreeSet::<String>::new();
+        let mut jobs = Vec::new();
         for graph in &gated {
             for node in &graph.nodes {
                 let digest = node.identity.digest();
-                if !gated_this_pass.insert(digest.to_owned()) || dropped_corpora.contains(digest) {
+                if !gated_this_pass.insert(digest.to_owned()) {
                     continue;
                 }
-                if withdrawals.iter().any(|(withdrawn, _)| withdrawn == digest) {
-                    continue;
-                }
-                let package = format!(
-                    "{}@{}",
-                    node.identity.package_name, node.identity.package_version
-                );
                 let node_probes = synthesized
                     .get(digest)
                     .map(super::synthesized_vetoes::SynthesizedCorpus::configuration)
@@ -1062,109 +1060,135 @@ fn certify_graphs_with_recipe_gating(
                     continue;
                 }
                 gates_by_node.remove(digest);
-                let dependencies = graph.transitive_dependency_plans(node)?;
-                let gate_started = std::time::Instant::now();
-                let authenticated = super::finalization::authenticate_probe_gates_with_dependencies(
-                    &node.plan,
+                jobs.push(GateJob {
+                    digest: digest.to_owned(),
+                    package: format!(
+                        "{}@{}",
+                        node.identity.package_name, node.identity.package_version
+                    ),
+                    node,
                     node_probes,
-                    pin,
-                    &dependencies,
-                );
-                timing.gate_runs += 1;
-                timing.gate_sessions += node
+                    gating_key,
+                    dependencies: graph.transitive_dependency_plans(node)?,
+                });
+            }
+        }
+        let gate_started = std::time::Instant::now();
+        timing.gate_workers = super::parallel::workers_for(jobs.len());
+        let outcomes = super::parallel::run_each(&jobs, timing.gate_workers, |job| {
+            super::finalization::authenticate_probe_gates_with_dependencies(
+                &job.node.plan,
+                job.node_probes,
+                pin,
+                &job.dependencies,
+            )
+        });
+        timing.gate_runs = jobs.len();
+        timing.gate_sessions = jobs
+            .iter()
+            .map(|job| {
+                job.node
                     .plan
                     .probe_gate_schedule()
-                    .map_or(0, |schedule| schedule.gates().len());
-                timing.gate_ns += elapsed_ns(gate_started);
-                match authenticated {
-                    Ok(gates) => {
-                        gates_by_node.insert(digest.to_owned(), (gating_key, gates));
+                    .map_or(0, |schedule| schedule.gates().len())
+            })
+            .sum();
+        timing.gate_ns = elapsed_ns(gate_started);
+        for (job, authenticated) in jobs.into_iter().zip(outcomes) {
+            let GateJob {
+                digest,
+                package,
+                node,
+                gating_key,
+                ..
+            } = job;
+            let digest = digest.as_str();
+            match authenticated {
+                Ok(gates) => {
+                    gates_by_node.insert(digest.to_owned(), (gating_key, gates));
+                }
+                Err(source) => {
+                    if let Some(record) = super::incomplete_gate_withholding(&node.plan, &source) {
+                        withdrawals.push((digest.to_owned(), record));
+                        continue;
                     }
-                    Err(source) => {
-                        if let Some(record) =
-                            super::incomplete_gate_withholding(&node.plan, &source)
-                        {
-                            withdrawals.push((digest.to_owned(), record));
+                    // A synthesized veto the pinned interpreter cannot run
+                    // for this artifact case -- an export condition it
+                    // cannot be given (`@tanstack/custom-condition`), or
+                    // one under which it would load a different file than
+                    // the witness read (`solid` selecting `dist/solid.js`
+                    // where Node selects `dist/server.js`). The hand corpus
+                    // named nothing for these candidates and the checker's
+                    // own veto cannot be executed, so they are withheld
+                    // with that reason and the node keeps the hand corpus.
+                    // A hand recipe that hits the same binding refuses as
+                    // it always did.
+                    let cannot_run = matches!(
+                        &source,
+                        super::Policy2FinalizationError::ProbeHarness(
+                            super::probe_harness::ProbeHarnessError::Configuration(_)
+                                | super::probe_harness::ProbeHarnessError::ConditionMismatch(_)
+                        )
+                    );
+                    if cannot_run && synthesized.contains_key(digest) {
+                        let served = graphs
+                            .iter()
+                            .find_map(|original| original.node(digest))
+                            .map(|original| {
+                                original.plan.recipe_gated_with(
+                                    base_corpus,
+                                    already_withheld.get(digest).map_or(&[], Vec::as_slice),
+                                )
+                            })
+                            .transpose()
+                            .map_err(|gating| {
+                                PublishedGraphCertificationError::RecipeGatingAtNode {
+                                    node: digest.to_owned(),
+                                    package: package.clone(),
+                                    source: Box::new(gating),
+                                }
+                            })?
+                            .map(|gated| gated.into_parts().1)
+                            .unwrap_or_default();
+                        let schedule = node.plan.probe_gate_schedule().ok();
+                        let records = served
+                        .into_iter()
+                        .filter(|record| record.reason == super::WITHHELD_CLOSURE_NO_RECIPE)
+                        .map(|record| {
+                            let gate_id = schedule
+                                .as_ref()
+                                .and_then(|schedule| {
+                                    schedule.gates().iter().find(|gate| {
+                                        gate.semantic_claim_id() == record.semantic_claim_id
+                                    })
+                                })
+                                .map_or_else(
+                                    || "unscheduled".to_owned(),
+                                    |gate| gate.id().to_owned(),
+                                );
+                            (
+                                digest.to_owned(),
+                                super::WithheldClosure {
+                                    reason: format!(
+                                        "{}{gate_id} (synthesized veto cannot run for this artifact case: {source})",
+                                        super::WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX
+                                    ),
+                                    ..record
+                                },
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                        if !records.is_empty() {
+                            withdrawals.extend(records);
+                            dropped_corpora.insert(digest.to_owned());
                             continue;
                         }
-                        // A synthesized veto the pinned interpreter cannot run
-                        // for this artifact case -- an export condition it
-                        // cannot be given (`@tanstack/custom-condition`), or
-                        // one under which it would load a different file than
-                        // the witness read (`solid` selecting `dist/solid.js`
-                        // where Node selects `dist/server.js`). The hand corpus
-                        // named nothing for these candidates and the checker's
-                        // own veto cannot be executed, so they are withheld
-                        // with that reason and the node keeps the hand corpus.
-                        // A hand recipe that hits the same binding refuses as
-                        // it always did.
-                        let cannot_run = matches!(
-                            &source,
-                            super::Policy2FinalizationError::ProbeHarness(
-                                super::probe_harness::ProbeHarnessError::Configuration(_)
-                                    | super::probe_harness::ProbeHarnessError::ConditionMismatch(_)
-                            )
-                        );
-                        if cannot_run && synthesized.contains_key(digest) {
-                            let served = graphs
-                                .iter()
-                                .find_map(|original| original.node(digest))
-                                .map(|original| {
-                                    original.plan.recipe_gated_with(
-                                        base_corpus,
-                                        already_withheld.get(digest).map_or(&[], Vec::as_slice),
-                                    )
-                                })
-                                .transpose()
-                                .map_err(|gating| {
-                                    PublishedGraphCertificationError::RecipeGatingAtNode {
-                                        node: digest.to_owned(),
-                                        package: package.clone(),
-                                        source: Box::new(gating),
-                                    }
-                                })?
-                                .map(|gated| gated.into_parts().1)
-                                .unwrap_or_default();
-                            let schedule = node.plan.probe_gate_schedule().ok();
-                            let records = served
-                                .into_iter()
-                                .filter(|record| record.reason == super::WITHHELD_CLOSURE_NO_RECIPE)
-                                .map(|record| {
-                                    let gate_id = schedule
-                                        .as_ref()
-                                        .and_then(|schedule| {
-                                            schedule.gates().iter().find(|gate| {
-                                                gate.semantic_claim_id() == record.semantic_claim_id
-                                            })
-                                        })
-                                        .map_or_else(
-                                            || "unscheduled".to_owned(),
-                                            |gate| gate.id().to_owned(),
-                                        );
-                                    (
-                                        digest.to_owned(),
-                                        super::WithheldClosure {
-                                            reason: format!(
-                                                "{}{gate_id} (synthesized veto cannot run for this artifact case: {source})",
-                                                super::WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX
-                                            ),
-                                            ..record
-                                        },
-                                    )
-                                })
-                                .collect::<Vec<_>>();
-                            if !records.is_empty() {
-                                withdrawals.extend(records);
-                                dropped_corpora.insert(digest.to_owned());
-                                continue;
-                            }
-                        }
-                        return Err(PublishedGraphCertificationError::FinalizationAtNode {
-                            node: digest.to_owned(),
-                            package,
-                            source,
-                        });
                     }
+                    return Err(PublishedGraphCertificationError::FinalizationAtNode {
+                        node: digest.to_owned(),
+                        package,
+                        source,
+                    });
                 }
             }
         }
@@ -1205,6 +1229,18 @@ fn certify_graphs_with_recipe_gating(
     Err(PublishedGraphCertificationError::WithholdingDidNotConverge { passes })
 }
 
+/// One node's probe-gate batch to run in the gate pre-pass of
+/// [`certify_graphs_with_recipe_gating`]: everything the run reads, resolved
+/// before any batch starts so the batches share no lookups.
+struct GateJob<'a> {
+    digest: String,
+    package: String,
+    node: &'a PlannedGraphNode,
+    node_probes: Option<&'a super::ProbeHarnessConfiguration>,
+    gating_key: String,
+    dependencies: Vec<&'a CertificationPlan>,
+}
+
 /// What one pass of [`certify_graphs_with_recipe_gating`] cost and moved,
 /// reported under `SOLID_CHECKER_TIMINGS` so a slow graph row is attributable
 /// to acquisition, synthesis, or gate launches rather than guessed at.
@@ -1218,6 +1254,7 @@ struct GraphGatingPassTiming {
     synthesis_ns: u64,
     gate_runs: usize,
     gate_sessions: usize,
+    gate_workers: usize,
     gate_ns: u64,
     withdrawn: usize,
 }
@@ -1239,6 +1276,7 @@ impl GraphGatingPassTiming {
                 "synthesisNs": self.synthesis_ns,
                 "gateRuns": self.gate_runs,
                 "gateSessions": self.gate_sessions,
+                "gateWorkers": self.gate_workers,
                 "gateNs": self.gate_ns,
                 "withdrawn": self.withdrawn,
                 "passNs": elapsed_ns(pass_started),

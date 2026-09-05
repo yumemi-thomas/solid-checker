@@ -619,10 +619,20 @@ struct WireIsolation {
     rename_all_fields = "camelCase"
 )]
 enum WireRunOutcome {
-    Completed { events: Vec<WireEvent> },
-    Error { details: String },
+    Completed {
+        events: Vec<WireEvent>,
+    },
+    Error {
+        details: String,
+        /// The worker's bounded one-line summary of what was thrown. Absent
+        /// from a frame an older harness wrote; never part of evidence.
+        #[serde(default)]
+        summary: Option<String>,
+    },
     Timeout,
-    Refused { reason: String },
+    Refused {
+        reason: String,
+    },
 }
 
 #[derive(Deserialize)]
@@ -861,8 +871,9 @@ fn probe_run(run: WireRun) -> Result<ProbeRun, RuntimeProbeWireError> {
                     .map(probe_event)
                     .collect::<Result<Vec<_>, _>>()?,
             },
-            WireRunOutcome::Error { details } => ProbeRunOutcome::Error {
+            WireRunOutcome::Error { details, summary } => ProbeRunOutcome::Error {
                 details: parse_digest(&details, "probe error details")?,
+                summary,
             },
             WireRunOutcome::Timeout => ProbeRunOutcome::Timeout,
             WireRunOutcome::Refused { reason } => ProbeRunOutcome::Refused { reason },
@@ -1246,5 +1257,29 @@ mod tests {
         );
         assert!(evaluation["contradictions"].as_array().unwrap().is_empty());
         assert_eq!(evaluation["transcripts"].as_array().unwrap().len(), 1);
+
+        // An error outcome decodes with or without the worker's one-line
+        // summary: a frame an older harness wrote has none, and the summary
+        // reaches the evaluation's account of the incomplete verdict but not
+        // the observation, which keeps only the digest.
+        for summary in [
+            None,
+            Some(serde_json::json!("ReferenceError: document is not defined")),
+        ] {
+            let mut errored = runs.clone();
+            let outcome = &mut errored["runs"][0]["outcome"];
+            *outcome = serde_json::json!({"kind": "error", "details": digest('7')});
+            if let Some(summary) = &summary {
+                outcome["summary"] = summary.clone();
+            }
+            let evaluation =
+                evaluate_runtime_probe_runs(&planned, &serde_json::to_vec(&errored).unwrap())
+                    .unwrap();
+            let evaluation: serde_json::Value = serde_json::from_slice(&evaluation).unwrap();
+            let observation = &evaluation["claims"][0]["observations"][0]["outcome"];
+            assert_eq!(observation["kind"], "error");
+            assert_eq!(observation["details"], serde_json::json!(digest('7')));
+            assert!(observation.get("summary").is_none());
+        }
     }
 }
