@@ -1,5 +1,35 @@
 # Precision backlog
 
+## An accessor reached through a parameter is the caller's code: three more census closures (2026-09-05)
+
+ADR 0034 extends the census's `parameter-rooted` principle from calls to read
+accessors. The producer (handshake protocol 18) states the parameter a
+`get-accessor` or `property-access-unknown-accessor` form's receiver chain
+roots at — only for a plain, uninitialized, non-rest parameter written nowhere
+in its file, in read position, in a declaration mentioning neither `arguments`
+nor `eval` — and states the receiver of a `.call`/`.apply` on a default-library
+`Function.prototype` member. The verifier dispositions such a form
+`parameter-rooted-accessor` instead of refusing, and decides
+`Object.prototype.toString.call(value)` through a reviewed this-protocol table
+whose only row today is that member (`Get(this, @@toStringTag)`). Setters,
+writes, iteration, coercion, `instanceof`, nested callables' parameters,
+aliases, written parameters and host globals stay refused.
+
+The generator's walk now proposes the direct-parameter member callee it used to
+decline to match the census: 29 `parameter-rooted` declines and their 15
+dependent `refusing-callee-fixpoint` declines leave the corpus, and the only
+other snapshot movement is the added `creates` closure label on those exports.
+
+Measured: Kobalte 0.9.2 `isString` and both `isPointInPolygon` cases pass the
+census and complete the import-free controlled profile — **3 of the 17 native
+refusals**, zero contradictions, 26 of the original 40 TypeScript candidates now
+complete a controlled profile. `scrollIntoView` and `scrollIntoViewport` still
+refuse on the accessor form of the parameter `relativeOffset` reassigns; the
+flow-sensitive extension that would admit them is named in the ADR and not
+taken. Fourteen refusals remain, twelve of them host-realm. Ordinary
+`exportsProven` stays 0. See the dated
+[implementation report](2026-09-05-parameter-rooted-accessors.md).
+
 ## Controlled browser execution admits the three census-complete browser candidates (2026-09-05)
 
 ADR 0033 adds `chromium-headless-shell-cdp-pipe-esm-v1`. The lead took the

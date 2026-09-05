@@ -2,7 +2,7 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:e337b3e23136e316a4cb437786f2080927bed5d6f28f46502a3879b1465c7313",
+  "semanticDigest": "sha256:60743af5c5177bafd83658c8bc7bafeb901b66d065cf07bd4aabd2c2dc1cfe3c",
   "closureCandidates": [
     {
       "claimId": "claim:v1:sha256:00ed69a860c6b3dc24b9ca16a98a62b99099e49455f96308cba9333bbeea0cbc",
@@ -894,6 +894,25 @@
         "path": {
           "kind": "call",
           "domain": "returns"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:c6fbda992fced76d499abdf1dedb0823e92b3f6cb2eaa2ef58c1dd86223e3a36",
+      "artifact": {
+        "entrypoint": "./called",
+        "runtimePath": "./called.js",
+        "runtimeDigest": "sha256:18d2d599c4ecc150a9655c385ef90b306f47b721a98f25ccc224ee3c5c7883c3",
+        "declarationsPath": "./called.d.ts",
+        "declarationsDigest": "sha256:9c69d63fb8fb4f42ccaaf6a519282448a3981835be1a51caca10e3a4ec267125",
+        "closureDigest": "sha256:e350deb6ab3d129682645fac288f2148e77777c20345b2bd1082a34acd30f5db"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:f0f5bfc7f7ae8a08bb6f4aac3939d4e9ad77d952958442eed685ea4a413f78ef",
+        "export": "Direct",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
         }
       }
     },
@@ -3729,25 +3748,6 @@
         "path": {
           "kind": "call",
           "domain": "disposals"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:c6fbda992fced76d499abdf1dedb0823e92b3f6cb2eaa2ef58c1dd86223e3a36",
-      "artifact": {
-        "entrypoint": "./called",
-        "runtimePath": "./called.js",
-        "runtimeDigest": "sha256:18d2d599c4ecc150a9655c385ef90b306f47b721a98f25ccc224ee3c5c7883c3",
-        "declarationsPath": "./called.d.ts",
-        "declarationsDigest": "sha256:9c69d63fb8fb4f42ccaaf6a519282448a3981835be1a51caca10e3a4ec267125",
-        "closureDigest": "sha256:e350deb6ab3d129682645fac288f2148e77777c20345b2bd1082a34acd30f5db"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:f0f5bfc7f7ae8a08bb6f4aac3939d4e9ad77d952958442eed685ea4a413f78ef",
-        "export": "Direct",
-        "path": {
-          "kind": "call",
-          "domain": "creates"
         }
       }
     },

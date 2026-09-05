@@ -41,35 +41,29 @@ appended columns.
 | `.` | `memberPropertyUnresolved` | `member-property-unresolved` | `publish` |
 | `.` | `memberReceiverUnresolved` | `member-receiver-unresolved` | `method` |
 | `.` | `computedMember` | `computed-member` | `handlers` (the receiver) |
-| `.` | `parameterRooted` | `parameter-rooted` | `read` |
 | `.` | `parameterAliasRooted` | `parameter-rooted` | `read` |
 | `.` | `expressionCallee` | `expression-callee` | `function-expression` |
 | `.` | `otherSyntax` | `other` | `await-expression` |
 
-## Why `parameterRooted` still declines, though the census has that disposition
+## Why `parameterRooted` proposes since ADR 0034, and `parameterAliasRooted` still declines
 
-The census's `parameter-rooted` disposition would decide this exact *call*
-(`source.read()` gives the producer a `calleeParameter` of parameter 0, path
-`["read"]`), which made this shape look like the generator being stricter than
-the certifier it feeds — 384 blocked consumer exports on the measured corpus.
-It is not, and aligning the walk here would have been a regression:
-**the same property access is an uncensused invoking form**,
-`property-access-unknown-accessor`, recorded by the producer exactly when the
-compiler resolves no symbol for the property
-(`apps/solid-typefacts/internal/typefacts/tsgo/uncensused_invoking_forms.go`,
-`accessorFormLocked`) — which is the same condition that brings the callee to
-this walk's unresolved branch. The census refuses every uncensused form at the
-`MayExecute` floor, so an export whose callee reads an unresolved property
-cannot close `creates` at all: a `.d.ts` `read(): unknown` may perfectly well
-describe a `.js` getter, and absence of a symbol is not evidence of a plain data
-property. Pinned from the other side by
-`../implementation-census-creates`'s `memberParameterRooted`, which the census
-refuses on that form.
+`parameterRooted` (`source.read()` on the export's own parameter) is the second
+control beside `clean`: it declines nothing. Until ADR 0034 it declined as
+`parameter-rooted`, because the same property access is an uncensused invoking
+form (`property-access-unknown-accessor`) the census refused at the
+`MayExecute` floor, so a walk that proposed it would have planned a candidate
+the census refused. The census now dispositions that form
+`parameter-rooted-accessor` when the producer roots its subject at a plain,
+unwritten parameter of the frame — the caller's object, the caller's code — so
+the walk proposes exactly that shape: a direct, un-aliased parameter of the
+outermost function containing the call.
 
-So all three of `parameterRooted`, `parameterAliasRooted` (an alias the
-producer's tracer does not follow) and `computedMember` keep declining, and the
-blocker the `parameter-rooted` shape names is producer-side, not a missing
-disposition here.
+`parameterAliasRooted` (one binding alias away) keeps declining under the same
+`parameter-rooted` shape name, as would a nested callable's own parameter: the
+producer roots neither subject, the census refuses both, and a walk that
+proposed them would turn a certified row into a refused one. Pinned from the
+other side by `../implementation-census-creates`, where `memberParameterRooted`
+certifies and `nestedCallableParameterRead` refuses.
 
 Nothing about the shapes is pinned by unit test alone. What the unit tests in
 `creates_walk.rs` do cover, and this fixture cannot, is the shape *vocabulary*

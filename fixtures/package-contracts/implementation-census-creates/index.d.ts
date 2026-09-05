@@ -17,8 +17,16 @@ export declare function labelledBreak(el: unknown): void;
 export declare function stdlibRefInvoker(items: Iterable<unknown>): void;
 export declare function reflectApply(args: unknown[]): unknown;
 export declare function reassignedHelper(el: unknown): unknown;
-// The two exports that pin why the generator's walk keeps declining an
-// unresolved member callee and an immediately-invoked function: this census
-// refuses both.
+// ADR 0034: a read accessor rooted at an unwritten parameter certifies; the
+// exports after it pin the boundary of that disposition, one premise each.
 export declare function memberParameterRooted(source: { read(): unknown }): unknown;
+export declare function toStringTagViaCall(value: unknown): boolean;
+export declare function writtenBeforeRead(source: { value: unknown }): unknown;
+export declare function writtenAfterRead(source: { value: unknown }): unknown;
+export declare function moduleReceiverRead(): unknown;
+export declare function nestedCallableParameterRead(items: Array<{ value: unknown }>): unknown[];
+export declare function callNonLibraryReceiver(value: unknown): unknown;
+export declare function callLibraryOutsideTable(value: unknown): unknown;
+export declare function setterOnParameter(source: { value: unknown }): void;
+// An immediately-invoked function expression: this census refuses it.
 export declare function iife(value: number): number;

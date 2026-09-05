@@ -18,24 +18,10 @@
       "kind": "unresolved-callee",
       "package": "",
       "callee": "",
-      "location": "<package-root>/index.js:11158:11197",
+      "location": "<package-root>/index.js:13283:13322",
       "declaration": "",
       "shape": "expression-callee",
       "spelling": "function-expression"
-    },
-    {
-      "entrypoint": ".",
-      "conditions": [],
-      "stage": "closure-proposal",
-      "export": "memberParameterRooted",
-      "domain": "creates",
-      "kind": "unresolved-callee",
-      "package": "",
-      "callee": "",
-      "location": "<package-root>/index.js:10680:10693",
-      "declaration": "",
-      "shape": "parameter-rooted",
-      "spelling": "read"
     },
     {
       "entrypoint": ".",

@@ -264,25 +264,83 @@ export function reassignedHelper(el) {
   return helper(el);
 }
 
-// The two exports below are why the generator's `creates` walk does **not**
-// align its unresolved-member declines with this census, though the corpus
-// shape ranking made it look as if it could. Each is a shape the ranking called
-// decidable or spurious, and each is refused here — so a walk that proposed
-// them would plan a candidate this census refuses at witness acquisition,
-// turning a certified row into a refused one.
-
-// A member of *this export's own parameter*: the producer does state
-// `calleeParameter` (parameter 0, path `["read"]`), so the `parameter-rooted`
-// disposition would decide this call. The export still refuses, and on a
-// different premise — reading `.read` off a value whose type is unknown is an
-// **uncensused invoking form** (`property-access-unknown-accessor`), recorded
-// exactly when the compiler resolves no symbol for the property, which is the
-// same condition that makes the generator's walk decline the callee. A `.d.ts`
-// `read(): unknown` may perfectly well describe a `.js` getter, so absence of a
-// symbol is not evidence of a plain data property. This is the pin that keeps
-// the generator's walk from proposing it.
+// A member of *this export's own parameter*. The call is `parameter-rooted`
+// (the producer states `calleeParameter`, parameter 0, path `["read"]`), and
+// since ADR 0034 the read of `.read` off a value whose type is unknown — an
+// `uncensused invoking form`, `property-access-unknown-accessor` — is
+// dispositioned `parameter-rooted-accessor` too: the producer states that its
+// subject is rooted at parameter 0, a plain, unwritten binding of this very
+// declaration, so whatever getter or trap that read reaches sits on an object
+// the caller handed over. The export **certifies**; the generator's walk now
+// proposes the direct-parameter member callee to match. The exports that
+// follow pin the boundary of that disposition, one premise each.
 export function memberParameterRooted(source) {
   return source.read();
+}
+
+// ADR 0034's this-protocol table: `Object.prototype.toString` reaches user code
+// only through `Get(this, @@toStringTag)`, and `value` is an unwritten parameter,
+// so the by-reference owner rule is decided before it refuses. **Certifies.**
+export function toStringTagViaCall(value) {
+  return Object.prototype.toString.call(value) === "[object String]";
+}
+
+// A parameter written before the read: the object read from is not the one the
+// caller handed over. The producer states no subject parameter; **refuses**.
+export function writtenBeforeRead(source) {
+  source = registryObject;
+  return source.value;
+}
+
+// A parameter written *after* the read. The disposition is deliberately not
+// flow-sensitive — an unwritten binding is the premise ADR 0029 reviewed — so
+// this **refuses** too, and says why the `scrollIntoView` pair still does.
+export function writtenAfterRead(source) {
+  const seen = source.value;
+  source = registryObject;
+  return seen;
+}
+
+// A read on a module-level value whose type the compiler does not know: the
+// member is an uncensused form with no parameter root. **Refuses.** (A module
+// object literal's own data property would resolve and record no form at all;
+// the `any` cast is what makes this the accessor question rather than a bound
+// data property.)
+export function moduleReceiverRead() {
+  return untypedRegistry.value;
+}
+
+// A read through a *nested callable's own* parameter. `items.map` is the
+// export's parameter and its read is rooted; `item.value` is the arrow's
+// parameter, which is the invoker's value, not this invocation's. **Refuses.**
+export function nestedCallableParameterRead(items) {
+  return items.map((item) => item.value);
+}
+
+// `.call` on a receiver that is not a default-library member: the by-reference
+// owner rule stands. **Refuses.**
+export function callNonLibraryReceiver(value) {
+  return identity.call(value);
+}
+
+// `.call` on a default-library receiver outside the reviewed this-protocol
+// table: `Array.prototype.slice` may read length and indices of its `this`, a
+// reach nobody reviewed. **Refuses.**
+export function callLibraryOutsideTable(value) {
+  return Array.prototype.slice.call(value);
+}
+
+// An accessor in write position on the parameter. Writes into a caller's object
+// are a `writes`-domain question ADR 0034 does not open. **Refuses.**
+export function setterOnParameter(source) {
+  source.value = 1;
+}
+
+const registryObject = { value: 1 };
+const untypedRegistry = /** @type {any} */ (registryObject);
+
+function identity() {
+  return this;
 }
 
 // An immediately-invoked function expression. Its body is lexically inside this

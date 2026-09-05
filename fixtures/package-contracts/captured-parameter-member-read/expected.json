@@ -13,9 +13,9 @@
             "sha256": "97b4406bc42572fbfdc2d970b8511033be5b023255541df1fc8b97b96390a85f"
           },
           "exports": {
-            "captured": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "direct": "summary-2c81130da361d547ba1b0ebe17074e052bbf732f1784c81ac109e860fbc640c8",
-            "mixed": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            "captured": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "direct": "summary-71f3db3a89cc9c1014a1603931a379b82c1c4b8170164f49082284fcc79208d6",
+            "mixed": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
           },
           "resolution": {
             "runtimeBranch": "/exports/./import",
@@ -39,8 +39,12 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-2c81130da361d547ba1b0ebe17074e052bbf732f1784c81ac109e860fbc640c8": {
+    "summary-71f3db3a89cc9c1014a1603931a379b82c1c4b8170164f49082284fcc79208d6": {
       "call": {
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -70,14 +74,25 @@
             }
           }
         ],
+        "proposedClosures": [
+          "creates"
+        ],
         "reads": [
           "read-0"
         ]
       },
       "shape": "callable"
     },
-    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
-      "call": {},
+    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
+      "call": {
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "creates"
+        ]
+      },
       "shape": "callable"
     }
   }

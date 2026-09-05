@@ -2,7 +2,7 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:f4a4ac63c142513de3828a355051db90aa240c64b72a57c7f26d668aaf923e80",
+  "semanticDigest": "sha256:f2f706fed47a50cf2e5f6f7a35d615be51821d50a2c214547529cef80a35561a",
   "closureCandidates": [
     {
       "claimId": "claim:v1:sha256:1cfb8552693bfc3869db65cab9beeb3e5d8ce555f6dcb759f2d99a0a42df32bd",
@@ -77,6 +77,25 @@
         "path": {
           "kind": "call",
           "domain": "reads"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:72ae9b0a4366b9d1928c66718e8a44a5cd26b14b3a2eddf51f3a57c5a867025a",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.js",
+        "runtimeDigest": "sha256:2c873f46222727cf2b33c764f5f72e510760fd21d682872e9fb97ebdb025e4c3",
+        "declarationsPath": "./index.d.ts",
+        "declarationsDigest": "sha256:5a28fbaf3918ce18a810515ba7dbd5ecc9b22f00b4d05553c6cabb3fc82b127b",
+        "closureDigest": "sha256:e7e17eb409c1c89027195f84bdddb4e3250c5925f7a5ac1ded76b0f3ca346f1f"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:d8b9fb60d733e5d87f77bc7da5513038329005fa3ec598174635c8c731f54dad",
+        "export": "Escaping",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
         }
       }
     },
@@ -347,25 +366,6 @@
         "path": {
           "kind": "call",
           "domain": "cleanups"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:72ae9b0a4366b9d1928c66718e8a44a5cd26b14b3a2eddf51f3a57c5a867025a",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.js",
-        "runtimeDigest": "sha256:2c873f46222727cf2b33c764f5f72e510760fd21d682872e9fb97ebdb025e4c3",
-        "declarationsPath": "./index.d.ts",
-        "declarationsDigest": "sha256:5a28fbaf3918ce18a810515ba7dbd5ecc9b22f00b4d05553c6cabb3fc82b127b",
-        "closureDigest": "sha256:e7e17eb409c1c89027195f84bdddb4e3250c5925f7a5ac1ded76b0f3ca346f1f"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:d8b9fb60d733e5d87f77bc7da5513038329005fa3ec598174635c8c731f54dad",
-        "export": "Escaping",
-        "path": {
-          "kind": "call",
-          "domain": "creates"
         }
       }
     },

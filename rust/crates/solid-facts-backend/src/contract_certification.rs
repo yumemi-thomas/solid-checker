@@ -10668,25 +10668,33 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 18] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 26] = [
+        "callLibraryOutsideTable",
+        "callNonLibraryReceiver",
         "cycle",
         "deep",
         "iife",
         "labelledBreak",
         "loopCall",
         "memberParameterRooted",
+        "moduleReceiverRead",
+        "nestedCallableParameterRead",
         "noRecipe",
         "plain",
         "reassignedHelper",
         "reflectApply",
+        "setterOnParameter",
         "spreadArgs",
         "spreadUntyped",
         "stdlibRefInvoker",
         "switchBreak",
         "taggedTemplate",
+        "toStringTagViaCall",
         "unresolved",
         "viaHelperChain",
         "whileBreak",
+        "writtenAfterRead",
+        "writtenBeforeRead",
     ];
 
     /// The census fixture as one published artifact, proposing `creates: []`
@@ -11313,21 +11321,30 @@ export const value = phantom;
     #[test]
     fn the_generated_census_fixture_carries_every_creates_candidate_into_planning() {
         let proposing = [
+            "callLibraryOutsideTable",
+            "callNonLibraryReceiver",
             "cycle",
             "deep",
             "labelledBreak",
             "loopCall",
+            "memberParameterRooted",
+            "moduleReceiverRead",
+            "nestedCallableParameterRead",
             "noRecipe",
             "plain",
             "reassignedHelper",
             "reflectApply",
+            "setterOnParameter",
             "spreadArgs",
             "spreadUntyped",
             "stdlibRefInvoker",
             "switchBreak",
             "taggedTemplate",
+            "toStringTagViaCall",
             "viaHelperChain",
             "whileBreak",
+            "writtenAfterRead",
+            "writtenBeforeRead",
         ];
         let plan = census_generated_fixture_plan();
         let creates = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates));
@@ -11438,20 +11455,29 @@ export const value = phantom;
         assert_eq!(
             withheld,
             [
+                "callLibraryOutsideTable",
+                "callNonLibraryReceiver",
                 "cycle",
                 "deep",
                 "labelledBreak",
                 "loopCall",
+                "memberParameterRooted",
+                "moduleReceiverRead",
+                "nestedCallableParameterRead",
                 "noRecipe",
                 "reassignedHelper",
                 "reflectApply",
+                "setterOnParameter",
                 "spreadArgs",
                 "spreadUntyped",
                 "stdlibRefInvoker",
                 "switchBreak",
                 "taggedTemplate",
+                "toStringTagViaCall",
                 "viaHelperChain",
                 "whileBreak",
+                "writtenAfterRead",
+                "writtenBeforeRead",
             ],
             "every sibling candidate is withheld for want of a recipe, by name"
         );
@@ -11917,33 +11943,100 @@ export const value = phantom;
         );
     }
 
-    /// (n) `memberParameterRooted`: **why the generator's walk does not align
-    /// its `parameter-rooted` declines with this census.**
-    ///
-    /// The corpus shape ranking measured 384 blocked consumer exports on a
-    /// callee rooted at a parameter and read that as the generator being
-    /// stricter than the certifier it feeds: the producer does state
-    /// `calleeParameter` for `source.read()`, so the `parameter-rooted`
-    /// disposition decides that one call. The export refuses anyway, on the
-    /// premise before the dispositions — reading `.read` off a value whose type
-    /// is unknown is an **uncensused invoking form**
-    /// (`property-access-unknown-accessor`, `uncensused_invoking_forms.go`'s
-    /// `accessorFormLocked`), recorded exactly when the compiler resolves no
-    /// symbol for the property, which is the same condition that brings the
-    /// callee to the walk's unresolved branch.
-    ///
-    /// So the two sides agree, and this test is what keeps them agreeing: a
-    /// walk that excused such a callee would propose a candidate refused here,
-    /// at witness acquisition, and a row that certifies today would refuse.
+    /// (n) `memberParameterRooted` (ADR 0034): the call is `parameter-rooted`
+    /// and the read of `.read` off the parameter — an uncensused
+    /// `property-access-unknown-accessor` form — is `parameter-rooted-accessor`,
+    /// because the producer roots its subject at parameter 0, a plain, unwritten
+    /// binding of this very declaration. Both are the caller's code; the export
+    /// **certifies**, and the generator's walk proposes the same shape so the two
+    /// sides keep agreeing.
     #[test]
-    fn the_probe_gate_tracer_census_refuses_a_parameter_rooted_member_callee() {
-        assert_census_refuses(
-            "memberParameterRooted",
-            &[
-                "uncensused invoking form: property-access-unknown-accessor",
-                "PropertyAccessExpression",
-            ],
+    fn the_probe_gate_tracer_census_certifies_a_parameter_rooted_member_callee() {
+        let Some((plan, outcome)) =
+            census_certify("memberParameterRooted", Some("member-parameter-rooted.mjs"))
+        else {
+            return;
+        };
+        let finalized = outcome.expect("a read accessor rooted at the parameter must certify");
+        assert!(finalized.withheld_closures().is_empty());
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan)
         );
+        assert!(creates_is_closed_in(
+            finalized.canonical_main(),
+            "memberParameterRooted"
+        ));
+    }
+
+    /// (n′) `toStringTagViaCall` (ADR 0034): `Object.prototype.toString.call(value)`
+    /// is decided by the reviewed this-protocol table before the by-reference
+    /// owner rule refuses it, because its only reach into user code is
+    /// `Get(this, @@toStringTag)` and `this` is the unwritten parameter.
+    #[test]
+    fn the_probe_gate_tracer_census_certifies_a_this_protocol_call_on_a_parameter() {
+        let Some((plan, outcome)) = census_certify("toStringTagViaCall", Some("to-string-tag.mjs"))
+        else {
+            return;
+        };
+        let finalized =
+            outcome.expect("Object.prototype.toString.call on a parameter must certify");
+        assert!(finalized.withheld_closures().is_empty());
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan)
+        );
+        assert!(creates_is_closed_in(
+            finalized.canonical_main(),
+            "toStringTagViaCall"
+        ));
+    }
+
+    /// (n″) The boundary of ADR 0034's disposition, one premise per export:
+    /// a written parameter (before or after the read), a module-level receiver,
+    /// a nested callable's own parameter, a `.call` whose receiver is not a
+    /// library member or is one outside the reviewed table, and an accessor in
+    /// write position all still refuse, and each names the form or member.
+    #[test]
+    fn the_probe_gate_tracer_census_refuses_every_accessor_outside_the_parameter_root() {
+        for (export, needles) in [
+            (
+                "writtenBeforeRead",
+                &["uncensused invoking form: property-access-unknown-accessor"][..],
+            ),
+            (
+                "writtenAfterRead",
+                &["uncensused invoking form: property-access-unknown-accessor"][..],
+            ),
+            (
+                "moduleReceiverRead",
+                &["uncensused invoking form: property-access-unknown-accessor"][..],
+            ),
+            (
+                "nestedCallableParameterRead",
+                &["uncensused invoking form: property-access-unknown-accessor"][..],
+            ),
+            (
+                "callNonLibraryReceiver",
+                &[
+                    "CallableFunction.call",
+                    "transfers control to a callable by reference",
+                ][..],
+            ),
+            (
+                "callLibraryOutsideTable",
+                &[
+                    "CallableFunction.call",
+                    "transfers control to a callable by reference",
+                ][..],
+            ),
+            (
+                "setterOnParameter",
+                &["uncensused invoking form: property-access-unknown-accessor"][..],
+            ),
+        ] {
+            assert_census_refuses(export, needles);
+        }
     }
 
     /// (o) `iife`: an immediately-invoked function expression, lexically walked

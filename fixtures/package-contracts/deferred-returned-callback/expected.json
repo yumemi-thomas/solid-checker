@@ -16,7 +16,7 @@
             "debounce": "summary-a830f7ca4514a2d4a15286680536e5caf83d74352a7fbe2e0c660df1da73a045",
             "decorated": "summary-a830f7ca4514a2d4a15286680536e5caf83d74352a7fbe2e0c660df1da73a045",
             "direct": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1",
-            "nestedThroughCallable": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "nestedThroughCallable": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "nestedThroughIdentity": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "throughIdentity": "summary-a830f7ca4514a2d4a15286680536e5caf83d74352a7fbe2e0c660df1da73a045"
           },
@@ -120,10 +120,6 @@
           "creates"
         ]
       },
-      "shape": "callable"
-    },
-    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
-      "call": {},
       "shape": "callable"
     },
     "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {

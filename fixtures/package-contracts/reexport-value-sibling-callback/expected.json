@@ -14,7 +14,7 @@
           },
           "exports": {
             "PREFIX": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
-            "subscribe": "summary-1e894f7835b78b11b2f89340a930e972546c1b597833c2f245deb58699ebad1e"
+            "subscribe": "summary-0abb0041d8b91a8b4a96d7f81bddae1de28921c28bde231c3f4b0cc5109e75e2"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -38,8 +38,12 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-1e894f7835b78b11b2f89340a930e972546c1b597833c2f245deb58699ebad1e": {
+    "summary-0abb0041d8b91a8b4a96d7f81bddae1de28921c28bde231c3f4b0cc5109e75e2": {
       "call": {
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -67,6 +71,9 @@
               "event": "call"
             }
           }
+        ],
+        "proposedClosures": [
+          "creates"
         ],
         "reads": [
           "read-0"

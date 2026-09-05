@@ -4,33 +4,41 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "a728e0bb2b8cbef81d51837c60628fdde0da52c4c7e9236872723cc3b5262717",
+            "closureSha256": "8969441726d371d0b91534fe1434fa148e7c8a44130254a9696633def844e24d",
             "path": "./index.js",
-            "sha256": "8d8242d40372877487b61b807c12cc95c194aca8edae8a4107e5841b24b1cca2"
+            "sha256": "42cb533882de1025a2c8cd8f1274867a214a416a729692fd0aae26ed0b2f1b9b"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "ea59464f27031d2c0678bce2a3010f544b7e001139ce735eaf23c86e916009a8"
+            "sha256": "6a383115a75647c96b97bcedb68be81b0bcf1378429cb8f61abefcd09c6fe09d"
           },
           "exports": {
+            "callLibraryOutsideTable": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "callNonLibraryReceiver": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "cycle": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "deep": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "iife": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "labelledBreak": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "loopCall": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "memberParameterRooted": "summary-dbf6fb3f94a549294e571240112f7733f56a4897c440709c324a03a678c472c6",
+            "memberParameterRooted": "summary-ddf5532c3690413bd5fb17a8801570de0cf52ea8396fc52149f3c37a810cb674",
+            "moduleReceiverRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "nestedCallableParameterRead": "summary-8e800eff6ddbdabfd339f5dfad278e3aa7623ae76cb8598687f1d3fbdd01821f",
             "noRecipe": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
             "plain": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
             "reassignedHelper": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "reflectApply": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "setterOnParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "spreadArgs": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "spreadUntyped": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "stdlibRefInvoker": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "switchBreak": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "taggedTemplate": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "toStringTagViaCall": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "unresolved": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "viaHelperChain": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1",
-            "whileBreak": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "whileBreak": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "writtenAfterRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "writtenBeforeRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -94,6 +102,49 @@
       },
       "shape": "callable"
     },
+    "summary-8e800eff6ddbdabfd339f5dfad278e3aa7623ae76cb8598687f1d3fbdd01821f": {
+      "call": {
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "map"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "creates"
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
     "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1": {
       "call": {
         "callbacks": [
@@ -134,8 +185,12 @@
       },
       "shape": "callable"
     },
-    "summary-dbf6fb3f94a549294e571240112f7733f56a4897c440709c324a03a678c472c6": {
+    "summary-ddf5532c3690413bd5fb17a8801570de0cf52ea8396fc52149f3c37a810cb674": {
       "call": {
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -163,6 +218,9 @@
               "event": "call"
             }
           }
+        ],
+        "proposedClosures": [
+          "creates"
         ],
         "reads": [
           "read-0"

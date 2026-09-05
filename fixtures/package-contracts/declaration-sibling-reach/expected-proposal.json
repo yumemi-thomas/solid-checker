@@ -2,8 +2,27 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:e6cc51247f785f54f667f77ee37284e483842efc264a7b314c2858a829384aa8",
+  "semanticDigest": "sha256:d6d14be268b908c238ba8df1f09165fe649f26519672bdaa1aaba353df76c949",
   "closureCandidates": [
+    {
+      "claimId": "claim:v1:sha256:65801e806f85eb64058d4c6632e8a21d9d67f9428cbb234b86e199df62a580c1",
+      "artifact": {
+        "entrypoint": "./direct",
+        "runtimePath": "./channel.js",
+        "runtimeDigest": "sha256:e9a25ba3bc2a95e5ca23c06bad054060a6ab0a9643ff9f39ee46416dc5efb240",
+        "declarationsPath": "./channel.d.ts",
+        "declarationsDigest": "sha256:66978bcd92fbc416ca78459554aa6a85b39ae3ce06e31bdd58a79db06b59f701",
+        "closureDigest": "sha256:f20ae712adc5969c87d74527eb95d67bde91cf4a8b6b9d53520790c6ad424606"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:76f43be086a835045a111e78f5588bbe0f65b496999c3db3791d6074c3553dd4",
+        "export": "channelFor",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
+        }
+      }
+    },
     {
       "claimId": "claim:v1:sha256:68a05f7bfeb937cdb752cee50b61d61f9296a0cc44aeef9336c81e6c96731a0c",
       "artifact": {
@@ -231,25 +250,6 @@
         "path": {
           "kind": "call",
           "domain": "writes"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:65801e806f85eb64058d4c6632e8a21d9d67f9428cbb234b86e199df62a580c1",
-      "artifact": {
-        "entrypoint": "./direct",
-        "runtimePath": "./channel.js",
-        "runtimeDigest": "sha256:e9a25ba3bc2a95e5ca23c06bad054060a6ab0a9643ff9f39ee46416dc5efb240",
-        "declarationsPath": "./channel.d.ts",
-        "declarationsDigest": "sha256:66978bcd92fbc416ca78459554aa6a85b39ae3ce06e31bdd58a79db06b59f701",
-        "closureDigest": "sha256:f20ae712adc5969c87d74527eb95d67bde91cf4a8b6b9d53520790c6ad424606"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:76f43be086a835045a111e78f5588bbe0f65b496999c3db3791d6074c3553dd4",
-        "export": "channelFor",
-        "path": {
-          "kind": "call",
-          "domain": "creates"
         }
       }
     },

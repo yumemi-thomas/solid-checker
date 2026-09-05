@@ -7314,10 +7314,23 @@ fn require_census_decides_closure(
 ///   passed its transcript premises, and every non-cycle edge in every frame
 ///   is still dispositioned normally. Re-entering the frame can repeat those
 ///   bodies or diverge, but cannot introduce an unenumerated `create`.
+/// * `ParameterRootedAccessor` — ADR 0034. A *read accessor* form — a
+///   `get-accessor` or a `property-access-unknown-accessor` on a property or
+///   element access — whose subject the producer states is rooted at a plain,
+///   unwritten parameter of this very declaration, or a `.call`/`.apply` of a
+///   reviewed this-protocol member ([`CENSUS_THIS_PROTOCOL_MEMBERS`]) whose
+///   `this` argument is so rooted. The code such a read can run — a getter, a
+///   Proxy trap, a `Symbol.toStringTag` getter — sits on an object the caller
+///   handed to this invocation, so it is the caller's behavior exactly as a
+///   parameter-rooted *call* is; this export's act is the read. The producer
+///   states the fact only under the premises its `subjectParameter` doc lists,
+///   and only from handshake protocol
+///   [`CENSUS_PARAMETER_ROOTED_SUBJECTS_PROTOCOL`] on.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CensusDisposition {
     Unreachable,
     ParameterRooted,
+    ParameterRootedAccessor,
     StandardLibrary,
     DialectAxiom,
     LocalRecursion,
@@ -7329,6 +7342,7 @@ impl CensusDisposition {
         match self {
             Self::Unreachable => "unreachable",
             Self::ParameterRooted => "parameter-rooted",
+            Self::ParameterRootedAccessor => "parameter-rooted-accessor",
             Self::StandardLibrary => "standard-library",
             Self::DialectAxiom => "dialect-axiom",
             Self::LocalRecursion => "local-recursion",
@@ -7364,6 +7378,14 @@ const CENSUS_UNCENSUSED_FORMS_PROTOCOL: u64 = 14;
 /// either as the admissible arm is the unsound direction, so an older producer's
 /// transcript refuses **here**, by protocol number, before any marker is read.
 const CENSUS_CONTROL_FLOW_CLASSES_PROTOCOL: u64 = 15;
+
+/// The handshake protocol at which an uncensused form and a `.call`/`.apply`
+/// row state the parameter their subject is rooted at (ADR 0034). Below it an
+/// absent `subjectParameter` is a producer with no opinion, and reading it as
+/// "not rooted" would only refuse — but reading a *present* one from a producer
+/// that never promised the premise behind it would admit; the check is here for
+/// the same reason the two constants above are.
+const CENSUS_PARAMETER_ROOTED_SUBJECTS_PROTOCOL: u64 = 18;
 
 /// One local declaration's own implementation transcript, keyed by the exact
 /// span it was demanded at.
@@ -7616,6 +7638,15 @@ fn census_creates_domain(
             typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
         )));
     }
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_PARAMETER_ROOTED_SUBJECTS_PROTOCOL {
+        return Err(refuse(format!(
+            "implementation-census premise required: the parameter-rooted subject fact arrived \
+             at handshake protocol {CENSUS_PARAMETER_ROOTED_SUBJECTS_PROTOCOL} and this build \
+             speaks {}, so a stated subject parameter would carry a premise this build never \
+             reviewed",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
     if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_CONTROL_FLOW_CLASSES_PROTOCOL {
         return Err(refuse(format!(
             "implementation-census premise required: unwithheld call rows and classified \
@@ -7741,14 +7772,23 @@ fn census_transcript_calls(
     depth: usize,
 ) -> Result<CensusStep, String> {
     // Every uncensused invoking form the floor admits refuses, by kind and
-    // location. This is the enumeration guarantee: the calls census records
+    // location — except the one shape ADR 0034 dispositions: a read accessor
+    // whose subject the producer roots at an unwritten parameter of this very
+    // declaration, which is the caller's object and the caller's code. This is
+    // otherwise the enumeration guarantee: the calls census records
     // `CallExpression` and `NewExpression` only, and a form it does not record
     // reaches a callable the walk below can say nothing about.
-    if let Some(form) = implementation
-        .uncensused_invoking_forms
-        .iter()
-        .find(|form| form.reach != Reachability::Unreachable)
-    {
+    for form in &implementation.uncensused_invoking_forms {
+        if form.reach == Reachability::Unreachable {
+            continue;
+        }
+        if census_form_is_parameter_rooted_accessor(form) {
+            run.sites.push(census_form_site(
+                form,
+                CensusDisposition::ParameterRootedAccessor,
+            ));
+            continue;
+        }
         return Err(format!(
             "creates census refuses an uncensused invoking form: {} ({}) at {}:{}..{}, reach {}",
             uncensused_invoking_form_kind_name(form.kind),
@@ -8074,12 +8114,9 @@ fn census_call_disposition(
         .as_ref()
         .filter(|declaration| declaration.standard_library)
     {
-        census_standard_library_admits(run, call, declaration)
+        let disposition = census_standard_library_admits(run, call, declaration)
             .map_err(|reason| format!("{reason}, called at {}", at()))?;
-        return Ok(Some((
-            CensusDisposition::StandardLibrary,
-            census_call_site(call, CensusDisposition::StandardLibrary),
-        )));
+        return Ok(Some((disposition, census_call_site(call, disposition))));
     }
     if let Some(terminator) = census_dialect_axiom_for_callee(
         call,
@@ -8349,6 +8386,19 @@ const CENSUS_CONTROL_TRANSFER_MEMBERS: &[&str] = &[
     "Reflect.construct",
 ];
 
+/// Default-library members whose only reach into user code is a protocol read
+/// on their `this` value, each with the ECMAScript step that names the reach
+/// (ADR 0034). A `.call`/`.apply` whose receiver resolves — by default-library
+/// symbol identity, never by spelling — to one of these is dispositioned as an
+/// invocation of that member with slot 0 as its subject; the subject then has
+/// to be parameter-rooted, or the site refuses as any by-reference transfer
+/// does. Grown by review, one row at a time; never derived from `lib.*.d.ts`.
+///
+/// | member | reach on `this` |
+/// | --- | --- |
+/// | `Object.prototype.toString` (qualified `Object.toString`) | ES2024 §20.1.3.6 step 15: `Get(O, @@toStringTag)` — one getter or trap on the subject, nothing else |
+const CENSUS_THIS_PROTOCOL_MEMBERS: &[&str] = &["Object.toString"];
+
 /// Owners every one of whose members transfers control by reference:
 /// `Function.prototype.{call,apply,bind}` under each of the interface names the
 /// default library declares them on.
@@ -8404,7 +8454,7 @@ fn census_standard_library_admits(
     run: &CensusRun<'_>,
     call: &typefacts::ImplementationCall,
     declaration: &typefacts::ResolvedDeclaration,
-) -> Result<(), String> {
+) -> Result<CensusDisposition, String> {
     let qualified: &str = if declaration.qualified_name.is_empty() {
         &declaration.name
     } else {
@@ -8416,6 +8466,32 @@ fn census_standard_library_admits(
         );
     }
     let last_segment = qualified.rsplit('.').next().unwrap_or(qualified);
+    // ADR 0034: `.call`/`.apply` of a reviewed this-protocol member on a
+    // parameter-rooted `this` is that member's invocation on the caller's own
+    // object, decided before the by-reference rule refuses the owner.
+    if matches!(last_segment, "call" | "apply")
+        && CENSUS_CONTROL_TRANSFER_OWNERS
+            .iter()
+            .any(|owner| qualified.starts_with(owner))
+        && let Some(receiver) = call.call_receiver.as_ref()
+        && receiver.standard_library
+    {
+        let receiver_name: &str = if receiver.qualified_name.is_empty() {
+            &receiver.name
+        } else {
+            &receiver.qualified_name
+        };
+        if CENSUS_THIS_PROTOCOL_MEMBERS.contains(&receiver_name) {
+            if call.this_parameter.is_some() {
+                return Ok(CensusDisposition::ParameterRootedAccessor);
+            }
+            return Err(format!(
+                "creates census refuses `{qualified}` on the this-protocol member `{receiver_name}`: \
+                 its `this` argument is not rooted at an unwritten parameter of this declaration, \
+                 so the protocol read it performs may run code this export owns"
+            ));
+        }
+    }
     if CENSUS_CONTROL_TRANSFER_MEMBERS.contains(&qualified)
         || CENSUS_CONTROL_TRANSFER_OWNERS
             .iter()
@@ -8508,7 +8584,7 @@ fn census_standard_library_admits(
             }
         ));
     }
-    Ok(())
+    Ok(CensusDisposition::StandardLibrary)
 }
 
 /// Whether the binding a local-recursion callee resolved through holds, at
@@ -8657,6 +8733,37 @@ fn census_local_declaration_identity(
 /// One call's witness line. Universal, not existential: every censused call
 /// contributes one, so a receipt records the whole census rather than the
 /// subset that happened to be interesting.
+/// Whether an uncensused form is the one shape ADR 0034 dispositions instead of
+/// refusing: a read accessor on a property or element access whose subject the
+/// producer rooted at a parameter of the transcript's own declaration. Every
+/// other kind — a setter, an iteration, a coercion, an `instanceof`, a spread,
+/// a destructuring pattern — refuses whatever the producer stated.
+fn census_form_is_parameter_rooted_accessor(form: &typefacts::UncensusedInvokingForm) -> bool {
+    use typefacts::UncensusedInvokingFormKind as Kind;
+    matches!(
+        form.kind,
+        Kind::GetAccessor | Kind::PropertyAccessUnknownAccessor
+    ) && matches!(
+        form.node_kind.as_ref(),
+        "PropertyAccessExpression" | "ElementAccessExpression"
+    ) && form.subject_parameter.is_some()
+}
+
+fn census_form_site(
+    form: &typefacts::UncensusedInvokingForm,
+    disposition: CensusDisposition,
+) -> String {
+    format!(
+        "census-form:{}:{}:{}:{}:{}:{}",
+        form.location.path,
+        form.location.start_byte,
+        form.location.end_byte,
+        uncensused_invoking_form_kind_name(form.kind),
+        reachability_name(form.reach),
+        disposition.wire_name()
+    )
+}
+
 fn census_call_site(
     call: &typefacts::ImplementationCall,
     disposition: CensusDisposition,
@@ -16781,15 +16888,52 @@ mod tests {
                         "declaration": null,
                     }),
                 ),
+                // parameter-rooted-accessor (ADR 0034): `Object.prototype
+                // .toString.call(value)` — the by-reference owner, a reviewed
+                // this-protocol receiver, and a `this` rooted at parameter 0.
+                signals_call(
+                    "call",
+                    json!({
+                        "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 220, "endByte": 250},
+                        "targetModule": "",
+                        "declaration": {
+                            "symbol": "symbol:CallableFunction.call",
+                            "name": "call",
+                            "qualifiedName": "CallableFunction.call",
+                            "kind": "MethodSignature",
+                            "sourceFile": lib,
+                            "location": {"path": lib, "startByte": 30, "endByte": 34},
+                            "standardLibrary": true,
+                        },
+                        "callReceiver": {
+                            "symbol": "symbol:Object.toString",
+                            "name": "toString",
+                            "qualifiedName": "Object.toString",
+                            "kind": "MethodSignature",
+                            "sourceFile": lib,
+                            "location": {"path": lib, "startByte": 40, "endByte": 48},
+                            "standardLibrary": true,
+                        },
+                        "thisParameter": 0,
+                    }),
+                ),
             ],
-            json!([]),
+            // parameter-rooted-accessor (ADR 0034): a read whose subject the
+            // producer rooted at parameter 0 is dispositioned, not refused.
+            json!([{
+                "kind": "property-access-unknown-accessor",
+                "nodeKind": "ElementAccessExpression",
+                "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 260, "endByte": 270},
+                "reach": "reachable",
+                "subjectParameter": 0,
+            }]),
         );
         let mut run = census_run(&certified, &roots);
         assert_eq!(
             census_transcript(&mut run, &implementation, 0),
             Ok(CensusStep::Decided)
         );
-        assert_eq!(run.calls, 4);
+        assert_eq!(run.calls, 5);
         run.sites.sort();
         assert_eq!(
             run.sites,
@@ -16797,8 +16941,214 @@ mod tests {
                 "census-call:/project/node_modules/consumer/dist/index.js:150:160:call:reachable:parameter-rooted",
                 "census-call:/project/node_modules/consumer/dist/index.js:170:190:call:reachable:standard-library",
                 "census-call:/project/node_modules/consumer/dist/index.js:200:210:call:unreachable:unreachable",
+                "census-call:/project/node_modules/consumer/dist/index.js:220:250:call:reachable:parameter-rooted-accessor",
                 "census-dialect-axiom:@solidjs/signals@2.0.0-rc.3#sha512-/yPhTf3xS1FRR4MX:createTrackedEffect:creates",
+                "census-form:/project/node_modules/consumer/dist/index.js:260:270:property-access-unknown-accessor:reachable:parameter-rooted-accessor",
             ]
+        );
+    }
+
+    /// ADR 0034's boundary, form by form and call by call: a stated subject
+    /// parameter admits only the two read-accessor kinds on a property or
+    /// element access; a `.call` admits only a reviewed this-protocol receiver
+    /// with a rooted `this`.
+    #[test]
+    fn creates_census_parameter_rooted_accessor_stops_at_its_stated_boundary() {
+        let certified = consumer_snapshot();
+        let roots = vec![consumer_root(&certified)];
+        let lib = "/toolchain/lib/lib.es5.d.ts";
+        let form = |kind: &str, node_kind: &str, subject: serde_json::Value| {
+            json!([{
+                "kind": kind,
+                "nodeKind": node_kind,
+                "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 260, "endByte": 270},
+                "reach": "reachable",
+                "subjectParameter": subject,
+            }])
+        };
+        // Admitted: both read-accessor kinds, on either access node kind.
+        for (kind, node_kind) in [
+            ("get-accessor", "PropertyAccessExpression"),
+            (
+                "property-access-unknown-accessor",
+                "PropertyAccessExpression",
+            ),
+            (
+                "property-access-unknown-accessor",
+                "ElementAccessExpression",
+            ),
+        ] {
+            assert_eq!(
+                census_transcript(
+                    &mut census_run(&certified, &roots),
+                    &census_transcript_with(vec![], form(kind, node_kind, json!(1))),
+                    0,
+                ),
+                Ok(CensusStep::Decided),
+                "{kind} on {node_kind}"
+            );
+        }
+        // Refused: a rooted subject on any other kind or node, and an unrooted
+        // read accessor.
+        for (kind, node_kind, subject) in [
+            ("set-accessor", "PropertyAccessExpression", json!(0)),
+            ("iteration-protocol", "ForOfStatement", json!(0)),
+            ("coercion", "BinaryExpression", json!(0)),
+            ("instanceof", "BinaryExpression", json!(0)),
+            (
+                "property-access-unknown-accessor",
+                "SpreadAssignment",
+                json!(0),
+            ),
+            (
+                "property-access-unknown-accessor",
+                "BindingElement",
+                json!(0),
+            ),
+            (
+                "property-access-unknown-accessor",
+                "PropertyAccessExpression",
+                serde_json::Value::Null,
+            ),
+            (
+                "get-accessor",
+                "PropertyAccessExpression",
+                serde_json::Value::Null,
+            ),
+        ] {
+            let refusal = census_transcript(
+                &mut census_run(&certified, &roots),
+                &census_transcript_with(vec![], form(kind, node_kind, subject)),
+                0,
+            )
+            .expect_err("a rooted subject on an unadmitted kind or node, or an unrooted read accessor, refuses");
+            assert!(
+                refusal.contains("refuses an uncensused invoking form"),
+                "{kind} on {node_kind}: {refusal}"
+            );
+        }
+        for (kind, node_kind, subject) in [
+            ("set-accessor", "PropertyAccessExpression", json!(0)),
+            (
+                "property-access-unknown-accessor",
+                "SpreadAssignment",
+                json!(0),
+            ),
+            (
+                "get-accessor",
+                "PropertyAccessExpression",
+                serde_json::Value::Null,
+            ),
+        ] {
+            let refusal = census_transcript(
+                &mut census_run(&certified, &roots),
+                &census_transcript_with(vec![], form(kind, node_kind, subject)),
+                0,
+            )
+            .expect_err("refuses");
+            assert!(
+                refusal.contains(&format!("uncensused invoking form: {kind}")),
+                "{refusal}"
+            );
+        }
+
+        let call_of = |receiver: serde_json::Value, this_parameter: serde_json::Value| {
+            signals_call(
+                "call",
+                json!({
+                    "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 220, "endByte": 250},
+                    "targetModule": "",
+                    "declaration": {
+                        "symbol": "symbol:CallableFunction.call",
+                        "name": "call",
+                        "qualifiedName": "CallableFunction.call",
+                        "kind": "MethodSignature",
+                        "sourceFile": lib,
+                        "location": {"path": lib, "startByte": 30, "endByte": 34},
+                        "standardLibrary": true,
+                    },
+                    "callReceiver": receiver,
+                    "thisParameter": this_parameter,
+                }),
+            )
+        };
+        let library_receiver = |qualified: &str| {
+            json!({
+                "symbol": format!("symbol:{qualified}"),
+                "name": qualified.rsplit('.').next().unwrap(),
+                "qualifiedName": qualified,
+                "kind": "MethodSignature",
+                "sourceFile": lib,
+                "location": {"path": lib, "startByte": 40, "endByte": 48},
+                "standardLibrary": true,
+            })
+        };
+        // A reviewed receiver whose `this` is not rooted refuses by name.
+        let refusal = census_transcript(
+            &mut census_run(&certified, &roots),
+            &census_transcript_with(
+                vec![call_of(
+                    library_receiver("Object.toString"),
+                    serde_json::Value::Null,
+                )],
+                json!([]),
+            ),
+            0,
+        )
+        .expect_err("an unrooted this refuses");
+        assert!(
+            refusal.contains("this-protocol member `Object.toString`")
+                && refusal.contains("not rooted at an unwritten parameter"),
+            "{refusal}"
+        );
+        // A library receiver outside the reviewed table refuses as the
+        // by-reference transfer it is, rooted `this` or not.
+        let refusal = census_transcript(
+            &mut census_run(&certified, &roots),
+            &census_transcript_with(
+                vec![call_of(library_receiver("Array.slice"), json!(0))],
+                json!([]),
+            ),
+            0,
+        )
+        .expect_err("an unreviewed receiver refuses");
+        assert!(
+            refusal.contains("transfers control to a callable by reference"),
+            "{refusal}"
+        );
+        // A receiver that is not a default-library member refuses the same way.
+        let refusal = census_transcript(
+            &mut census_run(&certified, &roots),
+            &census_transcript_with(
+                vec![call_of(
+                    json!({
+                        "symbol": "symbol:helper",
+                        "name": "helper",
+                        "kind": "FunctionDeclaration",
+                        "sourceFile": "/project/node_modules/consumer/dist/index.js",
+                        "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 5, "endByte": 11},
+                    }),
+                    json!(0),
+                )],
+                json!([]),
+            ),
+            0,
+        )
+        .expect_err("a local receiver refuses");
+        assert!(
+            refusal.contains("transfers control to a callable by reference"),
+            "{refusal}"
+        );
+        // No receiver stated at all: the old behavior, unchanged.
+        let refusal = census_transcript(
+            &mut census_run(&certified, &roots),
+            &census_transcript_with(vec![call_of(serde_json::Value::Null, json!(0))], json!([])),
+            0,
+        )
+        .expect_err("a receiverless by-reference transfer refuses");
+        assert!(
+            refusal.contains("transfers control to a callable by reference"),
+            "{refusal}"
         );
     }
 

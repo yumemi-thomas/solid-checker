@@ -122,7 +122,7 @@ A verifier-derived mandatory contradiction veto for one proposed closed claim. A
 _Avoid_: Runtime proof, passing probe, negative observation
 
 **Implementation census**:
-The proof mode that decides a closed behavioral call domain from the demanded export's own runtime implementation transcript rather than from its declaration: every transcript is complete with no control-flow marker and its declaration node (bound from the authenticated bytes) contains no jump, every invoking form the producer walked is enumerated, every call at the `MayExecute` floor is assigned exactly one **census disposition** (`unreachable`, `parameter-rooted`, `standard-library`, `dialect-axiom`, `local-recursion`), and the first premise that fails refuses the domain by name. Today it decides `creates` only.
+The proof mode that decides a closed behavioral call domain from the demanded export's own runtime implementation transcript rather than from its declaration: every transcript is complete with no control-flow marker and its declaration node (bound from the authenticated bytes) contains no jump, every invoking form the producer walked is enumerated, every call at the `MayExecute` floor is assigned exactly one **census disposition** (`unreachable`, `parameter-rooted`, `parameter-rooted-accessor`, `standard-library`, `dialect-axiom`, `local-recursion`, `local-recursion-backedge`) — the accessor disposition also covers a read accessor whose subject the producer roots at an unwritten parameter of the frame (ADR 0034) — and the first premise that fails refuses the domain by name. Today it decides `creates` only.
 _Avoid_: Call scan, callee check, behavioral census, implementation walk (that is the generator's proposal walk)
 
 **Withheld closure candidate**:

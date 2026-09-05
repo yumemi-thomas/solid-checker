@@ -47,18 +47,20 @@
 //! "What still refuses":
 //!
 //! * **A member callee rooted at a parameter** (`source.read()`) *is* the
-//!   census's `parameter-rooted` disposition as far as that one call goes — but
+//!   census's `parameter-rooted` disposition as far as that one call goes — and
 //!   the same property access is also an **uncensused invoking form** on the
 //!   producer's side, `property-access-unknown-accessor`, recorded exactly when
 //!   the compiler resolves no symbol for the property
-//!   (`uncensused_invoking_forms.go`, `accessorFormLocked`). That is the same
-//!   question this walk asks: a member callee reaches the unresolved branch
-//!   below precisely when its property resolves to no symbol. The census refuses
-//!   every uncensused form at the `MayExecute` floor, so such an export cannot
-//!   close `creates` at all — a `.d.ts` `read(): unknown` may perfectly well
-//!   describe a `.js` getter, and the producer will not read absence as a plain
-//!   data property. Pinned by
-//!   `the_probe_gate_tracer_census_refuses_a_parameter_rooted_member_callee`.
+//!   (`uncensused_invoking_forms.go`, `accessorFormLocked`). Until ADR 0034 the
+//!   census refused every such form, so this walk declined the callee to match.
+//!   The census now dispositions the form `parameter-rooted-accessor` when the
+//!   producer roots its subject at a plain, unwritten parameter of the frame
+//!   itself, so this walk **proposes** exactly that shape — a direct,
+//!   un-aliased parameter of the outermost containing function
+//!   ([`callee_roots_at_direct_frame_parameter`]) — and keeps declining the
+//!   alias, nested-parameter and computed shapes the census still refuses.
+//!   Pinned by `the_probe_gate_tracer_census_certifies_a_parameter_rooted_member_callee`
+//!   and the boundary exports beside it.
 //! * **A default-library member.** The census's `standard-library` disposition
 //!   reads [`typefacts::ResolvedDeclaration::standard_library`] on the callee's
 //!   *resolved declaration*. This walk only ever declines a callee it resolved
@@ -648,6 +650,45 @@ fn is_identifier(file: &solid_facts::FileFacts, span: Span) -> bool {
         .is_ok()
 }
 
+/// ADR 0034's alignment of this walk with the census: whether the member
+/// callee's receiver chain roots, with **no alias hop**, at a plain-identifier,
+/// uninitialized parameter of the **outermost** function whose body contains
+/// the call — the frame the census dispositions the read for. A nested
+/// callable's own parameter, an alias, a destructured or defaulted parameter,
+/// or a computed segment answers false and keeps declining, exactly as the
+/// census refuses those subjects.
+///
+/// This walk cannot see writes to the binding; a written parameter therefore
+/// proposes here and refuses in the census, which is the same direction every
+/// accessor read already takes (a read is not a call, so the walk never
+/// declined on one). It is not a certification premise: the census is.
+fn callee_roots_at_direct_frame_parameter<'a>(
+    ctx: &AnalysisContext<'a>,
+    file: &'a solid_facts::FileFacts,
+    callee: Span,
+) -> bool {
+    let peeled = file.ast.peel_ts_sugar_span(callee);
+    let Some((root, _)) = ctx.semantic_lookup.member_callee_receiver(file, peeled) else {
+        return false;
+    };
+    let Some(frame) = file
+        .ast
+        .functions_body_containing(callee)
+        .max_by_key(|function| function.body.end.saturating_sub(function.body.start))
+    else {
+        return false;
+    };
+    frame.parameters.iter().any(|parameter| {
+        parameter.shape == solid_facts::ast::BindingShape::Identifier
+            && parameter.initializer.is_none()
+            && parameter.names.len() == 1
+            && ctx
+                .semantic_lookup
+                .entity_symbol(file, parameter.names[0].span)
+                .is_some_and(|symbol| symbol == root.as_str())
+    })
+}
+
 /// Whether `root` — or a symbol it reaches through at most
 /// [`MAX_PARAMETER_ALIAS_HOPS`] binding-initializer aliases — is a parameter
 /// name of a function whose **body contains** `callee`.
@@ -990,11 +1031,17 @@ fn creates_proposal_decline<'a>(
         // from a genuinely undecidable call. A member callee is here exactly
         // when its property resolved to no symbol -- which is also when the
         // producer records the same property access as an uncensused invoking
-        // form, so the census refuses such an export rather than disposing it;
-        // see the module documentation.
-        return Some(CreatesDeclineKind::UnresolvedCallee {
-            shape: unresolved_callee_shape(ctx, file, callee, shape_facts),
-        });
+        // form. Since ADR 0034 the census dispositions that form when its
+        // subject roots *directly* at a plain parameter of the frame, so the
+        // one shape the census now decides is proposed rather than declined;
+        // every other shape still declines. See the module documentation.
+        let shape = unresolved_callee_shape(ctx, file, callee, shape_facts);
+        if matches!(shape, UnresolvedCalleeShape::ParameterRooted { .. })
+            && callee_roots_at_direct_frame_parameter(ctx, file, callee)
+        {
+            return None;
+        }
+        return Some(CreatesDeclineKind::UnresolvedCallee { shape });
     };
     if ctx
         .semantic_lookup

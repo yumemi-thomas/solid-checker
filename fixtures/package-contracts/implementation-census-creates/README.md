@@ -8,12 +8,14 @@ name for one.
 
 It is a generator-corpus fixture (`corpus.json`), so `expected.json` and
 `expected-proposal.json` pin the generator's side of the story: every function
-export **except `unresolved`, `memberParameterRooted` and `iife`** proposes
+export **except `unresolved` and `iife`** proposes
 `creates: []` — the generator's own walk
 of each implementation finds no call that a closed `creates` would contradict,
-and those three end at a callee it cannot resolve, which is never evidence of
+and those two end at a callee it cannot resolve, which is never evidence of
 harmlessness — and the proposal plan carries one `{kind: "call", domain:
-"creates"}` closure candidate per proposing export.
+"creates"}` closure candidate per proposing export. (`memberParameterRooted`
+proposes since ADR 0034 aligned the walk with the census's
+`parameter-rooted-accessor` disposition.)
 
 A proposing export's summary in `expected.json` states the closure and labels
 it: `closed: ["creates"]`, `creates: []`, `proposedClosures: ["creates"]`. That
@@ -85,12 +87,18 @@ disposition, and the first call with none refuses the domain by name:
 | `stdlibRefInvoker` | refuses: unseen callable | `Array.from(items).forEach(work)`: `forEach` invokes its slot 0 (reviewed invoker table) and `work` is a module-local function reference — neither a parameter nor a callable literal inside the transcript — so the standard-library disposition refuses the call by name |
 | `reflectApply` | refuses: by-reference member | `Reflect.apply(work, undefined, args)` transfers control to its first slot; the member refuses by qualified name whatever the slots prove |
 | `reassignedHelper` | refuses: written binding | `function helper` is reassigned at module level; the producer still resolves `helper(el)` to the declaration, and the verifier's own parse of the authenticated bytes finds the write and refuses to walk a declaration not proven to be the code that runs |
-| `memberParameterRooted` | refuses: uncensused form | `source.read()` — the shape the corpus ranking called the generator's own strictness, and the pin that says otherwise. The producer *does* state `calleeParameter` (parameter 0, path `["read"]`), so the `parameter-rooted` disposition would decide the call; the export is refused before that, because reading `.read` off a value whose type is unknown is an uncensused invoking form (`property-access-unknown-accessor`) — recorded exactly when the compiler resolves no symbol for the property, which is the same condition that makes the generator's walk decline the callee |
+| `memberParameterRooted` | **certifies** with a recipe (ADR 0034) | `source.read()`: the call is `parameter-rooted` and the read of `.read` — an uncensused `property-access-unknown-accessor` form — is `parameter-rooted-accessor`, because the producer roots its subject at parameter 0, a plain, unwritten binding of this declaration. Whatever getter or trap the read reaches sits on the caller's object |
+| `toStringTagViaCall` | **certifies** with a recipe (ADR 0034) | `Object.prototype.toString.call(value)`: the receiver is in the reviewed this-protocol table (`Object.toString`, reach `Get(this, @@toStringTag)`) and `this` is the unwritten parameter, so the site is decided before the by-reference owner rule refuses it |
+| `writtenBeforeRead`, `writtenAfterRead` | refuse: uncensused form | the parameter is reassigned in the declaration, so the producer states no subject root; the disposition is deliberately not flow-sensitive, which is why the real `scrollIntoView` pair still refuses |
+| `moduleReceiverRead` | refuses: uncensused form | a read on an untyped module-level value: no parameter root |
+| `nestedCallableParameterRead` | refuses: uncensused form | `items.map(item => item.value)`: `items.map` is rooted at the export's parameter, `item.value` at the arrow's own — the invoker's value, not this invocation's |
+| `callNonLibraryReceiver`, `callLibraryOutsideTable` | refuse: by-reference member | `.call` on a local function, and on `Array.prototype.slice`, which is a library member outside the reviewed table; both stay refused under the owner rule |
+| `setterOnParameter` | refuses: uncensused form | an accessor in write position; writes into a caller's object are a `writes`-domain question ADR 0034 does not open |
 | `iife` | refuses: unresolved callee | an immediately-invoked function expression. Its body is lexically inside the export and already walked, so the generator has no counterexample to name — and the census refuses the row by name: the producer resolves its callee to nothing at all. Which is why the walk keeps declining `expression-callee` rather than treating it as spurious |
 
 The `unresolved`, `taggedTemplate`, `spreadUntyped`, `labelledBreak`,
-`stdlibRefInvoker`, `reflectApply`, `reassignedHelper`,
-`memberParameterRooted` and `iife` refusals arrive
+`stdlibRefInvoker`, `reflectApply`, `reassignedHelper`, `iife` and the seven
+ADR 0034 boundary refusals arrive
 before any recipe matters, at witness acquisition. Their tests still supply a recipe
 (`probe-recipes/refused-export.mjs`), deliberately: without one the certifier
 would withhold the candidate and the row would certify with the domain open,

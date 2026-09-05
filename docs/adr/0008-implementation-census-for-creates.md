@@ -606,16 +606,17 @@ accessor-census disposition below; see
   `property-access-unknown-accessor` on an object spread; it removes a whole
   class of over-refusal standing behind that one.
 - **An export whose callee reads a property the compiler resolves no symbol
-  for**, which is every `parameter-rooted`, `member-property-unresolved`,
-  `member-receiver-unresolved` and `computed-member` decline the generator's
-  walk records: the same access is an uncensused invoking form
-  (`property-access-unknown-accessor`) and item 2 refuses it before any
-  disposition is tried. The `parameter-rooted` disposition would have decided
-  the call itself — the producer does state `calleeParameter` for
-  `source.read()` — which is why this is stated here rather than left implicit:
-  the walk and the census agree, and the blocker is the producer's inability to
-  tell an accessor from a data property on an untyped receiver. Pinned by
-  `memberParameterRooted`.
+  for**, *unless the receiver is the export's own parameter* (ADR 0034). The
+  `member-property-unresolved`, `member-receiver-unresolved` and
+  `computed-member` declines still hold: the access is an uncensused invoking
+  form (`property-access-unknown-accessor`) and item 2 refuses it before any
+  disposition is tried. The `parameter-rooted` shape no longer does: a read
+  accessor whose subject roots at a plain, unwritten parameter of the frame
+  takes the `parameter-rooted-accessor` disposition — the caller's object, the
+  caller's code — and the walk proposes the same shape. Pinned both ways in
+  `implementation-census-creates`: `memberParameterRooted` certifies, and
+  `writtenBeforeRead`, `writtenAfterRead`, `moduleReceiverRead`,
+  `nestedCallableParameterRead` and `setterOnParameter` refuse.
 - **An immediately-invoked function expression**, which the generator's walk
   keeps declining as `expression-callee` although its body is lexically inside
   the export's own walked span. The census refuses the row by name: the producer
@@ -647,6 +648,9 @@ accessor-census disposition below; see
 - **A standard-library member handed a callable the census cannot see**, and
   the by-reference members (`Function.*`, `CallableFunction.*`,
   `NewableFunction.*`, `Reflect.apply`/`construct`, `eval`, `Function`) —
+  except a `.call`/`.apply` whose receiver is a reviewed this-protocol member
+  (`Object.prototype.toString` today) on a parameter-rooted `this`, which ADR
+  0034 dispositions `parameter-rooted-accessor` —
   including a module-local `function work` handed to `forEach`, which the
   producer's argument tracer does not follow. The protocol-method reach
   (`toJSON`, `Symbol.iterator`, element `toString`, `then`) on a non-callable
@@ -792,11 +796,13 @@ generator rather than out of a test helper.
   `refusing-callee-fixpoint` at the call plus the helper's own
   `dialect-silent` at its own location — and `unresolvedCallee` declines
   `unresolved-callee` with the call's location. `parameterRooted`
-  (`source.read()`) is the second control: it declines *nothing* and proposes,
-  because the census disposes that call itself, while `parameterAliasRooted`
-  (one binding alias away) and `nestedParameterRooted` (a parameter of a nested
-  arrow) keep recording the `parameter-rooted` shape — the two sub-cases the
-  producer's `calleeParameter` does not answer. The control lives in its own
+  (`source.read()`) is the second control: since ADR 0034 it declines
+  *nothing* and proposes, because the census dispositions both the call and
+  its accessor form itself, while `parameterAliasRooted` (one binding alias
+  away) keeps recording the `parameter-rooted` shape — the producer roots
+  neither an alias nor a nested callable's own parameter, and the nested case
+  is pinned from the census side by `implementation-census-creates`'s
+  `nestedCallableParameterRead`. The control lives in its own
   entrypoint deliberately: `index.js`'s top-level `import "solid-js"` is an
   `UnacceptedExternalDependency` closure hazard that opens every domain of
   that artifact case whatever the walk found, so a control beside the declines

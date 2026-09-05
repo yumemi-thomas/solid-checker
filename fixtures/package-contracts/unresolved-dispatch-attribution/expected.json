@@ -13,9 +13,9 @@
             "sha256": "7ef9e694a262b5b6893a789f7b51ed68642396130217353d24a9a054864c3ec7"
           },
           "exports": {
-            "Arrow": "summary-cfa5f14e1529b4c09e9a86e873e15e8da957c9080683c7a7897b524f7dd8e4e5",
-            "Direct": "summary-cfa5f14e1529b4c09e9a86e873e15e8da957c9080683c7a7897b524f7dd8e4e5",
-            "Helper": "summary-cfa5f14e1529b4c09e9a86e873e15e8da957c9080683c7a7897b524f7dd8e4e5",
+            "Arrow": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
+            "Direct": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
+            "Helper": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
             "inert": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1"
           },
           "resolution": {
@@ -40,7 +40,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-cfa5f14e1529b4c09e9a86e873e15e8da957c9080683c7a7897b524f7dd8e4e5": {
+    "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395": {
       "call": {
         "callbacks": [
           {
@@ -51,6 +51,10 @@
             "operation": "callback-0"
           }
         ],
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -69,6 +73,9 @@
               "event": "call"
             }
           }
+        ],
+        "proposedClosures": [
+          "creates"
         ]
       },
       "shape": "callable"
