@@ -119,6 +119,50 @@ pub(super) fn authenticate_probe_gates_with_dependencies(
     Ok(schedule.authenticate_with_harness(inspected, &identity)?)
 }
 
+/// Whether any demand of the plan is one a Type Facts session answers. A plan
+/// without one — every demand satisfied by the artifact snapshot itself, no
+/// value claim, no closure candidate — has nothing to ask a producer, and
+/// policy 2 finalizes it with the `item-count:0` producer-sessions root rather
+/// than refusing it for lacking evidence nothing demanded.
+pub(super) fn requires_type_facts(plan: &CertificationPlan) -> bool {
+    plan.demand_graph.demands().iter().any(|demand| {
+        matches!(
+            demand.family(),
+            ProofFamily::SelectedSignature
+                | ProofFamily::ArgumentBinding
+                | ProofFamily::RestSpreadCoverage
+                | ProofFamily::CallablePath
+                | ProofFamily::OperationReachability
+                | ProofFamily::OperationCardinality
+                | ProofFamily::RecursiveValueShape
+                | ProofFamily::DomainExhaustiveness
+        )
+    })
+}
+
+/// Finalizes a plan no Type Facts demand applies to (see
+/// [`requires_type_facts`]): no producer session is opened and none is bound.
+/// A plan that does require one refuses inside with `TypeFactsRequired`.
+pub(super) fn finalize_value_only_without_type_facts(
+    plan: &CertificationPlan,
+    proposal_document: &[u8],
+    probe_gates: &VerifiedProbeGateBatch,
+    pin: &TypeFactsProducerPin,
+    issuer: &ConfiguredReceiptIssuer,
+    revocation_epoch: u64,
+) -> Result<FinalizedPolicy2Contract, Policy2FinalizationError> {
+    finalize_value_only_with_dependencies(
+        plan,
+        proposal_document,
+        None,
+        None,
+        probe_gates,
+        pin,
+        issuer,
+        revocation_epoch,
+    )
+}
+
 pub(super) fn finalize_value_only(
     plan: &CertificationPlan,
     proposal_document: &[u8],
@@ -246,20 +290,7 @@ pub(super) fn prepare_value_only(
         (false, Some(dependencies)) => dependencies.verify_plan(plan)?,
         (false, None) => {}
     }
-    let requires_type_facts = plan.demand_graph.demands().iter().any(|demand| {
-        matches!(
-            demand.family(),
-            ProofFamily::SelectedSignature
-                | ProofFamily::ArgumentBinding
-                | ProofFamily::RestSpreadCoverage
-                | ProofFamily::CallablePath
-                | ProofFamily::OperationReachability
-                | ProofFamily::OperationCardinality
-                | ProofFamily::RecursiveValueShape
-                | ProofFamily::DomainExhaustiveness
-        )
-    });
-    if requires_type_facts && type_facts.is_none() {
+    if requires_type_facts(plan) && type_facts.is_none() {
         return Err(Policy2FinalizationError::TypeFactsRequired);
     }
     probe_gates.verify_plan(plan)?;

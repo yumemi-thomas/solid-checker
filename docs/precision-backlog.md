@@ -18315,6 +18315,54 @@ to attack, with a harness that can be given the artifact case's own condition
 set. Phase 21 ledger regenerated; only the report digest pin moved.
 
 
+### A case that closes nothing is refused for that, not for an empty schedule (2026-09-06)
+
+`@solid-devtools/locator@0.16.7` refused as "certification invocation context
+must name a nonempty unique demand set". Its case set has three artifact cases;
+the server case's eight exports all summarize as `{"shape":"unknown","call":{}}`,
+so the case carries six artifact-owned demands, every one satisfied by the
+snapshot, and not one a Type Facts session answers. The case-set batch still
+scheduled it an acquisition, the schedule named no demand, and the producer
+session refused the *schedule* — a fact about the certifier's bookkeeping, not
+about the case.
+
+Both value-only lanes now ask `requires_type_facts` first
+(`contract_certification/finalization.rs`, the predicate finalization already
+used to decide whether absent evidence is a refusal) and take a plan with no
+Type Facts demand straight to finalization without opening a session
+(`finalize_value_only_without_type_facts`; the case-set lane finalizes such a
+plan on its own rather than in the shared batch). Finalization then refuses it
+for the reason that applies: `ReceiptValidation(NoClosedClaims)` — a receipt
+closes at least one claim, and a case whose every export is of unknown shape
+with no call semantics closes none. The row still refuses, because a case set
+finalizes all of its cases or none; what changed is that the refusal now names
+the case's own fact. Pinned by
+`a_case_with_no_type_facts_demand_is_refused_for_closing_nothing_not_for_an_empty_schedule`
+in both lanes.
+
+What stays open, deliberately. Excluding the claim-free case so its two
+siblings certify would need one of two things, and neither is a tuning: the
+generator refusing an all-unknown case at proposal time — which three fixtures
+(`published-export-entity`'s `./unknown` and `./mixed`,
+`non-emitting-module-target-control`'s `./default-export`,
+`class-expression-kind`'s `./unresolvable`) pin as *wrong*, an unknown shape
+being an honest statement the contract document must keep making — or a case
+set that certifies a subset of the proposal's census with a named per-case
+refusal, which the case-set format, its fresh-process verifier, and the CLI's
+partial-proposal lane (built for generation-time refusals) do not express
+today. That is a protocol decision, recorded here rather than made in passing.
+
+Checked in the same pass and found honest, so nothing moved:
+`@solidjs/testing-library@0.8.10` refuses because `dom-accessibility-api@0.5.x`
+exports `{ "import": "./dist/index.mjs", "require": "./dist/index.js" }` with
+no `types` condition and ships `index.d.ts` but no `index.d.mts`; TypeScript
+resolving the ESM import finds no declaration file either, and the planner's
+"no declaration target exists for dist/index.mjs" is exactly that answer.
+`@solid-primitives/visibility-observer@2.0.1` stands as recorded on
+2026-09-05: the `node`/`import` branch names its runtime file as its own
+declaration surface, the refusal is fail-closed and correct, and the message
+could be earlier and clearer without changing the verdict.
+
 ### Protocol 21: an overload count is a count of call signatures (2026-09-06)
 
 The 18 `noRecipe` candidates left after synthesis learned overload sets were

@@ -558,6 +558,24 @@ impl CertificationPlan {
                 &already_withheld,
             )?;
             let plan = gated.plan();
+            // An artifact case whose every demand the snapshot itself satisfies
+            // — no value claim, no closure candidate, no veto — has nothing to
+            // ask a producer, and an acquisition scheduled for it would name
+            // an empty demand set, which the session refuses by construction.
+            // Policy 2 already finalizes such a plan with the `item-count:0`
+            // producer-sessions root; take that path instead of launching.
+            if !finalization::requires_type_facts(plan) {
+                let probe_gates = finalization::authenticate_probe_gates(plan, configuration, pin)?;
+                return finalization::finalize_value_only_without_type_facts(
+                    plan,
+                    canonical_proposal,
+                    &probe_gates,
+                    pin,
+                    issuer,
+                    revocation_epoch,
+                )
+                .map(|finalized| finalized.with_withheld_closures(gated.withheld().to_vec()));
+            }
             let evidence = match type_facts::acquire_and_verify_export_values(plan, pin) {
                 Ok(evidence) => evidence,
                 Err(error) => {
@@ -770,6 +788,17 @@ pub fn certify_value_only_case_set(
         .map(|plan| plan.recipe_gated(recipe_corpus))
         .collect::<Result<Vec<_>, _>>()?;
     let gated_plans = gated.iter().map(RecipeGatedPlan::plan).collect::<Vec<_>>();
+    // A case with no Type Facts-owned demand cannot share the batch: the
+    // acquisition would schedule it an empty demand set, which the producer
+    // session refuses (`@solid-devtools/locator@0.16.7`'s server case, every
+    // demand satisfied by the snapshot). The per-plan path finalizes it without
+    // a session; the batch is only the fast path for the others.
+    if gated_plans
+        .iter()
+        .any(|plan| !finalization::requires_type_facts(plan))
+    {
+        return plans.iter().map(|plan| individually(plan)).collect();
+    }
     let evidence = match type_facts::acquire_and_verify_export_values_batch(&gated_plans, pin) {
         Ok(evidence) => evidence,
         // A census refusal in the batch names one plan's candidate; the
@@ -5651,6 +5680,92 @@ mod tests {
         assert!(
             wrong_copy.contains("outside the logical package root"),
             "unexpected refusal: {wrong_copy}"
+        );
+    }
+
+    /// An artifact case none of whose demands a Type Facts session answers —
+    /// an export of unknown shape, no call claim, every demand satisfied by
+    /// the snapshot itself — opens no producer session in either value-only
+    /// lane, and is refused for the reason that actually applies: a receipt
+    /// closes at least one claim, and this case closes none.
+    /// `@solid-devtools/locator@0.16.7`'s server case is this shape (six
+    /// artifact-owned demands, no others). The case-set batch used to
+    /// schedule it an acquisition naming an empty demand set, which the
+    /// session refuses by construction, so the row refused as "certification
+    /// invocation context must name a nonempty unique demand set" — a fact
+    /// about the schedule, not about the case.
+    #[test]
+    fn a_case_with_no_type_facts_demand_is_refused_for_closing_nothing_not_for_an_empty_schedule() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3","exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.js","default":"./dist/index.js"}}}"#;
+        let runtime = b"export const value = globalThis.__fixture;\n";
+        let declarations = b"export declare const value: unknown;\n";
+        let archive = published_archive_for(
+            "fixture-package",
+            "1.2.3",
+            &[
+                ("package/package.json", manifest),
+                ("package/dist/index.js", runtime),
+                ("package/dist/index.d.ts", declarations),
+            ],
+        );
+        let exports: &[TestExportBinding<'_>] = &[(
+            "value",
+            ("dist/index.js", runtime),
+            ("dist/index.d.ts", declarations),
+            "/project/node_modules/fixture-package",
+        )];
+        let plan = plan_for_test_package_closing(
+            &archive,
+            "fixture-package",
+            "1.2.3",
+            "/project/node_modules/fixture-package",
+            manifest,
+            &["import"],
+            exports,
+            &[],
+            &|_| ValueShape::Unknown,
+        );
+        assert!(
+            !super::finalization::requires_type_facts(&plan),
+            "an unknown-shaped export with no claim demands nothing of a producer: {:?}",
+            plan.demand_graph()
+                .demands()
+                .iter()
+                .map(|demand| demand.family())
+                .collect::<Vec<_>>()
+        );
+        let issuer = ConfiguredReceiptIssuer::persistent_local("no-type-facts", [29; 32])
+            .expect("a local issuer");
+        let proposal = crate::contract_document::encode(
+            &plan.selected_candidate,
+            &crate::contract_document::SidecarDigests::default(),
+            false,
+        )
+        .expect("encode the candidate");
+        let closes_nothing = |outcome: Result<(), super::Policy2FinalizationError>| {
+            let error = outcome
+                .err()
+                .expect("a case that closes no claim has no receipt");
+            assert!(
+                matches!(
+                    &error,
+                    super::Policy2FinalizationError::ReceiptValidation(
+                        solid_reactive_ir::contract_semantics::proof::ReceiptValidationError::NoClosedClaims
+                    )
+                ),
+                "refused for closing nothing, not for an empty acquisition: {error}"
+            );
+        };
+        closes_nothing(
+            plan.certify_value_only(&proposal, &pin, &issuer, 1, None)
+                .map(|_| ()),
+        );
+        closes_nothing(
+            super::certify_value_only_case_set(&[&plan], &proposal, &pin, &issuer, 1, None)
+                .map(|_| ()),
         );
     }
 
