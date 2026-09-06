@@ -197,8 +197,10 @@ func TestDeclaredSignaturePremiseKeepsRefusingUnknownAndHelpersAndProtocolContra
 		// `Iterable<number>` is a structural contract whose iterator is the
 		// caller's; the premise binds and the iteration protocol stands.
 		{"spreadDeclared", []typefacts.UncensusedInvokingFormKind{typefacts.UncensusedIterationProtocol}, true},
-		// The root has no form of its own: nothing to clear, no twin built.
-		{"viaHelper", nil, false},
+		// The root has no form of its own, but it calls a local helper: the
+		// twin is built to record the argument types at that call (protocol
+		// 23), and the premise binds.
+		{"viaHelper", nil, true},
 	} {
 		transcript := premiseTranscript(t, analyzer, dir, testCase.export)
 		if got := markerKinds(transcript.UncensusedInvokingForms); strings.Join(kindStrings(got), ",") != strings.Join(kindStrings(testCase.want), ",") {
@@ -304,4 +306,135 @@ func kindStrings(kinds []typefacts.UncensusedInvokingFormKind) []string {
 		out[index] = string(kind)
 	}
 	return out
+}
+
+// premiseLocalTranscript demands a local declaration's implementation
+// transcript the way the verifier's census does — the harness identifier of
+// the export that reached it as the anchor, the exact span of the helper's
+// declaration node, and the argument premises carried back from the caller.
+func premiseLocalTranscript(
+	t *testing.T,
+	analyzer typefacts.ExportValueAnalyzer,
+	dir, export, helper string,
+	premises []typefacts.ParameterPremise,
+) typefacts.ExportImplementationTranscript {
+	t.Helper()
+	harness, err := os.ReadFile(filepath.Join(dir, "harness.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	subjects := string(harness)
+	subjectStart := strings.Index(subjects, "subjects = [") + len("subjects = [")
+	offset := strings.Index(subjects[subjectStart:], export)
+	anchor := typefacts.Location{
+		Path:      filepath.Join(dir, "harness.ts"),
+		StartByte: subjectStart + offset,
+		EndByte:   subjectStart + offset + len(export),
+	}
+	start := strings.Index(premiseRuntimeSource, "function "+helper+"(")
+	if start < 0 {
+		t.Fatalf("runtime source declares no %q", helper)
+	}
+	end := start + strings.Index(premiseRuntimeSource[start:], "\n}\n") + len("\n}")
+	declaration := typefacts.Location{
+		Path:      filepath.Join(dir, "pkg", "index.js"),
+		StartByte: start,
+		EndByte:   end,
+	}
+	answer, err := analyzer.ExportValueTranscripts(
+		context.Background(),
+		[]typefacts.ExportValueDemand{{
+			Location:                 anchor,
+			LocalDeclarationLocation: &declaration,
+			ParameterPremises:        premises,
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(answer.Transcripts) != 1 || answer.Transcripts[0].LocalDeclaration == nil {
+		t.Fatalf("transcripts for %q = %#v, want one carrying a local declaration", helper, answer.Transcripts)
+	}
+	local := *answer.Transcripts[0].LocalDeclaration
+	if !local.Complete {
+		t.Fatalf("%q local transcript is open: %v", helper, local.OpenReasons)
+	}
+	return local
+}
+
+// Protocol 23: the caller's premised census records the argument types at the
+// call that reaches a local helper, and the helper's census is classified
+// under exactly those types when they are demanded back — bound by text and
+// declaration identity — and under its parameters' own `any` otherwise.
+func TestCallArgumentPremisesReachALocalHelper(t *testing.T) {
+	analyzer, dir := premiseProject(t)
+	caller := premiseTranscript(t, analyzer, dir, "viaHelper")
+	if len(caller.CallArgumentPremises) != 1 {
+		t.Fatalf("viaHelper call argument premises = %#v, want the one call to subtract (refusal %q)", caller.CallArgumentPremises, caller.ParameterPremiseRefusal)
+	}
+	recorded := caller.CallArgumentPremises[0]
+	if got := premiseRuntimeSource[recorded.Call.StartByte:recorded.Call.EndByte]; got != "subtract(a, b)" {
+		t.Fatalf("recorded call names %q in the original bytes, want subtract(a, b)", got)
+	}
+	if len(recorded.Arguments) != 2 {
+		t.Fatalf("recorded arguments = %#v, want both slots", recorded.Arguments)
+	}
+	for index, argument := range recorded.Arguments {
+		if argument.Index != index || argument.Type != "number" || argument.Identity == "" {
+			t.Fatalf("recorded argument %d = %#v, want number with an identity", index, argument)
+		}
+	}
+
+	// The premise the caller recorded, demanded back: the coercion clears and
+	// the transcript echoes exactly what it bound.
+	helper := premiseLocalTranscript(t, analyzer, dir, "viaHelper", "subtract", recorded.Arguments)
+	if kinds := markerKinds(helper.UncensusedInvokingForms); len(kinds) != 0 {
+		t.Fatalf("subtract forms under the caller's argument types = %v, want none (refusal %q)", kinds, helper.ParameterPremiseRefusal)
+	}
+	if len(helper.ParameterPremises) != 2 ||
+		helper.ParameterPremises[0] != recorded.Arguments[0] || helper.ParameterPremises[1] != recorded.Arguments[1] {
+		t.Fatalf("subtract premises = %#v, want the demanded %#v echoed", helper.ParameterPremises, recorded.Arguments)
+	}
+
+	// No premise: the helper's parameters are `any` and the coercion stands.
+	bare := premiseLocalTranscript(t, analyzer, dir, "viaHelper", "subtract", nil)
+	if kinds := markerKinds(bare.UncensusedInvokingForms); len(kinds) != 1 || kinds[0] != typefacts.UncensusedCoercion {
+		t.Fatalf("subtract forms without a premise = %v, want the coercion", kinds)
+	}
+	if len(bare.ParameterPremises) != 0 {
+		t.Fatalf("subtract states a premise nobody demanded: %#v", bare.ParameterPremises)
+	}
+
+	// One slot only: the other stays `any`, and the coercion stands under a
+	// premise the transcript still echoes, since it did bind what was asked.
+	partial := premiseLocalTranscript(t, analyzer, dir, "viaHelper", "subtract", recorded.Arguments[:1])
+	if kinds := markerKinds(partial.UncensusedInvokingForms); len(kinds) != 1 || kinds[0] != typefacts.UncensusedCoercion {
+		t.Fatalf("subtract forms under one premised slot = %v, want the coercion", kinds)
+	}
+	if len(partial.ParameterPremises) != 1 || partial.ParameterPremises[0] != recorded.Arguments[0] {
+		t.Fatalf("subtract premises under one slot = %#v, want the one demanded", partial.ParameterPremises)
+	}
+
+	// A text that spells `number` but claims another identity is a premise
+	// the twin cannot re-establish: refused, census kept over `any`.
+	forged := []typefacts.ParameterPremise{
+		{Index: 0, Type: "number", Identity: "flags:1|alias:/elsewhere.d.ts:0"},
+		recorded.Arguments[1],
+	}
+	refused := premiseLocalTranscript(t, analyzer, dir, "viaHelper", "subtract", forged)
+	if len(refused.ParameterPremises) != 0 || refused.ParameterPremiseRefusal == "" {
+		t.Fatalf("subtract bound a forged identity: premises %#v, refusal %q", refused.ParameterPremises, refused.ParameterPremiseRefusal)
+	}
+	if kinds := markerKinds(refused.UncensusedInvokingForms); len(kinds) != 1 || kinds[0] != typefacts.UncensusedCoercion {
+		t.Fatalf("subtract forms under a refused premise = %v, want the coercion", kinds)
+	}
+
+	// A type the twin resolves to something else — `Axis` is declared in the
+	// declaration file the JavaScript module never imports — is refused too.
+	unresolvable := premiseLocalTranscript(t, analyzer, dir, "viaHelper", "subtract", []typefacts.ParameterPremise{
+		{Index: 0, Type: "Axis", Identity: "flags:524288|symbol:/pkg/index.d.ts:0"},
+	})
+	if len(unresolvable.ParameterPremises) != 0 || unresolvable.ParameterPremiseRefusal == "" {
+		t.Fatalf("subtract bound an unresolvable spelling: premises %#v, refusal %q", unresolvable.ParameterPremises, unresolvable.ParameterPremiseRefusal)
+	}
 }

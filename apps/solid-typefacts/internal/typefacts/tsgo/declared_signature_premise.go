@@ -46,13 +46,25 @@ import (
 // fails either comparison is discarded and the census keeps the strictly more
 // refusing reading over the parameters' own types.
 //
-// What is deliberately outside this premise: a local helper's parameters (a
-// call-site argument type is a fact about the caller's twin, not a
-// declaration, and stating it is ADR 0038's named follow-up), an
-// implementation whose declaration is not in a declaration file (its parameter
-// types are already the checker's), a declaration with a rest parameter or a
-// different arity from its implementation, and a declaration whose anchor
-// already carries a JSDoc tag the compiler would read as a type.
+// A local helper has no declaration to bind, so its premise is the **type of
+// each argument slot at the call that reached it, on the caller's twin**
+// (handshake protocol 23): the premised census records those types per call
+// whose callee is a declaration in the program's own runtime source
+// (CallArgumentPremises), the consumer carries the entry for the call it
+// followed back as ParameterPremises on the helper's local-declaration demand,
+// and the helper is classified on a twin of its own carrying one spelled
+// `@param {<type>} <name>` per premised slot, held to the same falsifier — the
+// twin's parameter type must print as the demanded text and carry the
+// demanded identity — before the transcript echoes the premise. A helper
+// reached from two callers with different argument types is two demands and
+// two twins; a slot the caller's twin typed `any` is stated nowhere and stays
+// `any` on the helper.
+//
+// What is deliberately outside this premise: an implementation whose
+// declaration is not in a declaration file (its parameter types are already
+// the checker's), a declaration with a rest parameter or a different arity
+// from its implementation, and a declaration whose anchor already carries a
+// JSDoc tag the compiler would read as a type.
 
 // declaredSignaturePremise is the export's declared call signature as the
 // export-value transcript resolved it, handed to the implementation transcript
@@ -82,6 +94,21 @@ type premiseTwin struct {
 	// walk it again per twin.
 	original *ast.Node
 	premises []typefacts.ParameterPremise
+	// arguments is what the premised census recorded at each call to a
+	// runtime-source declaration inside the implementation: the type of every
+	// informative written argument slot on this twin, in the original file's
+	// coordinates. See callArgumentPremisesLocked.
+	arguments []typefacts.CallArgumentPremise
+}
+
+// slotPremise is one parameter position and the type it must carry on the
+// twin: the printed text and the declaration identity. For the root both come
+// from the declared signature through the accepted checker; for a helper both
+// come from the demand, which carried them from the caller's twin.
+type slotPremise struct {
+	index    int
+	text     string
+	identity string
 }
 
 // originalLocation maps a location reported over the twin's bytes back to the
@@ -258,24 +285,30 @@ func (p *project) declaredExportName(module *ast.SourceFile, target *ast.Symbol)
 // was written under: a spelled `@param {EasingFunction}` the twin cannot
 // resolve prints exactly like the declaration's `EasingFunction`, and only its
 // flags (an error type) and its missing alias tell them apart.
-func typeDeclarationIdentity(value *checker.Type) string {
+//
+// A declaration inside the twin's own file is reported in the *original*
+// file's coordinates (twin may be nil for a type of the accepted program), so
+// an identity taken on one twin compares equal to the same declaration's
+// identity taken on another twin of the same file or on the accepted program.
+func typeDeclarationIdentity(value *checker.Type, twin *premiseTwin) string {
 	if value == nil {
 		return ""
 	}
 	identity := fmt.Sprintf("flags:%d", value.Flags())
 	if symbol := value.Symbol(); symbol != nil &&
 		symbol.Flags&(ast.SymbolFlagsClass|ast.SymbolFlagsInterface|ast.SymbolFlagsEnum) != 0 {
-		identity += "|symbol:" + symbolDeclarationIdentity(symbol)
+		identity += "|symbol:" + symbolDeclarationIdentity(symbol, twin)
 	}
 	if alias := value.Alias(); alias != nil && alias.Symbol() != nil {
-		identity += "|alias:" + symbolDeclarationIdentity(alias.Symbol())
+		identity += "|alias:" + symbolDeclarationIdentity(alias.Symbol(), twin)
 	}
 	return identity
 }
 
 // symbolDeclarationIdentity is the file and position of a symbol's first
-// declaration, or "" when it has none.
-func symbolDeclarationIdentity(symbol *ast.Symbol) string {
+// declaration, or "" when it has none; a position inside the twin's file is
+// mapped back to the original bytes.
+func symbolDeclarationIdentity(symbol *ast.Symbol, twin *premiseTwin) string {
 	if symbol == nil || len(symbol.Declarations) == 0 || symbol.Declarations[0] == nil {
 		return ""
 	}
@@ -284,23 +317,33 @@ func symbolDeclarationIdentity(symbol *ast.Symbol) string {
 	if sourceFile == nil {
 		return ""
 	}
-	return fmt.Sprintf("%s:%d", sourceFile.FileName(), declaration.Pos())
+	position := declaration.Pos()
+	if twin != nil && sourceFile == twin.file && position >= twin.insertAt+twin.delta {
+		position -= twin.delta
+	}
+	return fmt.Sprintf("%s:%d", sourceFile.FileName(), position)
 }
 
 // premiseCensusKey identifies one premised classification within a
 // generation: the implementation's exact span and the annotation the twin
-// carried, which names the declaration module and export the premise binds.
+// carried — which names the declaration module and export a root premise
+// binds — together with the exact slot premises a helper was demanded under,
+// identities included, so two demands that spell alike but bind different
+// declarations never share an entry.
 type premiseCensusKey struct {
 	location   typefacts.Location
 	annotation string
+	demanded   string
 }
 
 // premiseCensusResult is what the memo keeps: the forms classified under the
-// premise and the premises established, or the refusal.
+// premise, the premises established and the argument types recorded at each
+// local call, or the refusal.
 type premiseCensusResult struct {
-	forms    []typefacts.UncensusedInvokingForm
-	premises []typefacts.ParameterPremise
-	refusal  string
+	forms     []typefacts.UncensusedInvokingForm
+	premises  []typefacts.ParameterPremise
+	arguments []typefacts.CallArgumentPremise
+	refusal   string
 }
 
 // premisedFormCensusLocked classifies the implementation's form census under
@@ -332,16 +375,115 @@ func (p *project) premisedFormCensusLocked(
 		twin, refusal = p.declaredSignatureTwinLocked(ctx, implementation, premise, imported, false)
 	}
 	if twin != nil {
-		result.forms = p.uncensusedInvokingFormCensusUnderPremiseLocked(twin)
+		result.forms, result.arguments = p.uncensusedInvokingFormCensusUnderPremiseLocked(twin)
 		result.premises = twin.premises
 	} else {
 		result.refusal = refusal
 	}
+	p.rememberPremiseCensus(key, result)
+	return result
+}
+
+func (p *project) rememberPremiseCensus(key premiseCensusKey, result premiseCensusResult) {
 	if p.premiseCensuses == nil {
 		p.premiseCensuses = make(map[premiseCensusKey]premiseCensusResult)
 	}
 	p.premiseCensuses[key] = result
+}
+
+// demandedPremiseCensusLocked classifies a local declaration's form census
+// under the slot premises a consumer demanded — the argument types the
+// caller's premised census recorded at the call that reached it — on a spelled
+// twin, memoized per generation like the root's. The result echoes exactly the
+// demanded premises when the twin bound every one of them, and refuses
+// otherwise; there is no `import()` fallback, because a helper has no
+// declaration module to name.
+func (p *project) demandedPremiseCensusLocked(
+	ctx context.Context,
+	implementation *ast.Node,
+	demanded []typefacts.ParameterPremise,
+) premiseCensusResult {
+	annotation, expected, refusal := p.demandedPremiseAnnotationLocked(implementation, demanded)
+	if refusal != "" {
+		return premiseCensusResult{refusal: refusal}
+	}
+	var demandedKey strings.Builder
+	for _, premise := range demanded {
+		fmt.Fprintf(&demandedKey, "%d\x00%s\x00%s\x00", premise.Index, premise.Type, premise.Identity)
+	}
+	key := premiseCensusKey{
+		location: nodeLocation(implementation), annotation: annotation, demanded: demandedKey.String(),
+	}
+	if cached, ok := p.premiseCensuses[key]; ok {
+		return cached
+	}
+	var result premiseCensusResult
+	twin, refusal := p.premiseTwinLocked(ctx, implementation, expected, annotation, nil)
+	if twin != nil {
+		result.forms, result.arguments = p.uncensusedInvokingFormCensusUnderPremiseLocked(twin)
+		result.premises = twin.premises
+	} else {
+		result.refusal = refusal
+	}
+	p.rememberPremiseCensus(key, result)
 	return result
+}
+
+// demandedPremiseAnnotationLocked decides whether the local declaration can
+// carry the demanded slot premises and spells them: one `@param {<type>}
+// <name>` per demanded slot, in position order. Every parameter must be a
+// plain identifier — the compiler matches a tag to a pattern parameter by tag
+// *order*, and a partial premise set would then bind the wrong slot — and the
+// demanded texts must be spellable inside a comment. Answered from the
+// accepted program alone, so a refusal costs no twin.
+func (p *project) demandedPremiseAnnotationLocked(
+	implementation *ast.Node,
+	demanded []typefacts.ParameterPremise,
+) (string, []slotPremise, string) {
+	if len(demanded) == 0 {
+		return "", nil, "no premise demanded"
+	}
+	sourceFile := ast.GetSourceFileOfNode(implementation)
+	if !isJavaScriptSourceFile(sourceFile) {
+		return "", nil, "implementation is not in a JavaScript file"
+	}
+	parameters := implementation.Parameters()
+	anchor := premiseAnnotationAnchor(implementation)
+	if anchor == nil {
+		return "", nil, "implementation is neither a function declaration nor the sole initializer of a variable statement"
+	}
+	if carriesJSDocTypeTag(anchor, sourceFile) {
+		return "", nil, "declaration already carries a JSDoc type tag"
+	}
+	names := make([]string, len(parameters))
+	for index, parameter := range parameters {
+		declaration := parameter.AsParameterDeclaration()
+		if declaration == nil || declaration.DotDotDotToken != nil {
+			return "", nil, "implementation has a rest parameter"
+		}
+		binding := parameter.Name()
+		if binding == nil || !ast.IsIdentifier(binding) {
+			return "", nil, fmt.Sprintf("parameter %d is not a plain identifier", index)
+		}
+		names[index] = binding.Text()
+	}
+	var tags strings.Builder
+	tags.WriteString("/**")
+	expected := make([]slotPremise, 0, len(demanded))
+	previous := -1
+	for _, premise := range demanded {
+		if premise.Index <= previous || premise.Index >= len(parameters) {
+			return "", nil, fmt.Sprintf("premise names parameter %d of %d, out of order or out of range", premise.Index, len(parameters))
+		}
+		previous = premise.Index
+		if premise.Type == "" || strings.ContainsAny(premise.Type, "*/\n\r") {
+			return "", nil, fmt.Sprintf("premise for parameter %d cannot be spelled in a comment", premise.Index)
+		}
+		fmt.Fprintf(&tags, " @param {%s} %s", premise.Type, names[premise.Index])
+		expected = append(expected, slotPremise{index: premise.Index, text: premise.Type, identity: premise.Identity})
+	}
+	tags.WriteString(" */ ")
+	return tags.String(), expected, ""
 }
 
 // spelledPremiseAnnotationLocked spells the declared signature as one `@param`
@@ -454,7 +596,9 @@ func (p *project) premiseAnnotationLocked(
 // declaredSignatureTwinLocked builds and checks the premise twin for one
 // implementation whose annotation premiseAnnotationLocked already admitted,
 // or refuses with the reason. A refusal is not an error: the caller keeps the
-// census it already has.
+// census it already has. Every parameter position is expected to carry the
+// declared signature's type at that position; a *spelled* twin's return type
+// is checked too (see premiseTwinLocked).
 func (p *project) declaredSignatureTwinLocked(
 	ctx context.Context,
 	implementation *ast.Node,
@@ -462,16 +606,60 @@ func (p *project) declaredSignatureTwinLocked(
 	annotation string,
 	spelled bool,
 ) (*premiseTwin, string) {
+	declaredParameters := premise.signature.Parameters()
+	expected := make([]slotPremise, len(declaredParameters))
+	for index := range declaredParameters {
+		declared := checker.Checker_getTypeAtPosition(p.checker, premise.signature, index)
+		if declared == nil {
+			return nil, fmt.Sprintf("parameter %d has no declared type", index)
+		}
+		expected[index] = slotPremise{
+			index:    index,
+			text:     p.checker.TypeToString(declared),
+			identity: typeDeclarationIdentity(declared, nil),
+		}
+	}
+	var returnCheck *checker.Signature
+	if spelled {
+		returnCheck = premise.signature
+	}
+	twin, refusal := p.premiseTwinLocked(ctx, implementation, expected, annotation, returnCheck)
+	if twin != nil {
+		// A root premise is bound to the declared signature by its text alone
+		// (census_root_premises); the identity is the producer's own falsifier
+		// and travels only where a consumer must echo it back.
+		for index := range twin.premises {
+			twin.premises[index].Identity = ""
+		}
+	}
+	return twin, refusal
+}
+
+// premiseTwinLocked builds the twin of the implementation's file with
+// `annotation` inserted before the anchor, checks it, and holds every expected
+// slot to the falsifier: the twin's parameter type at that position must print
+// as the expected text and carry the expected declaration identity. With
+// `returnCheck`, the twin's return type must also print and resolve as that
+// signature's — a spelled root twin's obligation, because the return type is
+// what types a returned arrow's parameters contextually, and a spelling that
+// named the wrong type there would silently classify those parameters under
+// something the declaration did not say. The `import()` twin needs no such
+// check — its return type is the declaration's own, by identity — and cannot
+// pass one reliably: the compiler answers the function's *inferred* return
+// type, which prints structurally where the declaration prints an alias. A
+// helper's twin has no declaration to check a return type against.
+func (p *project) premiseTwinLocked(
+	ctx context.Context,
+	implementation *ast.Node,
+	expected []slotPremise,
+	annotation string,
+	returnCheck *checker.Signature,
+) (*premiseTwin, string) {
 	sourceFile := ast.GetSourceFileOfNode(implementation)
 	if sourceFile == nil {
 		return nil, "implementation has no source file"
 	}
-	declaredParameters := premise.signature.Parameters()
 	parameters := implementation.Parameters()
-	declaredTypes := make([]*checker.Type, len(declaredParameters))
-	for index := range declaredParameters {
-		declaredTypes[index] = checker.Checker_getTypeAtPosition(p.checker, premise.signature, index)
-	}
 	insertAt := nodeLocation(premiseAnnotationAnchor(implementation)).StartByte
 	text := sourceFile.Text()
 	if insertAt < 0 || insertAt > len(text) {
@@ -536,42 +724,39 @@ func (p *project) declaredSignatureTwinLocked(
 		twin.release()
 		return nil, "twin declaration has a different arity"
 	}
-	twin.premises = make([]typefacts.ParameterPremise, len(parameters))
-	for index, parameter := range twinParameters {
-		name := parameter.Name()
+	twin.premises = make([]typefacts.ParameterPremise, 0, len(expected))
+	for _, slot := range expected {
+		if slot.index < 0 || slot.index >= len(twinParameters) {
+			twin.release()
+			return nil, fmt.Sprintf("premise names parameter %d of %d", slot.index, len(twinParameters))
+		}
+		name := twinParameters[slot.index].Name()
 		if name == nil {
 			twin.release()
-			return nil, fmt.Sprintf("parameter %d has no binding", index)
+			return nil, fmt.Sprintf("parameter %d has no binding", slot.index)
 		}
 		established := twinChecker.GetTypeAtLocation(name)
-		declared := declaredTypes[index]
-		if established == nil || declared == nil {
+		if established == nil {
 			twin.release()
-			return nil, fmt.Sprintf("parameter %d has no type on one side", index)
+			return nil, fmt.Sprintf("parameter %d has no type on the twin", slot.index)
 		}
-		declaredText := p.checker.TypeToString(declared)
-		if establishedText := twinChecker.TypeToString(established); establishedText != declaredText {
+		if establishedText := twinChecker.TypeToString(established); establishedText != slot.text {
 			twin.release()
 			return nil, fmt.Sprintf(
-				"parameter %d types differ: twin %q, declared %q", index, establishedText, declaredText,
+				"parameter %d types differ: twin %q, premised %q", slot.index, establishedText, slot.text,
 			)
 		}
-		if typeDeclarationIdentity(established) != typeDeclarationIdentity(declared) {
+		if typeDeclarationIdentity(established, twin) != slot.identity {
 			twin.release()
-			return nil, fmt.Sprintf("parameter %d types name different declarations", index)
+			return nil, fmt.Sprintf("parameter %d types name different declarations", slot.index)
 		}
-		twin.premises[index] = typefacts.ParameterPremise{Index: index, Type: declaredText}
+		twin.premises = append(twin.premises, typefacts.ParameterPremise{
+			Index: slot.index, Type: slot.text, Identity: slot.identity,
+		})
 	}
-	// The return type too, for a *spelled* twin: it is what types a returned
-	// arrow's parameters contextually, and a spelling that named the wrong
-	// type there would silently classify those parameters under something the
-	// declaration did not say. The `import()` twin needs no such check — its
-	// return type is the declaration's own, by identity — and cannot pass one
-	// reliably: the compiler answers the function's *inferred* return type,
-	// which prints structurally where the declaration prints an alias.
-	if spelled {
+	if returnCheck != nil {
 		twinSignature := twinChecker.GetSignatureFromDeclaration(twin.implementation)
-		declaredReturn := checker.Checker_getReturnTypeOfSignature(p.checker, premise.signature)
+		declaredReturn := checker.Checker_getReturnTypeOfSignature(p.checker, returnCheck)
 		if twinSignature == nil || declaredReturn == nil {
 			twin.release()
 			return nil, "return type is unavailable on one side"
@@ -579,7 +764,7 @@ func (p *project) declaredSignatureTwinLocked(
 		establishedReturn := checker.Checker_getReturnTypeOfSignature(twinChecker, twinSignature)
 		if establishedReturn == nil ||
 			twinChecker.TypeToString(establishedReturn) != p.checker.TypeToString(declaredReturn) ||
-			typeDeclarationIdentity(establishedReturn) != typeDeclarationIdentity(declaredReturn) {
+			typeDeclarationIdentity(establishedReturn, twin) != typeDeclarationIdentity(declaredReturn, nil) {
 			twin.release()
 			return nil, "return types differ between the twin and the declaration"
 		}
@@ -588,15 +773,16 @@ func (p *project) declaredSignatureTwinLocked(
 }
 
 // uncensusedInvokingFormCensusUnderPremiseLocked runs the form census over the
-// twin's implementation with the twin's checker and reports every location in
-// the original file's bytes. The twin is released before returning, and the
-// per-file memo it populated is dropped with it so no twin node outlives the
-// census.
+// twin's implementation with the twin's checker, records the argument types at
+// each local call, and reports every location in the original file's bytes.
+// The twin is released before returning, and the per-file memo it populated
+// is dropped with it so no twin node outlives the census.
 func (p *project) uncensusedInvokingFormCensusUnderPremiseLocked(
 	twin *premiseTwin,
-) []typefacts.UncensusedInvokingForm {
+) ([]typefacts.UncensusedInvokingForm, []typefacts.CallArgumentPremise) {
 	p.formTwin = twin
 	forms := p.uncensusedInvokingFormCensusLocked(twin.implementation)
+	arguments := p.callArgumentPremisesLocked(twin)
 	p.formTwin = nil
 	delete(p.assignedSymbols, twin.file)
 	twin.release()
@@ -607,7 +793,174 @@ func (p *project) uncensusedInvokingFormCensusUnderPremiseLocked(
 			forms[index].EnclosingCallable = &mapped
 		}
 	}
-	return forms
+	return forms, arguments
+}
+
+// callArgumentPremisesLocked records, for every call or construction inside
+// the twin's implementation whose callee is an identifier resolving to a
+// declaration in the program's own runtime source, the type the twin's checker
+// gives each written argument slot — the premise a consumer may hand back for
+// that callee's own census. A call carrying a spread states nothing: a slot
+// after the spread has no fixed position. A slot whose type is `any` — or
+// prints as nothing a comment can carry — is omitted, and an entry with no
+// informative slot is not recorded. Must run while p.formTwin is the twin, so
+// canonicalSymbol and formIsRuntimeSourceFile answer on the twin's program.
+func (p *project) callArgumentPremisesLocked(twin *premiseTwin) []typefacts.CallArgumentPremise {
+	body := twin.implementation.Body()
+	if body == nil {
+		return nil
+	}
+	var recorded []typefacts.CallArgumentPremise
+	var visit func(node *ast.Node) bool
+	visit = func(node *ast.Node) bool {
+		if node == nil {
+			return false
+		}
+		if ast.IsCallExpression(node) || ast.IsNewExpression(node) {
+			if entry, ok := p.callArgumentPremiseLocked(twin, node); ok {
+				recorded = append(recorded, entry)
+			}
+		}
+		node.ForEachChild(visit)
+		return false
+	}
+	body.ForEachChild(visit)
+	return recorded
+}
+
+func (p *project) callArgumentPremiseLocked(twin *premiseTwin, call *ast.Node) (typefacts.CallArgumentPremise, bool) {
+	callee := identityPreservingUnwrap(call.Expression())
+	if callee == nil || !ast.IsIdentifier(callee) {
+		return typefacts.CallArgumentPremise{}, false
+	}
+	symbol := p.canonicalSymbol(twin.checker.GetSymbolAtLocation(callee))
+	if symbol == nil || len(symbol.Declarations) == 0 || symbol.Declarations[0] == nil {
+		return typefacts.CallArgumentPremise{}, false
+	}
+	declarationFile := ast.GetSourceFileOfNode(symbol.Declarations[0])
+	if declarationFile == nil || declarationFile.IsDeclarationFile || !p.formIsRuntimeSourceFile(declarationFile) {
+		return typefacts.CallArgumentPremise{}, false
+	}
+	arguments := call.Arguments()
+	if len(arguments) == 0 || exactArgumentSlots(call) != len(arguments) {
+		return typefacts.CallArgumentPremise{}, false
+	}
+	entry := typefacts.CallArgumentPremise{Call: twin.originalLocation(nodeLocation(call))}
+	for index, argument := range arguments {
+		if argument == nil {
+			continue
+		}
+		argumentType := twin.checker.GetTypeAtLocation(argument)
+		if argumentType == nil || argumentType.Flags()&checker.TypeFlagsAny != 0 {
+			continue
+		}
+		text := twin.checker.TypeToString(argumentType)
+		if text == "" || strings.ContainsAny(text, "\n\r") || strings.Contains(text, "*/") {
+			continue
+		}
+		entry.Arguments = append(entry.Arguments, typefacts.ParameterPremise{
+			Index: index, Type: text, Identity: typeDeclarationIdentity(argumentType, twin),
+		})
+	}
+	if len(entry.Arguments) == 0 {
+		return typefacts.CallArgumentPremise{}, false
+	}
+	return entry, true
+}
+
+// calleesWorthPremisingLocked answers whether a premised twin of the
+// implementation could change any *callee's* census: whether some declaration
+// reachable from its body through calls to runtime-source declarations — the
+// callees a consumer's census recurses into — records, over its own parameters'
+// types, a form a type can clear. The twin is built for that as it is for a
+// type-decided form of the body itself; a body whose reachable helpers record
+// no such form has no premise worth carrying, and pays nothing.
+//
+// The walk is bounded by the consumer's own composition depth and a visited
+// set, and each declaration's answer is memoized per generation
+// (premiseWorth), so a helper shared by many exports is classified once.
+func (p *project) calleesWorthPremisingLocked(implementation *ast.Node) bool {
+	visited := map[*ast.Node]bool{implementation: true}
+	return p.calleesWorthPremisingWithinLocked(implementation, visited, 0)
+}
+
+const maxPremiseWorthDepth = 8
+
+func (p *project) calleesWorthPremisingWithinLocked(node *ast.Node, visited map[*ast.Node]bool, depth int) bool {
+	if depth >= maxPremiseWorthDepth {
+		return false
+	}
+	body := node.Body()
+	if body == nil {
+		return false
+	}
+	worth := false
+	var visit func(child *ast.Node) bool
+	visit = func(child *ast.Node) bool {
+		if worth || child == nil {
+			return worth
+		}
+		if ast.IsCallExpression(child) || ast.IsNewExpression(child) {
+			if callee := p.runtimeCalleeDeclarationLocked(child); callee != nil && !visited[callee] {
+				visited[callee] = true
+				if p.declarationWorthPremisingLocked(callee, visited, depth+1) {
+					worth = true
+					return true
+				}
+			}
+		}
+		child.ForEachChild(visit)
+		return worth
+	}
+	body.ForEachChild(visit)
+	return worth
+}
+
+// declarationWorthPremisingLocked is the memoized per-declaration half: the
+// declaration's own form census records a type-decided form, or one of its
+// reachable callees does.
+func (p *project) declarationWorthPremisingLocked(declaration *ast.Node, visited map[*ast.Node]bool, depth int) bool {
+	if cached, ok := p.premiseWorth[declaration]; ok {
+		return cached
+	}
+	worth := formsMayClearUnderTypes(p.uncensusedInvokingFormCensusLocked(declaration)) ||
+		p.calleesWorthPremisingWithinLocked(declaration, visited, depth)
+	if p.premiseWorth == nil {
+		p.premiseWorth = make(map[*ast.Node]bool)
+	}
+	p.premiseWorth[declaration] = worth
+	return worth
+}
+
+// runtimeCalleeDeclarationLocked resolves a call's identifier callee, on the
+// accepted program, to the function-like declaration node a consumer's census
+// would recurse into — a function declaration, or the arrow or function
+// expression that is the whole initializer of a variable declarator — when
+// that declaration sits in a runtime source file. Nil for every other callee.
+func (p *project) runtimeCalleeDeclarationLocked(call *ast.Node) *ast.Node {
+	callee := identityPreservingUnwrap(call.Expression())
+	if callee == nil || !ast.IsIdentifier(callee) {
+		return nil
+	}
+	symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(callee))
+	if symbol == nil || len(symbol.Declarations) == 0 || symbol.Declarations[0] == nil {
+		return nil
+	}
+	declaration := symbol.Declarations[0]
+	sourceFile := ast.GetSourceFileOfNode(declaration)
+	if sourceFile == nil || sourceFile.IsDeclarationFile || !p.isCurrentSourceFile(sourceFile) {
+		return nil
+	}
+	switch {
+	case ast.IsFunctionDeclaration(declaration):
+		return declaration
+	case ast.IsVariableDeclaration(declaration):
+		initializer := identityPreservingUnwrap(declaration.Initializer())
+		if initializer != nil && (ast.IsArrowFunction(initializer) || ast.IsFunctionExpression(initializer)) {
+			return initializer
+		}
+	}
+	return nil
 }
 
 // premiseHost is the compiler host the twin program is built with. The

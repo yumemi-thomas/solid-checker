@@ -69,6 +69,21 @@ type ExportValueDemand struct {
 	// localDeclarationImplementationTranscriptLocked.
 	LocalDeclarationLocation *Location `cbor:"localDeclarationLocation,omitempty" json:"localDeclarationLocation,omitempty"`
 	CallableDepth            int       `cbor:"callableDepth,omitempty" json:"callableDepth,omitempty"`
+	// ParameterPremises, stated only beside LocalDeclarationLocation, asks that
+	// the local declaration's uncensused-form census be classified with each
+	// named parameter bound to the given type: the type the *caller's*
+	// premised census found in that argument slot at the call that reached
+	// this declaration (ExportImplementationTranscript.CallArgumentPremises),
+	// carried back by the consumer as the premise for the callee (ADR 0038,
+	// handshake protocol 23). A parameter no entry names keeps its own type.
+	// The producer answers with the same entries in
+	// ExportImplementationTranscript.ParameterPremises when every one of them
+	// was re-established on the callee's twin, and with none — the strictly
+	// more refusing census — otherwise. Indexes are strictly increasing; a
+	// demand carrying premises for anything but a local declaration is refused
+	// whole, because an export's root has a declared signature to bind and a
+	// consumer has no business restating it.
+	ParameterPremises []ParameterPremise `cbor:"parameterPremises,omitempty" json:"parameterPremises,omitempty"`
 }
 
 type ArgumentBindingDisposition string
@@ -348,17 +363,50 @@ type ExportImplementationTranscript struct {
 	// to bind and a form that a type could have cleared but did not state
 	// ParameterPremises, why the binding was refused. Diagnostic only: a
 	// consumer decides nothing from it, and its absence means nothing.
-	ParameterPremiseRefusal string   `cbor:"parameterPremiseRefusal,omitempty" json:"parameterPremiseRefusal,omitempty"`
-	Complete                bool     `cbor:"complete,omitempty" json:"complete,omitempty"`
-	OpenReasons             []string `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+	ParameterPremiseRefusal string `cbor:"parameterPremiseRefusal,omitempty" json:"parameterPremiseRefusal,omitempty"`
+	// CallArgumentPremises states, for a call or construction this
+	// implementation's *premised* form census walked whose callee resolves to
+	// a declaration in the program's own runtime source, the type the twin's
+	// checker gave each written argument slot (handshake protocol 23). It is
+	// how a premise reaches a local helper: the consumer carries the entry for
+	// the call that reached the helper back as ExportValueDemand.ParameterPremises
+	// of the helper's own local-declaration demand, and the helper's census is
+	// classified under exactly those types. Stated only beside a nonempty
+	// ParameterPremises — an argument's type under the parameters' own `any`
+	// is nothing a premise could carry — only for a call whose every argument
+	// is a plain written slot (no spread), and only for the slots whose type is
+	// informative; a slot the list omits is `any` to the callee. Each Call is
+	// the location of a row of Calls, in the original file's bytes.
+	CallArgumentPremises []CallArgumentPremise `cbor:"callArgumentPremises,omitempty" json:"callArgumentPremises,omitempty"`
+	Complete             bool                  `cbor:"complete,omitempty" json:"complete,omitempty"`
+	OpenReasons          []string              `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
 }
 
-// ParameterPremise is one parameter's declared-type binding under which an
+// ParameterPremise is one parameter's type binding under which an
 // implementation's uncensused-form census was classified (ADR 0038). See
 // ExportImplementationTranscript.ParameterPremises.
+//
+// Type is the bound type's printed form. Identity is the producer's own
+// binding of that text to a declaration — the type's flags and, for a class,
+// interface, enum or alias, the declaration it resolves to, in the original
+// file's coordinates — stated on a call-argument premise and echoed on the
+// demand and the callee's premise so a spelling that resolves to a *different*
+// declaration of the same name on the callee's twin is refused rather than
+// bound. It is opaque to a consumer, which compares it byte for byte and reads
+// nothing into it; a root premise, bound to the declared signature by its text
+// alone, carries none.
 type ParameterPremise struct {
-	Index int    `cbor:"index" json:"index"`
-	Type  string `cbor:"type" json:"type"`
+	Index    int    `cbor:"index" json:"index"`
+	Type     string `cbor:"type" json:"type"`
+	Identity string `cbor:"identity,omitempty" json:"identity,omitempty"`
+}
+
+// CallArgumentPremise is the type each written argument slot of one call
+// carried under a premised census (handshake protocol 23). See
+// ExportImplementationTranscript.CallArgumentPremises.
+type CallArgumentPremise struct {
+	Call      Location           `cbor:"call" json:"call"`
+	Arguments []ParameterPremise `cbor:"arguments" json:"arguments"`
 }
 
 // UncensusedInvokingFormKind is a closed enumeration. A consumer that receives

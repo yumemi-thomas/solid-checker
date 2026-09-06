@@ -46,14 +46,14 @@ Two of those tests plan from **this fixture's own `expected.json`** rather than
 from a synthesized closed candidate, which is the only way the
 generate-then-certify path is exercised anywhere in the repository:
 `the_generated_census_fixture_carries_every_creates_candidate_into_planning`
-(no producer; asserts the thirty-two candidates survive into planning, each with
-its veto and its `DomainExhaustiveness` demand, and that all thirty-two are
+(no producer; asserts the thirty-four candidates survive into planning, each with
+its veto and its `DomainExhaustiveness` demand, and that all thirty-four are
 withheld by name when no corpus is supplied) and
 `the_census_certifies_a_generated_creates_candidate_and_withholds_its_siblings`
 (one hand recipe, for `plain`; since ADR 0036 every sibling candidate —
 `creates` and the valueless exports' `returns` alike — is served by a
-synthesized veto, and the test pins the resulting partition: fourteen `creates`
-and seven `returns` closures, seventeen `creates` candidates and one `returns`
+synthesized veto, and the test pins the resulting partition: fifteen `creates`
+and seven `returns` closures, eighteen `creates` candidates and one `returns`
 candidate withheld with the census's reason, and `loopCall` withheld in both
 domains because its synthesized run never reports). They rebind exactly one field of the document, the
 package integrity token, because the corpus generates `fixture:sha256:…` and a
@@ -115,7 +115,9 @@ disposition, and the first call with none refuses the domain by name:
 | `untypedCoercion` | refuses: uncensused form (ADR 0038) | `value + 1` where the declaration says `unknown`: the premise binds, and `unknown` is not provably a non-object, so the coercion stands under it |
 | `returnedCallbackCoercion` | **certifies** (ADR 0038) | `(p) => p * step`: the declared return type `(p: number) => number` types the returned arrow's parameter contextually, and `step` is declared `number` |
 | `declaredMemberCoercion` | **certifies** (ADR 0038) | `axis.max - axis.min` with `axis: { min: number; max: number }`. The two reads stay unknown accessors — a declaration file is not runtime bytes — and are `parameter-rooted-accessor` (ADR 0034); the subtraction's operands are `number` under the premise |
-| `helperCoercion` | refuses: uncensused form (ADR 0038) | `subtract(a, b)` is a local recursion whose `x - y` is over the *helper's* parameters, which have no declared signature: the premise is the root's alone, and the coercion refuses at depth 1. ADR 0038's named frontier |
+| `helperCoercion` | **certifies** (ADR 0038, helper premises) | `subtract(a, b)` is a local recursion whose `x - y` is over the *helper's* parameters, which have no declared signature. The root's premised census records the argument types at the call — `number`, `number` under the declared signature — as `callArgumentPremises`; the verifier demands the helper's transcript under exactly those types (`parameterPremises` on the local-declaration demand, protocol 23), the helper's own spelled twin re-establishes them, and the coercion clears at depth 1. The receipt carries a `census-premise:` site for the helper's parameters beside the root's |
+| `helperSpreadCoercion` | refuses: uncensused form (ADR 0038) | `subtract(...[a, b])`: a spread displaces every slot at or after it, so the call carries no argument premise and the helper is censused over its own `any`. The spread itself clears — `[a, b]` is a `number[]` under the premise |
+| `helperUntypedArgument` | refuses: uncensused form (ADR 0038) | `subtract(a, JSON.parse("1"))`: slot 1 is `any` and is stated nowhere, so `y` stays `any` on the helper's twin and `x - y` refuses at depth 1. A premise never widens a slot the caller's own types left open |
 | `iife` | refuses: unresolved callee | an immediately-invoked function expression. Its body is lexically inside the export and already walked, so the generator has no counterexample to name — and the census refuses the row by name: the producer resolves its callee to nothing at all. Which is why the walk keeps declining `expression-callee` rather than treating it as spurious |
 
 The `unresolved`, `taggedTemplate`, `spreadUntyped`, `labelledBreak`,
@@ -224,12 +226,15 @@ ran. None hands `session` or `harness` to the package.
   through a variable; the second pins that it takes no other.
 - **`typedCoercion`'s parameters must be unannotated in `index.js` and
   `number` in `index.d.ts`**, and **`helperCoercion`'s coercion must sit in a
-  helper the export calls, not in the export.** The first pins that the census
-  reads the declared signature the consumer compiles against rather than the
-  implementation's own `any`; the second pins that the premise stops at the
-  root — a helper's parameters have no declaration to bind — which is the
-  follow-up ADR 0038 names. A JSDoc type on either function would be a
-  different premise: the producer refuses to annotate over an existing one.
+  helper the export calls, not in the export, with `subtract` itself
+  unannotated and shared with `helperSpreadCoercion` and
+  `helperUntypedArgument`.** The first pins that the census reads the declared
+  signature the consumer compiles against rather than the implementation's own
+  `any`; the second pins that the premise reaches a helper only through the
+  argument types at the reaching call — the same helper certifies from one
+  caller and refuses from the two whose calls carry no premise for a slot. A
+  JSDoc type on any of the three functions would be a different premise: the
+  producer refuses to annotate over an existing one.
 - **`dependency-consumer/plainConsumer` must not call into `solid-js`.** The
   gate has to be *reached* for that fixture to say anything about the
   workspace, and a dependency callee refuses the census by name first.

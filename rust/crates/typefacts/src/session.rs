@@ -2192,6 +2192,18 @@ fn validate_local_declaration_binding(
             )));
         }
     }
+    // Protocol 23: a local declaration's premise is the demand's, or nothing.
+    // The producer states the entries its twin bound, and it binds all of the
+    // demanded ones or none; a transcript stating a premise nobody demanded, a
+    // subset, or a different type or identity for a slot is a census
+    // classified under a condition this consumer never asked for.
+    if !local.parameter_premises.is_empty() && local.parameter_premises != demand.parameter_premises
+    {
+        return Err(SessionError::InvalidResponse(format!(
+            "export-value transcript {index} local-declaration transcript states parameter premises {:?} for a demand that asked for {:?}",
+            local.parameter_premises, demand.parameter_premises
+        )));
+    }
     Ok(())
 }
 
@@ -2626,6 +2638,15 @@ fn export_value_demand_digest(demands: &[crate::ExportValueDemand]) -> String {
             hash_invocation_field(&mut hasher, "");
         }
         hash_invocation_field(&mut hasher, &demand.callable_depth.to_string());
+        // Protocol 23: the demanded premises are part of the question, so an
+        // answer to a demand asking for a census under `number` is never
+        // accepted for one that asked for a census under nothing.
+        hash_invocation_field(&mut hasher, &demand.parameter_premises.len().to_string());
+        for premise in &demand.parameter_premises {
+            hash_invocation_field(&mut hasher, &premise.index.to_string());
+            hash_invocation_field(&mut hasher, &premise.r#type);
+            hash_invocation_field(&mut hasher, &premise.identity);
+        }
     }
     format!("sha256:{:x}", hasher.finalize())
 }
@@ -3687,6 +3708,7 @@ mod tests {
             uncensused_invoking_forms: Vec::new(),
             parameter_premises: Vec::new(),
             parameter_premise_refusal: "".into(),
+            call_argument_premises: Vec::new(),
             complete: false,
             open_reasons: Vec::new(),
         }
@@ -3749,6 +3771,7 @@ mod tests {
             implementation_location: None,
             local_declaration_location: None,
             callable_depth: 0,
+            parameter_premises: Vec::new(),
         }
     }
 
@@ -3873,6 +3896,69 @@ mod tests {
         exact.local_declaration = Some(implementation_transcript(demanded));
         validate_local_declaration_binding(0, &demand, &exact)
             .expect("the demanded location, echoed back");
+    }
+
+    /// Protocol 23: a local declaration's transcript states the demanded
+    /// premise verbatim or none at all. A subset, a different type or identity
+    /// in a slot, or a premise for a demand that carried none is a census
+    /// classified under a condition the consumer never asked for.
+    #[test]
+    fn local_declaration_premise_is_the_demands_or_nothing() {
+        let demanded = span("/p/a.ts", 10, 40);
+        let premise = |index: usize, text: &str, identity: &str| crate::ParameterPremise {
+            index,
+            r#type: text.into(),
+            identity: identity.into(),
+        };
+        let mut demand = export_value_demand(span("/p/a.ts", 0, 5));
+        demand.local_declaration_location = Some(demanded.clone());
+        demand.parameter_premises = vec![
+            premise(0, "number", "flags:8"),
+            premise(1, "Axis", "flags:524288|symbol:/p/a.d.ts:3"),
+        ];
+        let mut transcript = export_value_transcript(span("/p/a.ts", 0, 5));
+        transcript.local_declaration = Some(implementation_transcript(demanded.clone()));
+
+        validate_local_declaration_binding(0, &demand, &transcript)
+            .expect("no premise stated is the strictly more refusing census");
+
+        let mut echoed = transcript.clone();
+        echoed
+            .local_declaration
+            .as_mut()
+            .unwrap()
+            .parameter_premises = demand.parameter_premises.clone();
+        validate_local_declaration_binding(0, &demand, &echoed).expect("the demand, echoed");
+
+        for stated in [
+            vec![premise(0, "number", "flags:8")],
+            vec![
+                premise(0, "number", "flags:8"),
+                premise(1, "Axis", "flags:524288"),
+            ],
+            vec![
+                premise(0, "number", "flags:8"),
+                premise(1, "unknown", "flags:2"),
+            ],
+            vec![
+                premise(1, "Axis", "flags:524288|symbol:/p/a.d.ts:3"),
+                premise(0, "number", "flags:8"),
+            ],
+        ] {
+            let mut other = transcript.clone();
+            other.local_declaration.as_mut().unwrap().parameter_premises = stated;
+            assert!(
+                validate_local_declaration_binding(0, &demand, &other).is_err(),
+                "a premise other than the demanded one must refuse"
+            );
+        }
+
+        let mut unasked = export_value_demand(span("/p/a.ts", 0, 5));
+        unasked.local_declaration_location = Some(demanded);
+        assert!(
+            validate_local_declaration_binding(0, &unasked, &echoed).is_err(),
+            "a premise for a demand that carried none must refuse"
+        );
     }
 
     /// The echo above binds nothing on its own — the producer copies the

@@ -601,8 +601,13 @@ fn acquire_census_local_transcripts(
 ) -> Result<Vec<LocalDeclarationTranscript>, TypeFactsCertificationError> {
     let mut locals = Vec::<LocalDeclarationTranscript>::new();
     for _round in 0..=MAX_COMPOSITION_DEPTH {
-        // (anchor expression the producer evaluates, declaration span asked for)
-        let mut requested = Vec::<(typefacts::Location, typefacts::Location)>::new();
+        // (anchor expression the producer evaluates, declaration span asked
+        // for, premise it is asked under)
+        let mut requested = Vec::<(
+            typefacts::Location,
+            typefacts::Location,
+            Vec<typefacts::ParameterPremise>,
+        )>::new();
         for (index, scheduled) in schedule.export_values.iter().enumerate() {
             let Some(transcript) = live.answer().transcripts.get(index) else {
                 continue;
@@ -637,11 +642,15 @@ fn acquire_census_local_transcripts(
                 if let Ok((CensusOutcome::NeedsTranscripts, _, wanted)) =
                     census_creates_domain(plan, proof, export, transcript, implementation, evidence)
                 {
-                    for location in wanted {
-                        let known = locals.iter().any(|local| local.location == location)
-                            || requested.iter().any(|(_, pending)| *pending == location);
+                    for (location, premises) in wanted {
+                        let known = locals
+                            .iter()
+                            .any(|local| local.location == location && local.premises == premises)
+                            || requested.iter().any(|(_, pending, pending_premises)| {
+                                *pending == location && *pending_premises == premises
+                            });
                         if !known {
-                            requested.push((scheduled.demand.location.clone(), location));
+                            requested.push((scheduled.demand.location.clone(), location, premises));
                         }
                     }
                 }
@@ -652,22 +661,25 @@ fn acquire_census_local_transcripts(
         }
         let demands = requested
             .iter()
-            .map(|(anchor, location)| ExportValueDemand {
+            .map(|(anchor, location, premises)| ExportValueDemand {
                 location: anchor.clone(),
                 implementation_location: None,
                 local_declaration_location: Some(location.clone()),
                 callable_depth: 0,
+                parameter_premises: premises.clone(),
             })
             .collect::<Vec<_>>();
         let answer = session.acquire_local_declarations(&demands)?;
-        for ((_, location), transcript) in requested.into_iter().zip(answer.transcripts) {
+        for ((_, location, premises), transcript) in requested.into_iter().zip(answer.transcripts) {
             // `Session::export_values` already refused an answer that omitted
-            // the local declaration or bound it to another span; an absent one
-            // here is therefore unreachable, and is simply not recorded, so the
-            // census refuses the demand by name rather than this loop guessing.
+            // the local declaration, bound it to another span, or stated a
+            // premise other than the demand's; an absent one here is therefore
+            // unreachable, and is simply not recorded, so the census refuses
+            // the demand by name rather than this loop guessing.
             if let Some(local) = transcript.local_declaration {
                 locals.push(LocalDeclarationTranscript {
                     location,
+                    premises,
                     transcript: local,
                 });
             }
@@ -2117,6 +2129,7 @@ fn derive_export_value_schedules(
                             callable_depth: *callable_depths
                                 .get(&(artifact_case.to_owned(), export.to_owned()))
                                 .expect("every scheduled export has an exact callable depth"),
+                            parameter_premises: Vec::new(),
                         },
                     ))
                 })
@@ -3484,9 +3497,12 @@ fn verify_export_value_family(
                              transcript was acquired for the local declaration(s) {}",
                             requested
                                 .iter()
-                                .map(|location| format!(
-                                    "{}:{}..{}",
-                                    location.path, location.start_byte, location.end_byte
+                                .map(|(location, premises)| format!(
+                                    "{}:{}..{} under {} premise(s)",
+                                    location.path,
+                                    location.start_byte,
+                                    location.end_byte,
+                                    premises.len()
                                 ))
                                 .collect::<Vec<_>>()
                                 .join(", ")
@@ -7750,11 +7766,23 @@ const CENSUS_COMPLETION_FORM_PROTOCOL: u64 = 19;
 /// is named, as the three above are.
 const CENSUS_DECLARED_SIGNATURE_PREMISES_PROTOCOL: u64 = 22;
 
+/// The handshake protocol at which a premise reaches a local helper (ADR 0038,
+/// helper premises): a premised transcript states `callArgumentPremises`, a
+/// local-declaration demand carries the entry for the call it followed back as
+/// `parameterPremises`, and the helper's transcript echoes the premise its own
+/// twin bound. Below it a producer refuses a premised local-declaration demand
+/// outright and states no call-argument premise, so nothing here could be read
+/// wrongly — the constant names the dependency, as the four above do.
+const CENSUS_CALL_ARGUMENT_PREMISES_PROTOCOL: u64 = 23;
+
 /// One local declaration's own implementation transcript, keyed by the exact
-/// span it was demanded at.
+/// span it was demanded at **and the premise it was demanded under**: the same
+/// helper reached from two calls with different argument types is two demands,
+/// two transcripts and two censuses, each holding under its own condition.
 #[derive(Clone, Debug)]
 struct LocalDeclarationTranscript {
     location: typefacts::Location,
+    premises: Vec<typefacts::ParameterPremise>,
     transcript: typefacts::ExportImplementationTranscript,
 }
 
@@ -7802,6 +7830,7 @@ impl CensusEvidence<'_> {
     fn local(
         &self,
         location: &typefacts::Location,
+        premises: &[typefacts::ParameterPremise],
     ) -> Option<&typefacts::ExportImplementationTranscript> {
         self.locals
             .iter()
@@ -7809,6 +7838,7 @@ impl CensusEvidence<'_> {
                 local.location.path == location.path
                     && local.location.start_byte == location.start_byte
                     && local.location.end_byte == location.end_byte
+                    && local.premises == premises
             })
             .map(|local| &local.transcript)
     }
@@ -7844,7 +7874,10 @@ struct CensusRun<'a> {
     evidence: CensusEvidence<'a>,
     runtime_sources: std::collections::BTreeSet<String>,
     visited: Vec<CensusDeclarationIdentity>,
-    requested: Vec<typefacts::Location>,
+    /// Every local declaration this pass reached without a transcript, with
+    /// the premise — the caller's argument types at the reaching call — it
+    /// must be demanded under.
+    requested: Vec<(typefacts::Location, Vec<typefacts::ParameterPremise>)>,
     sites: Vec<String>,
     calls: usize,
     deepest: usize,
@@ -7989,11 +8022,26 @@ fn census_creates_domain(
     declared: &typefacts::ExportValueTranscript,
     implementation: &typefacts::ExportImplementationTranscript,
     evidence: CensusEvidence<'_>,
-) -> Result<(CensusOutcome, Vec<String>, Vec<typefacts::Location>), TypeFactsCertificationError> {
+) -> Result<
+    (
+        CensusOutcome,
+        Vec<String>,
+        Vec<(typefacts::Location, Vec<typefacts::ParameterPremise>)>,
+    ),
+    TypeFactsCertificationError,
+> {
     let refuse = |reason: String| TypeFactsCertificationError::UnsupportedDemand {
         demand: proof.id.clone(),
         reason,
     };
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_CALL_ARGUMENT_PREMISES_PROTOCOL {
+        return Err(refuse(format!(
+            "implementation-census premise required: call-argument premises for local declarations \
+             arrived at handshake protocol {CENSUS_CALL_ARGUMENT_PREMISES_PROTOCOL} and this build \
+             speaks {}",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
     if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_DECLARED_SIGNATURE_PREMISES_PROTOCOL {
         return Err(refuse(format!(
             "implementation-census premise required: the declared-signature premise arrived at \
@@ -8076,7 +8124,7 @@ fn census_creates_domain(
         stated_call_signatures(declared).as_deref(),
     )
     .map_err(refuse)?;
-    let step = census_transcript(&mut run, implementation, 0).map_err(refuse)?;
+    let step = census_transcript(&mut run, implementation, 0, &[]).map_err(refuse)?;
     let mut sites = std::mem::take(&mut run.sites);
     let outcome = match step {
         CensusStep::Decided => {
@@ -8402,27 +8450,22 @@ fn census_root_premises(
     Ok(())
 }
 
+/// `demanded` is the premise this transcript was asked for under: empty for the
+/// root, whose premise is the declared signature `census_root_premises` bound
+/// before any body was read, and the caller's argument types at the reaching
+/// call for a local declaration.
 fn census_transcript(
     run: &mut CensusRun<'_>,
     implementation: &typefacts::ExportImplementationTranscript,
     depth: usize,
+    demanded: &[typefacts::ParameterPremise],
 ) -> Result<CensusStep, String> {
     run.deepest = run.deepest.max(depth);
     census_transcript_is_censusable(implementation, depth)?;
-    if depth != 0 && !implementation.parameter_premises.is_empty() {
-        // The premise is a fact about the export's declared signature, which
-        // only the root has; a local declaration has no declaration a consumer
-        // compiles against, and a producer stating one for it is stating a
-        // premise this census never asked for and cannot bind (ADR 0038).
-        return Err(format!(
-            "creates census refuses a local declaration transcript at depth {depth} for {}:{}..{} \
-             that states a declared-signature premise: only the export's own implementation has \
-             a declared signature to bind",
-            implementation.location.path,
-            implementation.location.start_byte,
-            implementation.location.end_byte
-        ));
+    if depth != 0 {
+        census_local_premises(run, implementation, depth, demanded)?;
     }
+    census_call_argument_premises_are_bound(implementation, depth)?;
     // The declaration node this transcript describes, bound from the
     // authenticated bytes, and the one premise the producer's own transcript
     // cannot state about it: that those bytes are this artifact's runtime
@@ -8472,11 +8515,18 @@ fn census_transcript_calls(
     let mut step = CensusStep::Decided;
     for call in &implementation.calls {
         run.calls += 1;
-        match census_call_disposition(run, call, depth)? {
+        // The premise a callee this call reaches is censused under: the
+        // argument types this transcript's premised census recorded at exactly
+        // this call, or nothing. Read before the disposition so the local
+        // transcript is looked up — and, in the acquisition phase, demanded —
+        // under the same condition it will be verified under.
+        let premises = census_call_premises(implementation, call);
+        match census_call_disposition(run, call, depth, premises)? {
             Some((disposition, site)) => {
                 run.sites.push(site);
                 if disposition == CensusDisposition::LocalRecursion
-                    && census_local_recursion(run, call, depth)? == CensusStep::NeedsTranscripts
+                    && census_local_recursion(run, call, depth, premises)?
+                        == CensusStep::NeedsTranscripts
                 {
                     step = CensusStep::NeedsTranscripts;
                 }
@@ -8485,6 +8535,164 @@ fn census_transcript_calls(
         }
     }
     Ok(step)
+}
+
+/// The argument premise this transcript recorded for `call`, or none.
+///
+/// Only a *premised* transcript's entries count —
+/// `census_call_argument_premises_are_bound` has already refused an entry on
+/// any other — and the match is the call row's own location, so a premise can
+/// never travel to a different call than the one whose arguments it describes.
+fn census_call_premises<'t>(
+    implementation: &'t typefacts::ExportImplementationTranscript,
+    call: &typefacts::ImplementationCall,
+) -> &'t [typefacts::ParameterPremise] {
+    if implementation.parameter_premises.is_empty() {
+        return &[];
+    }
+    implementation
+        .call_argument_premises
+        .iter()
+        .find(|entry| entry.call == call.location)
+        .map_or(&[], |entry| entry.arguments.as_slice())
+}
+
+/// The premise of a local declaration's transcript (protocol 23), bound to the
+/// demand that produced it and recorded.
+///
+/// The condition a helper's census holds under is the caller's argument types
+/// at the call the census followed — the `demanded` list, copied from the
+/// caller's own transcript row for that call — and a transcript may state
+/// exactly that list or none. None is the strictly more refusing census over
+/// the parameters' own types and needs no condition; the demanded list, echoed
+/// entry for entry with the same index, type and identity, becomes one
+/// `census-premise:` witness site per entry, so the receipt states the
+/// condition at every depth it holds at. Anything else — a premise for a call
+/// that stated none, a subset, a different type or identity in any slot — is a
+/// census classified under a condition nobody in this transaction asked for,
+/// and refuses by name.
+fn census_local_premises(
+    run: &mut CensusRun<'_>,
+    implementation: &typefacts::ExportImplementationTranscript,
+    depth: usize,
+    demanded: &[typefacts::ParameterPremise],
+) -> Result<(), String> {
+    if implementation.parameter_premises.is_empty() {
+        return Ok(());
+    }
+    let at = format!(
+        "{}:{}..{}",
+        implementation.location.path,
+        implementation.location.start_byte,
+        implementation.location.end_byte
+    );
+    if demanded.is_empty() {
+        return Err(format!(
+            "creates census refuses a local declaration transcript at depth {depth} for {at} that \
+             states a parameter premise no call-argument premise asked for"
+        ));
+    }
+    if implementation.parameter_premises != demanded {
+        return Err(format!(
+            "creates census refuses a local declaration transcript at depth {depth} for {at} whose \
+             stated premise differs from the caller's argument types it was demanded under"
+        ));
+    }
+    let mut previous: Option<usize> = None;
+    for premise in &implementation.parameter_premises {
+        if premise.r#type.is_empty() || previous.is_some_and(|last| premise.index <= last) {
+            return Err(format!(
+                "creates census refuses a local declaration transcript at depth {depth} for {at} \
+                 whose premise entries are not strictly increasing nonempty bindings"
+            ));
+        }
+        previous = Some(premise.index);
+    }
+    run.sites
+        .extend(implementation.parameter_premises.iter().map(|premise| {
+            format!(
+                "census-premise:{}:{}:{}:{}:{}",
+                implementation.location.path,
+                implementation.location.start_byte,
+                implementation.location.end_byte,
+                premise.index,
+                premise.r#type
+            )
+        }));
+    Ok(())
+}
+
+/// The invariants of a transcript's `callArgumentPremises` (protocol 23),
+/// checked before any call is dispositioned: every entry names a row of the
+/// transcript's own calls, its slots are strictly increasing nonempty bindings,
+/// and the transcript itself is premised — an argument's type under the
+/// parameters' own `any` is a fact of the accepted program, not of a twin, and
+/// a producer stating one where no premise held would be handing a helper a
+/// condition nobody bound.
+fn census_call_argument_premises_are_bound(
+    implementation: &typefacts::ExportImplementationTranscript,
+    depth: usize,
+) -> Result<(), String> {
+    if implementation.call_argument_premises.is_empty() {
+        return Ok(());
+    }
+    let at = || {
+        format!(
+            "{}:{}..{}",
+            implementation.location.path,
+            implementation.location.start_byte,
+            implementation.location.end_byte
+        )
+    };
+    if implementation.parameter_premises.is_empty() {
+        return Err(format!(
+            "creates census refuses a transcript at depth {depth} for {} that states call-argument \
+             premises without a parameter premise of its own",
+            at()
+        ));
+    }
+    for entry in &implementation.call_argument_premises {
+        let call_at = || {
+            format!(
+                "{}:{}..{}",
+                entry.call.path, entry.call.start_byte, entry.call.end_byte
+            )
+        };
+        if !implementation
+            .calls
+            .iter()
+            .any(|call| call.location == entry.call)
+        {
+            return Err(format!(
+                "creates census refuses a transcript at depth {depth} for {} whose call-argument \
+                 premise at {} names no call row",
+                at(),
+                call_at()
+            ));
+        }
+        if entry.arguments.is_empty() {
+            return Err(format!(
+                "creates census refuses a transcript at depth {depth} for {} whose call-argument \
+                 premise at {} binds no slot",
+                at(),
+                call_at()
+            ));
+        }
+        let mut previous: Option<usize> = None;
+        for argument in &entry.arguments {
+            if argument.r#type.is_empty() || previous.is_some_and(|last| argument.index <= last) {
+                return Err(format!(
+                    "creates census refuses a transcript at depth {depth} for {} whose \
+                     call-argument premise at {} is not a strictly increasing list of nonempty \
+                     bindings",
+                    at(),
+                    call_at()
+                ));
+            }
+            previous = Some(argument.index);
+        }
+    }
+    Ok(())
 }
 
 /// The transcript-level premise, applied to every transcript the census reads,
@@ -8741,6 +8949,7 @@ fn census_call_disposition(
     run: &mut CensusRun<'_>,
     call: &typefacts::ImplementationCall,
     depth: usize,
+    premises: &[typefacts::ParameterPremise],
 ) -> Result<Option<(CensusDisposition, String)>, String> {
     let at = || {
         format!(
@@ -8860,9 +9069,13 @@ fn census_call_disposition(
             at()
         ));
     }
-    if run.evidence.local(&node).is_none() {
-        if !run.requested.contains(&node) {
-            run.requested.push(node);
+    if run.evidence.local(&node, premises).is_none() {
+        if !run
+            .requested
+            .iter()
+            .any(|(pending, pending_premises)| *pending == node && pending_premises == premises)
+        {
+            run.requested.push((node, premises.to_vec()));
         }
         return Ok(None);
     }
@@ -9057,6 +9270,7 @@ fn census_local_recursion(
     run: &mut CensusRun<'_>,
     call: &typefacts::ImplementationCall,
     depth: usize,
+    premises: &[typefacts::ParameterPremise],
 ) -> Result<CensusStep, String> {
     let declaration = call
         .declaration
@@ -9068,7 +9282,7 @@ fn census_local_recursion(
         .expect("a local-recursion disposition bound the declaration node");
     let transcript = run
         .evidence
-        .local(&node)
+        .local(&node, premises)
         .expect("a local-recursion disposition found the declaration's transcript")
         .clone();
     // The transcript's own bytes, so the receipt names the evidence the census
@@ -9087,7 +9301,7 @@ fn census_local_recursion(
         Sha256::digest(&transcript_bytes)
     ));
     run.visited.push(identity);
-    let step = census_transcript(run, &transcript, depth + 1);
+    let step = census_transcript(run, &transcript, depth + 1, premises);
     run.visited.pop();
     step
 }
@@ -17831,7 +18045,7 @@ mod tests {
         );
         let mut run = census_run(&certified, &roots);
         assert_eq!(
-            census_transcript(&mut run, &implementation, 0),
+            census_transcript(&mut run, &implementation, 0, &[]),
             Ok(CensusStep::Decided)
         );
         assert_eq!(run.calls, 5);
@@ -18039,6 +18253,7 @@ mod tests {
             .map(|(index, text)| typefacts::ParameterPremise {
                 index: *index,
                 r#type: (*text).into(),
+                identity: "".into(),
             })
             .collect();
         transcript
@@ -18128,14 +18343,137 @@ mod tests {
             assert!(run.sites.is_empty(), "{error}");
         }
 
-        // A local declaration has no declared signature; a premise stated on
-        // one refuses before its body is read.
+        // A local declaration's premise is the demand's, or nothing (protocol
+        // 23): stated for a call that asked for none, it refuses before the
+        // body is read.
         let mut run = census_run(&certified, &roots);
-        let error = census_transcript(&mut run, &premised_transcript(&[(0, "number")]), 1)
-            .expect_err("a premised local transcript refuses");
+        let error = census_transcript(&mut run, &premised_transcript(&[(0, "number")]), 1, &[])
+            .expect_err("a premised local transcript nobody premised refuses");
         assert!(
-            error.contains("states a declared-signature premise"),
+            error.contains("no call-argument premise asked for"),
             "{error}"
+        );
+    }
+
+    fn argument_premise(index: usize, text: &str, identity: &str) -> typefacts::ParameterPremise {
+        typefacts::ParameterPremise {
+            index,
+            r#type: text.into(),
+            identity: identity.into(),
+        }
+    }
+
+    /// Protocol 23: a helper's premise is bound to the argument types the
+    /// caller's transcript recorded at the call that reached it — echoed entry
+    /// for entry, identity included — and every bound entry is a witness site;
+    /// a subset, a different type, a different identity, or a premise on a
+    /// call that recorded none refuses by name. Call-argument premises
+    /// themselves are admitted only on a premised transcript and only for a
+    /// row of its own calls.
+    #[test]
+    fn creates_census_binds_a_local_declaration_premise_to_the_callers_argument_types() {
+        assert_eq!(CENSUS_CALL_ARGUMENT_PREMISES_PROTOCOL, 23);
+        const {
+            assert!(
+                typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+                    >= CENSUS_CALL_ARGUMENT_PREMISES_PROTOCOL
+            );
+        }
+        let certified = consumer_snapshot();
+        let roots = vec![consumer_root(&certified)];
+        let demanded = vec![
+            argument_premise(0, "number", "flags:8"),
+            argument_premise(1, "Axis", "flags:524288|symbol:/project/index.d.ts:10"),
+        ];
+
+        // Echoed exactly: admitted, and recorded at the helper's own span.
+        let mut helper = census_transcript_with(vec![], json!([]));
+        helper.parameter_premises = demanded.clone();
+        let mut run = census_run(&certified, &roots);
+        census_local_premises(&mut run, &helper, 1, &demanded).expect("the demanded premise binds");
+        assert_eq!(
+            run.sites,
+            vec![
+                "census-premise:/project/node_modules/consumer/dist/index.js:0:400:0:number",
+                "census-premise:/project/node_modules/consumer/dist/index.js:0:400:1:Axis",
+            ]
+        );
+
+        // No premise stated: the strictly more refusing census, nothing bound.
+        let mut run = census_run(&certified, &roots);
+        census_local_premises(
+            &mut run,
+            &census_transcript_with(vec![], json!([])),
+            1,
+            &demanded,
+        )
+        .expect("an unpremised helper passes under any demand");
+        assert!(run.sites.is_empty());
+
+        for (stated, wants) in [
+            (
+                vec![demanded[0].clone()],
+                "differs from the caller's argument types",
+            ),
+            (
+                vec![
+                    demanded[0].clone(),
+                    argument_premise(1, "Axis", "flags:524288"),
+                ],
+                "differs from the caller's argument types",
+            ),
+            (
+                vec![
+                    demanded[0].clone(),
+                    argument_premise(1, "unknown", "flags:2"),
+                ],
+                "differs from the caller's argument types",
+            ),
+        ] {
+            let mut helper = census_transcript_with(vec![], json!([]));
+            helper.parameter_premises = stated;
+            let mut run = census_run(&certified, &roots);
+            let error = census_local_premises(&mut run, &helper, 1, &demanded)
+                .expect_err("a premise other than the demanded one refuses");
+            assert!(error.contains(wants), "{error}");
+            assert!(run.sites.is_empty());
+        }
+
+        // Call-argument premises: only on a premised transcript, only for a
+        // row of the transcript's calls.
+        let call = signals_call("helper", json!({}));
+        let entry = typefacts::CallArgumentPremise {
+            call: call.location.clone(),
+            arguments: demanded.clone(),
+        };
+        let mut caller = census_transcript_with(vec![call.clone()], json!([]));
+        caller.call_argument_premises = vec![entry.clone()];
+        let error = census_call_argument_premises_are_bound(&caller, 0)
+            .expect_err("an unpremised caller cannot hand a helper a premise");
+        assert!(
+            error.contains("without a parameter premise of its own"),
+            "{error}"
+        );
+        caller.parameter_premises = vec![argument_premise(0, "number", "")];
+        census_call_argument_premises_are_bound(&caller, 0)
+            .expect("a premised caller's entry for its own call row is admitted");
+        assert_eq!(census_call_premises(&caller, &call), demanded.as_slice());
+        let mut elsewhere = caller.clone();
+        elsewhere.call_argument_premises[0].call.start_byte += 1;
+        let error = census_call_argument_premises_are_bound(&elsewhere, 0)
+            .expect_err("an entry naming no call row refuses");
+        assert!(error.contains("names no call row"), "{error}");
+        assert!(census_call_premises(&elsewhere, &call).is_empty());
+        let mut unordered = caller.clone();
+        unordered.call_argument_premises[0].arguments.reverse();
+        let error = census_call_argument_premises_are_bound(&unordered, 0)
+            .expect_err("slots out of order refuse");
+        assert!(error.contains("strictly increasing"), "{error}");
+        let mut unpremised = caller.clone();
+        unpremised.parameter_premises.clear();
+        assert!(
+            census_call_premises(&unpremised, &call).is_empty(),
+            "an unpremised transcript hands a helper nothing"
         );
     }
 
@@ -18172,6 +18510,7 @@ mod tests {
                     &mut census_run(&certified, &roots),
                     &census_transcript_with(vec![], form(kind, node_kind, json!(1))),
                     0,
+                    &[],
                 ),
                 Ok(CensusStep::Decided),
                 "{kind} on {node_kind}"
@@ -18209,6 +18548,7 @@ mod tests {
                 &mut census_run(&certified, &roots),
                 &census_transcript_with(vec![], form(kind, node_kind, subject)),
                 0,
+                &[],
             )
             .expect_err("a rooted subject on an unadmitted kind or node, or an unrooted read accessor, refuses");
             assert!(
@@ -18233,6 +18573,7 @@ mod tests {
                 &mut census_run(&certified, &roots),
                 &census_transcript_with(vec![], form(kind, node_kind, subject)),
                 0,
+                &[],
             )
             .expect_err("refuses");
             assert!(
@@ -18283,6 +18624,7 @@ mod tests {
                 json!([]),
             ),
             0,
+            &[],
         )
         .expect_err("an unrooted this refuses");
         assert!(
@@ -18299,6 +18641,7 @@ mod tests {
                 json!([]),
             ),
             0,
+            &[],
         )
         .expect_err("an unreviewed receiver refuses");
         assert!(
@@ -18322,6 +18665,7 @@ mod tests {
                 json!([]),
             ),
             0,
+            &[],
         )
         .expect_err("a local receiver refuses");
         assert!(
@@ -18333,6 +18677,7 @@ mod tests {
             &mut census_run(&certified, &roots),
             &census_transcript_with(vec![call_of(serde_json::Value::Null, json!(0))], json!([])),
             0,
+            &[],
         )
         .expect_err("a receiverless by-reference transfer refuses");
         assert!(
@@ -18365,7 +18710,7 @@ mod tests {
             )],
             json!([]),
         );
-        let refusal = census_transcript(&mut census_run(&certified, &roots), &unresolved, 0)
+        let refusal = census_transcript(&mut census_run(&certified, &roots), &unresolved, 0, &[])
             .expect_err("an unresolved callee refuses");
         assert!(
             refusal.contains("refuses an unresolved callee") && refusal.contains("callback"),
@@ -18375,7 +18720,7 @@ mod tests {
         // A dependency export with no audited negative row, in a root that is
         // not this artifact's own runtime, is neither local nor excused.
         let unaudited = census_transcript_with(vec![signals_call("render", json!({}))], json!([]));
-        let refusal = census_transcript(&mut census_run(&certified, &roots), &unaudited, 0)
+        let refusal = census_transcript(&mut census_run(&certified, &roots), &unaudited, 0, &[])
             .expect_err("an unaudited dependency callee refuses");
         assert!(
             refusal.contains("neither a default-library member") && refusal.contains("\"render\""),
@@ -18394,6 +18739,7 @@ mod tests {
                 json!([]),
             ),
             0,
+            &[],
         )
         .expect_err("a transcript outside the certified artifact's runtime source refuses");
         assert!(
@@ -18415,6 +18761,7 @@ mod tests {
             &mut census_run(&certified, &roots),
             &census_transcript_with(vec![], forms("unknown")),
             0,
+            &[],
         )
         .expect_err("an uncensused form at the floor refuses");
         assert!(
@@ -18427,6 +18774,7 @@ mod tests {
                 &mut census_run(&certified, &roots),
                 &census_transcript_with(vec![], forms("unreachable")),
                 0,
+                &[],
             ),
             Ok(CensusStep::Decided)
         );
@@ -18439,6 +18787,7 @@ mod tests {
                 json!([]),
             ),
             0,
+            &[],
         )
         .expect_err("an absent call kind is never read as a call");
         assert!(refusal.contains("call of unknown kind"), "{refusal}");
@@ -18532,17 +18881,17 @@ mod tests {
         let mut run = census_run(&certified, &roots);
         run.runtime_sources.insert("dist/index.js".into());
         assert_eq!(
-            census_transcript(&mut run, &export, 0),
+            census_transcript(&mut run, &export, 0, &[]),
             Ok(CensusStep::NeedsTranscripts)
         );
-        assert_eq!(run.requested, vec![helper_location.clone()]);
+        assert_eq!(run.requested, vec![(helper_location.clone(), vec![])]);
 
         // A file the verified closure manifest does not call runtime source is
         // not walked at all, the export's own declaration included: a
         // declaration file the archive also ships is a description of code.
         let mut run = census_run(&certified, &roots);
         run.runtime_sources.clear();
-        let refusal = census_transcript(&mut run, &export, 0)
+        let refusal = census_transcript(&mut run, &export, 0, &[])
             .expect_err("a declaration outside the runtime source set is not walked");
         assert!(
             refusal.contains("not in this artifact's own runtime source"),
@@ -18560,7 +18909,7 @@ mod tests {
             .end_byte += 1;
         let mut run = census_run(&certified, &roots);
         run.runtime_sources.insert("dist/index.js".into());
-        let refusal = census_transcript(&mut run, &unbound, 0)
+        let refusal = census_transcript(&mut run, &unbound, 0, &[])
             .expect_err("an identifier no node owns is refused");
         assert!(
             refusal.contains("finds no function-like declaration node"),
@@ -18602,6 +18951,7 @@ mod tests {
         );
         let locals = vec![LocalDeclarationTranscript {
             location: helper_location.clone(),
+            premises: vec![],
             transcript: helper.clone(),
         }];
         let mut run = census_run(&certified, &roots);
@@ -18614,7 +18964,7 @@ mod tests {
         run.visited
             .push(CensusDeclarationIdentity::of(export.declaration.as_ref().unwrap()).unwrap());
         assert_eq!(
-            census_transcript(&mut run, &export, 0),
+            census_transcript(&mut run, &export, 0, &[]),
             Ok(CensusStep::Decided)
         );
         assert!(run.sites.contains(&format!(
@@ -18635,6 +18985,7 @@ mod tests {
         ));
         let locals = vec![LocalDeclarationTranscript {
             location: helper_location.clone(),
+            premises: vec![],
             transcript: helper.clone(),
         }];
         let mut run = census_run(&certified, &roots);
@@ -18645,7 +18996,7 @@ mod tests {
         };
         run.visited
             .push(CensusDeclarationIdentity::of(export.declaration.as_ref().unwrap()).unwrap());
-        let refusal = census_transcript(&mut run, &export, 0)
+        let refusal = census_transcript(&mut run, &export, 0, &[])
             .expect_err("a cycle does not hide an unresolved sibling edge");
         assert!(
             refusal.contains("refuses an unresolved callee"),
@@ -18666,6 +19017,7 @@ mod tests {
         )];
         let locals = vec![LocalDeclarationTranscript {
             location: helper_location,
+            premises: vec![],
             transcript: helper,
         }];
         let mut run = census_run(&certified, &roots);
@@ -18675,7 +19027,7 @@ mod tests {
             locals: &locals,
         };
         assert_eq!(
-            census_transcript(&mut run, &export, 0),
+            census_transcript(&mut run, &export, 0, &[]),
             Ok(CensusStep::Decided)
         );
         assert_eq!((run.calls, run.deepest), (2, 1));
@@ -18820,6 +19172,7 @@ mod tests {
         );
         let locals = vec![LocalDeclarationTranscript {
             location: mount.location.clone(),
+            premises: vec![],
             transcript: mount.clone(),
         }];
         let decide = |export: &typefacts::ExportImplementationTranscript,
@@ -18829,7 +19182,7 @@ mod tests {
                 roots: &roots,
                 locals,
             };
-            census_transcript(&mut run, export, 0)
+            census_transcript(&mut run, export, 0, &[])
         };
 
         // A `switch` whose `break` the construct itself owns: the lower bound
@@ -18910,6 +19263,7 @@ mod tests {
         unaccounted_local.open_reasons = vec!["controlFlowUnsupported".into()];
         let deep_locals = vec![LocalDeclarationTranscript {
             location: unaccounted_local.location.clone(),
+            premises: vec![],
             transcript: unaccounted_local,
         }];
         let refusal = decide(&deep_export, &deep_locals)
@@ -18980,6 +19334,7 @@ mod tests {
         );
         let locals = vec![LocalDeclarationTranscript {
             location: mount.location.clone(),
+            premises: vec![],
             transcript: mount,
         }];
         let mut run = census_run(&certified, &roots);
@@ -18988,7 +19343,7 @@ mod tests {
             locals: &locals,
         };
         assert_eq!(
-            census_transcript(&mut run, &export, 0),
+            census_transcript(&mut run, &export, 0, &[]),
             Ok(CensusStep::Decided)
         );
     }
@@ -19010,7 +19365,7 @@ mod tests {
         // Establish the frame exactly as `census_transcript` does.
         run.frame = Some(census_transcript_frame(&mut run, &export, 0).unwrap());
         let admitted = |run: &mut CensusRun<'_>, call: &typefacts::ImplementationCall| {
-            census_call_disposition(run, call, 0).map(|verdict| verdict.map(|(kind, _)| kind))
+            census_call_disposition(run, call, 0, &[]).map(|verdict| verdict.map(|(kind, _)| kind))
         };
         let for_each = |overrides: serde_json::Value| {
             let mut base = json!({
@@ -19178,6 +19533,7 @@ mod tests {
             &mut run,
             &library_call("MapConstructor", json!({"kind": "construct"})),
             0,
+            &[],
         )
         .unwrap()
         .unwrap();
@@ -19222,7 +19578,7 @@ mod tests {
             );
             let roots = vec![consumer_root(&certified)];
             let mut run = census_run(&certified, &roots);
-            census_transcript(&mut run, &export, 0)
+            census_transcript(&mut run, &export, 0, &[])
         };
         let name_at = |source: &str, needle: &str| {
             u64::try_from(source.find(needle).unwrap() + needle.len() - "helper".len()).unwrap()
@@ -19283,7 +19639,7 @@ mod tests {
         // unwritten and declared once, so the arrow is asked for like a named
         // declaration.
         assert_eq!(
-            census_transcript(&mut census_run(&certified, &roots), &export, 0),
+            census_transcript(&mut census_run(&certified, &roots), &export, 0, &[]),
             Ok(CensusStep::NeedsTranscripts)
         );
         // The same declarator resolved from another module names the binding
@@ -19307,7 +19663,7 @@ mod tests {
         let outcome_for = |source: &str, call: typefacts::ImplementationCall| {
             let (certified, export) = census_source_case(source, "useThing", vec![call]);
             let roots = vec![consumer_root(&certified)];
-            census_transcript(&mut census_run(&certified, &roots), &export, 0)
+            census_transcript(&mut census_run(&certified, &roots), &export, 0, &[])
         };
         let const_name = name_at(source, "const helper");
         assert_eq!(
@@ -19422,7 +19778,7 @@ mod tests {
         let certified = consumer_snapshot_with(&source);
         let roots = vec![consumer_root(&certified)];
         assert_eq!(
-            census_transcript(&mut census_run(&certified, &roots), &export, 0),
+            census_transcript(&mut census_run(&certified, &roots), &export, 0, &[]),
             Ok(CensusStep::Decided)
         );
         // Without the mark removed, the same offsets would name bytes three
@@ -19431,7 +19787,7 @@ mod tests {
         let declaration = shifted.declaration.as_mut().unwrap();
         declaration.location.start_byte += 3;
         declaration.location.end_byte += 3;
-        let refusal = census_transcript(&mut census_run(&certified, &roots), &shifted, 0)
+        let refusal = census_transcript(&mut census_run(&certified, &roots), &shifted, 0, &[])
             .expect_err("offsets counted over the mark bind nothing");
         assert!(
             refusal.contains("finds no function-like declaration node"),

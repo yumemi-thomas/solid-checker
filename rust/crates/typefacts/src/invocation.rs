@@ -86,6 +86,21 @@ pub struct ExportValueDemand {
     pub local_declaration_location: Option<Location>,
     #[serde(default, skip_serializing_if = "is_zero_usize")]
     pub callable_depth: usize,
+    /// The premise the local declaration's uncensused-form census is asked to
+    /// classify under: each named parameter bound to the given type, which is
+    /// the type the **caller's** premised census found in that argument slot
+    /// at the call that reached this declaration
+    /// ([`ExportImplementationTranscript::call_argument_premises`]), copied
+    /// back verbatim (handshake protocol 23, ADR 0038). Meaningful only beside
+    /// [`Self::local_declaration_location`]; the producer refuses a demand
+    /// stating it for anything else, because an export's root has a declared
+    /// signature to bind. Indexes are strictly increasing. The answer's
+    /// [`ExportImplementationTranscript::parameter_premises`] either equals
+    /// this list — every entry re-established on the callee's twin — or is
+    /// empty, the strictly more refusing census; `Session::export_values`
+    /// refuses anything in between.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parameter_premises: Vec<ParameterPremise>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -392,14 +407,34 @@ pub enum ImplementationCompletionForm {
 /// Exact runtime implementation selected independently of the declaration
 /// expression used by [`ExportValueTranscript`]. This is not an invented
 /// invocation: the producer inspects the snapshot-replayed binding itself.
-/// One parameter's declared-type binding under which an implementation's
+/// One parameter's type binding under which an implementation's
 /// uncensused-form census was classified (ADR 0038). See
 /// [`ExportImplementationTranscript::parameter_premises`].
+///
+/// `identity` is the producer's own binding of the text to a declaration —
+/// type flags and declaration positions — stated on a call-argument premise
+/// and echoed on the demand and the callee's premise so that a spelling which
+/// resolves to a *different* declaration of the same name on the callee's twin
+/// is refused by the producer rather than bound. A consumer compares it byte
+/// for byte and reads nothing into it; a root premise, bound to the declared
+/// signature by its text alone, carries none.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ParameterPremise {
     pub index: usize,
     pub r#type: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub identity: Arc<str>,
+}
+
+/// The type each informative written argument slot of one call carried on the
+/// twin a premised census ran over (handshake protocol 23). See
+/// [`ExportImplementationTranscript::call_argument_premises`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CallArgumentPremise {
+    pub call: Location,
+    pub arguments: Vec<ParameterPremise>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -489,9 +524,12 @@ pub struct ExportImplementationTranscript {
     /// JavaScript parameter has, and a consumer that closes a domain on the
     /// resulting census records every entry as a condition of the closure.
     /// Absent, the forms were classified over the parameters' own types, the
-    /// strictly more refusing reading; an empty list is never a premise. The
-    /// producer states it only on the export's root implementation, never on a
-    /// local declaration's transcript.
+    /// strictly more refusing reading; an empty list is never a premise. On
+    /// the export's root implementation the entries are the declared
+    /// signature's types; on a local declaration's transcript (protocol 23)
+    /// they equal the demand's [`ExportValueDemand::parameter_premises`],
+    /// which the consumer copied from the caller's
+    /// [`Self::call_argument_premises`] for the call it followed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub parameter_premises: Vec<ParameterPremise>,
     /// Why the producer, holding a declared signature and a form a type could
@@ -499,6 +537,18 @@ pub struct ExportImplementationTranscript {
     /// nothing from it and reads nothing into its absence.
     #[serde(default, skip_serializing_if = "str::is_empty")]
     pub parameter_premise_refusal: Arc<str>,
+    /// For each call or construction the **premised** census walked whose
+    /// callee is an identifier resolving to a declaration in the program's own
+    /// runtime source, the type the twin's checker gave each informative
+    /// written argument slot (handshake protocol 23). This is how a premise
+    /// reaches a local helper: a consumer following the call copies the entry
+    /// into the helper's [`ExportValueDemand::parameter_premises`]. Stated only
+    /// beside a nonempty [`Self::parameter_premises`], only for a call with no
+    /// spread, and only for the slots whose type is not `any`; each `call` is
+    /// the location of a row of [`Self::calls`]. A consumer refuses an entry
+    /// that names no row and any entry on an unpremised transcript.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub call_argument_premises: Vec<CallArgumentPremise>,
     /// The conjunction of seven independent gates, every one of which the
     /// producer clears before setting this — and nothing else.
     ///

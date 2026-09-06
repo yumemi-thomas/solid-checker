@@ -1,5 +1,48 @@
 # Precision backlog
 
+## The declared-signature premise reaches a local helper (2026-09-06, protocol 23)
+
+ADR 0038 amended (lever C step 2). A helper has no declared signature to bind,
+so its premise is the type of each argument slot at the call that reached it,
+on the caller's twin: the caller's premised census records those types per
+call to a runtime-source declaration (`callArgumentPremises`, text plus a
+declaration identity), the verifier demands the helper's transcript under
+exactly those entries (`parameterPremises` on the local-declaration demand,
+part of the demand digest), the producer classifies the helper on a spelled
+twin held to the same falsifier and echoes the premise or states none, and the
+verifier binds the echo entry for entry and records `census-premise:` sites at
+the helper's span. A slot the caller typed `any`, or every slot of a
+spread-carrying call, hands the helper nothing; two argument-type sets are two
+demands, never a union.
+
+Measured on the 2026-09-06 corpus against the ADR 0038 root slice: withheld
+`creates` candidates 904 → 866; `censusRefused` 786 → 748; coercion refusals
+80 → 30 (15 → 7 distinct sites); iteration 90 and accessor 398 → 404
+unchanged in kind; `vetoThrew` 45 → 62 because seventeen newly closed
+censuses reach the `.jsx`-entry veto that throws under the `solid` condition
+(ADR 0037's open class). Statuses unchanged, 368 certified / 30 refused.
+Cost, by alternating full-corpus runs of the previous and the new binaries in
+the same machine state: 2784 → 2908 CPU-seconds and 291 → 307 s wall, about
+5%, inside the movement of the checker-free stages between the same two runs
+(generation moved 8%). The report is again not repinned: the previous binaries
+ran at 291 s on that machine state against a 117 s pin and a 150 s budget, so
+a pin would have recorded the machine.
+
+Recorded, not closed. Three of the seven remaining coercion sites are new
+classes: a helper's **return type** in the caller's body (`scalePoint(point,
+scale, originPoint) + translate` — the caller's twin types the helper's
+parameters `any`, so its inferred return is `any` even though the helper's
+own census clears under the demanded premise; closing it is a fixpoint over
+the local call graph), a helper argument type spelled by a **`.d.ts` name the
+helper's module cannot resolve** (`calcLength(axis)` under `Axis`; refused by
+the identity check — spell it as `import("<declaration module>").<name>` from
+the identity's own file), and a **nested arrow's untyped parameter**
+(`cubicBezier`'s `getTForX = (aX) => binarySubdivide(aX, …)`). Pattern
+parameters on a helper refuse the premise (the compiler matches a tag to a
+pattern parameter by order). Pinned in `implementation-census-creates`:
+`helperCoercion` certifies; `helperSpreadCoercion`, `helperUntypedArgument`
+refuse.
+
 ## The `creates` census classifies under the export's declared signature (2026-09-06)
 
 ADR 0038 (lever C of the accuracy roadmap, root slice). The uncensused-form

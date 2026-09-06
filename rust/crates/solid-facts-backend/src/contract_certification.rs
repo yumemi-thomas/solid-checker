@@ -11474,7 +11474,7 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 34] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 36] = [
         "callInitialized",
         "callLibraryOutsideTable",
         "callNonLibraryReceiver",
@@ -11483,6 +11483,8 @@ export const value = phantom;
         "declaredMemberCoercion",
         "deep",
         "helperCoercion",
+        "helperSpreadCoercion",
+        "helperUntypedArgument",
         "iife",
         "labelledBreak",
         "loopCall",
@@ -12647,6 +12649,8 @@ export const value = phantom;
             "declaredMemberCoercion",
             "deep",
             "helperCoercion",
+            "helperSpreadCoercion",
+            "helperUntypedArgument",
             "labelledBreak",
             "loopCall",
             "memberParameterRooted",
@@ -12867,7 +12871,7 @@ export const value = phantom;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
-    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 32] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 34] = [
         "callInitialized",
         "callLibraryOutsideTable",
         "callNonLibraryReceiver",
@@ -12876,6 +12880,8 @@ export const value = phantom;
         "declaredMemberCoercion",
         "deep",
         "helperCoercion",
+        "helperSpreadCoercion",
+        "helperUntypedArgument",
         "labelledBreak",
         "loopCall",
         "memberParameterRooted",
@@ -12912,13 +12918,16 @@ export const value = phantom;
     /// the arrow its `const` holds is followed through the binding — while
     /// `callInitialized`, whose `const` holds a call's result, is refused.
     /// `typedCoercion`, `returnedCallbackCoercion` and `declaredMemberCoercion`
-    /// close under the declared-signature premise (ADR 0038); `untypedCoercion`
-    /// (declared `unknown`) and `helperCoercion` (the coercion is a helper's,
-    /// which has no declared signature) are refused.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 14] = [
+    /// close under the declared-signature premise (ADR 0038), and
+    /// `helperCoercion` closes since protocol 23 carries the caller's argument
+    /// types to the helper as its premise; `untypedCoercion` (declared
+    /// `unknown`), `helperSpreadCoercion` (a spread carries no slot) and
+    /// `helperUntypedArgument` (an `any` slot) are refused.
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 15] = [
         "constBound",
         "cycle",
         "declaredMemberCoercion",
+        "helperCoercion",
         "memberParameterRooted",
         "noRecipe",
         "overloaded",
@@ -12931,12 +12940,13 @@ export const value = phantom;
         "viaHelperChain",
         "whileBreak",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 18] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 19] = [
         ("callInitialized", "census"),
         ("callLibraryOutsideTable", "census"),
         ("callNonLibraryReceiver", "census"),
         ("deep", "census"),
-        ("helperCoercion", "census"),
+        ("helperSpreadCoercion", "census"),
+        ("helperUntypedArgument", "census"),
         ("labelledBreak", "census"),
         ("loopCall", "veto"),
         ("moduleReceiverRead", "census"),

@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "61582366396f470bb32dc2b99d5a172eb68b5ee3b1f8f91351fe404c5afab5b1",
+            "closureSha256": "748dda24f31198fdac46ab189ec6c96966aa13dc748e710ffb5cdd8d8bc1e58c",
             "path": "./index.js",
-            "sha256": "237669a215b74f5cd4773103796d50c3ae003edfce839a91f572812cbf4ea084"
+            "sha256": "a9165f284943b9c94c820430cef5bc378bc1e7eaa8ad1ca3709e29b46ed51a69"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "5839cd96b229b256ea3749931350a73ecf6fc53cd47fc238a4a0ac81ebcb5756"
+            "sha256": "c14e8b66ec7d868a57532a7008cc40abd361db54f6806ae409575df649d7d2c0"
           },
           "exports": {
             "callInitialized": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -21,6 +21,8 @@
             "declaredMemberCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "deep": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "helperCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "helperSpreadCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "helperUntypedArgument": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "iife": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "labelledBreak": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "loopCall": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",

@@ -191,18 +191,29 @@ refusals 357 → 80 (60 → 15 distinct sites), iteration 97 → 90; the accesso
 class *rose* 348 → 398 because the cleared coercions were hiding accessor
 refusals behind them. Statuses unchanged (368 / 30).
 
-**Step 2, open.** Of the 15 coercion sites left, 11 are **local helpers**
-reached from an export whose own body cleared: `scalePoint` from
-`applyPointDelta`/`removePointDelta`, `calcLength` from `aspectRatio`,
-`mixNumber` from `transformAxis`, `wrap` from `getEasingForSegment`, `clamp`
-from `steps`, `binarySubdivide` from `cubicBezier`, `formatErrorMessage` from
-`warnOnce`, `hueToRgb`, `fillOffset`, `distance`. A helper has no declared
-signature; the premise for it is the **call-site argument types in the
-caller's twin**, spelled as `@param` tags per slot from the caller twin's
-checker, carried on the local-declaration demand, and bound the same way. A
-helper reached from two callers with different argument types takes the union.
-The remaining 4 sites are honest: `unknown` and generic parameters
-(`@solid-primitives/utils`'s `compare<T>`), and `any`-typed declarations.
+**Step 2, taken (2026-09-06, handshake protocol 23).** Of the 15 coercion
+sites left after step 1, 11 were **local helpers** reached from an export whose
+own body cleared: `scalePoint` from `applyPointDelta`/`removePointDelta`,
+`calcLength` from `aspectRatio`, `mixNumber` from `transformAxis`, `wrap` from
+`getEasingForSegment`, `clamp` from `steps`, `binarySubdivide` from
+`cubicBezier`, `formatErrorMessage` from `warnOnce`, `hueToRgb`, `fillOffset`,
+`distance`. A helper has no declared signature; its premise is the **argument
+types at the call that reached it, on the caller's twin**, recorded by the
+caller's premised census (`callArgumentPremises`), carried on the helper's
+local-declaration demand (`parameterPremises`), spelled as one `@param` per
+slot on the helper's own twin, and bound the same way — text and declaration
+identity, at every hop. A helper reached from two calls with different argument
+types is two demands and two transcripts rather than a union, so each census
+holds under exactly the condition the receipt records. Measured: withheld
+904 → 866, `censusRefused` 786 → 748, coercion 80 → 30 (15 → 7 sites);
+`vetoThrew` 45 → 62 as newly closed censuses reach the `.jsx`-entry veto
+(ADR 0037's open class). Statuses unchanged. The 7 sites left: the 4 honest
+ones (`unknown` and generic parameters, `@solid-primitives/utils`'s
+`compare<T>`, `any`-typed declarations) and three new classes named in the
+ADR — a helper's `any` return type in the caller's body (`scalePoint(…) +
+translate`; a fixpoint over the local call graph), a `.d.ts` name the helper's
+module cannot spell (`calcLength(axis)` under `Axis`), and a nested arrow's
+untyped parameter (`binarySubdivide` through `getTForX`).
 
 **Step 3, not a lever.** Accessor forms are unchanged by design (ADR 0034's
 rejection stands: a declared property type says nothing about a getter). The
@@ -286,8 +297,11 @@ closed claims per domain so the intermediate progress is visible.
    on four TanStack rows and one 113-entrypoint row, recorded above.
 3. **Lever D** — const-bound callees taken 2026-09-06; own-class methods and
    `new` on an own-source class remain (18 refusals, 3 sites in `motion-dom`).
-4. ~~Lever C step 1~~ — taken as ADR 0038; step 2 (helper premises from
-   call-site argument types) is the next census slice, ≈11 sites.
+4. ~~Lever C step 1~~ — taken as ADR 0038; ~~step 2~~ — taken as its
+   amendment (protocol 23): helper premises from call-site argument types.
+   Open under C: a helper argument type spelled by a `.d.ts` name the
+   JavaScript module cannot resolve (spell it as `import(…).name` from the
+   identity's declaration file).
 5. **Lever B** ADR once A runs, Solid 2 first, 1.x with Babel reproduction.
 6. **Lever F** ADR: per-domain census terminators over the existing walk, then
    `callbacks`, then `reads`/`writes`.

@@ -289,3 +289,19 @@ the premise to the signature it already holds. `parameterPremiseRefusal` is
 diagnostic only. An empty form list on a premised transcript means "no form
 under the declared signature", which a protocol-21 consumer would read as "no
 form at all", so the handshake moves although the fields are additive.
+
+Protocol 23 (2026-09-06, ADR 0038 helper premises) carries a premise to a
+local helper. A *premised* transcript states `callArgumentPremises`: for each
+call or construction whose callee is an identifier resolving to a declaration
+in the program's own runtime source, with no spread, the type the twin's
+checker gave every argument slot that is not `any` — text plus an opaque
+`identity` binding the text to a declaration. A consumer following that call
+copies the entry onto the helper's local-declaration demand as
+`exportValueDemand.parameterPremises` (part of the demand digest), and the
+producer classifies the helper's form census on a spelled twin carrying one
+`@param` per premised slot, held to the same falsifier; the helper's transcript
+then states `parameterPremises` equal to the demand's, or none — the client
+refuses anything in between, and refuses a premise on a demand that is not a
+local declaration. A protocol-22 consumer refused any premise on a local
+declaration and never asked for one, so the handshake moves although every
+field is additive.

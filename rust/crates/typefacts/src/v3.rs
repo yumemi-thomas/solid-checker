@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:ccd57bc16f459dc14dde96055c0d9eebcc0ec0545bab03368242e3df121267f0";
+    "sha256:95b5229ebf17436cd5e360d6662cbc16f1c4dcff38533946128dcd99b53aa8da";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -138,6 +138,14 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
+// Protocol 23 carries a premise to a local helper: a premised census states
+// `callArgumentPremises` — the type of each informative argument slot at every
+// call to a runtime-source declaration, on the twin — a local-declaration
+// demand may carry them back as `parameterPremises`, and the helper's
+// transcript echoes the entries its own twin bound (ADR 0038, helper
+// premises). A protocol-22 consumer refused any premise on a local declaration
+// and never asked for one, so the number moves although every field is
+// additive.
 // Protocol 22 lets an export's root implementation transcript state
 // `parameterPremises`: its uncensused-form census was classified with each
 // parameter bound to the type the export's declared call signature gives that
@@ -167,7 +175,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // producer is never "not rooted".
 // Protocol 17 includes exact-null loose equality in the positive
 // uncensused-form classifier. Protocol 16 added unchanged-parameter identity.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 22;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 23;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

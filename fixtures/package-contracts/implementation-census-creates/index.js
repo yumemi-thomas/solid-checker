@@ -418,14 +418,33 @@ export function declaredMemberCoercion(axis) {
 }
 
 // The coercion sits in a local helper, whose parameters have no declared
-// signature: the premise is the root's alone, and `x - y` refuses at depth 1.
-// This is ADR 0038's named frontier. **Refuses.**
+// signature. The premise reaches it anyway (ADR 0038, helper premises): the
+// root's premised census records the argument types at `subtract(a, b)` —
+// `number`, `number` under the declared signature — the verifier demands the
+// helper's transcript under exactly those types, and `x - y` clears on the
+// helper's own twin. The receipt carries a `census-premise:` site for the
+// helper's parameters too. **Certifies.**
 function subtract(x, y) {
   return x - y;
 }
 
 export function helperCoercion(a, b) {
   return subtract(a, b);
+}
+
+// A spread displaces every slot at or after it, so the call carries no
+// argument premise; the helper is censused over its own `any` and `x - y`
+// refuses at depth 1. The spread itself clears — under the premise `[a, b]`
+// is a `number[]`, an engine container. **Refuses.**
+export function helperSpreadCoercion(a, b) {
+  return subtract(...[a, b]);
+}
+
+// One slot is `any` — `JSON.parse` returns `any` — so the premise names slot 0
+// only; `y` stays `any` on the helper's twin and `x - y` refuses at depth 1.
+// **Refuses.**
+export function helperUntypedArgument(a) {
+  return subtract(a, JSON.parse("1"));
 }
 
 const registryObject = { value: 1 };

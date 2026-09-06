@@ -206,15 +206,96 @@ outside the premise — exactly as it is outside every Type Facts claim.
   transaction's own falsifier already tests under the declared types, and it is
   the single largest census refusal class on the corpus.
 
+## Amendment: the premise reaches a local helper (2026-09-06, handshake protocol 23)
+
+The root slice stopped at the root because a helper has no declared signature.
+The helper's premise is instead **the type of each argument slot at the call
+that reached it, on the caller's twin** — a fact the caller's premised census
+already has in hand, conditional on nothing the transaction has not already
+recorded.
+
+**Producer.** A premised census — the root's, or a helper's own — walks the
+twin's implementation for every call or construction whose callee is an
+identifier resolving to a declaration in the program's own runtime source and,
+when the call carries no spread, records the type the twin's checker gives each
+argument slot that is not `any`, as text plus an *identity*
+(`callArgumentPremises`). The twin is now built for such a call as it is for a
+type-decided form, because an unpremised caller has no argument types to offer.
+A local-declaration demand may carry `parameterPremises`; the producer spells
+them as one `@param {<type>} <name>` per premised slot on a twin of the helper
+(every parameter must be a plain identifier — the compiler matches a tag to a
+pattern parameter by order, and a partial set would bind the wrong slot), holds
+each premised parameter to the falsifier — printed text and declaration
+identity equal to the demand's — and echoes exactly the demanded entries, or
+none. There is no `import()` fallback for a helper: it has no declaration
+module to name. A slot the caller's twin typed `any`, or every slot of a
+spread-carrying call, is stated nowhere and stays `any` on the helper. The
+identity is what stops a spelling that *resolves to something else*: `Axis`
+printed from a caller whose `.d.ts` declares it resolves to nothing in a
+JavaScript module that never imports it, and the flags and missing alias
+refuse the twin even though the text matches.
+
+**Verifier.** Before dispositioning a call, the census reads the premise the
+caller's transcript recorded for that exact call row — only from a transcript
+that is itself premised, and only for a location that is a row of its own
+`calls` — and looks the callee's transcript up by span *and* premise. A helper
+the session has not transcribed under that premise is demanded under it (the
+premise is part of the demand digest, so an answer to a different question is
+refused by the client), and the same helper reached from two calls with
+different argument types is two demands and two transcripts, each censused
+under its own condition; no union is taken. A local transcript's stated premise
+must equal the demanded one entry for entry — index, text, identity — or be
+empty, and every bound entry is a `census-premise:<helper path>:<start>:<end>:<i>:<type>`
+site beside the `census-local-declaration:` site whose digest covers the
+premise and the call-argument premises alike. The depth-1 refusal of the root
+slice is gone; a premise on a helper no call-argument premise asked for still
+refuses.
+
+**Measured** on the same corpus, with the previous pin's statuses unchanged
+(368 certified / 30 refused): withheld `creates` candidates 904 → 866,
+`censusRefused` 786 → 748, coercion refusals 80 → 30 (15 → 7 distinct sites),
+iteration 90 (13 sites) and accessor 398 → 404 unchanged in kind; `vetoThrew`
+45 → 62, because seventeen newly closed censuses now reach the `.jsx`-entry
+veto that throws under the `solid` condition (the class ADR 0037 left open).
+Cleared: `mixNumber`, `wrap`, `clamp`, `formatErrorMessage`, `hueToRgb`,
+`fillOffset`, `distance` and their kin.
+
+**Cost.** Two twins that did not exist before: the caller's, now built also
+when a reachable helper records a type-decided form over its own types
+(`calleesWorthPremisingLocked`, a memoized walk of the local call graph — a
+body whose helpers record no such form still pays nothing), and the helper's
+own spelled twin per distinct premise set. Measured by alternating full-corpus
+runs of the previous and the new binaries in the same machine state: 2784
+versus 2908 CPU-seconds and 291 versus 307 s wall, about 5%, inside the
+run-to-run movement of the stages that do not use the checker at all (the
+generation stage moved 8% between the same two runs). The benchmark report is
+not repinned: the machine ran the *previous* binaries at 291 s against a
+117 s pin and a 150 s budget that day.
+
+Pinned in `implementation-census-creates`: `helperCoercion` now certifies;
+`helperSpreadCoercion` (the spread carries no slot) and
+`helperUntypedArgument` (an `any` slot) refuse at the helper.
+
 ## What still refuses
 
-- **A local helper's parameters.** `applyPointDelta` clears its own `+ translate`
-  under the premise and then refuses at depth 1 on `scalePoint`'s
-  `point - originPoint`, whose parameters have no declaration. The follow-up is
-  to carry the call-site argument types from the caller's twin as the callee's
-  premises (`@param` per slot, spelled from the caller twin's checker), stated
-  on the local-declaration demand and bound the same way. Pinned by
-  `helperCoercion`.
+- **A helper reached only through a spread, or with an `any` argument**, and
+  a helper whose parameter is a binding pattern. Pinned by
+  `helperSpreadCoercion` and `helperUntypedArgument`. On the corpus the
+  `any` argument is a *nested arrow's* parameter: `cubicBezier`'s
+  `getTForX = (aX) => binarySubdivide(aX, 0, 1, mX1, mX2)` hands
+  `binarySubdivide` an untyped `aX`, and `calcBezier(…) - x` refuses.
+- **A helper whose argument type is spelled by a name the helper's module
+  cannot resolve** — an interface or alias from the caller's `.d.ts` that the
+  JavaScript module never imports: `calcLength(axis)` under `Axis`. The
+  identity refuses the twin; spelling such a type as
+  `import("<declaration module>").<name>` from the identity's declaration file
+  is the open follow-up.
+- **A helper's return type in the caller's body.** The caller's twin types the
+  helper's *parameters* as `any`, so `scalePoint(point, scale, originPoint) +
+  translate` refuses at the root on the helper's inferred `any` return, even
+  though the helper's own census clears under the demanded premise. Closing
+  it means carrying the helper premises back into the caller's twin — a
+  fixpoint over the local call graph — which this amendment does not take.
 - **`unknown`, a bare type parameter, an object type** as an operand: not
   provably a non-object under any premise. Pinned by `untypedCoercion`.
 - **A structural iterable** (`Iterable<number>`) as a spread or `for…of`
@@ -236,11 +317,18 @@ outside the premise — exactly as it is outside every Type Facts claim.
 
 ## Consequences
 
-- Protocol 21 → 22; schema digest and the Rust client move with it.
+- Protocol 21 → 22; schema digest and the Rust client move with it. The
+  amendment moves 22 → 23: `parameterPremises` on `exportValueDemand`,
+  `callArgumentPremises` on the transcript, `identity` on `parameterPremise`.
 - `implementation-census-creates` gains five exports: `typedCoercion`,
   `returnedCallbackCoercion` and `declaredMemberCoercion` certify with
   `census-premise:` sites; `untypedCoercion` and `helperCoercion` refuse.
   The generated-census tracer pins 14 `creates` closures and 18 withheld.
+  Under the amendment `helperCoercion` certifies and `helperSpreadCoercion`
+  and `helperUntypedArgument` are added and refuse: 15 closures, 19 withheld.
+- Producer test `TestCallArgumentPremisesReachALocalHelper`; verifier test
+  `creates_census_binds_a_local_declaration_premise_to_the_callers_argument_types`;
+  client test `local_declaration_premise_is_the_demands_or_nothing`.
 - Producer tests: `TestDeclaredSignaturePremise*` in
   `declared_signature_premise_test.go` — a declared `number` clears the
   coercion; `unknown` and `Iterable<number>` keep refusing under a bound

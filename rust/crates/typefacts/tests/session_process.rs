@@ -2216,12 +2216,14 @@ fn export_value_transcripts_carry_the_uncensused_invoking_form_census() {
                 implementation_location: Some(tagged),
                 local_declaration_location: None,
                 callable_depth: 0,
+                parameter_premises: Vec::new(),
             },
             typefacts::ExportValueDemand {
                 location: plain.clone(),
                 implementation_location: Some(plain),
                 local_declaration_location: None,
                 callable_depth: 0,
+                parameter_premises: Vec::new(),
             },
         ])
         .unwrap();
@@ -2286,12 +2288,14 @@ fn export_value_transcripts_classify_control_flow_incompleteness() {
                 implementation_location: Some(lower_bound),
                 local_declaration_location: None,
                 callable_depth: 0,
+                parameter_premises: Vec::new(),
             },
             typefacts::ExportValueDemand {
                 location: unaccounted.clone(),
                 implementation_location: Some(unaccounted),
                 local_declaration_location: None,
                 callable_depth: 0,
+                parameter_premises: Vec::new(),
             },
         ])
         .unwrap();
@@ -2380,6 +2384,7 @@ fn export_value_demand_reaches_a_module_local_declaration_by_exact_location() {
             implementation_location: None,
             local_declaration_location: Some(helper.clone()),
             callable_depth: 0,
+            parameter_premises: Vec::new(),
         }])
         .unwrap();
     let local = answer.transcripts[0].local_declaration.as_ref().unwrap();
@@ -2411,6 +2416,7 @@ fn export_value_demand_reaches_a_module_local_declaration_by_exact_location() {
             implementation_location: None,
             local_declaration_location: Some(name.clone()),
             callable_depth: 0,
+            parameter_premises: Vec::new(),
         }])
         .unwrap();
     let refusal = refused.transcripts[0].local_declaration.as_ref().unwrap();

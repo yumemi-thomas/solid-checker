@@ -38,12 +38,16 @@ export declare function setterOnParameter(source: { value: unknown }): void;
 // ADR 0038: these signatures are the premise the form census classifies the
 // runtime bodies under. `typedCoercion`, `returnedCallbackCoercion` and
 // `declaredMemberCoercion` certify because of the types stated here;
-// `untypedCoercion` refuses on `unknown`, and `helperCoercion` refuses because
-// its helper's parameters have no declaration to bind.
+// `untypedCoercion` refuses on `unknown`. `helperCoercion` certifies because
+// the argument types at its call reach the helper as the helper's premise
+// (protocol 23); `helperSpreadCoercion` (a spread carries no slot) and
+// `helperUntypedArgument` (an `any` slot) refuse at the helper.
 export declare function typedCoercion(min: number, max: number, v: number): number;
 export declare function untypedCoercion(value: unknown): unknown;
 export declare function returnedCallbackCoercion(step: number): (p: number) => number;
 export declare function declaredMemberCoercion(axis: { min: number; max: number }): number;
 export declare function helperCoercion(a: number, b: number): number;
+export declare function helperSpreadCoercion(a: number, b: number): number;
+export declare function helperUntypedArgument(a: number): number;
 // An immediately-invoked function expression: this census refuses it.
 export declare function iife(value: number): number;

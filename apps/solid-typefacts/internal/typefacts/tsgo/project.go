@@ -99,6 +99,12 @@ type project struct {
 	// transcript, and the twin — a program rebuild and a cold checker — is
 	// the one part of that transcript worth not paying nine times.
 	premiseCensuses map[premiseCensusKey]premiseCensusResult
+	// premiseWorth memoizes, per generation, whether a runtime-source
+	// declaration's own form census — or that of a callee reachable from it —
+	// records a form a type can clear, which is what decides whether a caller's
+	// twin is worth building for the argument premises it would carry
+	// (calleesWorthPremisingLocked).
+	premiseWorth map[*ast.Node]bool
 	// calleeInvocations memoizes what a callable's body does with its own
 	// parameters, per callee symbol *and the depth it was asked at*, for the
 	// accepted generation. The descent reads a whole body per callee and real
@@ -304,6 +310,7 @@ func (p *project) ReleaseAnalysisState() {
 	p.checker = nil
 	p.checkerPool.drop()
 	p.premiseCensuses = nil
+	p.premiseWorth = nil
 	p.idsBySymbol = make(map[*ast.Symbol]typefacts.SymbolID)
 	p.symbolsByID = make(map[typefacts.SymbolID]*ast.Symbol)
 	p.exportedIdentities = nil
@@ -583,6 +590,7 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.checkerPool = program.GetCheckerPool().(*singleCheckerPool)
 	p.release = release
 	p.premiseCensuses = nil
+	p.premiseWorth = nil
 	p.fs = candidateFS
 	p.versions = candidateVersions
 	p.generation++

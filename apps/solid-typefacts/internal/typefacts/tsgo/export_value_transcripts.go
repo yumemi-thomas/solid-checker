@@ -33,6 +33,9 @@ func (p *project) ExportValueTranscripts(
 				typefacts.MaxInvocationCallableDepth,
 			)
 		}
+		if err := validateDemandedPremises(demand); err != nil {
+			return typefacts.ExportValueAnswer{}, err
+		}
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -181,11 +184,38 @@ func (p *project) exportValueTranscriptLocked(
 			ctx,
 			*demand.LocalDeclarationLocation,
 			demand.CallableDepth,
+			demand.ParameterPremises,
 		)
 		transcript.LocalDeclaration = &local
 	}
 	transcript.Complete = true
 	return transcript
+}
+
+// validateDemandedPremises refuses a demand whose ParameterPremises are not a
+// premise this producer can answer: they belong to a local-declaration demand
+// only — an export's root binds its declared signature, and a consumer
+// restating one would be a premise nobody reviewed — with strictly increasing
+// indexes and a nonempty type each. Refused before the lock, as the depth
+// limit is, so a malformed batch answers nothing rather than something.
+func validateDemandedPremises(demand typefacts.ExportValueDemand) error {
+	if len(demand.ParameterPremises) == 0 {
+		return nil
+	}
+	if demand.LocalDeclarationLocation == nil {
+		return fmt.Errorf("export-value demand states parameter premises without a local declaration to bind them to")
+	}
+	previous := -1
+	for _, premise := range demand.ParameterPremises {
+		if premise.Index <= previous {
+			return fmt.Errorf("export-value demand premises are not in strictly increasing parameter order at %d", premise.Index)
+		}
+		if premise.Type == "" {
+			return fmt.Errorf("export-value demand premise for parameter %d states no type", premise.Index)
+		}
+		previous = premise.Index
+	}
+	return nil
 }
 
 // completeOverloadSet is the all-or-nothing gate on a reported overload set: it
@@ -296,13 +326,20 @@ func (p *project) exportImplementationTranscriptLocked(
 	// The twin is built only then — most bodies record no such form — and a
 	// twin that cannot be bound to the declaration leaves the census as it
 	// is, with the refusal stated for measurement.
-	if premise != nil && formsMayClearUnderTypes(transcript.UncensusedInvokingForms) {
+	//
+	// It is built as well when a helper reachable from the body records such a
+	// form over its own types: the argument types at the reaching call, on the
+	// twin, are the premise a consumer may hand back for the helper's census
+	// (CallArgumentPremises), and an unpremised caller has none to offer.
+	if premise != nil && (formsMayClearUnderTypes(transcript.UncensusedInvokingForms) ||
+		p.calleesWorthPremisingLocked(implementation)) {
 		premised := p.premisedFormCensusLocked(ctx, implementation, premise)
 		if premised.refusal != "" {
 			transcript.ParameterPremiseRefusal = premised.refusal
 		} else {
 			transcript.UncensusedInvokingForms = premised.forms
 			transcript.ParameterPremises = premised.premises
+			transcript.CallArgumentPremises = premised.arguments
 		}
 	}
 	if len(transcript.ControlFlow.Unsupported) != 0 {
@@ -358,10 +395,20 @@ func (p *project) exportImplementationTranscriptLocked(
 // `const helper = () => …` resolves to the arrow itself. The client repeats
 // this comparison, and additionally requires QueryName and the resolved
 // declaration's name to agree where both are populated.
+//
+// `demanded` is the consumer's premise for this declaration's form census: the
+// argument types the caller's premised census recorded at the call that
+// reached it (ExportValueDemand.ParameterPremises). The census is classified
+// under them on a spelled twin when the body, or a helper reachable from it,
+// records a type-decided form over its own types, and the transcript echoes
+// exactly the premises the twin bound; a twin that cannot bind them leaves the
+// census over the parameters' own types, the strictly more refusing reading,
+// with the refusal stated for measurement.
 func (p *project) localDeclarationImplementationTranscriptLocked(
 	ctx context.Context,
 	location typefacts.Location,
 	callableDepth int,
+	demanded []typefacts.ParameterPremise,
 ) typefacts.ExportImplementationTranscript {
 	transcript := typefacts.ExportImplementationTranscript{Location: location}
 	sourceFile, err := p.sourceFileFor(location)
@@ -445,6 +492,17 @@ func (p *project) localDeclarationImplementationTranscriptLocked(
 	transcript.CallableReturns = p.callableReturnCensusesLocked(implementation)
 	transcript.Calls = p.implementationCallCensusLocked(implementation)
 	transcript.UncensusedInvokingForms = p.uncensusedInvokingFormCensusLocked(implementation)
+	if len(demanded) != 0 && (formsMayClearUnderTypes(transcript.UncensusedInvokingForms) ||
+		p.calleesWorthPremisingLocked(implementation)) {
+		premised := p.demandedPremiseCensusLocked(ctx, implementation, demanded)
+		if premised.refusal != "" {
+			transcript.ParameterPremiseRefusal = premised.refusal
+		} else {
+			transcript.UncensusedInvokingForms = premised.forms
+			transcript.ParameterPremises = premised.premises
+			transcript.CallArgumentPremises = premised.arguments
+		}
+	}
 	if len(transcript.ControlFlow.Unsupported) != 0 {
 		transcript.OpenReasons = append(transcript.OpenReasons, "controlFlowUnsupported")
 		return transcript
@@ -1084,6 +1142,15 @@ func exportValueDemandDigest(demands []typefacts.ExportValueDemand) string {
 			hashField(hash, strconv.Itoa(demand.LocalDeclarationLocation.EndByte))
 		}
 		hashField(hash, strconv.Itoa(demand.CallableDepth))
+		// Protocol 23: the demanded premises are part of the question. A
+		// consumer that asked for a census under `number` must not accept an
+		// answer to a demand that asked for one under nothing.
+		hashField(hash, strconv.Itoa(len(demand.ParameterPremises)))
+		for _, premise := range demand.ParameterPremises {
+			hashField(hash, strconv.Itoa(premise.Index))
+			hashField(hash, premise.Type)
+			hashField(hash, premise.Identity)
+		}
 	}
 	return "sha256:" + hex.EncodeToString(hash.Sum(nil))
 }

@@ -616,16 +616,23 @@ accessor-census disposition below; see
   typing carries those types into the body — through the parameters, through
   the return type into a returned arrow, through a declared array's element
   type into a `map` callback. `v > max` over parameters declared `number`
-  records no form; `value + 1` over `unknown`, a spread of an
-  `Iterable<number>`, and every operand of a **local helper's** own parameter
-  still refuse — a helper has no declared signature, and carrying call-site
-  argument types to it is the follow-up ADR 0038 names. The verifier binds each
-  stated premise to the one declared signature the synthesized veto samples
-  from, byte for byte, and records it as a `census-premise:` witness; a premise
-  on a local transcript, or one naming any other type, refuses. Pinned in
-  `implementation-census-creates`: `typedCoercion`, `returnedCallbackCoercion`
-  and `declaredMemberCoercion` certify; `untypedCoercion` and `helperCoercion`
-  refuse. Accessor forms are untouched: a declaration file is not runtime
+  records no form; `value + 1` over `unknown` and a spread of an
+  `Iterable<number>` still refuse. A **local helper's** own parameters have no
+  declared signature; since handshake protocol 23 (ADR 0038, helper premises)
+  the caller's premised census records the argument types at each call to a
+  runtime-source declaration, the verifier demands the helper's transcript
+  under exactly those types, and the helper is classified on a spelled twin of
+  its own — so `subtract(a, b)` from a `number, number` caller clears, while a
+  spread-carrying call or an `any` argument leaves the slot `any` and the
+  helper refuses. The verifier binds each stated root premise to the one
+  declared signature the synthesized veto samples from, each helper premise
+  to the caller's recorded argument types for the followed call, byte for
+  byte, and records both as `census-premise:` witnesses; a premise naming any
+  other type, or one on a helper no call-argument premise asked for, refuses.
+  Pinned in `implementation-census-creates`: `typedCoercion`,
+  `returnedCallbackCoercion`, `declaredMemberCoercion` and `helperCoercion`
+  certify; `untypedCoercion`, `helperSpreadCoercion` and
+  `helperUntypedArgument` refuse. Accessor forms are untouched: a declaration file is not runtime
   bytes, and ADR 0034's rejection of declared types *as accessor evidence*
   stands.
 - **An export whose callee reads a property the compiler resolves no symbol
