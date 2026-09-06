@@ -740,40 +740,53 @@ fn run_probe_gates_inner(
     // interpreter actually applies. The second is measured, never assumed: the
     // two are not the same set, and the difference is what selects a file.
     let requested = requested_conditions(plan)?;
-    let conditions_started = Instant::now();
-    let observed = observe_conditions(&configuration.node_executable, &node, &requested)?;
-    timing.conditions_ns = elapsed_ns(conditions_started);
-    let environment = probe_environment(&node, &node_version, &requested, &observed);
-    let runtime_plan = plan.runtime_probe_plan(schedule, &corpus, environment.clone())?;
-    // Before anything is copied or launched: this interpreter has to select the
-    // very runtime target the Type Facts witness read, for every import kind
-    // the scheduled recipes declare. A conforming `module-sync` target beside a
-    // contradicting `import` one is otherwise a false pass.
-    for kind in scheduled_import_kinds(schedule, &corpus)? {
-        if inert.is_some() && kind != ProbeImportKind::Esm {
-            return Err(ProbeHarnessError::Configuration(
-                "inert execution requires ESM recipes".into(),
-            ));
-        }
-        refuse_unreproducible_artifact_case(plan, kind, &observed)?;
-    }
-    // Static graph edges are ESM imports. Reproduce their independently
-    // planned targets too; an extra Node condition must not silently select a
-    // different dependency artifact case from the same authenticated archive.
-    for dependency in graph_dependencies {
-        refuse_unreproducible_artifact_case(dependency, ProbeImportKind::Esm, &observed)?;
+    let kinds = scheduled_import_kinds(schedule, &corpus)?;
+    if inert.is_some() && kinds.iter().any(|kind| *kind != ProbeImportKind::Esm) {
+        return Err(ProbeHarnessError::Configuration(
+            "inert execution requires ESM recipes".into(),
+        ));
     }
     // The dependency closure the private workspace will carry, and the refusal
     // that keeps it from being a partial one. Both happen before the private
     // directory exists: a dependency the analyzed package imports and this
     // transaction did not authenticate is a named refusal, never a probe
-    // against whatever the layout happens to resolve.
+    // against whatever the layout happens to resolve. It is assembled before
+    // the condition search below because that search reads every manifest in
+    // it.
     let dependencies = authenticated_dependency_closure(plan, graph_dependencies)?;
     require_authenticated_dependency_closure(plan, &dependencies)?;
     for dependency in graph_dependencies {
         require_authenticated_dependency_closure(dependency, &dependencies)?;
     }
     require_declared_dependencies_authenticated(schedule, &corpus, &dependencies)?;
+    // Before anything is copied or launched: this interpreter has to select the
+    // very runtime target the Type Facts witness read, for every import kind
+    // the scheduled recipes declare and for every independently planned graph
+    // dependency. A conforming `module-sync` target beside a contradicting
+    // `import` one is otherwise a false pass, and an extra Node condition must
+    // not silently select a different dependency artifact case from the same
+    // authenticated archive. When the requested set alone does not reproduce
+    // the cases, the bounded reproduction-condition search (ADR 0037) may add
+    // a condition — and admits it only when every manifest in the closure
+    // selects identically under it.
+    let conditions_started = Instant::now();
+    let reproduced = reproduce_artifact_cases(
+        &configuration.node_executable,
+        &node,
+        &requested,
+        plan,
+        graph_dependencies,
+        &kinds,
+        &dependencies,
+    )?;
+    timing.conditions_ns = elapsed_ns(conditions_started);
+    let ReproducedConditions {
+        flags: interpreter_conditions,
+        reproduction,
+        observed,
+    } = reproduced;
+    let environment = probe_environment(&node, &node_version, &requested, &reproduction, &observed);
+    let runtime_plan = plan.runtime_probe_plan(schedule, &corpus, environment.clone())?;
 
     let workspace_inputs = PrivateWorkspaceInputs {
         plan,
@@ -786,7 +799,7 @@ fn run_probe_gates_inner(
         // separate reads of the same path.
         node_executable_sha256: &node,
         type_facts_pin,
-        requested_conditions: &requested,
+        interpreter_conditions: &interpreter_conditions,
         dependencies: &dependencies,
     };
     let workspace_started = Instant::now();
@@ -854,6 +867,7 @@ fn run_probe_gates_inner(
                 "dependency-materialization:{}",
                 dependency_materialization_root(&dependencies)
             ),
+            format!("reproduction-conditions:{}", reproduction.join(",")),
         ],
     };
     if let Some((module, _)) = inert {
@@ -1037,6 +1051,450 @@ fn require_declared_dependencies_authenticated(
         }
     }
     Ok(())
+}
+
+/// The conditions [`reproduce_artifact_cases`] may add to a launch's flags, in
+/// the order it tries them (ADR 0037).
+///
+/// `browser` is the one Solid's own packages order before `node`: every
+/// `solid-js` and `@solidjs/web` in the audited corpus lists `worker, browser,
+/// deno, node, development, import`, so an interpreter that applies `node` on
+/// its own selects `dist/server.js` where the artifact case — selected under
+/// the consumer's conditions plus `default` — read `dist/solid.js`, and a
+/// `browser` flag makes the same interpreter land on the certified file. The
+/// list is a fixed constant rather than a search over the manifests because
+/// what it names is part of the receipt-visible policy: a condition here is a
+/// condition the policy digest says a launch may carry.
+const REPRODUCTION_CONDITIONS: [&str; 1] = ["browser"];
+
+/// What the reproduction-condition search settled on for one gate batch.
+struct ReproducedConditions {
+    /// The `--conditions=` flags every launch carries: the requested set plus
+    /// `reproduction`, sorted and deduplicated.
+    flags: Vec<String>,
+    /// The conditions added beyond the requested set — empty when the
+    /// requested set already reproduced every planned artifact case.
+    reproduction: Vec<String>,
+    /// What the pinned interpreter applies under exactly `flags`.
+    observed: ObservedConditions,
+}
+
+/// Finds the flag set under which the pinned interpreter selects, for every
+/// planned artifact case, the runtime target the Type Facts witness read.
+///
+/// The requested set is tried first, and when it reproduces every case nothing
+/// is added — that is the whole pre-ADR-0037 behavior. Otherwise each entry of
+/// [`REPRODUCTION_CONDITIONS`] is tried in turn, and one is admitted only when
+/// both facts hold under the set the interpreter reports for it:
+///
+/// * the root plan reproduces for every scheduled import kind, every graph
+///   dependency plan reproduces for an ESM import
+///   ([`refuse_unreproducible_artifact_case`], exactly as before), and every
+///   accepted dependency edge of those plans' verified closures resolves to
+///   the same file under the applied set as under the requested one
+///   ([`refuse_unreproducible_dependency_edges`]), **and**
+/// * every `exports` and `imports` object in every manifest of the
+///   authenticated closure selects the same target under that set as under
+///   the requested one ([`require_condition_neutral_closure`]).
+///
+/// The second is what makes an added condition safe to pass: the replay proves
+/// each *planned* entry lands right, and the neutrality walk proves the added
+/// condition cannot move any other conditional target in the closure — a
+/// subpath no plan names, or a `#internal` import the package resolves for
+/// itself — onto bytes the witness never read. The requested set is not held
+/// to the neutrality walk, because the interpreter's own defaults are what
+/// ADR 0006's per-node replay already dispositions.
+///
+/// When nothing reproduces, the refusal is the requested set's own — the
+/// reason the run-time buckets already read — followed by what each attempt
+/// added and why it was refused too.
+fn reproduce_artifact_cases(
+    node_executable: &Path,
+    node_sha256: &str,
+    requested: &[String],
+    plan: &CertificationPlan,
+    graph_dependencies: &[&CertificationPlan],
+    kinds: &BTreeSet<ProbeImportKind>,
+    closure: &BTreeMap<String, AuthenticatedDependency<'_>>,
+) -> Result<ReproducedConditions, ProbeHarnessError> {
+    let observed = observe_conditions(node_executable, node_sha256, requested)?;
+    let requested_refusal =
+        match replay_every_artifact_case(plan, graph_dependencies, kinds, &observed, closure) {
+            Ok(()) => {
+                return Ok(ReproducedConditions {
+                    flags: requested.to_vec(),
+                    reproduction: Vec::new(),
+                    observed,
+                });
+            }
+            Err(ProbeHarnessError::ConditionMismatch(message)) => message,
+            Err(other) => return Err(other),
+        };
+    let mut attempts = Vec::new();
+    for condition in REPRODUCTION_CONDITIONS {
+        if requested.iter().any(|value| value == condition) {
+            continue;
+        }
+        let mut flags = requested.to_vec();
+        flags.push(condition.to_owned());
+        flags.sort();
+        flags.dedup();
+        let observed = observe_conditions(node_executable, node_sha256, &flags)?;
+        let outcome =
+            replay_every_artifact_case(plan, graph_dependencies, kinds, &observed, closure)
+                .and_then(|()| {
+                    require_condition_neutral_closure(
+                        plan,
+                        graph_dependencies,
+                        closure,
+                        kinds,
+                        &observed,
+                    )
+                });
+        match outcome {
+            Ok(()) => {
+                return Ok(ReproducedConditions {
+                    flags,
+                    reproduction: vec![condition.to_owned()],
+                    observed,
+                });
+            }
+            Err(ProbeHarnessError::ConditionMismatch(message)) => attempts.push(format!(
+                "with the reproduction condition {condition:?} added, {message}"
+            )),
+            Err(other) => return Err(other),
+        }
+    }
+    if attempts.is_empty() {
+        // Every admissible condition was already in the requested set, so
+        // there was nothing to try beyond it.
+        return Err(ProbeHarnessError::ConditionMismatch(requested_refusal));
+    }
+    Err(ProbeHarnessError::ConditionMismatch(format!(
+        "{requested_refusal}; {}",
+        attempts.join("; ")
+    )))
+}
+
+/// The planning-time replay: the root plan under every scheduled import kind,
+/// every graph dependency plan under an ESM import, and every accepted
+/// dependency edge of every one of those plans' verified closures under an ESM
+/// import.
+fn replay_every_artifact_case(
+    plan: &CertificationPlan,
+    graph_dependencies: &[&CertificationPlan],
+    kinds: &BTreeSet<ProbeImportKind>,
+    observed: &ObservedConditions,
+    closure: &BTreeMap<String, AuthenticatedDependency<'_>>,
+) -> Result<(), ProbeHarnessError> {
+    for kind in kinds {
+        refuse_unreproducible_artifact_case(plan, *kind, observed)?;
+    }
+    // Static graph edges are ESM imports.
+    for dependency in graph_dependencies {
+        refuse_unreproducible_artifact_case(dependency, ProbeImportKind::Esm, observed)?;
+    }
+    for importer in std::iter::once(&plan).chain(graph_dependencies.iter()) {
+        refuse_unreproducible_dependency_edges(importer, closure, observed)?;
+    }
+    Ok(())
+}
+
+/// Refuses when the pinned interpreter would select, for a dependency the
+/// analyzed package's own modules import, a different file than the one the
+/// package's certified closure resolves that import to.
+///
+/// [`refuse_unreproducible_artifact_case`] covers the *planned* cases: the root
+/// and, in the graph lanes, every dependency node. A value-only transaction
+/// plans no dependency node, yet its recipe still runs the package's top-level
+/// `import "solid-js"` inside the private copy — and the interpreter's own
+/// `node` condition selected `dist/server.js` there, silently, where the
+/// closure the transaction certified resolves `dist/solid.js`. So every
+/// accepted dependency edge of the verified closure is replayed too: the
+/// edge's entrypoint is resolved from the authenticated dependency snapshot
+/// once under the importer's requested conditions — the set the closure was
+/// replayed under — and once under the interpreter's applied set, and the two
+/// must name the same file. Rust against Rust here, because no plan carries
+/// the dependency's expected path; the run-frame echo of every declared
+/// dependency resolution remains the independent half.
+fn refuse_unreproducible_dependency_edges(
+    importer: &CertificationPlan,
+    closure: &BTreeMap<String, AuthenticatedDependency<'_>>,
+    observed: &ObservedConditions,
+) -> Result<(), ProbeHarnessError> {
+    let reference = importer
+        .import_request
+        .export_conditions
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let applied = observed
+        .for_kind(ProbeImportKind::Esm)
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    for edge in &importer.verified_closure.manifest().dependencies {
+        // A missing snapshot is `require_authenticated_dependency_closure`'s
+        // refusal, which runs first; nothing to replay against here.
+        let Some(dependency) = closure.get(&edge.package_name) else {
+            continue;
+        };
+        let package = format!(
+            "{}@{}",
+            dependency.snapshot.package_name(),
+            dependency.snapshot.package_version()
+        );
+        let entrypoint =
+            super::requested_entrypoint(&edge.specifier, &edge.package_name).map_err(|error| {
+                ProbeHarnessError::ConditionMismatch(format!(
+                    "the closure edge {:?} names no entrypoint of {package}: {error}",
+                    edge.specifier
+                ))
+            })?;
+        let manifest_bytes = dependency.snapshot.read("package.json").ok_or_else(|| {
+            ProbeHarnessError::ConditionMismatch(format!(
+                "the authenticated snapshot of {package} carries no package manifest to replay \
+                 resolution against"
+            ))
+        })?;
+        let manifest: super::SnapshotPackageManifest = serde_json::from_slice(manifest_bytes)
+            .map_err(|error| {
+                ProbeHarnessError::ConditionMismatch(format!(
+                    "the package manifest of {package} cannot drive resolution: {error}"
+                ))
+            })?;
+        let resolve = |conditions: &BTreeSet<&str>| {
+            super::resolve_snapshot_export(
+                dependency.snapshot,
+                &manifest,
+                &entrypoint,
+                conditions,
+                super::ResolutionAxis::Runtime,
+            )
+        };
+        let expected = resolve(&reference).map_err(|error| {
+            ProbeHarnessError::ConditionMismatch(format!(
+                "the closure edge {:?} does not resolve in {package} under the requested \
+                 conditions [{}]: {error}",
+                edge.specifier,
+                reference.iter().copied().collect::<Vec<_>>().join(",")
+            ))
+        })?;
+        let replayed = resolve(&applied).map_err(|error| {
+            ProbeHarnessError::ConditionMismatch(format!(
+                "the pinned interpreter applies [{}] for a esm import, and the closure edge {:?} \
+                 does not resolve in {package} under that set: {error}",
+                observed.for_kind(ProbeImportKind::Esm).join(","),
+                edge.specifier
+            ))
+        })?;
+        if replayed.path != expected.path {
+            return Err(ProbeHarnessError::ConditionMismatch(format!(
+                "the pinned interpreter applies [{}] for a esm import, which selects {:?} for \
+                 the closure edge {:?} of {package}, but the closure this transaction certifies \
+                 resolves {:?}: the probe would run the package against a different dependency \
+                 file than the Type Facts witness read",
+                observed.for_kind(ProbeImportKind::Esm).join(","),
+                replayed.path,
+                edge.specifier,
+                expected.path
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// The two manifest fields whose targets a condition can move.
+#[derive(Deserialize)]
+struct ConditionalManifestFields {
+    #[serde(default)]
+    exports: super::ExportField,
+    #[serde(default)]
+    imports: super::ExportField,
+}
+
+/// Refuses unless every `exports` and `imports` object in every manifest of the
+/// authenticated closure selects the same target under the interpreter's
+/// observed set as under the set the corresponding artifact case was selected
+/// under.
+///
+/// Each plan's own snapshot is compared under that plan's requested set; a
+/// closure snapshot no plan names (a certification source that is not a graph
+/// node) is compared under the root plan's. The comparison is per scheduled
+/// import kind, because the interpreter applies a different set to each.
+fn require_condition_neutral_closure(
+    plan: &CertificationPlan,
+    graph_dependencies: &[&CertificationPlan],
+    closure: &BTreeMap<String, AuthenticatedDependency<'_>>,
+    kinds: &BTreeSet<ProbeImportKind>,
+    observed: &ObservedConditions,
+) -> Result<(), ProbeHarnessError> {
+    fn requested_set(plan: &CertificationPlan) -> BTreeSet<&str> {
+        plan.import_request
+            .export_conditions
+            .iter()
+            .map(String::as_str)
+            .collect()
+    }
+    let mut subjects = vec![(&plan.snapshot, requested_set(plan))];
+    let mut covered = BTreeSet::from([plan.snapshot.root()]);
+    for dependency in graph_dependencies {
+        if covered.insert(dependency.snapshot.root()) {
+            subjects.push((&dependency.snapshot, requested_set(dependency)));
+        }
+    }
+    for dependency in closure.values() {
+        if covered.insert(dependency.snapshot.root()) {
+            subjects.push((dependency.snapshot, requested_set(plan)));
+        }
+    }
+    for (snapshot, reference) in subjects {
+        let package = format!("{}@{}", snapshot.package_name(), snapshot.package_version());
+        let bytes = snapshot.read("package.json").ok_or_else(|| {
+            ProbeHarnessError::ConditionMismatch(format!(
+                "the authenticated snapshot of {package} carries no package manifest to check \
+                 the reproduction condition against"
+            ))
+        })?;
+        let fields: ConditionalManifestFields = serde_json::from_slice(bytes).map_err(|error| {
+            ProbeHarnessError::ConditionMismatch(format!(
+                "the package manifest of {package} cannot be checked for condition neutrality: \
+                 {error}"
+            ))
+        })?;
+        for kind in kinds {
+            let comparison = observed
+                .for_kind(*kind)
+                .iter()
+                .map(String::as_str)
+                .collect::<BTreeSet<_>>();
+            for (field, value) in [("exports", &fields.exports), ("imports", &fields.imports)] {
+                let super::ExportField::Present(target) = value else {
+                    continue;
+                };
+                selects_identically(target, &reference, &comparison).map_err(|divergence| {
+                    ProbeHarnessError::ConditionMismatch(format!(
+                        "the reproduction condition is not neutral for {package}: {field} \
+                         {divergence}, so a {} import under the pinned interpreter's [{}] could \
+                         load a file the Type Facts witness did not read under [{}]",
+                        kind.as_str(),
+                        observed.for_kind(*kind).join(","),
+                        reference.iter().copied().collect::<Vec<_>>().join(",")
+                    ))
+                })?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// What one conditional target resolves to under one condition set, in the
+/// shape Node's `PACKAGE_TARGET_RESOLVE` walks it: the first key that is
+/// `default` or in the set answers, a nested object that matches nothing is
+/// skipped over, and an array keeps every member so two sets that disagree on
+/// any of them disagree here.
+#[derive(Debug, Eq, PartialEq)]
+enum ConditionalLeaf {
+    Unmatched,
+    Null,
+    Invalid,
+    Target(String),
+    Array(Vec<ConditionalLeaf>),
+}
+
+impl ConditionalLeaf {
+    fn describe(&self) -> String {
+        match self {
+            Self::Unmatched => "no target".into(),
+            Self::Null => "a null target".into(),
+            Self::Invalid => "an invalid target".into(),
+            Self::Target(target) => format!("{target:?}"),
+            Self::Array(members) => format!(
+                "[{}]",
+                members
+                    .iter()
+                    .map(Self::describe)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }
+    }
+}
+
+fn conditional_leaf(target: &super::ExportTarget, conditions: &BTreeSet<&str>) -> ConditionalLeaf {
+    use super::ExportTarget as Target;
+    match target {
+        Target::Null => ConditionalLeaf::Null,
+        Target::Invalid => ConditionalLeaf::Invalid,
+        Target::String(value) => ConditionalLeaf::Target(value.clone()),
+        Target::Array(members) => ConditionalLeaf::Array(
+            members
+                .iter()
+                .map(|member| conditional_leaf(member, conditions))
+                .collect(),
+        ),
+        Target::Object(fields) => {
+            for (key, value) in fields {
+                if key == "default" || conditions.contains(key.as_str()) {
+                    match conditional_leaf(value, conditions) {
+                        ConditionalLeaf::Unmatched => continue,
+                        leaf => return leaf,
+                    }
+                }
+            }
+            ConditionalLeaf::Unmatched
+        }
+    }
+}
+
+/// Requires every conditional object reachable from `target` to answer the
+/// same under `reference` as under `comparison`.
+///
+/// A subpath map (`exports` keyed by `./…`) or an imports map (keyed by `#…`)
+/// is walked key by key, pattern keys included as written; a conditional
+/// object is compared whole; strings, nulls and invalid values have nothing a
+/// condition could move. The error names the key path to the divergence and
+/// both answers.
+fn selects_identically(
+    target: &super::ExportTarget,
+    reference: &BTreeSet<&str>,
+    comparison: &BTreeSet<&str>,
+) -> Result<(), String> {
+    use super::ExportTarget as Target;
+    match target {
+        Target::Object(fields)
+            if fields
+                .iter()
+                .any(|(key, _)| key.starts_with('.') || key.starts_with('#')) =>
+        {
+            for (key, value) in fields {
+                selects_identically(value, reference, comparison)
+                    .map_err(|divergence| format!("{key:?} {divergence}"))?;
+            }
+            Ok(())
+        }
+        Target::Object(_) => {
+            let under_reference = conditional_leaf(target, reference);
+            let under_comparison = conditional_leaf(target, comparison);
+            if under_reference == under_comparison {
+                Ok(())
+            } else {
+                Err(format!(
+                    "selects {} under the requested set but {} under the interpreter's",
+                    under_reference.describe(),
+                    under_comparison.describe()
+                ))
+            }
+        }
+        Target::Array(members) => {
+            for (index, member) in members.iter().enumerate() {
+                selects_identically(member, reference, comparison)
+                    .map_err(|divergence| format!("[{index}] {divergence}"))?;
+            }
+            Ok(())
+        }
+        Target::Null | Target::String(_) | Target::Invalid => Ok(()),
+    }
 }
 
 /// The export conditions this plan's artifact case was selected under.
@@ -1337,8 +1795,8 @@ pub(crate) fn sandbox_policy_digest() -> Digest {
 /// against a literal copy, so dropping a field, renaming one, or bumping the
 /// scheme version without saying what changed fails a test rather than
 /// silently re-labelling every receipt's policy binding.
-pub(crate) const SANDBOX_POLICY_FIELDS: [&str; 46] = [
-    "scheme-version:10",
+pub(crate) const SANDBOX_POLICY_FIELDS: [&str; 47] = [
+    "scheme-version:12",
     "profile:inert-or-import-free-or-relative-ts-graph-esm,explicit-controlled-consumer,ordinary-acceptance-refused",
     "transform:pinned-node-strip-only,parser-runtime-token-preservation,all-derived-outputs-compared,watched-derived-graph",
     "resolution:profile-hook-exact-source-url-and-authenticated-relative-edge-map,unmapped-profile-imports-refused",
@@ -1359,7 +1817,7 @@ pub(crate) const SANDBOX_POLICY_FIELDS: [&str; 46] = [
     "snapshot:dependency-materialization-manifest-bound-to-probe-root",
     "cwd:private-directory",
     "environment:allowlisted-not-inherited",
-    "argv:worker-path-plus-requested-conditions-only",
+    "argv:worker-path-plus-requested-and-admitted-reproduction-conditions-only",
     // One field per resolution step the table dispositions.
     "resolution:private-package-scope",
     "resolution:no-package-self-reference",
@@ -1370,6 +1828,12 @@ pub(crate) const SANDBOX_POLICY_FIELDS: [&str; 46] = [
     "resolution:no-environment-loader-hooks",
     "resolution:file-format-from-private-package-scope",
     "resolution:requested-conditions-passed-as-interpreter-flags",
+    // ADR 0037: the one condition the search may add, and the two facts that
+    // admit it — the requested set alone did not reproduce every planned
+    // artifact case, and every `exports`/`imports` object in the authenticated
+    // closure selects the same target under the interpreter's resulting set
+    // as under the requested one.
+    "resolution:reproduction-conditions:browser,added-only-when-requested-set-does-not-reproduce-and-every-closure-manifest-selects-identically",
     "resolution:conditions-observed-from-pinned-interpreter",
     "resolution:declared-import-kind-per-recipe",
     "resolution:declared-dependency-specifiers-per-recipe",
@@ -1396,22 +1860,28 @@ pub(crate) const SANDBOX_POLICY_FIELDS: [&str; 46] = [
 
 /// The environment identity every session records, and the worker has to echo.
 ///
-/// `conditions` is tagged rather than bare, because two different facts belong
-/// on the record and conflating them is what made the old constant
+/// `conditions` is tagged rather than bare, because three different facts
+/// belong on the record and conflating them is what made the old constant
 /// `["import", "node"]` a lie: `requested:` is the set this plan's artifact
-/// case was *selected* under, and `esm:`/`require:` are the sets the pinned
-/// interpreter reported that it actually *applies* for each import kind. The
-/// two differ — `module-sync` and `node-addons` are in the second and not the
-/// first — and the difference decides which file a bare specifier lands on.
+/// case was *selected* under, `reproduction:` is what
+/// [`reproduce_artifact_cases`] added so the pinned interpreter would land on
+/// the certified files (ADR 0037), and `esm:`/`require:` are the sets the
+/// pinned interpreter reported that it actually *applies* for each import
+/// kind. They differ — `module-sync` and `node-addons` are in the last and not
+/// the first — and the difference decides which file a bare specifier lands on.
 fn probe_environment(
     node_executable_sha256: &str,
     node_version: &str,
     requested: &[String],
+    reproduction: &[String],
     observed: &ObservedConditions,
 ) -> EnvironmentIdentity {
     let mut conditions = Vec::new();
     for condition in requested {
         conditions.push(format!("requested:{condition}"));
+    }
+    for condition in reproduction {
+        conditions.push(format!("reproduction:{condition}"));
     }
     for condition in &observed.esm {
         conditions.push(format!("esm:{condition}"));
@@ -2083,7 +2553,10 @@ struct PrivateWorkspaceInputs<'a> {
     /// it rather than recording whatever was on disk when the baseline ran.
     node_executable_sha256: &'a str,
     type_facts_pin: &'a TypeFactsProducerPin,
-    requested_conditions: &'a [String],
+    /// The export conditions every launch passes as `--conditions=` flags: the
+    /// requested set plus any reproduction condition
+    /// [`reproduce_artifact_cases`] admitted.
+    interpreter_conditions: &'a [String],
     dependencies: &'a BTreeMap<String, AuthenticatedDependency<'a>>,
 }
 
@@ -2103,7 +2576,7 @@ impl PrivateProbeWorkspace {
             node_executable,
             node_executable_sha256,
             type_facts_pin,
-            requested_conditions,
+            interpreter_conditions,
             dependencies,
         } = *inputs;
         let directory = create_private_directory("harness")?;
@@ -2358,7 +2831,7 @@ impl PrivateProbeWorkspace {
             runtime_target,
             execution,
             dependency_roots,
-            condition_flags: requested_conditions
+            condition_flags: interpreter_conditions
                 .iter()
                 .map(|condition| format!("--conditions={condition}"))
                 .collect(),

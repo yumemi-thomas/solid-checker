@@ -295,7 +295,10 @@ one label after another.
   `vetoIncomplete` bucket by that account into `vetoUnreproducible` (a
   synthesized veto the pinned interpreter cannot run for the artifact case),
   `vetoThrew`, `vetoTimedOut`, `vetoRunRefused`, with `vetoIncomplete` left for
-  a record with no account.
+  a record with no account. ADR 0037 (2026-09-06) closes the
+  `vetoUnreproducible` shape this attribution exposed — Node's own `node`
+  condition selecting `dist/server.js` — with a bounded reproduction-condition
+  search, and extends the replay to every closure edge in every lane.
 - **What the attribution says.** Corpus-wide, 237 of the 262 incomplete vetoes
   are the reproducibility refusal of `refuse_unreproducible_artifact_case`
   applied to a graph *dependency*: the graph certified `solid-js`'s `.` as

@@ -514,7 +514,7 @@ this workspace's disposition. Four dispositions:
   omitted.
 
 `sandbox_policy_digest` (`probe_harness.rs`) mirrors these field names into the
-receipt-visible policy digest, now at `scheme-version:10` (ADR 0030).
+receipt-visible policy digest, now at `scheme-version:12` (ADR 0037; 10 was ADR 0030, 11 is the browser family's).
 Version 7 also binds the canonical package-name/snapshot-root materialization
 manifest into each nonempty probe root. Graph-authenticated dependencies and
 compiler-source snapshots enter the same collision checks, private copies and
@@ -581,12 +581,12 @@ both.
 | ADR 0026/0028/0030 controlled ESM profiles | native complete syntax whitelist, authenticated source graph, native expected outputs, native replayed relative edges and compiled Node/harness pins | **CONTAINED / REFUSED / WATCHED** — the trusted worker alone installs strip-only format overrides for exact selected `.ts` URLs, after primordial capture/freeze and before recipe import. Node output must equal every native expected output and watched derived file. The inert profile calls its sole export directly; the import-free and relative-graph profiles replay one selected recipe. The relative profile accepts only its receipt-bound exact edge map. Unmapped imports, URL variants and CommonJS refuse. Every frame echoes the binding and confirms the root source was loaded and the controlled consumer completed. No hook is installed for ordinary certification; controlled receipt v5 cannot enter the policy-2 consumer |
 | ADR 0033 controlled browser profile (`chromium-headless-shell-cdp-pipe-esm-v1`) | compiled browser bundle pin, pinned-Node reproduction of every derived module, the checker's exact URL map, a Rust-authored page bootstrap | **CONTAINED / REFUSED / CARVE-OUT** — a separate scheme (`scheme-version:11`, family `browser-cdp-pipe`, `BROWSER_SANDBOX_POLICY_FIELDS`), not a change to this table's Node scheme. The browser has no package resolver: every request is intercepted at request stage and answered from authenticated derived bytes or fails *and refuses the launch*, and the requested URL set must equal the served map. The browser's own `--user-data-dir` is a named subtree inside the private directory whose contents are deliberately unwatched. Workers, iframes, service workers, downloads and network are refused by CSP, auto-attach and flags the pinned browser enforces — denial by the instrument, stated as such. `probe_harness/browser.rs` carries the browser's own disposition table |
 | `NODE_OPTIONS` (`--import`, `--require`, `--loader`, `--experimental-loader`, `--conditions`, `--preserve-symlinks`) | the environment | **REFUSED** — `env_clear()` plus an explicitly emptied `NODE_OPTIONS`. This one matters most: `--import` runs a module *before* the worker evaluates, which is before its primordials are captured and before the intrinsic prototypes are frozen |
-| command-line flags | `argv` | **CONTAINED** — Rust builds the whole argument vector: one `--conditions=<name>` flag per requested export condition (each validated as a plain condition name first), then the worker path. Nothing else, and nothing from the environment |
+| command-line flags | `argv` | **CONTAINED** — Rust builds the whole argument vector: one `--conditions=<name>` flag per requested export condition (each validated as a plain condition name first) plus one per *admitted reproduction condition* (ADR 0037, the constant `REPRODUCTION_CONDITIONS`, today `browser`), then the worker path. Nothing else, and nothing from the environment |
 | `--env-file`, `--env-file-if-exists` | `argv`, then the named file | **REFUSED** — by argv, not by the environment: these are flags, so `env_clear()` does not bear on them, and the vector above contains no flag but `--conditions`. `NODE_OPTIONS` cannot smuggle one either (it is emptied, and Node disallows `--env-file` there) |
 | single-executable applications, `--build-snapshot`, `--snapshot-blob` | `argv`, then a blob or the executable's own trailing resource | **CONTAINED by the byte pin alone** — no such flag is passed, and a SEA's embedded main would be *part of the executable*, so it is covered by `SOLID_CHECKER_PROBE_NODE_SHA256` and by the census that re-asserts that digest on every pass. Stated because it is the one loader input no argv or environment rule would catch: the pin is the whole of the answer |
 | every other `NODE_*` / arbitrary variable (`NODE_COMPILE_CACHE`, `NODE_REPL_EXTERNAL_MODULE`, …) | the environment | **REFUSED** — the allowlist is `HOME`, `TMPDIR`, `LANG`, `LC_ALL`, an emptied `NODE_OPTIONS`, `SOLID_CHECKER_PROBE_RECIPE`, and `SOLID_CHECKER_PROBE_NONCE`. `PATH` is deliberately absent |
 | `node.config.json` (`--experimental-config-file`, `--experimental-default-config-file`) | the cwd | **CONTAINED** *and* **WATCHED** — no such flag is passed, and the cwd is the private directory; but the cwd and `TMPDIR` are both that directory, so it is also censused **non-recursively** (`private-directory-entries`, direct entry names and kinds) and a `node.config.json` appearing beside the three subdirectories refuses. The row no longer rests on the absent flag alone. Its cost is a refusal direction: a probe that writes a temporary file into `TMPDIR` changes that entry census and refuses the gate |
-| resolution `conditions` | the requested set via `--conditions`, plus the interpreter's own defaults | **CONTAINED**, but by two mechanisms rather than by a constant, and this row was wrong before this change — see "Export conditions" below. Rust passes one `--conditions=` flag per requested condition, then *asks the pinned bytes* which conditions they actually apply for each import kind and records that in the environment identity the worker echoes. What makes the row sound is neither of those: it is that the worker reports `import.meta.resolve(<specifier>)` (and the `createRequire` resolution) before importing the recipe, and Rust **REFUSES** unless the reported target is the exact runtime target the Type Facts witness read |
+| resolution `conditions` | the requested set via `--conditions`, plus the interpreter's own defaults | **CONTAINED**, but by two mechanisms rather than by a constant, and this row was wrong before this change — see "Export conditions" below. Rust passes one `--conditions=` flag per requested condition, then *asks the pinned bytes* which conditions they actually apply for each import kind and records that in the environment identity the worker echoes. What makes the row sound is neither of those: it is that the worker reports `import.meta.resolve(<specifier>)` (and the `createRequire` resolution) before importing the recipe, and Rust **REFUSES** unless the reported target is the exact runtime target the Type Facts witness read **ADR 0037:** when the requested set alone does not reproduce every planned artifact case, the harness may add one reproduction condition from a fixed constant — admitted only when the replay passes under the resulting applied set *and* every `exports`/`imports` object in the authenticated closure selects identically under it and under the requested set; the record tags what was added (`reproduction:<c>`) and the probe root names it (`reproduction-conditions:`) |
 | `module.register`, `module.registerHooks` | the worker's own realm | **NOT DENIED** — a recipe or a package top level can install a resolve hook. It gains no filesystem reach a `file:` import does not already have, and reads are not denied either. It cannot forge the resolution echo either, which is read before the recipe is imported |
 | native addons (`process.dlopen`), descriptor-inheriting children | the worker's own realm and its open descriptors | **NOT DENIED** — descriptor 3 is nameable in-realm (`fs.writeSync(3, …)`), a native addon runs outside every JavaScript guarantee, and a child process inherits the descriptor unless the spawner closes it. What refuses a forged frame is not secrecy of the number: a frame has to carry this launch's nonce and name the pid Rust launched, and a *third* frame on the descriptor is a protocol refusal rather than a choice of which one to believe. So an in-realm writer can spoil a run — a refusal — but cannot substitute a laundered one |
 | `--permission`, policy manifests | not passed | **NOT DENIED** — OS- and runtime-level denial is Stage 2's whole subject |
@@ -655,10 +655,20 @@ whenever the package's `exports` would answer an `import` key first — and it
 does not subsume mechanism 3, which is what proves the interpreter itself
 landed where Rust's replay said it would.
 
+When that replay fails under the requested set — Node's own `node` condition
+selecting `solid-js/dist/server.js` where the case read `dist/solid.js` was the
+whole 2026-09-06 population — ADR 0037's search may add one condition from a
+fixed constant and retry the replay under the resulting applied set, admitting
+the addition only when every `exports`/`imports` object in the authenticated
+closure selects identically under both sets. The flags a launch carries are
+then the requested set plus the admitted condition, and the record says so.
+
 What the record now carries: `EnvironmentIdentity::conditions` holds tagged
 entries rather than bare names — `requested:<c>` for what the artifact case was
-selected under, and `esm:<c>` / `require:<c>` for what the pinned bytes
-reported that they apply — so the two facts cannot be conflated again. The
+selected under, `reproduction:<c>` for what ADR 0037's bounded search added so
+the interpreter would land on the certified files, and `esm:<c>` /
+`require:<c>` for what the pinned bytes reported that they apply — so the
+facts cannot be conflated again. The
 candidate list the observation asks about is a constant
 (`OBSERVED_CONDITION_CANDIDATES`), which bounds what the record *names*; a
 condition Node applies that is absent from it is missing from the record and
@@ -786,7 +796,9 @@ recorded rather than worked around.
   gate.
 
 `SandboxKind::Process` is recorded with a **verifier-computed** policy digest
-over exactly this scheme, now at `scheme-version:10`. ADR 0028 extends the
+over exactly this scheme, now at `scheme-version:12`. ADR 0037 adds
+`resolution:reproduction-conditions:…` and renames the `argv:` field to
+`argv:worker-path-plus-requested-and-admitted-reproduction-conditions-only`. ADR 0028 extends the
 restricted transformer and exact-URL hook to import-free runtime expressions,
 adds recipe replay to the separate consumer fields, and advances the worker to
 protocol v4. ADR 0030 adds native-replayed exact relative edges, binds every
@@ -803,7 +815,7 @@ disposition table's own names — `resolution:private-package-scope`,
 `resolution:conditions-observed-from-pinned-interpreter`,
 `resolution:declared-import-kind-per-recipe`,
 `resolution:artifact-case-runtime-target-reproduced-or-refused`,
-`argv:worker-path-plus-requested-conditions-only`,
+`argv:worker-path-plus-requested-conditions-only` (renamed by ADR 0037),
 `report:resolution-echoed-and-compared-to-artifact-case`,
 `private-directory-entries` inside the `watched:` list, and, new at version 6,
 the dependency closure's own — one renamed field, five added, and one more

@@ -18505,6 +18505,55 @@ what the census promises, and hashing them once per batch or dropping the
 producer image (re-verified against its pin before every producer launch
 anyway) changes the policy digest and belongs in an ADR.
 
+### Reproduction conditions: the pinned Node lands on the client build (2026-09-06, ADR 0037)
+
+Every `vetoUnreproducible` withholding in the corpus was one shape: the
+artifact case was selected under the consumer's conditions plus `default` and
+read `solid-js/dist/solid.js`, and the pinned Node, applying `node` on its own,
+would have loaded `dist/server.js`. Node cannot drop `node`, but every
+`solid-js` and `@solidjs/web` in the corpus orders `browser` before `node`, so a
+launch carrying `--conditions=browser` lands on the certified file. The gate
+batch now runs a bounded search — the requested set first, then `browser` —
+and admits the added condition only when the planning-time replay passes for
+every planned case *and* every `exports`/`imports` object in the authenticated
+closure selects the same target under the resulting set as under the requested
+one (`reproduce_artifact_cases`, `require_condition_neutral_closure`). The
+record tags it (`reproduction:browser`), the probe root names it
+(`reproduction-conditions:`), and the sandbox scheme moves to version 12.
+
+Writing the tracer tests exposed a second gap, closed in the same change: the
+value-only lane plans no dependency node, so nothing compared what the
+interpreter selected for the package's own `import "solid-js"` with what the
+certified closure resolves. A stub whose `server.js` answers the recipe
+differently ran to completion against `server.js` with no refusal. Every
+accepted dependency edge of every plan's verified closure is now replayed too
+(`refuse_unreproducible_dependency_edges`), in every lane, so a value-only row
+whose closure carries `solid-js` either runs its vetoes against the client
+build with `browser` admitted or withholds them with the edge named.
+
+**Measured and repinned (release checker, recipe corpus on both targets,
+116 s against 96 s — the freed vetoes now run):** 368 certified / 30 refused, no row changed status. Withheld `creates`
+candidates 1367 → **1187**: `vetoUnreproducible` 256 → 36 (all
+`@tanstack/custom-condition`, a condition-name grammar question the search
+never reaches), `vetoThrew` 25 → 45 (the freed corvu vetoes now run far enough
+to hit the `.jsx` runtime target under `solid`), `dependencyWithheld` 0 → 20,
+`censusRefused` unchanged at 1086. 180 candidates that were withheld unexamined
+now carry a veto that ran against the certified client build and passed. Rows:
+`@solid-primitives/form` 68 → 32 (both variants), `@corvu/drawer` 166 → 132,
+`motion-solidjs` 792 → 758, the TanStack query rows −6 each, the corvu
+accordions −2 each.
+
+One report caveat this exposed: `exportsProven` and `unknownByDomain` are
+computed from the generator's *proposal*, so a veto that closes a withheld
+candidate moves the withheld count and not those columns. They stay at
+0 / 8706 for `creates`; the certified closure state lives in the accepted
+catalog, and the report should learn to read it.
+
+Still open: the 36 `@tanstack/custom-condition` candidates (Node accepts the
+name; the harness grammar does not), the 44 `.jsx` cases (a compiler decision,
+`docs/package-contract-v2/accuracy-roadmap.md` lever B), and the one
+`@kobalte/utils` `.ts` target Node refuses to strip under `node_modules`.
+
 ### Exact remaining refusals in the traced set
 
 - `@corvu-next/popover`, `@corvu/popover`, `corvu@0.7.2`: `@floating-ui/utils@0.2.12`

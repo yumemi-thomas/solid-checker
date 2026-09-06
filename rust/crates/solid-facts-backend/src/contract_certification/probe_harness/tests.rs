@@ -1121,7 +1121,7 @@ fn the_probe_browser_sandbox_policy_digest_names_its_carve_out_and_refusals() {
         BROWSER_SANDBOX_POLICY_FIELDS.contains(&"renderer-sandbox:chromium-own,not-verified-here")
     );
     // The Node scheme is untouched by the browser profile.
-    assert_eq!(SANDBOX_POLICY_FIELDS[0], "scheme-version:10");
+    assert_eq!(SANDBOX_POLICY_FIELDS[0], "scheme-version:12");
 }
 
 #[test]
@@ -1212,8 +1212,8 @@ fn the_sandbox_policy_digest_names_what_is_not_denied() {
     // receipt reader can see would all have passed. The literal below is the
     // second copy on purpose — a change has to be made twice, and the diff
     // says which field moved.
-    const EXPECTED: [&str; 46] = [
-        "scheme-version:10",
+    const EXPECTED: [&str; 47] = [
+        "scheme-version:12",
         "profile:inert-or-import-free-or-relative-ts-graph-esm,explicit-controlled-consumer,ordinary-acceptance-refused",
         "transform:pinned-node-strip-only,parser-runtime-token-preservation,all-derived-outputs-compared,watched-derived-graph",
         "resolution:profile-hook-exact-source-url-and-authenticated-relative-edge-map,unmapped-profile-imports-refused",
@@ -1227,7 +1227,7 @@ fn the_sandbox_policy_digest_names_what_is_not_denied() {
         "snapshot:dependency-materialization-manifest-bound-to-probe-root",
         "cwd:private-directory",
         "environment:allowlisted-not-inherited",
-        "argv:worker-path-plus-requested-conditions-only",
+        "argv:worker-path-plus-requested-and-admitted-reproduction-conditions-only",
         "resolution:private-package-scope",
         "resolution:no-package-self-reference",
         "resolution:no-package-imports-escape",
@@ -1237,6 +1237,7 @@ fn the_sandbox_policy_digest_names_what_is_not_denied() {
         "resolution:no-environment-loader-hooks",
         "resolution:file-format-from-private-package-scope",
         "resolution:requested-conditions-passed-as-interpreter-flags",
+        "resolution:reproduction-conditions:browser,added-only-when-requested-set-does-not-reproduce-and-every-closure-manifest-selects-identically",
         "resolution:conditions-observed-from-pinned-interpreter",
         "resolution:declared-import-kind-per-recipe",
         "resolution:declared-dependency-specifiers-per-recipe",
@@ -1936,9 +1937,13 @@ fn the_recorded_conditions_come_from_the_pinned_interpreter() {
         &digest_of(NODE_STAND_IN),
         "v0.0.0-test",
         &["development".to_owned()],
+        &["browser".to_owned()],
         &requested,
     );
-    let mut expected = vec!["requested:development".to_owned()];
+    let mut expected = vec![
+        "requested:development".to_owned(),
+        "reproduction:browser".to_owned(),
+    ];
     expected.extend(requested.esm.iter().map(|value| format!("esm:{value}")));
     expected.extend(
         requested
@@ -2221,5 +2226,119 @@ fn the_production_layout_writes_a_package_scope_beside_the_harness_and_the_recip
     assert!(
         !layout.modules.join("package.json").exists(),
         "the private node_modules must not be given a package scope"
+    );
+}
+
+fn export_target(json: &str) -> super::super::ExportTarget {
+    serde_json::from_str(json).expect("a package exports value")
+}
+
+fn conditions<'a>(names: &[&'a str]) -> BTreeSet<&'a str> {
+    names.iter().copied().collect()
+}
+
+/// ADR 0037's admission walk, on the manifest shapes that decide it. The
+/// reference set is what the artifact case was selected under; the comparison
+/// set is what the pinned interpreter reports with `browser` added.
+#[test]
+fn the_neutrality_walk_admits_browser_only_where_it_moves_no_target() {
+    let reference = conditions(&["import"]);
+    let with_browser = conditions(&["browser", "import", "module-sync", "node", "node-addons"]);
+    // Solid's own order: `browser` before `node`, both leading to the same
+    // client build the `import` key names. Neutral for every subpath.
+    let solid = export_target(
+        r#"{
+          ".": {"worker": "./w.js", "browser": {"development": "./dev.js", "import": "./solid.js"},
+                "node": {"import": "./server.js"}, "development": "./dev.js", "import": "./solid.js"},
+          "./web": {"browser": {"import": "./web.js"}, "node": {"import": "./web-server.js"}, "import": "./web.js"},
+          "./*": "./dist/*.js"
+        }"#,
+    );
+    selects_identically(&solid, &reference, &with_browser)
+        .expect("browser and import select the same client files");
+    // The same manifest with `development` requested: both sets still agree,
+    // on the development build this time.
+    let development = conditions(&["development", "import"]);
+    let development_browser = conditions(&[
+        "browser",
+        "development",
+        "import",
+        "module-sync",
+        "node",
+        "node-addons",
+    ]);
+    selects_identically(&solid, &development, &development_browser)
+        .expect("a requested development condition is honored on both sides");
+    // A `#internal` import the package resolves for itself, which `browser`
+    // moves: not neutral, and the error names the key and both answers.
+    let imports = export_target(r##"{"#flag": {"browser": "./b.js", "default": "./d.js"}}"##);
+    let divergence = selects_identically(&imports, &reference, &with_browser)
+        .expect_err("a browser-only #import is moved by the condition");
+    assert!(
+        divergence.contains("\"#flag\"")
+            && divergence.contains("\"./d.js\"")
+            && divergence.contains("\"./b.js\""),
+        "unexpected divergence text: {divergence}"
+    );
+    // A subpath no plan names, moved by `browser`: not neutral either, even
+    // though "." itself is.
+    let subpath = export_target(
+        r#"{".": {"import": "./index.js"}, "./util": {"browser": "./util-b.js", "default": "./util.js"}}"#,
+    );
+    let divergence = selects_identically(&subpath, &reference, &with_browser)
+        .expect_err("a browser-only subpath is moved by the condition");
+    assert!(
+        divergence.starts_with("\"./util\""),
+        "unexpected divergence text: {divergence}"
+    );
+    // A nested object that matches nothing is skipped over, as Node skips it,
+    // so a `browser` branch that resolves to nothing under either set is not
+    // a divergence.
+    let skipped =
+        export_target(r#"{".": {"browser": {"worker": "./w.js"}, "import": "./index.js"}}"#);
+    selects_identically(&skipped, &reference, &with_browser)
+        .expect("an unmatched nested object is backtracked over on both sides");
+    // Arrays keep every member.
+    let arrays =
+        export_target(r#"{".": [{"browser": "./b.js", "default": "./d.js"}, "./fallback.js"]}"#);
+    selects_identically(&arrays, &reference, &with_browser)
+        .expect_err("a divergent array member is a divergence");
+    // Strings and nulls have nothing a condition could move.
+    selects_identically(&export_target(r#""./index.js""#), &reference, &with_browser)
+        .expect("a bare string target");
+    selects_identically(
+        &export_target(r#"{"./private/*": null}"#),
+        &reference,
+        &with_browser,
+    )
+    .expect("a null subpath");
+}
+
+#[test]
+fn a_conditional_leaf_follows_nodes_first_matching_key_and_backtracks() {
+    let target = export_target(
+        r#"{"browser": {"worker": "./never.js"}, "node": "./server.js", "import": "./index.js", "default": "./default.js"}"#,
+    );
+    assert_eq!(
+        conditional_leaf(&target, &conditions(&["browser", "import"])),
+        ConditionalLeaf::Target("./index.js".into()),
+        "an unmatched nested browser object is skipped and import answers"
+    );
+    assert_eq!(
+        conditional_leaf(&target, &conditions(&["browser", "node", "import"])),
+        ConditionalLeaf::Target("./server.js".into()),
+        "node answers before import because it is listed first"
+    );
+    assert_eq!(
+        conditional_leaf(&target, &conditions(&[])),
+        ConditionalLeaf::Target("./default.js".into()),
+        "default answers when nothing else matches"
+    );
+    assert_eq!(
+        conditional_leaf(
+            &export_target(r#"{"node": "./s.js"}"#),
+            &conditions(&["import"])
+        ),
+        ConditionalLeaf::Unmatched
     );
 }

@@ -12122,18 +12122,27 @@ export const value = phantom;
     fn dependency_consumer_stub_archive() -> (PublishedArchive, Vec<u8>) {
         let stub = census_fixture().join("dependency-consumer/node_modules/solid-js");
         let manifest = std::fs::read(stub.join("package.json")).expect("stub manifest");
+        dependency_consumer_stub_archive_with(&manifest, &[])
+    }
+
+    /// The same stub with another manifest and extra members: the runtime and
+    /// declarations are the fixture's, so the Type Facts side is unchanged and
+    /// only the `exports` — what a condition can move — differ.
+    fn dependency_consumer_stub_archive_with(
+        manifest: &[u8],
+        extra_members: &[(&str, &[u8])],
+    ) -> (PublishedArchive, Vec<u8>) {
+        let stub = census_fixture().join("dependency-consumer/node_modules/solid-js");
         let runtime = std::fs::read(stub.join("index.js")).expect("stub runtime");
         let declarations = std::fs::read(stub.join("index.d.ts")).expect("stub declarations");
-        let archive = published_archive_for(
-            "solid-js",
-            "2.0.0-rc.3",
-            &[
-                ("package/package.json", manifest.as_slice()),
-                ("package/index.js", runtime.as_slice()),
-                ("package/index.d.ts", declarations.as_slice()),
-            ],
-        );
-        (archive, manifest)
+        let mut members = vec![
+            ("package/package.json", manifest),
+            ("package/index.js", runtime.as_slice()),
+            ("package/index.d.ts", declarations.as_slice()),
+        ];
+        members.extend(extra_members.iter().copied());
+        let archive = published_archive_for("solid-js", "2.0.0-rc.3", &members);
+        (archive, manifest.to_vec())
     }
 
     /// The nested consumer whose module top level imports `solid-js`, planned
@@ -12148,8 +12157,16 @@ export const value = phantom;
     /// closure and the recipe can import the package; without it the closure is
     /// partial and the gate refuses by name.
     fn dependency_consumer_plan(authenticate_dependency: bool) -> CertificationPlan {
-        let fixture = census_fixture().join("dependency-consumer");
         let (stub_archive, stub_manifest) = dependency_consumer_stub_archive();
+        dependency_consumer_plan_from_stub(authenticate_dependency, stub_archive, &stub_manifest)
+    }
+
+    fn dependency_consumer_plan_from_stub(
+        authenticate_dependency: bool,
+        stub_archive: PublishedArchive,
+        stub_manifest: &[u8],
+    ) -> CertificationPlan {
+        let fixture = census_fixture().join("dependency-consumer");
         let stub_runtime = std::fs::read(
             census_fixture().join("dependency-consumer/node_modules/solid-js/index.js"),
         )
@@ -12164,7 +12181,7 @@ export const value = phantom;
             "solid-js",
             "2.0.0-rc.3",
             DEPENDENCY_STUB_ROOT,
-            &stub_manifest,
+            stub_manifest,
             &["import"],
             &[(
                 "record",
@@ -12334,6 +12351,194 @@ export const value = phantom;
                 && rendered.contains("solid-js")
                 && rendered.contains(DEPENDENCY_CONSUMER),
             "the refusal must name the specifier and the importer: {rendered}"
+        );
+    }
+
+    /// A `solid-js`-shaped stub: `browser` ordered before `node`, the two
+    /// naming different files, and the case selected under `import` alone
+    /// certifying `index.js` — the client build. `server.js` answers `record`
+    /// differently, so a run that loaded it fails the recipe's own check.
+    fn browser_before_node_stub_manifest(imports: &str) -> Vec<u8> {
+        format!(
+            "{{\n  \"name\": \"solid-js\",\n  \"version\": \"2.0.0-rc.3\",\n  \"type\": \
+             \"module\",\n  \"types\": \"index.d.ts\",\n  \"exports\": {{\n    \".\": {{\n      \
+             \"types\": \"./index.d.ts\",\n      \"browser\": {{ \"import\": \"./index.js\" }},\n      \
+             \"node\": {{ \"import\": \"./server.js\" }},\n      \"import\": \"./index.js\",\n      \
+             \"default\": \"./index.js\"\n    }}\n  }}{imports}\n}}\n"
+        )
+        .into_bytes()
+    }
+
+    const SERVER_BUILD: &[u8] =
+        b"export function record(value) {\n  return `server:${value}`;\n}\n";
+
+    /// ADR 0037. The pinned Node applies `node` on its own and would load the
+    /// stub's `server.js` where the artifact case certified `index.js`; that
+    /// was every `vetoUnreproducible` withholding in the corpus. The bounded
+    /// search adds `browser`, which the stub orders first, the replay and the
+    /// closure neutrality walk both pass, and the veto runs against the client
+    /// build — proved by the recipe, whose `callsDependency` check throws on
+    /// the server build's answer. The receipt names what was added.
+    #[test]
+    fn a_reproduction_condition_lands_the_interpreter_on_the_certified_client_build() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("reproduction-condition");
+        let manifest = browser_before_node_stub_manifest("");
+        let (stub_archive, stub_manifest) = dependency_consumer_stub_archive_with(
+            &manifest,
+            &[("package/server.js", SERVER_BUILD)],
+        );
+        let plan = dependency_consumer_plan_from_stub(true, stub_archive, &stub_manifest);
+        let schedule = plan.probe_gate_schedule().unwrap();
+        assert_eq!(schedule.gates().len(), 1);
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        let Some(configuration) = tracer_configuration_with_dependencies(
+            &census_fixture(),
+            scratch.path(),
+            "reproduction-condition",
+            &[(
+                claim_id.as_str(),
+                "dependency-consumer.mjs",
+                &["solid-js"] as &[&str],
+            )],
+        ) else {
+            return;
+        };
+        plan.acquire_and_verify_export_value_type_facts(&pin)
+            .expect("the census proves creates: [] regardless of the stub's exports order");
+        let batch =
+            super::finalization::authenticate_probe_gates(&plan, Some(&configuration), &pin)
+                .expect(
+                    "with `browser` added the pinned interpreter selects the certified client \
+                     build for the dependency, so the veto must run and pass",
+                );
+        assert_eq!(batch.gate_ids().len(), 1);
+        assert!(
+            batch
+                .harness_identity_fields()
+                .contains(&"reproduction-conditions:browser"),
+            "the receipt root must name the added condition: {:?}",
+            batch.harness_identity_fields()
+        );
+    }
+
+    /// The admission half. The same stub, plus an `imports` entry that
+    /// `browser` would move: the entry replay passes exactly as above, and the
+    /// gate still refuses, because the added condition is not neutral for the
+    /// closure — a `#flag` the package resolves for itself would load a file
+    /// the witness never read.
+    #[test]
+    fn a_reproduction_condition_that_moves_any_closure_target_is_refused() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("reproduction-not-neutral");
+        let manifest = browser_before_node_stub_manifest(
+            ",\n  \"imports\": {\n    \"#flag\": { \"browser\": \"./flag-browser.js\", \"default\": \
+             \"./flag-default.js\" }\n  }",
+        );
+        let (stub_archive, stub_manifest) = dependency_consumer_stub_archive_with(
+            &manifest,
+            &[
+                ("package/server.js", SERVER_BUILD),
+                (
+                    "package/flag-browser.js",
+                    b"export const flag = \"browser\";\n",
+                ),
+                (
+                    "package/flag-default.js",
+                    b"export const flag = \"default\";\n",
+                ),
+            ],
+        );
+        let plan = dependency_consumer_plan_from_stub(true, stub_archive, &stub_manifest);
+        let claim_id = plan.probe_gate_schedule().unwrap().gates()[0]
+            .semantic_claim_id()
+            .to_owned();
+        let Some(configuration) = tracer_configuration_with_dependencies(
+            &census_fixture(),
+            scratch.path(),
+            "reproduction-not-neutral",
+            &[(
+                claim_id.as_str(),
+                "dependency-consumer.mjs",
+                &["solid-js"] as &[&str],
+            )],
+        ) else {
+            return;
+        };
+        let error =
+            super::finalization::authenticate_probe_gates(&plan, Some(&configuration), &pin)
+                .expect_err("a reproduction condition that moves a closure target must refuse");
+        let rendered = error.to_string();
+        assert!(
+            matches!(
+                &error,
+                super::Policy2FinalizationError::ProbeHarness(
+                    super::ProbeHarnessError::ConditionMismatch(_)
+                )
+            ) && rendered.contains("server.js")
+                && rendered.contains("with the reproduction condition \"browser\" added")
+                && rendered.contains("not neutral for solid-js@2.0.0-rc.3")
+                && rendered.contains("\"#flag\"")
+                && rendered.contains("flag-browser.js"),
+            "the refusal must carry the requested set's own reason, the attempt, and the \
+             divergent key: {rendered}"
+        );
+    }
+
+    /// The search is bounded and honest about failing: a stub that orders
+    /// `node` before `browser` still selects `server.js` with the condition
+    /// added, so the gate refuses with the requested set's reason followed by
+    /// the attempt's.
+    #[test]
+    fn a_reproduction_condition_that_does_not_reproduce_is_refused_with_both_attempts() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("reproduction-still-server");
+        let manifest = b"{\n  \"name\": \"solid-js\",\n  \"version\": \"2.0.0-rc.3\",\n  \"type\": \
+             \"module\",\n  \"types\": \"index.d.ts\",\n  \"exports\": {\n    \".\": {\n      \
+             \"types\": \"./index.d.ts\",\n      \"node\": { \"import\": \"./server.js\" },\n      \
+             \"browser\": { \"import\": \"./index.js\" },\n      \"import\": \"./index.js\",\n      \
+             \"default\": \"./index.js\"\n    }\n  }\n}\n"
+            .to_vec();
+        let (stub_archive, stub_manifest) = dependency_consumer_stub_archive_with(
+            &manifest,
+            &[("package/server.js", SERVER_BUILD)],
+        );
+        let plan = dependency_consumer_plan_from_stub(true, stub_archive, &stub_manifest);
+        let claim_id = plan.probe_gate_schedule().unwrap().gates()[0]
+            .semantic_claim_id()
+            .to_owned();
+        let Some(configuration) = tracer_configuration_with_dependencies(
+            &census_fixture(),
+            scratch.path(),
+            "reproduction-still-server",
+            &[(
+                claim_id.as_str(),
+                "dependency-consumer.mjs",
+                &["solid-js"] as &[&str],
+            )],
+        ) else {
+            return;
+        };
+        let error =
+            super::finalization::authenticate_probe_gates(&plan, Some(&configuration), &pin)
+                .expect_err("no admitted condition reproduces the case, so the gate refuses");
+        let rendered = error.to_string();
+        assert!(
+            matches!(
+                &error,
+                super::Policy2FinalizationError::ProbeHarness(
+                    super::ProbeHarnessError::ConditionMismatch(_)
+                )
+            ) && rendered.contains("selects \"server.js\"")
+                && rendered.contains("resolves \"index.js\"")
+                && rendered.contains("with the reproduction condition \"browser\" added"),
+            "the refusal must name both attempts and both files: {rendered}"
         );
     }
 

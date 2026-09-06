@@ -164,6 +164,10 @@ _Avoid_: Rule config, checker settings, options file
 Whether a finding is a **violation** (the analyzer proved the code misbehaves at runtime) or **uncertifiable** (a proof obligation the analyzer could not resolve). Distinct from severity (error/warning).
 _Avoid_: Finding status, finding type
 
+**Reproduction condition**:
+An export condition the probe harness adds to a launch's `--conditions=` flags beyond the artifact case's *requested* conditions, so the pinned interpreter selects the runtime files the certified closure resolves (ADR 0037). Drawn from a fixed constant (today `browser`) and admitted only when every planned case and closure edge reproduces under the resulting applied set and every `exports`/`imports` object in the authenticated closure selects identically. Recorded as `reproduction:<c>` beside `requested:<c>` and `esm:<c>`/`require:<c>`.
+_Avoid_: extra condition, fallback condition, browser mode, condition override
+
 **Discarded region**:
 A source region the Solid compiler censused and then **deleted** — the `Value(Elided)` decision, projected as `ExecutionMap::discarded_regions` and classified `ExecutionRole::DiscardedRendering`. Distinct from an *untracked region*, which is code that executes once at render: a discarded region executes zero times, so it supports no finding and no certification. Silence over one means "both compilers deleted this", never "this was proven safe".
 _Avoid_: Elided region, dead region, untracked region (that is the once-executing one), unreachable code

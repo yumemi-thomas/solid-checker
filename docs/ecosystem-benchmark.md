@@ -285,9 +285,11 @@ does; `withheldClosureReasons` on each row says what the corpus still cannot
 decide: `noRecipe` (no recipe and no stated call signature to synthesize one
 from), `censusRefused` (the implementation census declined the candidate),
 `vetoUnreproducible` (a synthesized veto the pinned interpreter cannot run for
-the artifact case — chiefly a graph dependency such as `solid-js` whose `.`
-Node's own `node` condition resolves to `dist/server.js` where the witness read
-`dist/solid.js`), `vetoThrew` / `vetoTimedOut` / `vetoRunRefused` (the worker's
+the artifact case even with ADR 0037's reproduction condition added — before
+that ADR, chiefly a graph dependency such as `solid-js` whose `.` Node's own
+`node` condition resolves to `dist/server.js` where the witness read
+`dist/solid.js`; now a closure the added `browser` condition does not
+reproduce or is not neutral for), `vetoThrew` / `vetoTimedOut` / `vetoRunRefused` (the worker's
 own failure, budget, or refusal, with the account in the record's reason),
 `vetoIncomplete` (a record with no account), and `dependencyWithheld` (a parent
 composing over a dependency's withheld claim).
