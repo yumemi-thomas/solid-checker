@@ -539,15 +539,29 @@ type UncensusedInvokingForm struct {
 	Captured          bool      `cbor:"captured,omitempty" json:"captured,omitempty"`
 	// SubjectParameter, when present, is the index of a parameter of the
 	// transcript's own declaration at which the form's subject — the receiver
-	// of a property or element read — is rooted, through a chain of property
+	// of a property or element access — is rooted, through a chain of property
 	// and element reads only (ADR 0034, handshake protocol 18). The producer
-	// states it only for a get-accessor or property-access-unknown-accessor
-	// form in read position whose root parameter is a plain identifier
-	// binding with no initializer and no rest token, written nowhere in its
-	// file, in a declaration that mentions neither `arguments` nor `eval`.
-	// Absent otherwise; absence is never "not rooted", and a consumer that
-	// reads this fact must require protocol 18 first.
+	// states it only for a get-accessor, set-accessor or
+	// property-access-unknown-accessor form whose root parameter is a plain
+	// identifier binding with no initializer and no rest token, written
+	// nowhere in its file, in a declaration that mentions neither `arguments`
+	// nor `eval`. Absent otherwise; absence is never "not rooted", and a
+	// consumer that reads this fact must require protocol 18 first.
 	SubjectParameter *int `cbor:"subjectParameter,omitempty" json:"subjectParameter,omitempty"`
+	// SubjectWrite accompanies SubjectParameter and says the access is in
+	// **write position** — an assignment target, a compound assignment, or an
+	// update expression — so the accessor that may run is a setter, and a
+	// compound or update form runs the getter too (ADR 0040, handshake
+	// protocol 24). False, and absent from the wire, for a plain read.
+	//
+	// The distinction is stated rather than folded into the subject because
+	// the two positions are the same fact for one question and different facts
+	// for another: for `creates` the accessor is the caller's code either way,
+	// while for `writes` and `invalidates` the write is this export's own act
+	// and a census of those domains must refuse exactly what this field marks.
+	// A consumer that cannot tell the positions apart must not read the
+	// subject at all, which is why the number moves with the field.
+	SubjectWrite bool `cbor:"subjectWrite,omitempty" json:"subjectWrite,omitempty"`
 }
 
 type ParameterValueSource struct {

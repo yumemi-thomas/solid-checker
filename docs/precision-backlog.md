@@ -1,5 +1,36 @@
 # Precision backlog
 
+## A parameter-rooted accessor is the caller's code in write position too (2026-09-06)
+
+ADR 0040, the first slice of lever G. ADR 0034 stopped refusing a *read*
+accessor whose subject the producer roots at an unwritten parameter, on the
+ground that the getter or trap it can run was installed by the caller on an
+object the caller passed. It deferred write position with one parenthetical,
+and that deferral became the largest census refusal class: 404 refusals at 72
+sites, dominated by `axis.min = applyPointDelta(axis.min, …)`, where the read
+on the right was dispositioned and the write on the left refused.
+
+The premise turns on provenance, not on reading, so it now holds in either
+position. The producer states a subject for `set-accessor` as well as
+`get-accessor` and `property-access-unknown-accessor`, and states
+`subjectWrite` beside it (handshake protocol 23 → 24); the census records
+`parameter-rooted-accessor-write` for those sites. The position is on the wire
+precisely so a future `writes` or `invalidates` census can refuse exactly what
+it marks — there the assignment is this export's own operation, and whose
+accessor runs is beside the point.
+
+Measured: withheld 805 → 745, `censusRefused` 748 → 688, accessor refusals
+404 → 284, statuses unchanged at 368 certified / 30 refused. The coercion class
+rose 30 → 84 for the same reason it did under ADR 0038: a body that never got
+past its first write now reaches its next form.
+
+Recorded, not closed: 110 property reads and 101 element reads whose receiver
+is not parameter-rooted, 42 destructuring elements and 31 spreads. `delete` on
+a parameter-rooted member stays refused as an unreviewed trap. A module-level
+object *literal* needs no premise at all — the compiler binds its members as
+data properties, so no form is recorded — which is why the negative fixture
+must use an untyped receiver instead.
+
 ## A `.jsx` module with no JSX executes as ECMAScript (2026-09-06)
 
 ADR 0039. A closure candidate whose veto did not complete is withheld by name

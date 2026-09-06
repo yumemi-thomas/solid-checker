@@ -7676,7 +7676,7 @@ fn require_census_decides_closure(
 ///   passed its transcript premises, and every non-cycle edge in every frame
 ///   is still dispositioned normally. Re-entering the frame can repeat those
 ///   bodies or diverge, but cannot introduce an unenumerated `create`.
-/// * `ParameterRootedAccessor` — ADR 0034. A *read accessor* form — a
+/// * `ParameterRootedAccessor` — ADR 0034. An accessor form — a
 ///   `get-accessor` or a `property-access-unknown-accessor` on a property or
 ///   element access — whose subject the producer states is rooted at a plain,
 ///   unwritten parameter of this very declaration, or a `.call`/`.apply` of a
@@ -7688,11 +7688,20 @@ fn require_census_decides_closure(
 ///   states the fact only under the premises its `subjectParameter` doc lists,
 ///   and only from handshake protocol
 ///   [`CENSUS_PARAMETER_ROOTED_SUBJECTS_PROTOCOL`] on.
+/// * `ParameterRootedAccessorWrite` — ADR 0040, the same premise in **write**
+///   position: `axis.min = v` on a parameter-rooted receiver runs a setter the
+///   caller installed, and a compound assignment or update runs that caller's
+///   getter first. A separate disposition rather than the same one, because
+///   the receipt has to say which of the two premises a site held under, and
+///   because the `writes` and `invalidates` domains must refuse exactly these
+///   sites when they gain a census — there the assignment is this export's own
+///   operation, and whose accessor runs is beside the point.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CensusDisposition {
     Unreachable,
     ParameterRooted,
     ParameterRootedAccessor,
+    ParameterRootedAccessorWrite,
     StandardLibrary,
     DialectAxiom,
     LocalRecursion,
@@ -7705,6 +7714,7 @@ impl CensusDisposition {
             Self::Unreachable => "unreachable",
             Self::ParameterRooted => "parameter-rooted",
             Self::ParameterRootedAccessor => "parameter-rooted-accessor",
+            Self::ParameterRootedAccessorWrite => "parameter-rooted-accessor-write",
             Self::StandardLibrary => "standard-library",
             Self::DialectAxiom => "dialect-axiom",
             Self::LocalRecursion => "local-recursion",
@@ -7748,6 +7758,15 @@ const CENSUS_CONTROL_FLOW_CLASSES_PROTOCOL: u64 = 15;
 /// that never promised the premise behind it would admit; the check is here for
 /// the same reason the two constants above are.
 const CENSUS_PARAMETER_ROOTED_SUBJECTS_PROTOCOL: u64 = 18;
+
+/// The handshake protocol at which an accessor form states its subject in
+/// **write** position too, with the position beside it (ADR 0040). A
+/// protocol-23 producer states a subject only for a read, so a build that read
+/// this census's write disposition against one would be reading a fact it
+/// never sent; and a producer at this protocol states `subjectWrite` for every
+/// write it roots, so an absent flag is a read rather than an unstated
+/// position.
+const CENSUS_PARAMETER_ROOTED_WRITES_PROTOCOL: u64 = 24;
 
 /// The handshake protocol at which an implementation transcript states its
 /// completion form (ADR 0035). A `returns` census on an older producer would
@@ -8057,6 +8076,14 @@ fn census_creates_domain(
             "implementation-census premise required: the uncensused-invoking-form census arrived \
              at handshake protocol {CENSUS_UNCENSUSED_FORMS_PROTOCOL} and this build speaks {}, \
              so an empty form list would be an absence read as an enumeration",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_PARAMETER_ROOTED_WRITES_PROTOCOL {
+        return Err(refuse(format!(
+            "implementation-census premise required: a write-position accessor subject arrived at \
+             handshake protocol {CENSUS_PARAMETER_ROOTED_WRITES_PROTOCOL} and this build speaks \
+             {}, so a stated subject would not say which position its access is in",
             typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
         )));
     }
@@ -8500,7 +8527,11 @@ fn census_transcript_calls(
         if census_form_is_parameter_rooted_accessor(form) {
             run.sites.push(census_form_site(
                 form,
-                CensusDisposition::ParameterRootedAccessor,
+                if form.subject_write {
+                    CensusDisposition::ParameterRootedAccessorWrite
+                } else {
+                    CensusDisposition::ParameterRootedAccessor
+                },
             ));
             continue;
         }
@@ -9709,11 +9740,26 @@ fn census_local_declaration_identity(
 /// producer rooted at a parameter of the transcript's own declaration. Every
 /// other kind — a setter, an iteration, a coercion, an `instanceof`, a spread,
 /// a destructuring pattern — refuses whatever the producer stated.
+/// Whether this form is an accessor on an object the caller handed to this
+/// invocation, which ADR 0034 dispositions instead of refusing — in either
+/// position since ADR 0040.
+///
+/// The premise is about the *provenance of the code*, not about reading: a
+/// setter the caller installed on an object it passed is the caller's code
+/// exactly as its getter is, analyzed in the caller's own artifact, and this
+/// export's act is the assignment rather than the accessor body. A compound
+/// assignment or update runs both, and both are the caller's.
+///
+/// **What this may not be reused for.** The `writes` and `invalidates`
+/// domains, when they gain a census, must refuse exactly what
+/// [`typefacts::UncensusedInvokingForm::subject_write`] marks: there the
+/// assignment into the caller's object is the export's own operation, and no
+/// question of whose code runs excuses it.
 fn census_form_is_parameter_rooted_accessor(form: &typefacts::UncensusedInvokingForm) -> bool {
     use typefacts::UncensusedInvokingFormKind as Kind;
     matches!(
         form.kind,
-        Kind::GetAccessor | Kind::PropertyAccessUnknownAccessor
+        Kind::GetAccessor | Kind::SetAccessor | Kind::PropertyAccessUnknownAccessor
     ) && matches!(
         form.node_kind.as_ref(),
         "PropertyAccessExpression" | "ElementAccessExpression"
@@ -18065,6 +18111,111 @@ mod tests {
         );
     }
 
+    /// ADR 0040: the same premise in write position. An accessor the producer
+    /// roots at an unwritten parameter is dispositioned whichever position the
+    /// access is in — a setter the caller installed is the caller's code
+    /// exactly as its getter is — and the receipt says which of the two
+    /// premises held, so a `writes` census can refuse exactly the writes.
+    /// A form with no stated subject still refuses, in either position.
+    #[test]
+    fn creates_census_dispositions_a_parameter_rooted_accessor_in_write_position() {
+        assert_eq!(CENSUS_PARAMETER_ROOTED_WRITES_PROTOCOL, 24);
+        const {
+            assert!(
+                typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+                    >= CENSUS_PARAMETER_ROOTED_WRITES_PROTOCOL
+            );
+        }
+        let certified = consumer_snapshot();
+        let roots = vec![consumer_root(&certified)];
+        let source = "/project/node_modules/consumer/dist/index.js";
+        let form = |kind: &str, extra: serde_json::Value| {
+            let mut value = json!({
+                "kind": kind,
+                "nodeKind": "PropertyAccessExpression",
+                "location": {"path": source, "startByte": 260, "endByte": 270},
+                "reach": "reachable",
+            });
+            let object = value.as_object_mut().expect("an object");
+            for (key, replacement) in extra.as_object().expect("an object") {
+                object.insert(key.clone(), replacement.clone());
+            }
+            value
+        };
+
+        // A write on a rooted subject: dispositioned, and named as a write.
+        let mut run = census_run(&certified, &roots);
+        let written = census_transcript_with(
+            vec![],
+            json!([form(
+                "property-access-unknown-accessor",
+                json!({"subjectParameter": 0, "subjectWrite": true})
+            )]),
+        );
+        assert_eq!(
+            census_transcript(&mut run, &written, 0, &[]),
+            Ok(CensusStep::Decided)
+        );
+        assert_eq!(
+            run.sites,
+            vec![format!(
+                "census-form:{source}:260:270:property-access-unknown-accessor:reachable:parameter-rooted-accessor-write"
+            )]
+        );
+
+        // A resolved setter, which only a write position can reach.
+        let mut run = census_run(&certified, &roots);
+        let setter = census_transcript_with(
+            vec![],
+            json!([form(
+                "set-accessor",
+                json!({"subjectParameter": 1, "subjectWrite": true})
+            )]),
+        );
+        assert_eq!(
+            census_transcript(&mut run, &setter, 0, &[]),
+            Ok(CensusStep::Decided)
+        );
+        assert!(run.sites[0].ends_with("set-accessor:reachable:parameter-rooted-accessor-write"));
+
+        // The read premise still records the read disposition, so the two are
+        // distinguishable in the receipt.
+        let mut run = census_run(&certified, &roots);
+        let read = census_transcript_with(
+            vec![],
+            json!([form(
+                "property-access-unknown-accessor",
+                json!({"subjectParameter": 0})
+            )]),
+        );
+        assert_eq!(
+            census_transcript(&mut run, &read, 0, &[]),
+            Ok(CensusStep::Decided)
+        );
+        assert!(run.sites[0].ends_with(":reachable:parameter-rooted-accessor"));
+
+        // No stated subject: refused in either position, as before.
+        for extra in [json!({}), json!({"subjectWrite": true})] {
+            let mut run = census_run(&certified, &roots);
+            let unrooted = census_transcript_with(
+                vec![],
+                json!([form("property-access-unknown-accessor", extra)]),
+            );
+            let refusal = census_transcript(&mut run, &unrooted, 0, &[])
+                .expect_err("an accessor with no rooted subject refuses");
+            assert!(
+                refusal.contains("refuses an uncensused invoking form"),
+                "{refusal}"
+            );
+        }
+
+        // A `set-accessor` the producer did not root is still refused: the
+        // kind alone is never the premise.
+        let mut run = census_run(&certified, &roots);
+        let bare_setter = census_transcript_with(vec![], json!([form("set-accessor", json!({}))]));
+        assert!(census_transcript(&mut run, &bare_setter, 0, &[]).is_err());
+    }
+
     /// ADR 0035: the `returns` census reads the implementation's completion
     /// form and its return sites, and nothing else. Every premise refuses by
     /// name; a value-carrying site is admitted only when the producer proved it
@@ -18519,9 +18670,10 @@ mod tests {
             );
         }
         // Refused: a rooted subject on any other kind or node, and an unrooted
-        // read accessor.
+        // read accessor. `set-accessor` left this list with ADR 0040, which
+        // admits it in write position; the kinds below have their own protocol
+        // reach and none has been reviewed.
         for (kind, node_kind, subject) in [
-            ("set-accessor", "PropertyAccessExpression", json!(0)),
             ("iteration-protocol", "ForOfStatement", json!(0)),
             ("coercion", "BinaryExpression", json!(0)),
             ("instanceof", "BinaryExpression", json!(0)),
@@ -18559,7 +18711,11 @@ mod tests {
             );
         }
         for (kind, node_kind, subject) in [
-            ("set-accessor", "PropertyAccessExpression", json!(0)),
+            // `set-accessor` with a rooted subject was here until ADR 0040,
+            // which admits it in write position; see
+            // `creates_census_dispositions_a_parameter_rooted_accessor_in_write_position`.
+            // A spread is not an access node and stays refused whatever it
+            // roots at, and a read accessor with no subject stays refused.
             (
                 "property-access-unknown-accessor",
                 "SpreadAssignment",

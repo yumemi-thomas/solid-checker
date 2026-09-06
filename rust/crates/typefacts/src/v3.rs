@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:95b5229ebf17436cd5e360d6662cbc16f1c4dcff38533946128dcd99b53aa8da";
+    "sha256:7a2cb29d4aba0b48e80cec9f95e55ec5ac8df447e48091d15421bdff260afef1";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -138,6 +138,11 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
+// Protocol 24 lets an uncensused accessor form state its subject parameter in
+// **write** position as well, with `subjectWrite` saying which position it is
+// (ADR 0040). A protocol-23 consumer only ever saw a subject for a read, so
+// reading the field without the position would read a write into the caller's
+// object as a read of it.
 // Protocol 23 carries a premise to a local helper: a premised census states
 // `callArgumentPremises` — the type of each informative argument slot at every
 // call to a runtime-source declaration, on the twin — a local-declaration
@@ -175,7 +180,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // producer is never "not rooted".
 // Protocol 17 includes exact-null loose equality in the positive
 // uncensused-form classifier. Protocol 16 added unchanged-parameter identity.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 23;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 24;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

@@ -284,6 +284,40 @@ transcript, and the negative rows come from the same audited dialect
 documents. That is one ADR generalizing the census terminator per domain and
 one veto family per domain.
 
+**The census half is already domain-parameterized; the veto half is the lever
+(investigated 2026-09-06).** `census_dialect_axiom_for_callee` takes the domain
+and asks `primitive_performs_no_operation(archive, name, domain)`, and the
+generator's proposal walk asks `some_audit_denies_primitive(spelling, domain)`
+the same way, so generalizing the terminator is mostly threading a parameter.
+What is *not* in place is a falsifier. ADR 0036 synthesizes a veto from the
+export's call signature and observes the domain's contradiction — exactly
+`undefined`-vs-value for `returns`, own-property additions to `globalThis` for
+`creates` — and a domain added to `ClaimDomain::PROPOSABLE` without an
+observation of its own would have inherited the `creates` one silently. That
+fallback is now closed: `reviewed_observation` returns nothing for an
+unreviewed domain, so its candidates stay withheld for want of a recipe rather
+than being gated by a veto watching the wrong thing.
+
+An observation for `cleanups` does exist, and it is *precise* — measured on
+both dialects, with the export's own owner:
+
+| dialect | owner field | empty | one registration | two |
+| --- | --- | --- | --- | --- |
+| `solid-js@1.9.11` | `cleanups` | `null` | `array(1)` | `array(2)` |
+| `solid-js@2.0.0` (`@solidjs/signals`) | `_disposal` | `null` | the function | `array(2)` |
+
+`createSignal` perturbs neither field, so the observation is specific to
+cleanup registration rather than to resource creation. But both fields are
+**private runtime internals**, and the Solid 2 one is an underscore-prefixed
+field of a prerelease whose shape moves between builds. Reading it is a premise
+about the runtime's internals, which the dialect would have to state and audit
+per version — a new premise class, and the reason this lever is one ADR of its
+own rather than a thread-the-parameter change. `disposals` and `invalidates`
+have no observation identified at all: a disposal of the caller's resource and
+a store-proxy invalidation are not visible from the veto's side without the
+same internals, and `invalidates` additionally needs the proxy question lever C
+makes decidable.
+
 The remaining domains each need something new:
 
 - `callbacks`: whether the export invokes its callable parameters and in which
@@ -316,14 +350,23 @@ closed claims per domain so the intermediate progress is visible.
    JavaScript module cannot resolve (spell it as `import(…).name` from the
    identity's declaration file).
 5. **Lever B** ADR once A runs, Solid 2 first, 1.x with Babel reproduction.
-6. **Lever F** ADR: per-domain census terminators over the existing walk, then
-   `callbacks`, then `reads`/`writes`.
-7. **Lever G** (new): the accessor class — 398 refusals at 73 sites after
-   ADR 0038, mostly writes into a parameter-rooted object (`axis.min = …`, a
-   `set-accessor` question ADR 0034 left to the `writes` domain), module-level
-   object-literal receivers whose initializer the census could inspect
-   (`isDragging[axis]`, `scaleCorrectors[key]`), and destructuring of locals.
-   Each needs its own premise; none is a type question.
+6. **Lever F** — investigated 2026-09-06 and *not* taken: the census
+   terminator generalizes by parameter, but every one of the three domains
+   needs a veto observation, and the only one that exists (`cleanups`) reads
+   private runtime internals. Its own ADR, with the dialect stating the owner's
+   cleanup registry per version. The silent-inheritance hazard is closed in the
+   meantime. Then `callbacks`, then `reads`/`writes`.
+7. **Lever G** — the accessor class. Its first slice is taken as ADR 0040:
+   a parameter-rooted accessor is the caller's code in **write** position too,
+   which was the shape that dominated the class (`axis.min = …`, the
+   `set-accessor` question ADR 0034 deferred to the `writes` domain). Measured:
+   withheld 805 → 745, accessor refusals 404 → 284, statuses unchanged. What
+   remains, on the same measurement: 101 element reads and 110 property reads
+   whose receiver is not parameter-rooted — module-level untyped receivers
+   (`isDragging[axis]`, `scaleCorrectors[key]`) whose initializer the census
+   could inspect — plus 42 destructuring elements and 31 spreads, each needing
+   its own premise. A module-level *object literal* needs none: the compiler
+   binds its members as data properties and records no form.
 
 Nothing here is a `tsc` duplicate: every claim is about runtime reactive
 behavior the type system cannot express. Nothing here loosens a refusal without

@@ -1352,10 +1352,13 @@ func TestExportValueDemandDigestSeparatesLocalDeclarationLocations(t *testing.T)
 	}
 }
 
-// subjectSource pins ADR 0034's subject-parameter premise, positive and negative:
-// only a read accessor whose receiver chain roots at a plain, uninitialized,
-// non-rest parameter that is written nowhere — in a declaration mentioning
-// neither `arguments` nor `eval` — states a subject parameter.
+// subjectSource pins ADR 0034's subject-parameter premise, positive and
+// negative: only an accessor whose receiver chain roots at a plain,
+// uninitialized, non-rest parameter that is written nowhere — in a declaration
+// mentioning neither `arguments` nor `eval` — states a subject parameter.
+// ADR 0040 adds write position to that, and the position is stated beside the
+// subject, so the two are separable by a consumer that must refuse one of
+// them.
 const subjectSource = `const registry: any = { value: 1, inner: [{ value: 2 }] };
 
 export function parameterRead(source: any): unknown {
@@ -1395,6 +1398,14 @@ export function destructuredParameter({ inner }: any): unknown {
 
 export function setterOnParameter(source: any): void {
 	source.value = 1;
+}
+
+export function updateOnParameter(source: any): void {
+	source.value += 1;
+}
+
+export function setterOnModuleValue(): void {
+	registry.value = 1;
 }
 
 export function deletedOnParameter(source: any): void {
@@ -1439,7 +1450,13 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 		{"nestedParameterRead", []*int{nil}},
 		{"defaultedParameter", []*int{nil}},
 		{"destructuredParameter", []*int{nil}},
-		{"setterOnParameter", []*int{nil}},
+		// ADR 0040: a write into the caller's object roots exactly as a read
+		// of it does, and says so.
+		{"setterOnParameter", []*int{&zero}},
+		// A compound assignment records the coercion `+=` performs *and* the
+		// accessor: the operand is `any`, and only the accessor is rooted.
+		{"updateOnParameter", []*int{nil, &zero}},
+		{"setterOnModuleValue", []*int{nil}},
 		{"deletedOnParameter", []*int{nil}},
 		{"argumentsMention", []*int{nil}},
 	} {
@@ -1456,6 +1473,31 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 			case want != nil && (got == nil || *got != *want):
 				t.Fatalf("%s form %d (%s) subject parameter = %v, want %d", testCase.export, index, forms[index].Kind, got, *want)
 			}
+		}
+	}
+
+	// The position travels beside the subject: a `writes` census must be able
+	// to refuse exactly the writes, and cannot if the two read alike.
+	for _, testCase := range []struct {
+		export string
+		write  bool
+	}{
+		{"parameterRead", false},
+		{"setterOnParameter", true},
+		{"updateOnParameter", true},
+	} {
+		transcript := implementationTranscriptFor(t, analyzer, path, subjectSource, testCase.export)
+		var rooted *typefacts.UncensusedInvokingForm
+		for index, form := range transcript.UncensusedInvokingForms {
+			if form.SubjectParameter != nil {
+				rooted = &transcript.UncensusedInvokingForms[index]
+			}
+		}
+		if rooted == nil {
+			t.Fatalf("%s: no form states a subject", testCase.export)
+		}
+		if rooted.SubjectWrite != testCase.write {
+			t.Fatalf("%s: subject write = %v, want %v", testCase.export, rooted.SubjectWrite, testCase.write)
 		}
 	}
 }

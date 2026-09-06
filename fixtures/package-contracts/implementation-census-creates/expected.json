@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "748dda24f31198fdac46ab189ec6c96966aa13dc748e710ffb5cdd8d8bc1e58c",
+            "closureSha256": "8cbb7ea49d1106a2c6ef02a7ab71b8dcdb43c65cc0bb3c46ef23f34c38cb4804",
             "path": "./index.js",
-            "sha256": "a9165f284943b9c94c820430cef5bc378bc1e7eaa8ad1ca3709e29b46ed51a69"
+            "sha256": "6be83620c7b76242eb5226e26142d5199d4e6c9707e1697ffad68b702b2a3376"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "c14e8b66ec7d868a57532a7008cc40abd361db54f6806ae409575df649d7d2c0"
+            "sha256": "61fbf0e4613a8fd67bf1cd90b64512b3aa2ed23d7abb6bc7ca40627f219440f9"
           },
           "exports": {
             "callInitialized": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -35,6 +35,7 @@
             "reassignedHelper": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "reflectApply": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "returnedCallbackCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "setterOnModuleValue": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "setterOnParameter": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "spreadArgs": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "spreadUntyped": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -45,6 +46,7 @@
             "typedCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "unresolved": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "untypedCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "updateOnParameter": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "viaHelperChain": "summary-5f5b804e83be5aede7d0abaf2dc45cc361fe1b11fc38c0a3ccf72ca6ebf6f4dc",
             "whileBreak": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "writtenAfterRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",

@@ -380,10 +380,28 @@ export function callLibraryOutsideTable(value) {
   return Array.prototype.slice.call(value);
 }
 
-// An accessor in write position on the parameter. Writes into a caller's object
-// are a `writes`-domain question ADR 0034 does not open. **Refuses.**
+// An accessor in write position on the parameter. The setter that may run was
+// installed by the caller on the object it passed, so it is the caller's code
+// exactly as its getter would be (ADR 0040); the receipt names the site
+// `parameter-rooted-accessor-write`, which is what a future `writes` census
+// must refuse. **Certifies.**
 export function setterOnParameter(source) {
   source.value = 1;
+}
+
+// A compound assignment runs the caller's getter and then the caller's setter,
+// both on the object the caller passed. Same premise, one site.
+// **Certifies.**
+export function updateOnParameter(source) {
+  source.value += 1;
+}
+
+// The same write, on the module-level untyped value `moduleReceiverRead` reads.
+// Nothing roots it at a parameter, so no premise covers the accessor and the
+// form refuses exactly as it did before ADR 0040: the boundary is provenance,
+// not position. **Refuses.**
+export function setterOnModuleValue() {
+  untypedRegistry.value = 1;
 }
 
 // ADR 0038: the form census is classified under the export's *declared*

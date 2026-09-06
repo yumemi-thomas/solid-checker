@@ -316,7 +316,8 @@ func (p *project) uncensusedInvokingFormCensusLocked(
 				enclosingLocation := nodeLocation(enclosing)
 				form.EnclosingCallable = &enclosingLocation
 			}
-			form.SubjectParameter = p.accessorFormSubjectParameterLocked(node, kind, roots)
+			form.SubjectParameter, form.SubjectWrite =
+				p.accessorFormSubjectParameterLocked(node, kind, roots)
 			forms = append(forms, form)
 		},
 	)
@@ -429,32 +430,48 @@ func (p *project) subjectParameterLocked(subject *ast.Node, roots *parameterSubj
 	return &index
 }
 
-// accessorFormSubjectParameterLocked states the subject parameter for exactly
-// the two read-accessor kinds ADR 0034 admits, in read position, on a property
-// or element access node. Every other form — a setter, a write position, a
-// `delete`, a destructuring pattern, a spread, an iteration, a coercion —
-// stays unstated, which the consumer reads as "refuse as before".
+// accessorFormSubjectParameterLocked states the subject parameter of an
+// accessor form on a property or element access node, together with whether
+// the access is in write position (ADR 0034, extended by ADR 0040).
+//
+// Three kinds qualify: `get-accessor` and `set-accessor`, where the compiler
+// resolved the member to an accessor declaration, and
+// `property-access-unknown-accessor`, where it bound no data property at all.
+// A `delete` stays unstated — it reaches a `deleteProperty` trap rather than
+// an accessor, and no ADR has reviewed it — and so does every other form: a
+// destructuring pattern, a spread, an iteration, a coercion.
+//
+// The write flag is the position, not a second premise: `axis.min = v` runs a
+// setter, `axis.min += 1` runs the getter and then the setter, and both are
+// code on the object the caller handed over. Stating the position is what lets
+// one consumer treat the two alike and another — a `writes` census, where the
+// assignment is the export's own act — refuse exactly the write.
 func (p *project) accessorFormSubjectParameterLocked(
 	node *ast.Node,
 	kind typefacts.UncensusedInvokingFormKind,
 	roots *parameterSubjectRoots,
-) *int {
+) (*int, bool) {
 	if roots == nil {
-		return nil
+		return nil, false
 	}
-	if kind != typefacts.UncensusedGetAccessor && kind != typefacts.UncensusedPropertyAccessUnknownAccessor {
-		return nil
+	switch kind {
+	case typefacts.UncensusedGetAccessor, typefacts.UncensusedSetAccessor,
+		typefacts.UncensusedPropertyAccessUnknownAccessor:
+	default:
+		return nil, false
 	}
 	if !ast.IsPropertyAccessExpression(node) && nodeKindName(node) != "ElementAccessExpression" {
-		return nil
-	}
-	if ast.GetAssignmentTarget(node) != nil {
-		return nil
+		return nil, false
 	}
 	if parent := node.Parent; parent != nil && nodeKindName(parent) == "DeleteExpression" {
-		return nil
+		return nil, false
 	}
-	return p.subjectParameterLocked(node.Expression(), roots)
+	write := ast.GetAssignmentTarget(node) != nil
+	subject := p.subjectParameterLocked(node.Expression(), roots)
+	if subject == nil {
+		return nil, false
+	}
+	return subject, write
 }
 
 // thisProtocolCallLocked states the receiver of a `.call` or `.apply` whose

@@ -3762,6 +3762,7 @@ mod tests {
             enclosing_callable: None,
             captured: false,
             subject_parameter: None,
+            subject_write: false,
         }
     }
 

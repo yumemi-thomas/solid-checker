@@ -69,6 +69,10 @@ pub(crate) fn synthesize(
     let candidates = withheld
         .iter()
         .filter(|record| record.reason == WITHHELD_CLOSURE_NO_RECIPE)
+        // A domain this module has no *reviewed* observation for synthesizes
+        // nothing, so its candidate stays withheld for want of a recipe. See
+        // `reviewed_observation`.
+        .filter(|record| reviewed_observation(&record.domain).is_some())
         .filter_map(|record| {
             evidence
                 .call_signatures(&record.export)
@@ -133,23 +137,15 @@ pub(crate) fn synthesize(
         );
         let source = module_source(specifier, &record.export, &record.domain, signatures);
         std::fs::write(directory.join(&module), source)?;
-        let (marker, observation) = match record.domain.as_str() {
-            "returns" => (
-                "return-value",
-                "exact: any call whose result is not undefined",
-            ),
-            _ => (
-                "create-operation",
-                "own-property additions to globalThis during the call window; not an exact observation of a create operation",
-            ),
-        };
+        let reviewed = reviewed_observation(&record.domain)
+            .expect("candidates were filtered to domains with a reviewed observation");
         entries.push(serde_json::json!({
             "claimId": record.semantic_claim_id,
             "module": module,
             "importKind": import_kind,
             "dependencySpecifiers": [],
             "scenario": "operation",
-            "expectedEvent": { "marker": marker, "class": "call" },
+            "expectedEvent": { "marker": reviewed.marker, "class": "call" },
             "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
             "coverageLimitations": [
                 format!(
@@ -163,7 +159,10 @@ pub(crate) fn synthesize(
                         String::new()
                     }
                 ),
-                format!("{} contradiction observed as: {}", record.domain, observation),
+                format!(
+                    "{} contradiction observed as: {}",
+                    record.domain, reviewed.observation
+                ),
             ],
             "provenance": "synthesized",
         }));
@@ -353,6 +352,45 @@ fn sample_count(signatures: &[typefacts::SelectedSignature]) -> usize {
     sample_tuples(signatures).len()
 }
 
+/// What a synthesized module emits as the domain's contradiction, and how the
+/// coverage limitation describes it — for the domains whose observation has
+/// been **reviewed**, and for no others.
+///
+/// There is deliberately no fallback arm. Until this returned `None` for an
+/// unknown domain, a domain added to
+/// [`solid_reactive_ir::contract_semantics::ClaimDomain::PROPOSABLE`] would
+/// have inherited the `creates` observation silently: its candidates would
+/// have been gated by a veto watching `globalThis` for a claim about cleanup
+/// registration or invalidation, and a clean run would have read as "nothing
+/// contradicted it". A domain whose contradiction nobody has reviewed
+/// synthesizes nothing, so its candidate stays withheld for want of a recipe
+/// and a hand recipe remains the only way to gate it.
+///
+/// Adding a domain here is an ADR: the observation has to be stated, and its
+/// exactness has to be stated with it — `returns` is exact, `creates` is
+/// explicitly not.
+struct ReviewedObservation {
+    marker: &'static str,
+    observation: &'static str,
+    emit: &'static str,
+}
+
+fn reviewed_observation(domain: &str) -> Option<ReviewedObservation> {
+    match domain {
+        "returns" => Some(ReviewedObservation {
+            marker: "return-value",
+            observation: "exact: any call whose result is not undefined",
+            emit: "  if (yielded) harness.emit({ marker: \"return-value\", kind: \"call\", phase: \"enter\" });",
+        }),
+        "creates" => Some(ReviewedObservation {
+            marker: "create-operation",
+            observation: "own-property additions to globalThis during the call window; not an exact observation of a create operation",
+            emit: "  if (Reflect.ownKeys(globalThis).some((key) => !before.includes(key))) {\n    harness.emit({ marker: \"create-operation\", kind: \"call\", phase: \"enter\" });\n  }",
+        }),
+        _ => None,
+    }
+}
+
 fn module_source(
     specifier: &str,
     export: &str,
@@ -364,14 +402,9 @@ fn module_source(
         .map(|arguments| format!("  [{}],", arguments.join(", ")))
         .collect::<Vec<_>>()
         .join("\n");
-    let observation = match domain {
-        "returns" => {
-            "  if (yielded) harness.emit({ marker: \"return-value\", kind: \"call\", phase: \"enter\" });"
-        }
-        _ => {
-            "  if (Reflect.ownKeys(globalThis).some((key) => !before.includes(key))) {\n    harness.emit({ marker: \"create-operation\", kind: \"call\", phase: \"enter\" });\n  }"
-        }
-    };
+    let observation = reviewed_observation(domain)
+        .expect("a module is only synthesized for a domain with a reviewed observation")
+        .emit;
     format!(
         "// Synthesized veto (ADR 0036) for the `{domain}: []` claim of `{export}`.\n\
          // Derived from the export's Type Facts call signature; deterministic in it.\n\
@@ -406,4 +439,47 @@ fn module_source(
         specifier_json = serde_json::to_string(specifier).unwrap_or_default(),
         export_json = serde_json::to_string(export).unwrap_or_default(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Only a domain whose contradiction has been reviewed synthesizes a veto,
+    /// and each states its own observation. This is the gate that keeps a
+    /// domain added to `ClaimDomain::PROPOSABLE` from silently inheriting the
+    /// `creates` convention: a `cleanups` candidate gated by a veto watching
+    /// `globalThis` would report "nothing contradicted it" for a claim that
+    /// observation says nothing about.
+    #[test]
+    fn only_a_reviewed_domain_synthesizes_a_veto() {
+        let returns = reviewed_observation("returns").expect("returns is reviewed");
+        assert_eq!(returns.marker, "return-value");
+        assert!(returns.observation.starts_with("exact:"));
+
+        let creates = reviewed_observation("creates").expect("creates is reviewed");
+        assert_eq!(creates.marker, "create-operation");
+        assert!(
+            creates.observation.contains("not an exact observation"),
+            "the creates convention states its own inexactness: {}",
+            creates.observation
+        );
+        assert!(creates.emit.contains("globalThis"));
+
+        for domain in [
+            "cleanups",
+            "disposals",
+            "invalidates",
+            "callbacks",
+            "reads",
+            "writes",
+            "throws",
+            "",
+        ] {
+            assert!(
+                reviewed_observation(domain).is_none(),
+                "{domain} has no reviewed observation and must synthesize nothing"
+            );
+        }
+    }
 }

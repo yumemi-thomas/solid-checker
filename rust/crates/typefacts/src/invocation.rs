@@ -642,18 +642,32 @@ pub struct UncensusedInvokingForm {
     #[serde(default, skip_serializing_if = "is_false")]
     pub captured: bool,
     /// The parameter of the transcript's own declaration at which this form's
-    /// subject — the receiver of a property or element read — is rooted
+    /// subject — the receiver of a property or element access — is rooted
     /// through a chain of property and element reads (ADR 0034, handshake
-    /// protocol 18). Stated only for a `get-accessor` or
-    /// `property-access-unknown-accessor` form in read position whose root is
-    /// a plain, uninitialized, non-rest parameter binding written nowhere in
-    /// its file, in a declaration mentioning neither `arguments` nor `eval`.
+    /// protocol 18; extended to write position by ADR 0040 at protocol 24).
+    /// Stated only for a `get-accessor`, `set-accessor` or
+    /// `property-access-unknown-accessor` form whose root is a plain,
+    /// uninitialized, non-rest parameter binding written nowhere in its file,
+    /// in a declaration mentioning neither `arguments` nor `eval`.
     ///
     /// **Absence is never "not rooted."** A protocol-17 producer states nothing
     /// here for a rooted form, so a consumer that reads this field must
     /// require protocol 18 first.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subject_parameter: Option<usize>,
+    /// Whether the access this form's [`Self::subject_parameter`] roots is in
+    /// **write** position — an assignment target, a compound assignment, or an
+    /// update expression — so the accessor that may run is a setter, and a
+    /// compound or update form runs the getter too (ADR 0040, handshake
+    /// protocol 24).
+    ///
+    /// The position is stated rather than folded into the subject because the
+    /// two are one fact for `creates` — the accessor is the caller's code
+    /// either way — and different facts for `writes` and `invalidates`, where
+    /// the write is this export's own act. A consumer that cannot tell them
+    /// apart must not read the subject, which is why the handshake moves.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub subject_write: bool,
 }
 
 /// The closed vocabulary of invoking forms the call census does not record.

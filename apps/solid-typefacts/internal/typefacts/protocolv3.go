@@ -4,7 +4,12 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 23: a premise reaches a local helper. A
+// TypeFactsHandshakeProtocol is 24: an uncensused accessor form states its
+// subject parameter in **write** position too, with SubjectWrite saying which
+// position it is (ADR 0040). A protocol-23 consumer received a stated subject
+// only for a read, so reading a protocol-24 transcript's subject without the
+// position would treat a write into the caller's object as a read of it.
+// Protocol 23: a premise reaches a local helper. A
 // premised census records the argument types at each call to a runtime-source
 // declaration (CallArgumentPremises), a local-declaration demand may carry
 // them back as ParameterPremises, and the helper's transcript echoes the ones
@@ -140,8 +145,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 23
-	TypeFactsSchemaSHA256             = "sha256:95b5229ebf17436cd5e360d6662cbc16f1c4dcff38533946128dcd99b53aa8da"
+	TypeFactsHandshakeProtocol uint64 = 24
+	TypeFactsSchemaSHA256             = "sha256:7a2cb29d4aba0b48e80cec9f95e55ec5ac8df447e48091d15421bdff260afef1"
 )
 
 type ServiceHandshake struct {

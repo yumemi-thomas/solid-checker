@@ -35,6 +35,8 @@ export declare function nestedCallableParameterRead(items: Array<{ value: unknow
 export declare function callNonLibraryReceiver(value: unknown): unknown;
 export declare function callLibraryOutsideTable(value: unknown): unknown;
 export declare function setterOnParameter(source: { value: unknown }): void;
+export declare function updateOnParameter(source: { value: number }): void;
+export declare function setterOnModuleValue(): void;
 // ADR 0038: these signatures are the premise the form census classifies the
 // runtime bodies under. `typedCoercion`, `returnedCallbackCoercion` and
 // `declaredMemberCoercion` certify because of the types stated here;
