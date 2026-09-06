@@ -658,9 +658,19 @@ accessor-census disposition below; see
   producer's argument tracer does not follow. The protocol-method reach
   (`toJSON`, `Symbol.iterator`, element `toString`, `then`) on a non-callable
   argument is **not** refused and is an open producer-side gap.
-- **A local declaration with no binding identifier** (an arrow or function
-  expression a variable holds), **a written binding**, and **a redeclared
-  name** — refused at the local-recursion step by name and location.
+- **A callable expression with no binding identifier** that is not the whole
+  initializer of a plain variable declarator — an argument, an element, an
+  operand — **a written binding**, **a redeclared name**, and **a declarator
+  initialized by anything but a function or arrow literal** (`const helper =
+  memo(() => …)`) — refused at the local-recursion step by name and location.
+  Since 2026-09-06 an arrow or function expression that *is* the whole
+  initializer of a `const`/`let`/`var` binding one plain identifier is
+  followed through that identifier, held to the same written/redeclared
+  checks; the producer resolves such a callee to the arrow from the same file
+  and to the identifier from another, and the verifier binds both readings to
+  the declarator (`census_plain_binding_named_at`,
+  `census_plain_binding_initialized_by`). A call through a *parameter of a
+  nested callable* refuses naming the `callbacks` domain that owns it.
 - **Every behavioral call domain other than `creates` and `returns`**: `reads`
   (needs the proxy property-access forms, § 4.4), `writes`, `callbacks`,
   `cleanups`, `disposals`, `invalidates`; `throws` is not a census target under

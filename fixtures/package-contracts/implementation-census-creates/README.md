@@ -101,6 +101,8 @@ disposition, and the first call with none refuses the domain by name:
 | `labelledBreak` | refuses: unaccounted flow | `break outer` out of a plain labelled *block*. No enclosing loop or `switch` of the frame owns that target, and the target is what bounds every region-based repair either census applies to a jump, so the marker is `jumpReachability`, classified `flow-unaccounted`. `mount(el)` is on the wire here too — the refusal is not about a missing row but about a frame nobody modelled, and it is what keeps the relaxation above from being a blanket one |
 | `stdlibRefInvoker` | refuses: unseen callable | `Array.from(items).forEach(work)`: `forEach` invokes its slot 0 (reviewed invoker table) and `work` is a module-local function reference — neither a parameter nor a callable literal inside the transcript — so the standard-library disposition refuses the call by name |
 | `reflectApply` | refuses: by-reference member | `Reflect.apply(work, undefined, args)` transfers control to its first slot; the member refuses by qualified name whatever the slots prove |
+| `constBound` | **certifies** | `boundHelper(callback)` resolves to an arrow a `const` holds. Since 2026-09-06 the verifier binds the arrow to the declarator that holds it — the initializer is a function literal and the identifier is the whole binding — and holds that identifier to the same two checks as a named declaration (unwritten, declared once), then walks the arrow's transcript; `callback(0)` inside it is parameter-rooted. Before that every callable a variable held refused as having no binding identifier |
+| `callInitialized` | refuses: value-initialized binding | `wrappedHelper` is a `const` holding what `wrap(…)` returned. The identifier binds, but its initializer is not a function or arrow literal, so the census refuses by name rather than tracing the value |
 | `reassignedHelper` | refuses: written binding | `function helper` is reassigned at module level; the producer still resolves `helper(el)` to the declaration, and the verifier's own parse of the authenticated bytes finds the write and refuses to walk a declaration not proven to be the code that runs |
 | `memberParameterRooted` | **certifies** with a recipe (ADR 0034) | `source.read()`: the call is `parameter-rooted` and the read of `.read` — an uncensused `property-access-unknown-accessor` form — is `parameter-rooted-accessor`, because the producer roots its subject at parameter 0, a plain, unwritten binding of this declaration. Whatever getter or trap the read reaches sits on the caller's object |
 | `toStringTagViaCall` | **certifies** with a recipe (ADR 0034) | `Object.prototype.toString.call(value)`: the receiver is in the reviewed this-protocol table (`Object.toString`, reach `Get(this, @@toStringTag)`) and `this` is the unwritten parameter, so the site is decided before the by-reference owner rule refuses it |
@@ -112,8 +114,8 @@ disposition, and the first call with none refuses the domain by name:
 | `iife` | refuses: unresolved callee | an immediately-invoked function expression. Its body is lexically inside the export and already walked, so the generator has no counterexample to name — and the census refuses the row by name: the producer resolves its callee to nothing at all. Which is why the walk keeps declining `expression-callee` rather than treating it as spurious |
 
 The `unresolved`, `taggedTemplate`, `spreadUntyped`, `labelledBreak`,
-`stdlibRefInvoker`, `reflectApply`, `reassignedHelper`, `iife` and the seven
-ADR 0034 boundary refusals arrive
+`stdlibRefInvoker`, `reflectApply`, `reassignedHelper`, `callInitialized`,
+`iife` and the seven ADR 0034 boundary refusals arrive
 before any recipe matters, at witness acquisition. Their tests still supply a recipe
 (`probe-recipes/refused-export.mjs`), deliberately: without one the certifier
 would withhold the candidate and the row would certify with the domain open,
@@ -206,8 +208,15 @@ ran. None hands `session` or `harness` to the package.
   would refuse for a different reason (a callable outside the transcript);
   the row pins the untraced-reference case.
 - **`reassignedHelper`'s `helper` must be a `function` declaration written by
-  a later statement.** A `const` arrow would refuse as an anonymous callable
-  before any write is consulted.
+  a later statement.** Before 2026-09-06 a `const` arrow refused as an
+  anonymous callable before any write was consulted; it is now followed
+  through its binding and a write refuses it on the same terms, so the row
+  keeps the `function` spelling to pin the declaration-node case on its own.
+- **`constBound`'s `boundHelper` must be an arrow that is the whole
+  initializer of a `const` binding one plain identifier, unwritten and
+  declared once**, and **`callInitialized`'s `wrappedHelper` must be
+  initialized by a call.** The first pins the one indirection the census takes
+  through a variable; the second pins that it takes no other.
 - **`dependency-consumer/plainConsumer` must not call into `solid-js`.** The
   gate has to be *reached* for that fixture to say anything about the
   workspace, and a dependency callee refuses the census by name first.

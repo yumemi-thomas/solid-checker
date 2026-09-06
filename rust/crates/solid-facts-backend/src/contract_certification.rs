@@ -11476,9 +11476,11 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 27] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 29] = [
+        "callInitialized",
         "callLibraryOutsideTable",
         "callNonLibraryReceiver",
+        "constBound",
         "cycle",
         "deep",
         "iife",
@@ -12634,8 +12636,10 @@ export const value = phantom;
     #[test]
     fn the_generated_census_fixture_carries_every_creates_candidate_into_planning() {
         let proposing = [
+            "callInitialized",
             "callLibraryOutsideTable",
             "callNonLibraryReceiver",
+            "constBound",
             "cycle",
             "deep",
             "labelledBreak",
@@ -12855,9 +12859,11 @@ export const value = phantom;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
-    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 25] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 27] = [
+        "callInitialized",
         "callLibraryOutsideTable",
         "callNonLibraryReceiver",
+        "constBound",
         "cycle",
         "deep",
         "labelledBreak",
@@ -12889,8 +12895,11 @@ export const value = phantom;
     /// argument, is withheld because its synthesized run never reports
     /// (`veto`). `deep` closes `returns` while its `creates` is refused at the
     /// depth bound: the `returns` census reads the export's own completions
-    /// and recurses into no callee.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 10] = [
+    /// and recurses into no callee. `constBound` closes since 2026-09-06 —
+    /// the arrow its `const` holds is followed through the binding — while
+    /// `callInitialized`, whose `const` holds a call's result, is refused.
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 11] = [
+        "constBound",
         "cycle",
         "memberParameterRooted",
         "noRecipe",
@@ -12902,7 +12911,8 @@ export const value = phantom;
         "viaHelperChain",
         "whileBreak",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 15] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 16] = [
+        ("callInitialized", "census"),
         ("callLibraryOutsideTable", "census"),
         ("callNonLibraryReceiver", "census"),
         ("deep", "census"),

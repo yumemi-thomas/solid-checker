@@ -1,7 +1,7 @@
 # Phase 21 ecosystem refusal-reduction ledger
 
 - Baseline fully refused rows: 30
-- Current report SHA-256: cf8d1e12a806ffb454296e8085f956007f7982421ea82170bf9979df6313ccf8
+- Current report SHA-256: b3125f12e86a9975194470ca404de9cd717fa00276f97090591d901debaa2617
 - Upstream missing-byte controls: 5
 - CJS/no-ESM controls: 7
 - Checker-addressable rows: 18

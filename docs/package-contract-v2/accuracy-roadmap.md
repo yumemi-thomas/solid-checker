@@ -192,12 +192,16 @@ uncertain until measured: `motion`'s declarations type many helpers as
 `any` themselves. Prototype on `motion-dom` first and count how many of the
 44 coercion and 52 property-access sites clear before deciding.
 
-### D. Census callee vocabulary (≈130 refusals, ≈25 sites)
+### D. Census callee vocabulary (≈130 refusals, ≈25 sites) — first slice taken 2026-09-06
 
-- A `const` binding whose initializer is a function or arrow expression, never
-  written elsewhere in its file: follow it. That is most of the 24
-  "not a function declaration" sites (`isMotionValue`, `isEasingArray`,
-  `mixNumber`, `calcBezier`, `wrap`, …). A `let` (`invariant`) stays refused.
+- ~~A `const` binding whose initializer is a function or arrow expression~~ —
+  taken: the verifier binds an arrow or function expression that is the whole
+  initializer of a plain `const`/`let`/`var` declarator to that identifier and
+  holds it to the same written/redeclared checks as a named declaration
+  (ADR 0008 amended). A `let` is admitted on the same terms; `invariant`
+  refuses because it is *written*, not because of its keyword. A declarator
+  initialized by a call (`supportsLinearEasing = memoSupports(…)`) refuses by
+  name.
 - A method on a class declared in the artifact's own runtime source, called on
   `this`: follow it (`getAll`).
 - A callee that is a *parameter* (`cb`, `signal`, `b`) is caller-supplied code.
@@ -263,8 +267,8 @@ closed claims per domain so the intermediate progress is visible.
    change; see above.
 2. ~~Lever E~~ investigation — done; the residual is a lane-fallback question
    on four TanStack rows and one 113-entrypoint row, recorded above.
-3. **Lever D** (const-bound callees, own-class methods): small, sound, no
-   premise change; a good slice while the ADRs are reviewed.
+3. **Lever D** — const-bound callees taken 2026-09-06; own-class methods and
+   `new` on an own-source class remain (18 refusals, 3 sites in `motion-dom`).
 4. **Lever C** prototype on `motion-dom`, measured before its ADR.
 5. **Lever B** ADR once A runs, Solid 2 first, 1.x with Babel reproduction.
 6. **Lever F** ADR: per-domain census terminators over the existing walk, then

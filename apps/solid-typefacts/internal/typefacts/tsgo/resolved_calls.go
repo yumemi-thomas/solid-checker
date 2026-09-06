@@ -17,9 +17,17 @@ func isCallLikeExpression(node *ast.Node) bool {
 	return ast.IsCallExpression(node) || ast.IsNewExpression(node)
 }
 
+// resolvedDeclarationCacheKey is the whole input resolvedDeclaration derives
+// its answer from. The node is part of it: the same symbol resolves to its
+// *identifier* when the node is the declarator a call site bound (`const
+// helper = …`) and to the *arrow itself* when the node is that arrow, which is
+// what a local-declaration demand at the arrow's span asks about. A key without
+// the node answered the second question with the first's cached location, and
+// the client refused the transcript as resolving outside the demanded span.
 type resolvedDeclarationCacheKey struct {
 	signature *checker.Signature
 	fallback  *ast.Symbol
+	node      *ast.Node
 }
 
 type resolvedParameterCacheKey struct {
@@ -114,7 +122,7 @@ func (p *project) isCurrentSourceFile(sourceFile *ast.SourceFile) bool {
 }
 
 func (p *project) resolvedDeclaration(signature *checker.Signature, node *ast.Node, fallbackSymbol *ast.Symbol) *typefacts.ResolvedDeclaration {
-	key := resolvedDeclarationCacheKey{signature: signature, fallback: fallbackSymbol}
+	key := resolvedDeclarationCacheKey{signature: signature, fallback: fallbackSymbol, node: node}
 	if cached := p.resolvedDeclarations[key]; cached != nil {
 		return cached
 	}

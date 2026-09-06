@@ -18554,6 +18554,55 @@ name; the harness grammar does not), the 44 `.jsx` cases (a compiler decision,
 `docs/package-contract-v2/accuracy-roadmap.md` lever B), and the one
 `@kobalte/utils` `.ts` target Node refuses to strip under `node_modules`.
 
+### The census follows an arrow a variable holds (2026-09-06)
+
+Two of the census's refusal reasons were one shape. A callee declared `const
+helper = (x) => …` resolved, from the same file, to the arrow itself and refused
+as "a local declaration with no binding identifier of its own"; from another
+module of the same artifact it resolved to the identifier `helper` and refused
+as "no function-like declaration node". Both were the census declining to trace
+a variable — and in bundled output that is how every module-local helper is
+spelled (`const isMotionValue = (value) => …`, `var chain = (callbacks) => …`).
+
+The verifier now binds either reading to the declarator through its own Oxc
+facts: the arrow or function expression must be the *whole* initializer of a
+declarator binding *one plain identifier*, and that identifier is then held to
+exactly the two checks a named `function` declaration already faces — written
+nowhere in the file, declared once (`census_plain_binding_named_at`,
+`census_plain_binding_initialized_by`). A `let` or `var` is admitted on the
+same terms: an unwritten, once-declared module binding holds its initializer
+at every call whatever keyword declared it, and no other module can write it.
+A declarator initialized by anything else (`const supportsLinearEasing =
+memoSupports(…)`) refuses by name, a callable expression nothing binds still
+refuses, and a call through a parameter of a *nested* callable — `(signal) =>
+signal()` inside `signals.some(…)` — now says that the `callbacks` domain owns
+it instead of reporting a missing declaration node. ADR 0008's "what still
+refuses" is amended.
+
+The producer had a bug the change exposed: `resolvedDeclaration` cached by
+`(signature, symbol)` alone, so a local-declaration demand at the arrow's exact
+span was answered with the identifier location a call site had cached moments
+earlier, and the client refused the transcript as resolving outside the demanded
+span. The key now includes the node
+(`TestLocalDeclarationTranscriptAnswersAnArrowBoundToAConst`, which fails
+without it).
+
+**Measured and repinned (release checker, 117 s):** 368 certified / 30 refused,
+no row changed status. Withheld `creates` candidates 1187 → **1093**,
+`censusRefused` 1086 → 992. By reason: "no function-like declaration" 127 → 46
+(what remains is `new` on an own-source class — `JSAnimation`, `MotionValue`,
+`ViewTransitionBuilder` — and four TanStack callees declared in a dependency's
+TypeScript source), "no binding identifier" 56 → 0, 44 now named as nested-
+callable parameters, 6 as value-initialized bindings. The followed helpers
+brought their own bodies into the census: coercion refusals rose 280 → 330 and
+`for…of` 36 → 64, all on `any`-typed operands in untyped `dist` JavaScript —
+which is lever C of `docs/package-contract-v2/accuracy-roadmap.md`, not a
+regression. Rows: `motion-solidjs` 758 → 676, `@corvu/drawer` 132 → 128,
+`@solid-primitives/form` 32 → 28 (both variants). Fixture
+`implementation-census-creates` gains `constBound` (certifies) and
+`callInitialized` (refuses); phase 21 ledger regenerated, only the report digest
+pin moved.
+
 ### Exact remaining refusals in the traced set
 
 - `@corvu-next/popover`, `@corvu/popover`, `corvu@0.7.2`: `@floating-ui/utils@0.2.12`

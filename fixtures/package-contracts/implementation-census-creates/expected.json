@@ -4,17 +4,19 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "fb93e9a6c62620ff2931abc969db682b5257540d4b5cc5aac8a39c552bf293b8",
+            "closureSha256": "a484cf49c3714b784dd64b860a705a040b5b89c2454f326c67536bf530979092",
             "path": "./index.js",
-            "sha256": "d76130be596ae44892377ab11b3a4788591e13c9c37e4532d8d64af8bdc62bef"
+            "sha256": "020776df0e009f2b2aed7d5cdc65d97236405cf48ca1f432082144c4a513083a"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "9346fc41004d20d499d98602e29f5d1cd43e0c473f854b064c733df69f8529b9"
+            "sha256": "a6a2e9a3cf3986960ef4128bdf57a4c595ad30cbef0dddf007d8c1519486d722"
           },
           "exports": {
+            "callInitialized": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "callLibraryOutsideTable": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "callNonLibraryReceiver": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "constBound": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1",
             "cycle": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "deep": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "iife": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
@@ -201,6 +203,46 @@
           "returns"
         ],
         "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "creates"
+        ]
       },
       "shape": "callable"
     },

@@ -18,7 +18,7 @@
       "kind": "unresolved-callee",
       "package": "",
       "callee": "",
-      "location": "<package-root>/index.js:13759:13798",
+      "location": "<package-root>/index.js:15064:15103",
       "declaration": "",
       "shape": "expression-callee",
       "spelling": "function-expression"
@@ -32,7 +32,7 @@
       "kind": "unresolved-callee",
       "package": "",
       "callee": "",
-      "location": "<package-root>/index.js:4284:4305",
+      "location": "<package-root>/index.js:4594:4615",
       "declaration": "",
       "shape": "undeclared-identifier",
       "spelling": "externalGlobal"

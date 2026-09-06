@@ -41,6 +41,12 @@
 //                      control through `Reflect.apply`
 //   written binding    `reassignedHelper` calls a `function helper` that a
 //                      later statement reassigns
+//   value-initialized  `callInitialized` calls a `const` holding what `wrap`
+//                      returned, not a function literal
+//
+// And the one indirection the census does take since 2026-09-06: `constBound`
+// calls an arrow a `const` holds, followed through its unwritten,
+// once-declared binding.
 
 function never() {}
 
@@ -273,6 +279,32 @@ helper = (el) => mount(el);
 
 export function reassignedHelper(el) {
   return helper(el);
+}
+
+// An arrow a `const` holds. The producer resolves `boundHelper(callback)` to
+// the arrow (or, from another module, to the identifier `boundHelper`); the
+// verifier's own parse binds the arrow to the declarator that holds it, finds
+// the identifier unwritten and declared once, and walks the arrow's transcript
+// exactly as it walks `function helper` — since 2026-09-06. Before that the
+// census refused every callable a variable held, which was most of the
+// module-local helpers in bundled output (`const isMotionValue = (value) =>`).
+const boundHelper = (callback) => callback(0);
+
+export function constBound(callback) {
+  return boundHelper(callback);
+}
+
+// The same binding shape with an initializer that is not a function literal.
+// Whatever `wrap` returns is what runs, and the census does not trace values,
+// so the call refuses by name.
+function wrap(fn) {
+  return fn;
+}
+
+const wrappedHelper = wrap(() => 0);
+
+export function callInitialized() {
+  return wrappedHelper();
 }
 
 // A member of *this export's own parameter*. The call is `parameter-rooted`

@@ -8794,15 +8794,24 @@ fn census_local_declaration_node(
             declaration.location.end_byte
         )
     };
-    let nodes = census_source(run, relative)
-        .map_err(|_| {
-            format!(
-                "creates census cannot parse the runtime source declaring {}",
-                describe()
-            )
-        })?
-        .function_nodes()
-        .collect::<Vec<_>>();
+    // A callee that is a *parameter* — of a nested callable, since a parameter
+    // of the transcript's own declaration is dispositioned `parameter-rooted`
+    // before any recursion — is caller-supplied code. It has no body this
+    // census could walk, and saying so names the domain that owns the fact.
+    if declaration.kind.as_ref() == "Parameter" {
+        return Err(format!(
+            "creates census refuses a call through {}: a parameter of a nested callable is \
+             caller-supplied code, which the callbacks domain owns and this census cannot see",
+            describe()
+        ));
+    }
+    let source = census_source(run, relative).map_err(|_| {
+        format!(
+            "creates census cannot parse the runtime source declaring {}",
+            describe()
+        )
+    })?;
+    let nodes = source.function_nodes().collect::<Vec<_>>();
     let resolved = (
         u32::try_from(declaration.location.start_byte).map_err(|_| "declaration span overflows")?,
         u32::try_from(declaration.location.end_byte).map_err(|_| "declaration span overflows")?,
@@ -8823,6 +8832,34 @@ fn census_local_declaration_node(
             })
             .collect();
     }
+    if matches.is_empty() {
+        // Third reading (2026-09-06): the resolved span is the binding
+        // identifier of a variable declarator — `const helper = (el) => …`
+        // resolved from another module of the same artifact names `helper`,
+        // not the arrow — and the declarator's initializer is a function or
+        // arrow literal. That literal is the node to ask about; whether the
+        // binding is proven to still hold it when the call runs is
+        // `census_local_binding_is_stable`'s question, asked next. An
+        // initializer that is anything else — a call, a conditional, another
+        // identifier — refuses by name: the census does not trace values.
+        if let Some(binding) = census_plain_binding_named_at(&source.facts, resolved) {
+            let initializer = binding
+                .initializer
+                .filter(|_| binding.initializer_function)
+                .ok_or_else(|| {
+                    format!(
+                        "creates census refuses {}: the binding is initialized by an expression \
+                         that is not a function or arrow literal, and the census does not trace \
+                         values",
+                        describe()
+                    )
+                })?;
+            matches = nodes
+                .iter()
+                .filter(|node| node.span == initializer)
+                .collect();
+        }
+    }
     match matches.as_slice() {
         [node] => Ok(typefacts::Location {
             path: declaration.location.path.clone(),
@@ -8838,6 +8875,34 @@ fn census_local_declaration_node(
             describe()
         )),
     }
+}
+
+/// The variable declarator binding exactly one plain identifier at `name`, if
+/// any: no destructuring pattern, so the identifier is the whole binding.
+fn census_plain_binding_named_at(
+    facts: &solid_facts::ast::AstFacts,
+    name: (u32, u32),
+) -> Option<&solid_facts::ast::BindingFact> {
+    facts.bindings.iter().find(|binding| {
+        binding.array_slots.is_empty()
+            && binding.object_slots.is_empty()
+            && matches!(binding.names.as_slice(), [named] if (named.span.start, named.span.end) == name)
+    })
+}
+
+/// The variable declarator whose initializer is exactly the function-like node
+/// at `initializer`, binding one plain identifier.
+fn census_plain_binding_initialized_by(
+    facts: &solid_facts::ast::AstFacts,
+    initializer: solid_facts::core::Span,
+) -> Option<&solid_facts::ast::BindingFact> {
+    facts.bindings.iter().find(|binding| {
+        binding.initializer == Some(initializer)
+            && binding.initializer_function
+            && binding.array_slots.is_empty()
+            && binding.object_slots.is_empty()
+            && binding.names.len() == 1
+    })
 }
 
 /// Recurses into the local declaration a `LocalRecursion` call named, adding
@@ -9123,10 +9188,13 @@ fn census_standard_library_admits(
 /// things therefore refuse, each by name and location, all read from the
 /// verifier's own Oxc facts over the authenticated bytes:
 ///
-/// * a declaration with **no binding identifier** — an arrow or function
-///   expression a `const` holds (`const helper = () => …`), which the producer
-///   resolves to the expression node itself. What runs is whatever the
-///   variable holds, and this census does not trace variables;
+/// * a callable expression with **no binding identifier** that is not the
+///   whole initializer of a variable declarator binding one plain identifier —
+///   an argument, an element, an operand. What runs is whatever holds it, and
+///   this census does not trace values. `const helper = () => …` (and the
+///   `let`/`var` spellings) is the one indirection taken, since 2026-09-06:
+///   the declarator's identifier is the binding, and it is held to the same
+///   two checks below;
 /// * any **write** to the binding: an assignment or update expression whose
 ///   target contains a reference to it, or a `for…in`/`for…of` head that
 ///   assigns it;
@@ -9160,13 +9228,31 @@ fn census_local_binding_is_stable(
                 describe()
             )
         })?;
-    let Some(name_span) = function.name else {
-        return Err(format!(
-            "creates census refuses a local declaration with no binding identifier of its own \
-             ({}): a callable expression runs through whatever variable holds it, and the \
-             census does not trace variables",
-            describe()
-        ));
+    let facts = &source.facts;
+    // An arrow or function expression has no name of its own. When it is the
+    // whole initializer of a variable declarator binding one plain identifier
+    // (2026-09-06), that identifier is the binding the call runs through, and
+    // the same two questions decide it as decide a named declaration: is it
+    // written anywhere in the file, and is it declared again. A `let` or `var`
+    // is admitted on the same terms as a `const` — an unwritten, once-declared
+    // module binding holds its initializer at every call, whatever keyword
+    // declared it, and no other module can write it. A callable expression
+    // that is not such an initializer — an argument, an element, an operand —
+    // still refuses: it runs through whatever holds it, which the census does
+    // not trace.
+    let name_span = match function.name {
+        Some(span) => span,
+        None => match census_plain_binding_initialized_by(facts, function.span) {
+            Some(binding) => binding.names[0].span,
+            None => {
+                return Err(format!(
+                    "creates census refuses a local declaration with no binding identifier of \
+                     its own ({}): a callable expression runs through whatever variable holds \
+                     it, and the census does not trace variables",
+                    describe()
+                ));
+            }
+        },
     };
     let name = source.text_at(name_span).ok_or_else(|| {
         format!(
@@ -9174,7 +9260,6 @@ fn census_local_binding_is_stable(
             describe()
         )
     })?;
-    let facts = &source.facts;
     for (reference, resolved) in &facts.reference_declarations {
         if *resolved != name_span {
             continue;
@@ -18812,9 +18897,12 @@ mod tests {
 
     /// A local-recursion callee is walked only when the binding the producer
     /// resolved through is proven to hold that declaration: a written binding, a
-    /// redeclared name, and an anonymous callable each refuse by name.
+    /// redeclared name, and a callable expression nothing binds each refuse by
+    /// name, while an arrow or function expression that is the whole
+    /// initializer of a plain declarator is followed through that binding.
     #[test]
-    fn creates_census_refuses_a_local_binding_that_is_written_redeclared_or_anonymous() {
+    fn creates_census_follows_an_initializer_binding_and_refuses_a_written_redeclared_or_unbound_one()
+     {
         let source_path = "/project/node_modules/consumer/dist/index.js";
         let local_call = |source: &str, callee: &str, name_offset: u64| {
             let at = |needle: &str| u64::try_from(source.find(needle).unwrap()).unwrap();
@@ -18899,12 +18987,129 @@ mod tests {
             )],
         );
         let roots = vec![consumer_root(&certified)];
-        let refusal = census_transcript(&mut census_run(&certified, &roots), &export, 0)
-            .expect_err("an anonymous callable refuses");
+        // Since 2026-09-06 the arrow's declarator binds it: `helper` is
+        // unwritten and declared once, so the arrow is asked for like a named
+        // declaration.
+        assert_eq!(
+            census_transcript(&mut census_run(&certified, &roots), &export, 0),
+            Ok(CensusStep::NeedsTranscripts)
+        );
+        // The same declarator resolved from another module names the binding
+        // identifier rather than the arrow (the third reading).
+        let declared = |source: &str, kind: &str, name_offset: u64, len: u64| {
+            signals_call(
+                "helper",
+                json!({
+                    "location": {"path": source_path, "startByte": source.find("helper(el)").unwrap(), "endByte": source.find("helper(el)").unwrap() + 10},
+                    "targetModule": "",
+                    "declaration": {
+                        "symbol": "symbol:helper",
+                        "name": "helper",
+                        "kind": kind,
+                        "sourceFile": source_path,
+                        "location": {"path": source_path, "startByte": name_offset, "endByte": name_offset + len},
+                    },
+                }),
+            )
+        };
+        let outcome_for = |source: &str, call: typefacts::ImplementationCall| {
+            let (certified, export) = census_source_case(source, "useThing", vec![call]);
+            let roots = vec![consumer_root(&certified)];
+            census_transcript(&mut census_run(&certified, &roots), &export, 0)
+        };
+        let const_name = name_at(source, "const helper");
+        assert_eq!(
+            outcome_for(
+                source,
+                declared(source, "VariableDeclaration", const_name, 6)
+            ),
+            Ok(CensusStep::NeedsTranscripts)
+        );
+        // A `let` is admitted on the same terms, and a write refuses it on the
+        // same terms too.
+        let source =
+            "export function useThing(el) {\n  return helper(el);\n}\nlet helper = (el) => el;\n";
+        assert_eq!(
+            outcome_for(
+                source,
+                declared(
+                    source,
+                    "VariableDeclaration",
+                    name_at(source, "let helper"),
+                    6
+                )
+            ),
+            Ok(CensusStep::NeedsTranscripts)
+        );
+        let source = "export function useThing(el) {\n  return helper(el);\n}\nlet helper = (el) => el;\nhelper = (el) => mount(el);\n";
+        let refusal = outcome_for(
+            source,
+            declared(
+                source,
+                "VariableDeclaration",
+                name_at(source, "let helper"),
+                6,
+            ),
+        )
+        .expect_err("a written let binding refuses");
+        assert!(
+            refusal.contains("local declaration `helper`") && refusal.contains("written at"),
+            "{refusal}"
+        );
+        // An initializer that is not a function or arrow literal refuses by
+        // name: the census does not trace values.
+        let source = "export function useThing(el) {\n  return helper(el);\n}\nconst helper = memo(() => el);\n";
+        let refusal = outcome_for(
+            source,
+            declared(
+                source,
+                "VariableDeclaration",
+                name_at(source, "const helper"),
+                6,
+            ),
+        )
+        .expect_err("a call-initialized binding refuses");
+        assert!(
+            refusal.contains("not a function or arrow literal"),
+            "{refusal}"
+        );
+        // A destructured binding is not a plain one.
+        let source =
+            "export function useThing(el) {\n  return helper(el);\n}\nconst { helper } = el;\n";
+        let refusal = outcome_for(
+            source,
+            declared(
+                source,
+                "VariableDeclaration",
+                name_at(source, "{ helper"),
+                6,
+            ),
+        )
+        .expect_err("a destructured binding refuses");
+        assert!(
+            refusal.contains("finds no function-like declaration node"),
+            "{refusal}"
+        );
+        // A callable expression that is not a declarator's initializer still
+        // has no binding identifier.
+        let source = "export function useThing(el) {\n  return helper(el);\n}\nconst helper = [(el) => el][0];\n";
+        let arrow = u64::try_from(source.find("(el) => el").unwrap()).unwrap();
+        let refusal = outcome_for(source, declared(source, "ArrowFunction", arrow, 10))
+            .expect_err("an element callable refuses");
         assert!(
             refusal.contains("no binding identifier of its own"),
             "{refusal}"
         );
+        // A parameter of a nested callable is caller-supplied code, and the
+        // refusal names the domain that owns it.
+        let source =
+            "export function useThing(el) {\n  return [el].map((helper) => helper(el));\n}\n";
+        let refusal = outcome_for(
+            source,
+            declared(source, "Parameter", name_at(source, "(helper)"), 6),
+        )
+        .expect_err("a nested callable's parameter refuses");
+        assert!(refusal.contains("callbacks domain"), "{refusal}");
         // The unwritten, once-declared helper is asked for.
         let source = "export function useThing(el) {\n  return helper(el);\n}\nfunction helper(el) {\n  return el;\n}\n";
         assert_eq!(

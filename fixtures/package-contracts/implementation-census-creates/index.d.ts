@@ -22,6 +22,8 @@ export declare function labelledBreak(el: unknown): void;
 export declare function stdlibRefInvoker(items: Iterable<unknown>): void;
 export declare function reflectApply(args: unknown[]): unknown;
 export declare function reassignedHelper(el: unknown): unknown;
+export declare function constBound(callback: (value: number) => unknown): unknown;
+export declare function callInitialized(): unknown;
 // ADR 0034: a read accessor rooted at an unwritten parameter certifies; the
 // exports after it pin the boundary of that disposition, one premise each.
 export declare function memberParameterRooted(source: { read(): unknown }): unknown;

@@ -1047,6 +1047,73 @@ func TestLocalDeclarationTranscriptAnswersANonExportedHelper(t *testing.T) {
 	}
 }
 
+const arrowHelperSource = `const localArrow = (callback: () => void): void => {
+	callback();
+};
+
+export function entry(callback: () => void): void {
+	localArrow(callback);
+}
+`
+
+// A local declaration demand at an arrow's exact span answers through the
+// declarator that holds it: the name and symbol come from the enclosing
+// variable declaration, and the declaration identity binds because an anonymous
+// callable resolves to the arrow itself, which is the demanded span. This is the
+// producer half of the certifier's initializer-binding reading.
+func TestLocalDeclarationTranscriptAnswersAnArrowBoundToAConst(t *testing.T) {
+	analyzer, dir := markerProject(t, map[string]string{"local.ts": arrowHelperSource})
+	path := filepath.Join(dir, "local.ts")
+	entryStart := strings.Index(arrowHelperSource, "entry")
+	entry := typefacts.Location{Path: path, StartByte: entryStart, EndByte: entryStart + len("entry")}
+	arrowStart := strings.Index(arrowHelperSource, "(callback: () => void): void =>")
+	arrowEnd := strings.Index(arrowHelperSource, "};\n") + 1
+	arrow := typefacts.Location{Path: path, StartByte: arrowStart, EndByte: arrowEnd}
+
+	// The implementation transcript of `entry` is demanded in the same request
+	// and answered first: its `localArrow(callback)` call resolves the symbol
+	// through the *declarator*, to the identifier. The local-declaration answer
+	// that follows must still be the arrow — a cache keyed by the symbol alone
+	// handed back the identifier here, and the client refused it.
+	answer, err := analyzer.ExportValueTranscripts(
+		context.Background(),
+		[]typefacts.ExportValueDemand{{
+			Location:                 entry,
+			ImplementationLocation:   &entry,
+			LocalDeclarationLocation: &arrow,
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	implementation := answer.Transcripts[0].Implementation
+	if implementation == nil || len(implementation.Calls) != 1 || implementation.Calls[0].Declaration == nil {
+		t.Fatalf("expected entry's one resolved call, got %+v", implementation)
+	}
+	if got := implementation.Calls[0].Declaration.Location; got.StartByte != strings.Index(arrowHelperSource, "localArrow") {
+		t.Fatalf("expected the call to resolve to the declarator's identifier, got %+v", got)
+	}
+	transcript := answer.Transcripts[0].LocalDeclaration
+	if transcript == nil {
+		t.Fatal("expected a local declaration transcript")
+	}
+	if len(transcript.OpenReasons) != 0 {
+		t.Fatalf("expected a closed transcript, got open reasons %v", transcript.OpenReasons)
+	}
+	if transcript.QueryName != "localArrow" {
+		t.Fatalf("expected the declarator's name, got %q", transcript.QueryName)
+	}
+	if transcript.Declaration == nil || transcript.Declaration.Name != "localArrow" {
+		t.Fatalf("expected the declaration to resolve to localArrow, got %+v", transcript.Declaration)
+	}
+	if transcript.Declaration.Location.StartByte != arrowStart || transcript.Declaration.Location.EndByte != arrowEnd {
+		t.Fatalf("expected the resolved declaration to be the arrow itself, got %+v", transcript.Declaration.Location)
+	}
+	if len(transcript.Calls) != 1 {
+		t.Fatalf("expected the arrow's one call, got %d", len(transcript.Calls))
+	}
+}
+
 func TestLocalDeclarationTranscriptRefusesAWrongLocation(t *testing.T) {
 	analyzer, dir := markerProject(t, map[string]string{"local.ts": localHelperSource})
 	path := filepath.Join(dir, "local.ts")
