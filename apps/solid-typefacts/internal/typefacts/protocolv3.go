@@ -4,7 +4,12 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 24: an uncensused accessor form states its
+// TypeFactsHandshakeProtocol is 25: an object or JSX prop spread's operand and
+// an object binding pattern's source may carry SubjectParameter too, so the
+// forms that read properties of a caller-supplied value all state where that
+// value came from (ADR 0041). A protocol-24 producer roots only a property or
+// element access.
+// Protocol 24: an uncensused accessor form states its
 // subject parameter in **write** position too, with SubjectWrite saying which
 // position it is (ADR 0040). A protocol-23 consumer received a stated subject
 // only for a read, so reading a protocol-24 transcript's subject without the
@@ -145,8 +150,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 24
-	TypeFactsSchemaSHA256             = "sha256:7a2cb29d4aba0b48e80cec9f95e55ec5ac8df447e48091d15421bdff260afef1"
+	TypeFactsHandshakeProtocol uint64 = 25
+	TypeFactsSchemaSHA256             = "sha256:28efb100aa1b406e1747fd647a59c809b7fc1a6aad90cba00404ecb114754259"
 )
 
 type ServiceHandshake struct {

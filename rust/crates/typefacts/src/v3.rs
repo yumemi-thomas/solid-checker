@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:7a2cb29d4aba0b48e80cec9f95e55ec5ac8df447e48091d15421bdff260afef1";
+    "sha256:28efb100aa1b406e1747fd647a59c809b7fc1a6aad90cba00404ecb114754259";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -138,6 +138,11 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
+// Protocol 25 lets an object or JSX prop spread's operand and an object
+// binding pattern's source carry `subjectParameter` as well, so every form
+// that reads properties of a caller-supplied value states where that value
+// came from (ADR 0041). A protocol-24 producer roots only a property or
+// element access.
 // Protocol 24 lets an uncensused accessor form state its subject parameter in
 // **write** position as well, with `subjectWrite` saying which position it is
 // (ADR 0040). A protocol-23 consumer only ever saw a subject for a read, so
@@ -180,7 +185,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // producer is never "not rooted".
 // Protocol 17 includes exact-null loose equality in the positive
 // uncensused-form classifier. Protocol 16 added unchanged-parameter identity.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 24;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 25;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

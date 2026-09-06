@@ -1,5 +1,34 @@
 # Precision backlog
 
+## A spread's operand and an object pattern's source are subjects (2026-09-06)
+
+ADR 0041, the third slice of ADR 0034's premise. The producer roots a subject
+for two more forms that read properties of a caller-supplied value: an object
+or JSX prop spread, whose operand the runtime reads every own enumerable
+property of, and a binding element of an object pattern, whose subject is the
+value the **outermost** enclosing pattern destructures — which is what makes a
+nested pattern correct rather than merely permitted, and what a rest element
+reads the remaining properties of. Both are reads, so neither records ADR 0040's
+write disposition. Handshake protocol 24 → 25.
+
+Measured: withheld 745 → 739, accessor refusals 284 → 277, statuses unchanged
+at 368 certified / 30 refused. The form counts move much further than the
+candidate count — `BindingElement` 42 → 6, `SpreadAssignment` 31 → 41, the two
+access kinds up 19 between them — because a body that used to refuse at its
+destructuring now reaches its next form. **Six candidates is the honest gain.**
+
+Recorded, not closed, and named by that measurement: `resolveTransition` clears
+`const { inherit: _, ...rest } = transition` and then refuses at
+`{ ...parentTransition, ...rest }`. The own properties of a spread or
+rest-element result are data properties — the engine copies values, not
+accessors — so reading one invokes nothing, but only if nothing installed an
+accessor on the local between its creation and the read. That is an escape
+question rather than a provenance one, and it is the first premise in lever G
+that ADR 0034's reasoning does not already supply. Also still refusing: a
+spread of a *written* parameter (`combineStyle`'s `...b`), a binding pattern in
+parameter position (its default would be an object this code made), and a
+destructuring assignment, which reaches the census through other node kinds.
+
 ## A parameter-rooted accessor is the caller's code in write position too (2026-09-06)
 
 ADR 0040, the first slice of lever G. ADR 0034 stopped refusing a *read*

@@ -11494,7 +11494,7 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 38] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 42] = [
         "callInitialized",
         "callLibraryOutsideTable",
         "callNonLibraryReceiver",
@@ -11502,6 +11502,8 @@ export const value = phantom;
         "cycle",
         "declaredMemberCoercion",
         "deep",
+        "destructureModuleValue",
+        "destructureParameter",
         "helperCoercion",
         "helperSpreadCoercion",
         "helperUntypedArgument",
@@ -11520,7 +11522,9 @@ export const value = phantom;
         "setterOnModuleValue",
         "setterOnParameter",
         "spreadArgs",
+        "spreadParameter",
         "spreadUntyped",
+        "spreadWrittenParameter",
         "stdlibRefInvoker",
         "switchBreak",
         "taggedTemplate",
@@ -12672,6 +12676,8 @@ export const value = phantom;
             "cycle",
             "declaredMemberCoercion",
             "deep",
+            "destructureModuleValue",
+            "destructureParameter",
             "helperCoercion",
             "helperSpreadCoercion",
             "helperUntypedArgument",
@@ -12689,7 +12695,9 @@ export const value = phantom;
             "setterOnModuleValue",
             "setterOnParameter",
             "spreadArgs",
+            "spreadParameter",
             "spreadUntyped",
+            "spreadWrittenParameter",
             "stdlibRefInvoker",
             "switchBreak",
             "taggedTemplate",
@@ -12897,7 +12905,7 @@ export const value = phantom;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
-    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 36] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 40] = [
         "callInitialized",
         "callLibraryOutsideTable",
         "callNonLibraryReceiver",
@@ -12905,6 +12913,8 @@ export const value = phantom;
         "cycle",
         "declaredMemberCoercion",
         "deep",
+        "destructureModuleValue",
+        "destructureParameter",
         "helperCoercion",
         "helperSpreadCoercion",
         "helperUntypedArgument",
@@ -12922,7 +12932,9 @@ export const value = phantom;
         "setterOnModuleValue",
         "setterOnParameter",
         "spreadArgs",
+        "spreadParameter",
         "spreadUntyped",
+        "spreadWrittenParameter",
         "stdlibRefInvoker",
         "switchBreak",
         "taggedTemplate",
@@ -12945,6 +12957,10 @@ export const value = phantom;
     /// and recurses into no callee. `constBound` closes since 2026-09-06 —
     /// the arrow its `const` holds is followed through the binding — while
     /// `callInitialized`, whose `const` holds a call's result, is refused.
+    /// `spreadParameter` and `destructureParameter` close under ADR 0041 — a
+    /// spread's operand and an object pattern's source are the caller's object
+    /// too — while `spreadWrittenParameter` (a written parameter) and
+    /// `destructureModuleValue` are refused.
     /// `setterOnParameter` and `updateOnParameter` close under ADR 0040 — the
     /// accessor on the caller's object is the caller's code in write position
     /// too — while `setterOnModuleValue` writes into a value this module made
@@ -12955,10 +12971,11 @@ export const value = phantom;
     /// types to the helper as its premise; `untypedCoercion` (declared
     /// `unknown`), `helperSpreadCoercion` (a spread carries no slot) and
     /// `helperUntypedArgument` (an `any` slot) are refused.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 17] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 19] = [
         "constBound",
         "cycle",
         "declaredMemberCoercion",
+        "destructureParameter",
         "helperCoercion",
         "memberParameterRooted",
         "noRecipe",
@@ -12967,6 +12984,7 @@ export const value = phantom;
         "returnedCallbackCoercion",
         "setterOnParameter",
         "spreadArgs",
+        "spreadParameter",
         "switchBreak",
         "toStringTagViaCall",
         "typedCoercion",
@@ -12974,11 +12992,12 @@ export const value = phantom;
         "viaHelperChain",
         "whileBreak",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 19] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 21] = [
         ("callInitialized", "census"),
         ("callLibraryOutsideTable", "census"),
         ("callNonLibraryReceiver", "census"),
         ("deep", "census"),
+        ("destructureModuleValue", "census"),
         ("helperSpreadCoercion", "census"),
         ("helperUntypedArgument", "census"),
         ("labelledBreak", "census"),
@@ -12989,6 +13008,7 @@ export const value = phantom;
         ("reflectApply", "census"),
         ("setterOnModuleValue", "census"),
         ("spreadUntyped", "census"),
+        ("spreadWrittenParameter", "census"),
         ("stdlibRefInvoker", "census"),
         ("taggedTemplate", "census"),
         ("untypedCoercion", "census"),

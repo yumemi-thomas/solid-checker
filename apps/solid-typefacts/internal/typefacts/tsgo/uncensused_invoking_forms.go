@@ -460,18 +460,75 @@ func (p *project) accessorFormSubjectParameterLocked(
 	default:
 		return nil, false
 	}
-	if !ast.IsPropertyAccessExpression(node) && nodeKindName(node) != "ElementAccessExpression" {
+	subjectExpression, write := accessorFormSubjectExpression(node)
+	if subjectExpression == nil {
 		return nil, false
 	}
-	if parent := node.Parent; parent != nil && nodeKindName(parent) == "DeleteExpression" {
-		return nil, false
-	}
-	write := ast.GetAssignmentTarget(node) != nil
-	subject := p.subjectParameterLocked(node.Expression(), roots)
+	subject := p.subjectParameterLocked(subjectExpression, roots)
 	if subject == nil {
 		return nil, false
 	}
 	return subject, write
+}
+
+// accessorFormSubjectExpression answers the expression whose value the form
+// reads properties *of*, and whether the access is in write position, or nil
+// when this form's shape is one no ADR has reviewed.
+//
+// Four node kinds qualify, and each names its subject differently:
+//
+//   - a property or element access — the receiver, `node.Expression()`;
+//   - an object spread (`{ ...a }`) or a JSX prop spread — the spread operand,
+//     which the runtime reads every own enumerable property of, invoking each
+//     getter among them (ADR 0041);
+//   - a binding element of an object pattern — the value the *outermost*
+//     enclosing pattern destructures. A nested pattern reads a property of the
+//     same value, so rooting the outermost source roots every element under it,
+//     and a rest element reads whatever own properties remain of that same
+//     value.
+//
+// A `delete` names no subject: it reaches a `deleteProperty` trap rather than
+// an accessor, and no ADR has reviewed that reach.
+func accessorFormSubjectExpression(node *ast.Node) (*ast.Node, bool) {
+	switch {
+	case ast.IsPropertyAccessExpression(node), nodeKindName(node) == "ElementAccessExpression":
+		if parent := node.Parent; parent != nil && nodeKindName(parent) == "DeleteExpression" {
+			return nil, false
+		}
+		return node.Expression(), ast.GetAssignmentTarget(node) != nil
+	case nodeKindName(node) == "SpreadAssignment", nodeKindName(node) == "JsxSpreadAttribute":
+		return node.Expression(), false
+	case nodeKindName(node) == "BindingElement":
+		return bindingPatternSubjectExpression(node), false
+	}
+	return nil, false
+}
+
+// bindingPatternSubjectExpression answers the expression the outermost binding
+// pattern containing `element` destructures, or nil when this build has not
+// reviewed where that value comes from.
+//
+// Only a variable declaration with an initializer qualifies today. A
+// *parameter* pattern destructures the caller's argument directly, which is the
+// same provenance by a shorter route, but it also admits a default
+// (`function f({ a } = {})`) whose object this code created — the case ADR 0034
+// excludes a defaulted parameter for — so it is left unstated rather than
+// decided here.
+func bindingPatternSubjectExpression(element *ast.Node) *ast.Node {
+	outermost := element
+	for outermost.Parent != nil {
+		switch nodeKindName(outermost.Parent) {
+		case "ObjectBindingPattern", "ArrayBindingPattern", "BindingElement":
+			outermost = outermost.Parent
+			continue
+		}
+		break
+	}
+	parent := outermost.Parent
+	if parent == nil || !ast.IsVariableDeclaration(parent) {
+		return nil
+	}
+	return parent.Initializer()
 }
 
 // thisProtocolCallLocked states the receiver of a `.call` or `.apply` whose

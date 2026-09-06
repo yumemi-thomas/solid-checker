@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "8cbb7ea49d1106a2c6ef02a7ab71b8dcdb43c65cc0bb3c46ef23f34c38cb4804",
+            "closureSha256": "e34ce5faee4f180637999a2fdfad0eb72a52f3b31cdd67b75058b30dc34ff8f1",
             "path": "./index.js",
-            "sha256": "6be83620c7b76242eb5226e26142d5199d4e6c9707e1697ffad68b702b2a3376"
+            "sha256": "02a6920b4db5cf511b8e4e60549221e9ce963d25bbd60ebb2411e1a81aad97bf"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "61fbf0e4613a8fd67bf1cd90b64512b3aa2ed23d7abb6bc7ca40627f219440f9"
+            "sha256": "060e55a4e0a28a8cb537c304b15894dd1f5622d0b583ff4e6d1f23e92cd020f7"
           },
           "exports": {
             "callInitialized": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -20,6 +20,8 @@
             "cycle": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "declaredMemberCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "deep": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
+            "destructureModuleValue": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "destructureParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "helperCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "helperSpreadCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "helperUntypedArgument": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -38,7 +40,9 @@
             "setterOnModuleValue": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "setterOnParameter": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "spreadArgs": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "spreadParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "spreadUntyped": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "spreadWrittenParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "stdlibRefInvoker": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "switchBreak": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "taggedTemplate": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",

@@ -364,9 +364,23 @@ closed claims per domain so the intermediate progress is visible.
    remains, on the same measurement: 101 element reads and 110 property reads
    whose receiver is not parameter-rooted — module-level untyped receivers
    (`isDragging[axis]`, `scaleCorrectors[key]`) whose initializer the census
-   could inspect — plus 42 destructuring elements and 31 spreads, each needing
-   its own premise. A module-level *object literal* needs none: the compiler
-   binds its members as data properties and records no form.
+   could inspect — plus 42 destructuring elements and 31 spreads. A
+   module-level *object literal* needs no premise at all: the compiler binds
+   its members as data properties and records no form.
+
+   The second slice is ADR 0041: a spread's operand and an object pattern's
+   source are subjects under the same premise. It removed the destructuring
+   class (`BindingElement` 42 → 6) but closed only **six** candidates, because
+   the bodies it unblocked refuse at their next form — usually a spread of a
+   local the engine just built (`{ ...parentTransition, ...rest }`). That is
+   the measured next slice, and it is a **different premise**: the own
+   properties of a spread or rest-element result are data properties, so
+   reading one invokes nothing, *provided* nothing installed an accessor on the
+   local between its creation and the read. Proving that is an escape
+   question — the local must not reach code the census cannot see — and it is
+   the first premise in this lever that is not about provenance. After it, 122
+   property reads and 108 element reads on receivers that are neither
+   parameter-rooted nor engine-built remain.
 
 Nothing here is a `tsc` duplicate: every claim is about runtime reactive
 behavior the type system cannot express. Nothing here loosens a refusal without

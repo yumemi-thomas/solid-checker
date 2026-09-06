@@ -7688,6 +7688,11 @@ fn require_census_decides_closure(
 ///   states the fact only under the premises its `subjectParameter` doc lists,
 ///   and only from handshake protocol
 ///   [`CENSUS_PARAMETER_ROOTED_SUBJECTS_PROTOCOL`] on.
+///   ADR 0041 adds two more shapes under the same premise: an object or JSX
+///   prop **spread** whose operand is so rooted, which reads every own
+///   enumerable property of the caller's object and invokes each getter among
+///   them, and a **binding element** of an object pattern whose destructured
+///   source is so rooted, including its rest element.
 /// * `ParameterRootedAccessorWrite` — ADR 0040, the same premise in **write**
 ///   position: `axis.min = v` on a parameter-rooted receiver runs a setter the
 ///   caller installed, and a compound assignment or update runs that caller's
@@ -7767,6 +7772,12 @@ const CENSUS_PARAMETER_ROOTED_SUBJECTS_PROTOCOL: u64 = 18;
 /// write it roots, so an absent flag is a read rather than an unstated
 /// position.
 const CENSUS_PARAMETER_ROOTED_WRITES_PROTOCOL: u64 = 24;
+
+/// The handshake protocol at which a spread operand and an object pattern's
+/// source may carry a subject parameter (ADR 0041). A protocol-24 producer
+/// states a subject only for a property or element access, so this build would
+/// otherwise be reading a fact for node kinds the producer never rooted.
+const CENSUS_PARAMETER_ROOTED_READ_FORMS_PROTOCOL: u64 = 25;
 
 /// The handshake protocol at which an implementation transcript states its
 /// completion form (ADR 0035). A `returns` census on an older producer would
@@ -8076,6 +8087,14 @@ fn census_creates_domain(
             "implementation-census premise required: the uncensused-invoking-form census arrived \
              at handshake protocol {CENSUS_UNCENSUSED_FORMS_PROTOCOL} and this build speaks {}, \
              so an empty form list would be an absence read as an enumeration",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_PARAMETER_ROOTED_READ_FORMS_PROTOCOL {
+        return Err(refuse(format!(
+            "implementation-census premise required: a spread operand's and an object pattern's \
+             subject arrived at handshake protocol \
+             {CENSUS_PARAMETER_ROOTED_READ_FORMS_PROTOCOL} and this build speaks {}",
             typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
         )));
     }
@@ -9762,7 +9781,15 @@ fn census_form_is_parameter_rooted_accessor(form: &typefacts::UncensusedInvoking
         Kind::GetAccessor | Kind::SetAccessor | Kind::PropertyAccessUnknownAccessor
     ) && matches!(
         form.node_kind.as_ref(),
-        "PropertyAccessExpression" | "ElementAccessExpression"
+        // ADR 0034: the receiver of a property or element access.
+        "PropertyAccessExpression"
+            | "ElementAccessExpression"
+            // ADR 0041: the operand of an object or JSX prop spread, and the
+            // value an object pattern destructures. Both read properties of
+            // the subject rather than of anything this code made.
+            | "SpreadAssignment"
+            | "JsxSpreadAttribute"
+            | "BindingElement"
     ) && form.subject_parameter.is_some()
 }
 
@@ -18216,6 +18243,49 @@ mod tests {
         assert!(census_transcript(&mut run, &bare_setter, 0, &[]).is_err());
     }
 
+    /// ADR 0041: an object spread's operand and an object pattern's source are
+    /// the same premise as a named read — the value is the caller's, and every
+    /// getter the spread or the pattern reaches sits on it. Both are reads, so
+    /// neither records the write disposition; an unrooted one still refuses.
+    #[test]
+    fn creates_census_dispositions_a_parameter_rooted_spread_and_pattern() {
+        assert_eq!(CENSUS_PARAMETER_ROOTED_READ_FORMS_PROTOCOL, 25);
+        const {
+            assert!(
+                typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+                    >= CENSUS_PARAMETER_ROOTED_READ_FORMS_PROTOCOL
+            );
+        }
+        let certified = consumer_snapshot();
+        let roots = vec![consumer_root(&certified)];
+        let source = "/project/node_modules/consumer/dist/index.js";
+        for node_kind in ["SpreadAssignment", "JsxSpreadAttribute", "BindingElement"] {
+            let mut run = census_run(&certified, &roots);
+            let rooted = census_transcript_with(
+                vec![],
+                json!([{
+                    "kind": "property-access-unknown-accessor",
+                    "nodeKind": node_kind,
+                    "location": {"path": source, "startByte": 300, "endByte": 312},
+                    "reach": "reachable",
+                    "subjectParameter": 0,
+                }]),
+            );
+            assert_eq!(
+                census_transcript(&mut run, &rooted, 0, &[]),
+                Ok(CensusStep::Decided),
+                "{node_kind}"
+            );
+            assert_eq!(
+                run.sites,
+                vec![format!(
+                    "census-form:{source}:300:312:property-access-unknown-accessor:reachable:parameter-rooted-accessor"
+                )],
+                "{node_kind} records the read disposition"
+            );
+        }
+    }
+
     /// ADR 0035: the `returns` census reads the implementation's completion
     /// form and its return sites, and nothing else. Every premise refuses by
     /// name; a value-carrying site is admitted only when the producer proved it
@@ -18671,22 +18741,13 @@ mod tests {
         }
         // Refused: a rooted subject on any other kind or node, and an unrooted
         // read accessor. `set-accessor` left this list with ADR 0040, which
-        // admits it in write position; the kinds below have their own protocol
+        // admits it in write position, and the spread and binding-element node
+        // kinds left it with ADR 0041; the kinds below have their own protocol
         // reach and none has been reviewed.
         for (kind, node_kind, subject) in [
             ("iteration-protocol", "ForOfStatement", json!(0)),
             ("coercion", "BinaryExpression", json!(0)),
             ("instanceof", "BinaryExpression", json!(0)),
-            (
-                "property-access-unknown-accessor",
-                "SpreadAssignment",
-                json!(0),
-            ),
-            (
-                "property-access-unknown-accessor",
-                "BindingElement",
-                json!(0),
-            ),
             (
                 "property-access-unknown-accessor",
                 "PropertyAccessExpression",
@@ -18712,14 +18773,21 @@ mod tests {
         }
         for (kind, node_kind, subject) in [
             // `set-accessor` with a rooted subject was here until ADR 0040,
-            // which admits it in write position; see
-            // `creates_census_dispositions_a_parameter_rooted_accessor_in_write_position`.
-            // A spread is not an access node and stays refused whatever it
-            // roots at, and a read accessor with no subject stays refused.
+            // which admits it in write position, and a rooted spread until
+            // ADR 0041; see
+            // `creates_census_dispositions_a_parameter_rooted_accessor_in_write_position`
+            // and `creates_census_dispositions_a_parameter_rooted_spread_and_pattern`.
+            // A read accessor with no stated subject stays refused, whatever
+            // its kind: the subject is the premise, never the node kind.
             (
                 "property-access-unknown-accessor",
                 "SpreadAssignment",
-                json!(0),
+                serde_json::Value::Null,
+            ),
+            (
+                "property-access-unknown-accessor",
+                "BindingElement",
+                serde_json::Value::Null,
             ),
             (
                 "get-accessor",

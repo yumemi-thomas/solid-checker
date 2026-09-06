@@ -396,6 +396,38 @@ export function updateOnParameter(source) {
   source.value += 1;
 }
 
+// ADR 0041: an object spread reads every own enumerable property of its
+// operand, invoking each getter among them. The operand is the object the
+// caller passed, so the getters are the caller's exactly as a named read's
+// would be. **Certifies.**
+export function spreadParameter(source) {
+  return { ...source };
+}
+
+// The same spread on a *written* parameter. The binding may hold something
+// other than the caller's argument by the time it is read, so no premise
+// covers it and the form refuses. **Refuses.**
+export function spreadWrittenParameter(source) {
+  source = source ?? {};
+  return { ...source };
+}
+
+// A destructuring of a parameter-rooted value: each binding element reads a
+// property of the caller's object, and the rest element reads whatever own
+// properties remain of it. One premise, one site per element. **Certifies.**
+export function destructureParameter(source) {
+  const { first, ...rest } = source;
+  return first === undefined ? rest : first;
+}
+
+// A destructuring of a value this module made. Nothing roots it at a
+// parameter, so the reads refuse exactly as they did before ADR 0041.
+// **Refuses.**
+export function destructureModuleValue() {
+  const { value } = untypedRegistry;
+  return value;
+}
+
 // The same write, on the module-level untyped value `moduleReceiverRead` reads.
 // Nothing roots it at a parameter, so no premise covers the accessor and the
 // form refuses exactly as it did before ADR 0040: the boundary is provenance,

@@ -37,6 +37,10 @@ export declare function callLibraryOutsideTable(value: unknown): unknown;
 export declare function setterOnParameter(source: { value: unknown }): void;
 export declare function updateOnParameter(source: { value: number }): void;
 export declare function setterOnModuleValue(): void;
+export declare function spreadParameter(source: unknown): unknown;
+export declare function spreadWrittenParameter(source: unknown): unknown;
+export declare function destructureParameter(source: unknown): unknown;
+export declare function destructureModuleValue(): unknown;
 // ADR 0038: these signatures are the premise the form census classifies the
 // runtime bodies under. `typedCoercion`, `returnedCallbackCoercion` and
 // `declaredMemberCoercion` certify because of the types stated here;
