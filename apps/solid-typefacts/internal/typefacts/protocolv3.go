@@ -115,8 +115,17 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 //
 // Protocol 11 separated the members a value declares from the members it
 // carries only through the compiler's apparent-type augmentation.
+//
+// Protocol 21 changes what overloadOrdinal and overloadCount range over: the
+// declarations that state a call signature — TypeScript's overload set, the
+// bodiless declarations — rather than every declaration of the signature's
+// kind. A protocol-20 producer counted the implementation body of an
+// overloaded function analyzed from source, so its set reported
+// overloadCount == len + 1 and a consumer comparing the count with the type's
+// signatures refused it as incomplete. The selected-signature identity digest
+// includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 20
+	TypeFactsHandshakeProtocol uint64 = 21
 	TypeFactsSchemaSHA256             = "sha256:b3993c8aae676d361125a5b86832215ac0039a1ba90a61513d7facae30f123f6"
 )
 

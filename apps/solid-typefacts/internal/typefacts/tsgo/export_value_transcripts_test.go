@@ -319,6 +319,65 @@ void retained;
 	}
 }
 
+// An overloaded export analyzed from its *source* — two overload declarations
+// and the implementation that follows them — reports a two-member set whose
+// every member says `overloadCount == 2`. The implementation has a body and is
+// not a call signature of the type; counting it made the set look one short of
+// its own count and the consumer refused it as incomplete, which is what kept
+// `@tanstack/solid-query`'s `queryOptions` (whose `@tanstack/custom-condition`
+// case resolves `types` to TypeScript source) and `@tanstack/query-core`'s
+// `noop` withheld for want of a signature to synthesize from.
+func TestExportValueTranscriptCountsOverloadsBySignatureNotByDeclaration(t *testing.T) {
+	dir := t.TempDir()
+	writeInvocationProject(t, dir, map[string]string{
+		"facts.ts": `export function choose(value: string): string;
+export function choose(value: number): number;
+export function choose(value: string | number): string | number { return value; }
+export function single(value: number): number { return value; }
+`,
+		"harness.ts": `import { choose as __solid_checker_export_0, single as __solid_checker_export_1 } from "./facts";
+void __solid_checker_export_0;
+void __solid_checker_export_1;
+`,
+	})
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	analyzer := opened.(typefacts.ExportValueAnalyzer)
+	harness := filepath.Join(dir, "harness.ts")
+	source, err := os.ReadFile(harness)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var demands []typefacts.ExportValueDemand
+	for _, needle := range []string{"__solid_checker_export_0", "__solid_checker_export_1"} {
+		start := strings.LastIndex(string(source), needle)
+		demands = append(demands, typefacts.ExportValueDemand{
+			Location:      typefacts.Location{Path: harness, StartByte: start, EndByte: start + len(needle)},
+			CallableDepth: 1,
+		})
+	}
+	answer, err := analyzer.ExportValueTranscripts(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	overloaded := answer.Transcripts[0]
+	if overloaded.CallSignature != nil || len(overloaded.CallSignatures) != 2 {
+		t.Fatalf("overloaded export = single %v, set %d; want the complete two-member set", overloaded.CallSignature != nil, len(overloaded.CallSignatures))
+	}
+	for ordinal, signature := range overloaded.CallSignatures {
+		if signature.OverloadOrdinal != ordinal || signature.OverloadCount != 2 {
+			t.Fatalf("overload %d = ordinal %d of %d, want %d of 2", ordinal, signature.OverloadOrdinal, signature.OverloadCount, ordinal)
+		}
+	}
+	single := answer.Transcripts[1]
+	if single.CallSignature == nil || single.CallSignature.OverloadCount != 1 || single.CallSignature.OverloadOrdinal != 0 {
+		t.Fatalf("single-declaration export = %#v, want its one signature as a one-member set", single.CallSignature)
+	}
+}
+
 // TestReportedOverloadSetIsAllOrNothing pins the producer half of the overload
 // guard: a set that describes fewer signatures than the type has is not a
 // smaller answer to the same question, it is a different one. "Every overload"

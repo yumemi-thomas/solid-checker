@@ -296,33 +296,46 @@ func (p *project) expandedMinimumArgumentCountLocked(
 	return minimum
 }
 
-func invocationOverloadOrdinal(declaration *ast.Node) int {
+// overloadDeclarations is the declaration set an overload ordinal and count
+// range over: the symbol's declarations of the signature's own kind that state
+// a call signature. TypeScript's overload set is the bodiless declarations; the
+// implementation that follows them has a body and is not a signature of the
+// type. A function declared once, with its body, is its own one-member set.
+// Counting the implementation reported `overloadCount == len(signatures) + 1`
+// for every overloaded function whose *source* was analyzed rather than its
+// `.d.ts`, and the consumer, which requires the count to agree with the type's
+// signatures, refused the set as incomplete (docs/precision-backlog.md).
+func overloadDeclarations(declaration *ast.Node) []*ast.Node {
 	if declaration == nil || declaration.Symbol() == nil {
-		return 0
+		return nil
 	}
-	ordinal := 0
+	var sameKind, bodiless []*ast.Node
 	for _, candidate := range declaration.Symbol().Declarations {
+		if candidate.Kind != declaration.Kind {
+			continue
+		}
+		sameKind = append(sameKind, candidate)
+		if candidate.Body() == nil {
+			bodiless = append(bodiless, candidate)
+		}
+	}
+	if len(bodiless) != 0 {
+		return bodiless
+	}
+	return sameKind
+}
+
+func invocationOverloadOrdinal(declaration *ast.Node) int {
+	for ordinal, candidate := range overloadDeclarations(declaration) {
 		if candidate == declaration {
 			return ordinal
 		}
-		if candidate.Kind == declaration.Kind {
-			ordinal++
-		}
 	}
-	return ordinal
+	return 0
 }
 
 func invocationOverloadCount(declaration *ast.Node) int {
-	if declaration == nil || declaration.Symbol() == nil {
-		return 0
-	}
-	count := 0
-	for _, candidate := range declaration.Symbol().Declarations {
-		if candidate.Kind == declaration.Kind {
-			count++
-		}
-	}
-	return count
+	return len(overloadDeclarations(declaration))
 }
 
 func selectedSignatureDigest(kind typefacts.CallKind, selected typefacts.SelectedSignature) string {

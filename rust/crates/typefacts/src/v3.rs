@@ -138,6 +138,13 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
+// Protocol 21 makes `overloadOrdinal` and `overloadCount` range over the
+// declarations that state a call signature — TypeScript's overload set, the
+// bodiless declarations — instead of every declaration of the signature's kind.
+// A protocol-20 producer counted an overloaded function's implementation body
+// when it analyzed source rather than a `.d.ts`, reported `overloadCount ==
+// len + 1`, and `require_complete_overload_set` refused the set as incomplete;
+// the selected-signature identity digest carries the count and moves with it.
 // Protocol 20 lets an implementation transcript state `implementationOf`: the
 // declaration whose body it walked when its declaration is a binding that
 // aliases that function by identity (`const defaultScheduler =
@@ -154,7 +161,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // producer is never "not rooted".
 // Protocol 17 includes exact-null loose equality in the positive
 // uncensused-form classifier. Protocol 16 added unchanged-parameter identity.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 20;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 21;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

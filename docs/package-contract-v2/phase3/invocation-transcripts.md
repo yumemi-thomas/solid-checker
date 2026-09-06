@@ -268,3 +268,12 @@ schema 1. Protocol 4 adds `overloadCount`, includes it in selected-signature
 identity v2, and marks unresolved instantiable type leaves locally open. This
 lets policy 2 refuse cherry-picked overload closure without contaminating exact
 sibling value paths.
+
+Protocol 21 (2026-09-06) fixes what `overloadOrdinal` and `overloadCount` range
+over: the declarations that state a call signature — the bodiless overload
+declarations of the signature's kind, or the one bodied declaration when there
+is no other — rather than every declaration of the kind. Until then an
+overloaded function analyzed from source counted its implementation body and
+reported `overloadCount == len + 1`, which the consumer's completeness check
+refused. The count is part of the selected-signature identity, so the number
+moves with the meaning (docs/precision-backlog.md, "Protocol 21").

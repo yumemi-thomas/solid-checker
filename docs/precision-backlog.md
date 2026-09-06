@@ -18315,6 +18315,60 @@ to attack, with a harness that can be given the artifact case's own condition
 set. Phase 21 ledger regenerated; only the report digest pin moved.
 
 
+### Protocol 21: an overload count is a count of call signatures (2026-09-06)
+
+The 18 `noRecipe` candidates left after synthesis learned overload sets were
+all one shape, found by instrumenting the real certification rather than a
+fixture: the producer reported the set, complete by its own gate, and the
+consumer's `require_complete_overload_set` refused it because every member said
+`overloadCount == 3` for a type with two call signatures. `overloadCount` and
+`overloadOrdinal` ranged over every declaration of the signature's kind, and an
+overloaded function analyzed from *source* has one more declaration than
+signatures: the implementation, which has a body and is not a call signature.
+Package `.d.ts` files never have one, which is why the corpus's other overload
+sets agreed with themselves and these did not — `@tanstack/solid-query`'s
+`@tanstack/custom-condition` artifact case resolves `types` to TypeScript
+source, and `@tanstack/query-core`'s `noop` is declared twice and implemented
+once. The 2026-09-05 entry above ("The overload set's completeness was trusted,
+not verified") had recorded exactly this as a fail-closed approximation.
+
+The producer now ranges both numbers over the declarations that state a call
+signature — TypeScript's overload set, the bodiless declarations of the kind,
+or the one bodied declaration when there is no other — in `overloadDeclarations`
+(apps/solid-typefacts/internal/typefacts/tsgo/invocation_transcripts.go). The
+selected-signature identity digest carries the count, so the handshake protocol
+moves 20 → 21 on both sides and `bin/solid-typefacts` is rebuilt; a mixed pair
+refuses. Pinned by
+`TestExportValueTranscriptCountsOverloadsBySignatureNotByDeclaration` (two
+overloads and an implementation → a two-member set, every member `2`; a single
+bodied declaration → a one-member set) and by the invocation census test, whose
+expectation moves from three declarations to two signatures. Nothing on the
+consumer side changed: the completeness check is the same, and it now agrees
+with a producer that counts what it counts.
+
+Two things tried and withdrawn on the way. A synthetic reproduction of the
+declared shape (two `declare function` overloads, `export { … }`, with and
+without a `export *` that also declares the name) reported the set correctly,
+because the fixture's declarations had no body. And a Rust-side mechanism that
+kept asking the producer for a withheld candidate's export value when recipe
+gating had removed its last Type Facts demand was written, measured to change
+nothing — every callable export keeps a Type Facts demand after gating — and
+reverted before commit.
+
+**Measured on `@tanstack/solid-query@5.102.5` alone:** `noRecipe` 3 → 0, the
+three candidates now decided by their census (`censusRefused` 5 → 9) or withheld
+by the interpreter's resolution (`vetoUnreproducible` 11 → 10; the total of 19
+is unchanged).
+
+**Repinned (mains, 96 s):** 368 certified / 30 refused, no row changed status;
+`noRecipe` 18 → **0**. Every `creates` candidate the corpus withholds now
+carries a decided reason: 1086 `censusRefused` (+27, the newly sampled
+overloads whose census declines), 256 `vetoUnreproducible` (−9; a synthesized
+veto the pinned Node cannot run for the artifact case), 25 `vetoThrew`. Total
+withheld 1367, unchanged since the graph-lane extension — what moved, in three
+slices, is that "nobody asked" became a census refusal or a named executor
+limit for every one of them.
+
 ### Incomplete vetoes say why, gate batches run side by side, and the wall-time budget is a host fact (2026-09-06)
 
 Three follow-ups to the graph-lane extension above.
@@ -18390,17 +18444,12 @@ overload; a partial set still synthesizes nothing. The census fixture's new
 **Repinned (mains, 110 s):** 368 certified / 30 refused, no row changed status;
 `noRecipe` 57 → 18, the 39 served candidates now decided by their census (11
 more `censusRefused`, 1059) or withheld by the interpreter's resolution (28
-more `vetoUnreproducible`, 265); `vetoThrew` 25 unchanged. The 18 left are
+more `vetoUnreproducible`, 265); `vetoThrew` 25 unchanged. The 18 left were
 `queryOptions`, `mutationOptions` and `infiniteQueryOptions` on the six
-`@tanstack/solid-query` and `solid-query-persist-client` rows — two declared
-overloads each, and no set reported: the producer reports an overload set
-all-or-nothing (`completeOverloadSet` in
-apps/solid-typefacts/internal/typefacts/tsgo/export_value_transcripts.go),
-and for these one overload's current signature declaration cannot be selected
-(`currentSignatureDeclaration` returns none), so the whole field stays empty
-and the candidate stays withheld by name. Why that declaration is unavailable
-for a bundled `declare function` overload is a producer question and the next
-`noRecipe` item.
+`@tanstack/solid-query` and `solid-query-persist-client` rows. The first guess
+recorded here — that one overload's current declaration could not be selected —
+was wrong: the producer reported the set, and the consumer refused it. The
+cause and the fix are the protocol 21 entry below.
 
 What would move the CPU itself is a census policy question, not a
 tuning one: hashing the three pinned images (263 MB) between every session is

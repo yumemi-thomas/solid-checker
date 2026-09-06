@@ -336,7 +336,9 @@ one label after another.
   overload). A partial set synthesizes nothing. Pinned by the census fixture's
   `overloaded` export and
   `the_probe_gate_tracer_synthesizes_a_veto_from_a_complete_overload_set`.
-  On the repinned corpus it serves 39 of the 57; the 18 left are three
-  `@tanstack/solid-query` exports whose overload set the producer does not
-  report because one overload's current declaration cannot be selected
-  (docs/precision-backlog.md, 2026-09-06).
+  On the repinned corpus it served 39 of the 57; the 18 left were three
+  `@tanstack/solid-query` exports whose set the producer reported with
+  `overloadCount` one above the type's signature count — it counted the
+  implementation declaration of source-analyzed overloads — and the consumer
+  refused as incomplete. Type Facts protocol 21 counts call signatures
+  (docs/precision-backlog.md, "Protocol 21", 2026-09-06).

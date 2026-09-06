@@ -182,9 +182,13 @@ choose(1);
 		!slices.Contains(generic.Result.OpenReasons, "unresolvedGeneric") {
 		t.Fatalf("unresolved generic did not stay locally open: %#v", generic)
 	}
+	// `choose` has three declarations and two call signatures: the third is
+	// the implementation, which has a body and is not a signature of the type.
+	// The count ranges over signatures, as the type's own signature list does,
+	// so a consumer comparing it with `GetSignaturesOfType` sees them agree.
 	overloaded := answer.Transcripts[1].SelectedSignature
-	if overloaded == nil || overloaded.OverloadCount != 3 || overloaded.OverloadOrdinal >= overloaded.OverloadCount {
-		t.Fatalf("overload census = %#v, want selected ordinal within three declarations", overloaded)
+	if overloaded == nil || overloaded.OverloadCount != 2 || overloaded.OverloadOrdinal >= overloaded.OverloadCount {
+		t.Fatalf("overload census = %#v, want selected ordinal within the two call signatures", overloaded)
 	}
 }
 
