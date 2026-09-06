@@ -4,18 +4,21 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "e34ce5faee4f180637999a2fdfad0eb72a52f3b31cdd67b75058b30dc34ff8f1",
+            "closureSha256": "4f84609bdd54c03fdb3816bbc4e628833cf3c1b0a719bd0d0e3fd8ecfa3df63e",
             "path": "./index.js",
-            "sha256": "02a6920b4db5cf511b8e4e60549221e9ce963d25bbd60ebb2411e1a81aad97bf"
+            "sha256": "ae1836a3851cfc91253e3fb3e8944c80878f131029baabde8356f0c552401853"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "060e55a4e0a28a8cb537c304b15894dd1f5622d0b583ff4e6d1f23e92cd020f7"
+            "sha256": "8019a681b805bedc81600549aa533dc294988507a47122de7084cbc2da9467cf"
           },
           "exports": {
+            "awaitIterateParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "callInitialized": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "callLibraryOutsideTable": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "callNonLibraryReceiver": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "chainCallbacks": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "chainModuleCallbacks": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "constBound": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1",
             "cycle": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "declaredMemberCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",

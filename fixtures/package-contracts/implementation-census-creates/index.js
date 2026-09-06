@@ -396,6 +396,35 @@ export function updateOnParameter(source) {
   source.value += 1;
 }
 
+// ADR 0042: the whole `chain` shape, which five packages in the ecosystem
+// publish verbatim. Three premises meet here and none of them is about this
+// module's own code: `callbacks` is the caller's iterable, so its
+// `Symbol.iterator` and the `next` calls after it are the caller's; `args` is a
+// rest parameter, whose array the engine itself builds, so spreading it reaches
+// `Array.prototype` and nothing else; and `callback` is a value that iterable
+// yielded, so calling it runs the caller's code exactly as calling a parameter
+// would. **Certifies.**
+export function chainCallbacks(callbacks) {
+  return (...args) => {
+    for (const callback of callbacks) callback && callback(...args);
+  };
+}
+
+// The same loop over a value this module made. Nothing roots the iterable at a
+// parameter, so neither the iteration nor the callee has a premise.
+// **Refuses.**
+const moduleCallbacks = [];
+export function chainModuleCallbacks() {
+  for (const callback of moduleCallbacks) callback();
+}
+
+// A `for await…of` over the caller's iterable. The async iteration protocol
+// reaches `Symbol.asyncIterator` and the promise machinery, which no ADR has
+// reviewed, so the form refuses whatever it is rooted at. **Refuses.**
+export async function awaitIterateParameter(callbacks) {
+  for await (const callback of callbacks) void callback;
+}
+
 // ADR 0041: an object spread reads every own enumerable property of its
 // operand, invoking each getter among them. The operand is the object the
 // caller passed, so the getters are the caller's exactly as a named read's

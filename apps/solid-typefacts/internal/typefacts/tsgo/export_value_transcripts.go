@@ -790,6 +790,8 @@ func (p *project) implementationCallCensusLocked(
 				// which is a different resolution and was not reviewed here, so
 				// a construct site states neither and the demand stays open.
 				call.CalleeParameter = p.parameterValueSourceLocked(node.Expression(), bySymbol)
+				call.CalleeIteratedParameter =
+					p.calleeIteratedParameterLocked(node.Expression(), bySymbol)
 				call.CalleeDirectlyCalledParameters,
 					call.CalleeInvokedParameters,
 					call.CalleeStronglyInvokedParameters,
@@ -1083,6 +1085,72 @@ func (p *project) returnValueSourcesLocked(expression *ast.Node) []typefacts.Imp
 	}
 	walk(expression, nil)
 	return sources
+}
+
+// calleeIteratedParameterLocked answers the parameter-rooted iterable whose
+// iteration produced `node` as a value, or nil (ADR 0042).
+//
+// The shape is exactly `for (const callback of callbacks) callback(…)`: the
+// callee is the binding the loop head declares, and the loop iterates a value
+// rooted at a parameter of this declaration. What the iterable yields is the
+// caller's, so calling it runs the caller's code — the same fact
+// CalleeParameter states for a callee that *is* a parameter.
+//
+// Every premise is checked here rather than left to the consumer:
+//
+//   - the callee is a plain identifier (after identity-preserving unwrapping);
+//   - its symbol has exactly one declaration, a variable declaration with no
+//     initializer of its own, whose declaration list is the head of a
+//     `for…of`;
+//   - the loop is not `for await`, whose async iteration protocol reaches
+//     `Symbol.asyncIterator` and the promise machinery and has not been
+//     reviewed;
+//   - the head declares that one binding and nothing else, and no file writes
+//     it — a reassigned loop variable may hold anything by the time it is
+//     called, and this fact is not flow-sensitive;
+//   - the iterated expression roots at a parameter by the same walk
+//     CalleeParameter uses.
+func (p *project) calleeIteratedParameterLocked(
+	node *ast.Node,
+	bySymbol map[*ast.Symbol]parameterCensusRoot,
+) *typefacts.ParameterValueSource {
+	callee := identityPreservingUnwrap(node)
+	if callee == nil || !ast.IsIdentifier(callee) {
+		return nil
+	}
+	symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(callee))
+	if symbol == nil || len(symbol.Declarations) != 1 {
+		return nil
+	}
+	declaration := symbol.Declarations[0]
+	if declaration == nil || !ast.IsVariableDeclaration(declaration) ||
+		declaration.Initializer() != nil {
+		return nil
+	}
+	name := declaration.Name()
+	if name == nil || !ast.IsIdentifier(name) {
+		return nil
+	}
+	list := declaration.Parent
+	if list == nil || nodeKindName(list) != "VariableDeclarationList" {
+		return nil
+	}
+	if declarations := list.AsVariableDeclarationList(); declarations == nil ||
+		len(declarations.Declarations.Nodes) != 1 {
+		return nil
+	}
+	loop := list.Parent
+	if loop == nil || nodeKindName(loop) != "ForOfStatement" {
+		return nil
+	}
+	statement := loop.AsForInOrOfStatement()
+	if statement == nil || statement.AwaitModifier != nil {
+		return nil
+	}
+	if p.symbolIsAssignedLocked(symbol, declaration) {
+		return nil
+	}
+	return p.parameterValueSourceLocked(statement.Expression, bySymbol)
 }
 
 func (p *project) parameterValueSourceLocked(

@@ -7693,6 +7693,12 @@ fn require_census_decides_closure(
 ///   enumerable property of the caller's object and invokes each getter among
 ///   them, and a **binding element** of an object pattern whose destructured
 ///   source is so rooted, including its rest element.
+///   ADR 0042 adds the iteration protocol under the same premise, as
+///   `ParameterRootedIterable`: the `Symbol.iterator` a `for…of`, a spread or
+///   an array pattern reaches, and the `next`/`return` calls after it, sit on
+///   the object the caller passed. Its companion `ParameterRootedElement` is a
+///   *call* whose callee such a loop bound — what the caller's iterable
+///   yielded is the caller's, exactly as a parameter callee is.
 /// * `ParameterRootedAccessorWrite` — ADR 0040, the same premise in **write**
 ///   position: `axis.min = v` on a parameter-rooted receiver runs a setter the
 ///   caller installed, and a compound assignment or update runs that caller's
@@ -7707,6 +7713,8 @@ enum CensusDisposition {
     ParameterRooted,
     ParameterRootedAccessor,
     ParameterRootedAccessorWrite,
+    ParameterRootedIterable,
+    ParameterRootedElement,
     StandardLibrary,
     DialectAxiom,
     LocalRecursion,
@@ -7720,6 +7728,8 @@ impl CensusDisposition {
             Self::ParameterRooted => "parameter-rooted",
             Self::ParameterRootedAccessor => "parameter-rooted-accessor",
             Self::ParameterRootedAccessorWrite => "parameter-rooted-accessor-write",
+            Self::ParameterRootedIterable => "parameter-rooted-iterable",
+            Self::ParameterRootedElement => "parameter-rooted-element",
             Self::StandardLibrary => "standard-library",
             Self::DialectAxiom => "dialect-axiom",
             Self::LocalRecursion => "local-recursion",
@@ -7778,6 +7788,14 @@ const CENSUS_PARAMETER_ROOTED_WRITES_PROTOCOL: u64 = 24;
 /// states a subject only for a property or element access, so this build would
 /// otherwise be reading a fact for node kinds the producer never rooted.
 const CENSUS_PARAMETER_ROOTED_READ_FORMS_PROTOCOL: u64 = 25;
+
+/// The handshake protocol at which the iteration protocol states where its
+/// value came from (ADR 0042): a subject parameter on the form, and
+/// `calleeIteratedParameter` on a call whose callee a `for…of` head bound. A
+/// protocol-25 producer states neither, and also still records a rest
+/// parameter's array as an iteration form, so this build would be reading two
+/// facts it never sent.
+const CENSUS_PARAMETER_ROOTED_ITERATION_PROTOCOL: u64 = 26;
 
 /// The handshake protocol at which an implementation transcript states its
 /// completion form (ADR 0035). A `returns` census on an older producer would
@@ -8087,6 +8105,14 @@ fn census_creates_domain(
             "implementation-census premise required: the uncensused-invoking-form census arrived \
              at handshake protocol {CENSUS_UNCENSUSED_FORMS_PROTOCOL} and this build speaks {}, \
              so an empty form list would be an absence read as an enumeration",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_PARAMETER_ROOTED_ITERATION_PROTOCOL {
+        return Err(refuse(format!(
+            "implementation-census premise required: the iteration protocol's subject and \
+             iterated callee arrived at handshake protocol \
+             {CENSUS_PARAMETER_ROOTED_ITERATION_PROTOCOL} and this build speaks {}",
             typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
         )));
     }
@@ -8544,14 +8570,14 @@ fn census_transcript_calls(
             continue;
         }
         if census_form_is_parameter_rooted_accessor(form) {
-            run.sites.push(census_form_site(
-                form,
-                if form.subject_write {
-                    CensusDisposition::ParameterRootedAccessorWrite
-                } else {
-                    CensusDisposition::ParameterRootedAccessor
-                },
-            ));
+            let disposition = match (form.kind, form.subject_write) {
+                (typefacts::UncensusedInvokingFormKind::IterationProtocol, _) => {
+                    CensusDisposition::ParameterRootedIterable
+                }
+                (_, true) => CensusDisposition::ParameterRootedAccessorWrite,
+                (_, false) => CensusDisposition::ParameterRootedAccessor,
+            };
+            run.sites.push(census_form_site(form, disposition));
             continue;
         }
         return Err(format!(
@@ -9038,6 +9064,17 @@ fn census_call_disposition(
         return Ok(Some((
             CensusDisposition::ParameterRooted,
             census_call_site(call, CensusDisposition::ParameterRooted),
+        )));
+    }
+    // ADR 0042: the callee is a value the caller's own iterable yielded, which
+    // is the caller's code by the same argument that excuses a callee which
+    // *is* a parameter. The producer states it only for a plain, non-`await`
+    // `for…of` head declaring one unwritten binding over a parameter-rooted
+    // expression, so nothing here re-derives it.
+    if call.callee_iterated_parameter.is_some() {
+        return Ok(Some((
+            CensusDisposition::ParameterRootedElement,
+            census_call_site(call, CensusDisposition::ParameterRootedElement),
         )));
     }
     if let Some(declaration) = call
@@ -9776,6 +9813,21 @@ fn census_local_declaration_identity(
 /// question of whose code runs excuses it.
 fn census_form_is_parameter_rooted_accessor(form: &typefacts::UncensusedInvokingForm) -> bool {
     use typefacts::UncensusedInvokingFormKind as Kind;
+    if form.subject_parameter.is_none() {
+        return false;
+    }
+    // ADR 0042: the iteration protocol on a caller-supplied value. Its
+    // `Symbol.iterator`, the `next` calls that follow it and any `return` on
+    // early exit all sit on the object the caller passed, so the code that runs
+    // is the caller's exactly as a getter's is. A rest parameter's array never
+    // reaches here at all: the producer proves the engine built it and records
+    // no form.
+    if form.kind == Kind::IterationProtocol {
+        return matches!(
+            form.node_kind.as_ref(),
+            "ForOfStatement" | "SpreadElement" | "ArrayBindingPattern"
+        );
+    }
     matches!(
         form.kind,
         Kind::GetAccessor | Kind::SetAccessor | Kind::PropertyAccessUnknownAccessor
@@ -9790,7 +9842,7 @@ fn census_form_is_parameter_rooted_accessor(form: &typefacts::UncensusedInvoking
             | "SpreadAssignment"
             | "JsxSpreadAttribute"
             | "BindingElement"
-    ) && form.subject_parameter.is_some()
+    )
 }
 
 fn census_form_site(
@@ -18286,6 +18338,96 @@ mod tests {
         }
     }
 
+    /// ADR 0042: the iteration protocol on a caller-supplied value, and a
+    /// callee that value's iteration yielded. Both are the caller's code by
+    /// the premise ADR 0034 established; the receipt names each with its own
+    /// disposition, and an unrooted one still refuses.
+    #[test]
+    fn creates_census_dispositions_a_parameter_rooted_iteration() {
+        assert_eq!(CENSUS_PARAMETER_ROOTED_ITERATION_PROTOCOL, 26);
+        const {
+            assert!(
+                typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+                    >= CENSUS_PARAMETER_ROOTED_ITERATION_PROTOCOL
+            );
+        }
+        let certified = consumer_snapshot();
+        let roots = vec![consumer_root(&certified)];
+        let source = "/project/node_modules/consumer/dist/index.js";
+        for node_kind in ["ForOfStatement", "SpreadElement", "ArrayBindingPattern"] {
+            let mut run = census_run(&certified, &roots);
+            let rooted = census_transcript_with(
+                vec![],
+                json!([{
+                    "kind": "iteration-protocol",
+                    "nodeKind": node_kind,
+                    "location": {"path": source, "startByte": 320, "endByte": 340},
+                    "reach": "reachable",
+                    "subjectParameter": 0,
+                }]),
+            );
+            assert_eq!(
+                census_transcript(&mut run, &rooted, 0, &[]),
+                Ok(CensusStep::Decided),
+                "{node_kind}"
+            );
+            assert_eq!(
+                run.sites,
+                vec![format!(
+                    "census-form:{source}:320:340:iteration-protocol:reachable:parameter-rooted-iterable"
+                )],
+                "{node_kind}"
+            );
+        }
+
+        // An iteration with no stated subject refuses, whatever its node kind:
+        // the subject is the premise.
+        let mut run = census_run(&certified, &roots);
+        let unrooted = census_transcript_with(
+            vec![],
+            json!([{
+                "kind": "iteration-protocol",
+                "nodeKind": "ForOfStatement",
+                "location": {"path": source, "startByte": 320, "endByte": 340},
+                "reach": "reachable",
+            }]),
+        );
+        assert!(census_transcript(&mut run, &unrooted, 0, &[]).is_err());
+
+        // The callee the loop bound: dispositioned, with its own site.
+        let mut run = census_run(&certified, &roots);
+        let call = signals_call(
+            "callback",
+            json!({
+                "target": "",
+                "targetModule": "",
+                "declaration": null,
+                "calleeIteratedParameter": {"parameterIndex": 0},
+            }),
+        );
+        let calls = census_transcript_with(vec![call.clone()], json!([]));
+        assert_eq!(
+            census_transcript(&mut run, &calls, 0, &[]),
+            Ok(CensusStep::Decided)
+        );
+        assert!(
+            run.sites[0].ends_with(":call:reachable:parameter-rooted-element"),
+            "{:?}",
+            run.sites
+        );
+
+        // Without the fact the same call refuses: nothing here re-derives it.
+        let mut run = census_run(&certified, &roots);
+        let bare = census_transcript_with(
+            vec![signals_call(
+                "callback",
+                json!({"target": "", "targetModule": "", "declaration": null}),
+            )],
+            json!([]),
+        );
+        assert!(census_transcript(&mut run, &bare, 0, &[]).is_err());
+    }
+
     /// ADR 0035: the `returns` census reads the implementation's completion
     /// form and its return sites, and nothing else. Every premise refuses by
     /// name; a value-carrying site is admitted only when the producer proved it
@@ -18745,7 +18887,9 @@ mod tests {
         // kinds left it with ADR 0041; the kinds below have their own protocol
         // reach and none has been reviewed.
         for (kind, node_kind, subject) in [
-            ("iteration-protocol", "ForOfStatement", json!(0)),
+            // `iteration-protocol` with a rooted subject left this list with
+            // ADR 0042; see
+            // `creates_census_dispositions_a_parameter_rooted_iteration`.
             ("coercion", "BinaryExpression", json!(0)),
             ("instanceof", "BinaryExpression", json!(0)),
             (

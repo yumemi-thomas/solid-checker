@@ -174,7 +174,7 @@ _Avoid_: typed census, inferred parameter types, declared types as facts (they a
 
 **Parameter-rooted accessor**:
 A property or element access whose receiver the producer roots at a plain, unwritten parameter of the censused declaration, dispositioned by the `creates` census instead of refusing (ADR 0034) because the getter, setter or trap it can run was installed by the caller on an object the caller passed. Since ADR 0040 the disposition holds in **write** position too, and the form states `subjectWrite` so the two are separable: the receipt records `parameter-rooted-accessor` or `parameter-rooted-accessor-write`. The write flag exists for the domains that must refuse it — for `writes` and `invalidates` the assignment is this export's own operation, whoever wrote the accessor.
-Since ADR 0041 the same premise covers two more forms, by naming their subject differently: an object or JSX prop spread's is its operand, and an object pattern binding element's is the value the outermost enclosing pattern destructures.
+Since ADR 0041 the same premise covers two more forms, by naming their subject differently: an object or JSX prop spread's is its operand, and an object pattern binding element's is the value the outermost enclosing pattern destructures. ADR 0042 adds the iteration protocol (`parameter-rooted-iterable`) and the callee a `for…of` head binds from such an iterable (`parameter-rooted-element`), and separately proves that a **rest parameter's** array is the engine's, so iterating or spreading it records no form at all — a syntactic fact its `any[]` type cannot supply. `for await…of` is outside all of it.
 _Avoid_: safe accessor, inert property, trusted receiver, treating the read and write dispositions as one
 
 **JSX-free module premise**:

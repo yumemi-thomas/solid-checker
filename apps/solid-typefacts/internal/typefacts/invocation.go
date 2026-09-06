@@ -583,13 +583,28 @@ type ImplementationCall struct {
 	// A construct site deliberately carries no callee-parameter facts: the
 	// three CalleeXxxParameters fields below are about the body of a resolved
 	// *function*, and a constructor's resolution was not reviewed here.
-	Kind               CallKind                `cbor:"kind" json:"kind"`
-	Target             SymbolID                `cbor:"target,omitempty" json:"target,omitempty"`
-	TargetName         string                  `cbor:"targetName,omitempty" json:"targetName,omitempty"`
-	TargetModule       string                  `cbor:"targetModule,omitempty" json:"targetModule,omitempty"`
-	Declaration        *ResolvedDeclaration    `cbor:"declaration,omitempty" json:"declaration,omitempty"`
-	CalleeParameter    *ParameterValueSource   `cbor:"calleeParameter,omitempty" json:"calleeParameter,omitempty"`
-	ArgumentParameters []*ParameterValueSource `cbor:"argumentParameters,omitempty" json:"argumentParameters,omitempty"`
+	Kind            CallKind              `cbor:"kind" json:"kind"`
+	Target          SymbolID              `cbor:"target,omitempty" json:"target,omitempty"`
+	TargetName      string                `cbor:"targetName,omitempty" json:"targetName,omitempty"`
+	TargetModule    string                `cbor:"targetModule,omitempty" json:"targetModule,omitempty"`
+	Declaration     *ResolvedDeclaration  `cbor:"declaration,omitempty" json:"declaration,omitempty"`
+	CalleeParameter *ParameterValueSource `cbor:"calleeParameter,omitempty" json:"calleeParameter,omitempty"`
+	// CalleeIteratedParameter names the parameter-rooted iterable whose
+	// iteration produced this call's callee: the binding a `for…of` head
+	// declares, called inside the loop (ADR 0042, handshake protocol 26).
+	//
+	// The value called is one the caller's iterable yielded, so it is the
+	// caller's code exactly as a callee that *is* a parameter is — the
+	// distinction the census draws between "this export performs it" and "the
+	// caller's own code performs it", which the callbacks domain owns.
+	//
+	// Stated only for a plain, non-`await` `for…of` whose declaration list
+	// declares exactly this one binding, which nothing in its file writes, and
+	// whose iterated expression is parameter-rooted by the same walk
+	// CalleeParameter uses. Absent otherwise, and absence is never "not
+	// iterated".
+	CalleeIteratedParameter *ParameterValueSource   `cbor:"calleeIteratedParameter,omitempty" json:"calleeIteratedParameter,omitempty"`
+	ArgumentParameters      []*ParameterValueSource `cbor:"argumentParameters,omitempty" json:"argumentParameters,omitempty"`
 	// CallReceiver is stated for a `.call` or `.apply` whose resolved callee is
 	// the default library's Function.prototype member: the resolved declaration
 	// of the *receiver* expression — `Object.prototype.toString` in

@@ -1,5 +1,37 @@
 # Precision backlog
 
+## The iteration protocol, by whose value is iterated (2026-09-06)
+
+ADR 0042, the fourth slice of ADR 0034's premise and the one that paid. The
+census stops asking whether an operand's *type* names a container with an
+engine-owned iterator — for compiled JavaScript it almost never does, since an
+unannotated parameter is `any` and `any` enumerates no members — and asks the
+provenance instead, in three parts: an iteration whose value is rooted at an
+unwritten parameter runs the caller's iterator
+(`parameter-rooted-iterable`); a **rest parameter** records no form at all,
+because the engine builds that array with ArrayCreate and iterating it reaches
+`Array.prototype` and nothing else, which its `any[]` type cannot say; and a
+callee a plain `for…of` head bound over such an iterable is the caller's value
+(`parameter-rooted-element`, `calleeIteratedParameter`). Handshake protocol
+25 → 26.
+
+The target was one helper, `chain`, that five packages publish verbatim and
+that carried 58 of the 90 iteration refusals with all three blockers in two
+lines. Measured: withheld 739 → 675, `censusRefused` 682 → 618, iteration
+90 → 18 at 15 → 9 sites, **64 candidates closed**, statuses unchanged at 368
+certified / 30 refused. The accessor class rose only 277 → 285 — unlike the two
+slices before it, almost nothing moved to the next form, because `chain` is a
+leaf. That is the lesson: pick a body whose whole blocker set one ADR can
+close, not the largest form count.
+
+This also resolves a refusal ADR 0038 named and left standing — a structural
+`Iterable` as a spread operand — and `spreadUntyped` flips to certifying.
+
+Recorded, not closed: `for await…of` refuses however it is rooted, because the
+async protocol reaches `Symbol.asyncIterator` and the promise machinery and no
+ADR has reviewed that; a callee bound by anything but a plain `for…of` head; a
+written rest parameter. The 18 iteration refusals left are at 9 sites.
+
 ## A spread's operand and an object pattern's source are subjects (2026-09-06)
 
 ADR 0041, the third slice of ADR 0034's premise. The producer roots a subject

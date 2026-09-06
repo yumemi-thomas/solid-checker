@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:28efb100aa1b406e1747fd647a59c809b7fc1a6aad90cba00404ecb114754259";
+    "sha256:cc416d14b5f222ad4495cc526f69172bacce2ccf8cd796d6338da076fa9da490";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -138,6 +138,11 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
+// Protocol 26 lets an iteration form state the parameter its iterated value is
+// rooted at, and a call state `calleeIteratedParameter` — the parameter-rooted
+// iterable whose iteration produced the callee (ADR 0042). A rest parameter's
+// array also stops being recorded as an iteration form: the engine builds it,
+// so iterating or spreading it reaches `Array.prototype` and nothing else.
 // Protocol 25 lets an object or JSX prop spread's operand and an object
 // binding pattern's source carry `subjectParameter` as well, so every form
 // that reads properties of a caller-supplied value states where that value
@@ -185,7 +190,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // producer is never "not rooted".
 // Protocol 17 includes exact-null loose equality in the positive
 // uncensused-form classifier. Protocol 16 added unchanged-parameter identity.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 25;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 26;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

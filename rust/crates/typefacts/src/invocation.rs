@@ -796,6 +796,17 @@ pub struct ImplementationCall {
     pub declaration: Option<ResolvedDeclaration>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub callee_parameter: Option<ParameterValueSource>,
+    /// The parameter-rooted iterable whose iteration produced this call's
+    /// callee — the binding a `for…of` head declares, called inside the loop
+    /// (ADR 0042, handshake protocol 26).
+    ///
+    /// What the caller's iterable yields is the caller's, so calling it runs
+    /// the caller's code exactly as calling a parameter does. The producer
+    /// states it only for a plain non-`await` `for…of` whose head declares
+    /// this one binding, which nothing writes, over an expression rooted at a
+    /// parameter of the censused declaration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub callee_iterated_parameter: Option<ParameterValueSource>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub argument_parameters: Vec<Option<ParameterValueSource>>,
     /// For a `.call` or `.apply` whose resolved callee is the default library's

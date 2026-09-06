@@ -11494,10 +11494,13 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 42] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 45] = [
+        "awaitIterateParameter",
         "callInitialized",
         "callLibraryOutsideTable",
         "callNonLibraryReceiver",
+        "chainCallbacks",
+        "chainModuleCallbacks",
         "constBound",
         "cycle",
         "declaredMemberCoercion",
@@ -11545,7 +11548,8 @@ export const value = phantom;
     /// The census fixture's exports whose valueless-completion walk is clean
     /// (ADR 0035): block-bodied, neither `async` nor generator, and no
     /// `return` carrying an expression in their own body.
-    const CENSUS_FIXTURE_VALUELESS_EXPORTS: [&str; 11] = [
+    const CENSUS_FIXTURE_VALUELESS_EXPORTS: [&str; 12] = [
+        "chainModuleCallbacks",
         "cycle",
         "deep",
         "labelledBreak",
@@ -12669,9 +12673,12 @@ export const value = phantom;
     #[test]
     fn the_generated_census_fixture_carries_every_creates_candidate_into_planning() {
         let proposing = [
+            "awaitIterateParameter",
             "callInitialized",
             "callLibraryOutsideTable",
             "callNonLibraryReceiver",
+            "chainCallbacks",
+            "chainModuleCallbacks",
             "constBound",
             "cycle",
             "declaredMemberCoercion",
@@ -12905,10 +12912,13 @@ export const value = phantom;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
-    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 40] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 43] = [
+        "awaitIterateParameter",
         "callInitialized",
         "callLibraryOutsideTable",
         "callNonLibraryReceiver",
+        "chainCallbacks",
+        "chainModuleCallbacks",
         "constBound",
         "cycle",
         "declaredMemberCoercion",
@@ -12957,6 +12967,10 @@ export const value = phantom;
     /// and recurses into no callee. `constBound` closes since 2026-09-06 —
     /// the arrow its `const` holds is followed through the binding — while
     /// `callInitialized`, whose `const` holds a call's result, is refused.
+    /// `chainCallbacks` closes under ADR 0042 — the caller's iterable, the
+    /// engine's rest array and the value that iterable yielded — while
+    /// `chainModuleCallbacks` (no parameter root) and `awaitIterateParameter`
+    /// (the async protocol is unreviewed) are refused.
     /// `spreadParameter` and `destructureParameter` close under ADR 0041 — a
     /// spread's operand and an object pattern's source are the caller's object
     /// too — while `spreadWrittenParameter` (a written parameter) and
@@ -12971,7 +12985,8 @@ export const value = phantom;
     /// types to the helper as its premise; `untypedCoercion` (declared
     /// `unknown`), `helperSpreadCoercion` (a spread carries no slot) and
     /// `helperUntypedArgument` (an `any` slot) are refused.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 19] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 21] = [
+        "chainCallbacks",
         "constBound",
         "cycle",
         "declaredMemberCoercion",
@@ -12985,6 +13000,7 @@ export const value = phantom;
         "setterOnParameter",
         "spreadArgs",
         "spreadParameter",
+        "spreadUntyped",
         "switchBreak",
         "toStringTagViaCall",
         "typedCoercion",
@@ -12992,10 +13008,12 @@ export const value = phantom;
         "viaHelperChain",
         "whileBreak",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 21] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 22] = [
+        ("awaitIterateParameter", "census"),
         ("callInitialized", "census"),
         ("callLibraryOutsideTable", "census"),
         ("callNonLibraryReceiver", "census"),
+        ("chainModuleCallbacks", "census"),
         ("deep", "census"),
         ("destructureModuleValue", "census"),
         ("helperSpreadCoercion", "census"),
@@ -13007,7 +13025,6 @@ export const value = phantom;
         ("reassignedHelper", "census"),
         ("reflectApply", "census"),
         ("setterOnModuleValue", "census"),
-        ("spreadUntyped", "census"),
         ("spreadWrittenParameter", "census"),
         ("stdlibRefInvoker", "census"),
         ("taggedTemplate", "census"),
@@ -13015,7 +13032,8 @@ export const value = phantom;
         ("writtenAfterRead", "census"),
         ("writtenBeforeRead", "census"),
     ];
-    const CENSUS_FIXTURE_GENERATED_RETURNS_CLOSED: [&str; 9] = [
+    const CENSUS_FIXTURE_GENERATED_RETURNS_CLOSED: [&str; 10] = [
+        "chainModuleCallbacks",
         "cycle",
         "deep",
         "setterOnModuleValue",
@@ -13327,19 +13345,30 @@ export const value = phantom;
         );
     }
 
-    /// (g) `spreadUntyped`: a spread drives the iteration protocol, and the
-    /// producer records it as an invoking form when the operand's type does not
-    /// prove the iterator is the engine's (ADR 0026). Arguments do not
-    /// otherwise matter for `creates`; a spread is not an argument but a form.
-    /// Here the operand is an unannotated ordinary parameter — `any`, which
-    /// enumerates no members — and a nil `[Symbol.iterator]` lookup refuses
-    /// rather than clears.
+    /// (g) `spreadUntyped`: a spread drives the iteration protocol, and until
+    /// ADR 0042 it refused whenever the operand's *type* did not prove the
+    /// iterator was the engine's — which for an unannotated parameter it never
+    /// does, since `any` enumerates no members. ADR 0042 stops asking the type
+    /// and asks the **provenance**: the operand is this declaration's own
+    /// unwritten parameter, so whatever iterator it carries is the caller's,
+    /// exactly as a getter on a caller-supplied object is.
+    ///
+    /// This resolves the refusal ADR 0038 named and left standing ("a
+    /// structural iterable as a spread or `for…of` operand: its iterator is
+    /// the caller's") rather than widening it: `chainModuleCallbacks` iterates
+    /// a module-level array and still refuses, and `awaitIterateParameter`
+    /// refuses on the async protocol however it is rooted.
     #[test]
-    fn the_probe_gate_tracer_census_refuses_a_spread_of_an_unknown_operand() {
-        assert_census_withholds(
-            "spreadUntyped",
-            &["uncensused invoking form: iteration-protocol"],
-        );
+    fn the_probe_gate_tracer_census_closes_a_parameter_rooted_spread() {
+        let Some((_, outcome)) = census_certify("spreadUntyped", Some("plain.mjs")) else {
+            return;
+        };
+        let finalized = outcome.expect("a parameter-rooted spread certifies under ADR 0042");
+        assert!(finalized.withheld_closures().is_empty());
+        assert!(creates_is_closed_in(
+            finalized.canonical_main(),
+            "spreadUntyped"
+        ));
     }
 
     /// The pair, and the whole precision of the iteration arm: `spreadArgs`

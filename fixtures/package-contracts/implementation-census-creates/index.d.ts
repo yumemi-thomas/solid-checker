@@ -37,6 +37,11 @@ export declare function callLibraryOutsideTable(value: unknown): unknown;
 export declare function setterOnParameter(source: { value: unknown }): void;
 export declare function updateOnParameter(source: { value: number }): void;
 export declare function setterOnModuleValue(): void;
+export declare function chainCallbacks(
+  callbacks: Iterable<((...args: unknown[]) => void) | undefined>,
+): (...args: unknown[]) => void;
+export declare function chainModuleCallbacks(): void;
+export declare function awaitIterateParameter(callbacks: AsyncIterable<unknown>): Promise<void>;
 export declare function spreadParameter(source: unknown): unknown;
 export declare function spreadWrittenParameter(source: unknown): unknown;
 export declare function destructureParameter(source: unknown): unknown;

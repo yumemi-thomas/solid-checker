@@ -4,7 +4,13 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 25: an object or JSX prop spread's operand and
+// TypeFactsHandshakeProtocol is 26: an iteration form may state the parameter
+// its iterated value is rooted at, and a call may state
+// CalleeIteratedParameter — the parameter-rooted iterable whose iteration
+// produced the callee (ADR 0042). A rest parameter's array is also no longer
+// recorded as an iteration form at all: the engine builds it, so iterating or
+// spreading it reaches Array.prototype and nothing else.
+// Protocol 25: an object or JSX prop spread's operand and
 // an object binding pattern's source may carry SubjectParameter too, so the
 // forms that read properties of a caller-supplied value all state where that
 // value came from (ADR 0041). A protocol-24 producer roots only a property or
@@ -150,8 +156,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 25
-	TypeFactsSchemaSHA256             = "sha256:28efb100aa1b406e1747fd647a59c809b7fc1a6aad90cba00404ecb114754259"
+	TypeFactsHandshakeProtocol uint64 = 26
+	TypeFactsSchemaSHA256             = "sha256:cc416d14b5f222ad4495cc526f69172bacce2ccf8cd796d6338da076fa9da490"
 )
 
 type ServiceHandshake struct {

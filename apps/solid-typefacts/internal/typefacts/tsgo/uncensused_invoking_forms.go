@@ -456,7 +456,8 @@ func (p *project) accessorFormSubjectParameterLocked(
 	}
 	switch kind {
 	case typefacts.UncensusedGetAccessor, typefacts.UncensusedSetAccessor,
-		typefacts.UncensusedPropertyAccessUnknownAccessor:
+		typefacts.UncensusedPropertyAccessUnknownAccessor,
+		typefacts.UncensusedIterationProtocol:
 	default:
 		return nil, false
 	}
@@ -500,6 +501,26 @@ func accessorFormSubjectExpression(node *ast.Node) (*ast.Node, bool) {
 		return node.Expression(), false
 	case nodeKindName(node) == "BindingElement":
 		return bindingPatternSubjectExpression(node), false
+	case nodeKindName(node) == "ForOfStatement":
+		// The iterated value (ADR 0042). Its `Symbol.iterator`, the `next`
+		// calls that follow, and any `return` on early exit all sit on this
+		// value.
+		//
+		// `for await…of` states nothing: it drives `Symbol.asyncIterator` and
+		// the promise machinery that awaits each result, a reach no ADR has
+		// reviewed, so it refuses whatever it is rooted at.
+		statement := node.AsForInOrOfStatement()
+		if statement == nil || statement.AwaitModifier != nil {
+			return nil, false
+		}
+		return node.Expression(), false
+	case nodeKindName(node) == "SpreadElement":
+		return node.Expression(), false
+	case nodeKindName(node) == "ArrayBindingPattern":
+		// A pattern has no operand: the iterated value is what the enclosing
+		// declaration initializes it from, which is the same question an
+		// object pattern's binding elements ask.
+		return bindingPatternSubjectExpression(node), false
 	}
 	return nil, false
 }
@@ -515,6 +536,9 @@ func accessorFormSubjectExpression(node *ast.Node) (*ast.Node, bool) {
 // excludes a defaulted parameter for — so it is left unstated rather than
 // decided here.
 func bindingPatternSubjectExpression(element *ast.Node) *ast.Node {
+	// Called with a binding *element* for an object pattern's reads and with
+	// the array *pattern itself* for the iteration it performs; the climb is
+	// the same either way.
 	outermost := element
 	for outermost.Parent != nil {
 		switch nodeKindName(outermost.Parent) {
@@ -974,14 +998,63 @@ func (p *project) iterationFormLocked(
 }
 
 // iterationProtocolFormLocked records the iteration protocol unless the
-// operand's type is provably one whose iterator is the engine's.
+// operand's iterator is provably the engine's — because its *type* names a
+// reviewed engine container, or because the operand is a **rest parameter
+// binding**, whose array the engine itself creates.
 func (p *project) iterationProtocolFormLocked(
 	operand *ast.Node,
 ) (typefacts.UncensusedInvokingFormKind, bool) {
 	if operand == nil {
 		return typefacts.UncensusedIterationProtocol, true
 	}
+	if p.isUnwrittenRestParameterReferenceLocked(operand) {
+		return "", false
+	}
 	return p.iterationProtocolClearedLocked(p.formChecker().GetTypeAtLocation(operand))
+}
+
+// isUnwrittenRestParameterReferenceLocked answers whether `operand` is a
+// reference to a rest parameter binding that its declaration never writes.
+//
+// A rest parameter is the one binding whose value the *engine* constructs: the
+// specification builds it with ArrayCreate at every call, so it is an ordinary
+// Array, never a Proxy and never an object a caller shaped, and iterating or
+// spreading it reaches `Array.prototype[Symbol.iterator]` and nothing else.
+// That is the same standing the census already gives every default-library
+// member — `lib.*.d.ts` describes the engine, whose implementation is not user
+// code — rather than a new premise about the caller.
+//
+// The *type* cannot answer this. An untyped rest parameter is `any[]`, and an
+// `any[]`-typed value need not be an array at all; what makes this sound is the
+// binding's syntax, not its type. The binding must be unwritten for the same
+// reason ADR 0034 requires it: a reassigned `args` may hold anything by the
+// time it is read, and this disposition is not flow-sensitive.
+func (p *project) isUnwrittenRestParameterReferenceLocked(operand *ast.Node) bool {
+	operand = identityPreservingUnwrap(operand)
+	if operand == nil || !ast.IsIdentifier(operand) {
+		return false
+	}
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(operand))
+	if symbol == nil || len(symbol.Declarations) != 1 {
+		return false
+	}
+	declaration := symbol.Declarations[0]
+	if declaration == nil || nodeKindName(declaration) != "Parameter" {
+		return false
+	}
+	parameter := declaration.AsParameterDeclaration()
+	if parameter == nil || parameter.DotDotDotToken == nil {
+		return false
+	}
+	name := declaration.Name()
+	if name == nil || !ast.IsIdentifier(name) {
+		return false
+	}
+	enclosing := declaration.Parent
+	if enclosing == nil || mentionsArgumentsOrEval(enclosing) {
+		return false
+	}
+	return !p.symbolIsAssignedLocked(symbol, declaration)
 }
 
 func (p *project) iterationProtocolClearedLocked(

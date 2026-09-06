@@ -368,6 +368,16 @@ closed claims per domain so the intermediate progress is visible.
    module-level *object literal* needs no premise at all: the compiler binds
    its members as data properties and records no form.
 
+   The third slice is ADR 0042, and it is the one that paid: the iteration
+   protocol dispositioned by *whose value is iterated* rather than by its type.
+   One helper — `chain`, published verbatim by five packages — carried 58 of
+   the 90 iteration refusals and needed three premises at once: the caller's
+   iterable, the engine-built rest array, and the value that iterable yielded.
+   Measured: withheld 739 → 675, iteration 90 → 18, **64 candidates**, with the
+   accessor class rising only 277 → 285 because `chain` is a leaf. Picking a
+   leaf is what made the difference; the two slices before it cleared forms
+   that were merely first in a queue.
+
    The second slice is ADR 0041: a spread's operand and an object pattern's
    source are subjects under the same premise. It removed the destructuring
    class (`BindingElement` 42 → 6) but closed only **six** candidates, because

@@ -298,10 +298,11 @@ Pinned in `implementation-census-creates`: `helperCoercion` now certifies;
   fixpoint over the local call graph — which this amendment does not take.
 - **`unknown`, a bare type parameter, an object type** as an operand: not
   provably a non-object under any premise. Pinned by `untypedCoercion`.
-- **A structural iterable** (`Iterable<number>`) as a spread or `for…of`
-  operand: its iterator is the caller's. Pinned by the census fixture's
-  `spreadUntyped`, whose declaration is `Iterable<number>` and which refuses
-  under the premise exactly as it did over `any`.
+- ~~**A structural iterable** (`Iterable<number>`) as a spread or `for…of`
+  operand: its iterator is the caller's.~~ Resolved by ADR 0042, which stops
+  asking the operand's *type* and asks its provenance instead: the iterator of
+  a caller-supplied value is the caller's code, exactly as its getter is. The
+  fixture's `spreadUntyped` now certifies.
 - **Everything the producer refuses to premise** (above), and every body whose
   first refusal is not a type-decided form — an accessor on a non-parameter
   receiver, a write into a parameter's object, `instanceof`.
