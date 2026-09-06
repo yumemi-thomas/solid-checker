@@ -7844,6 +7844,15 @@ impl CensusEvidence<'_> {
     }
 }
 
+/// What one `creates` census pass produced: its outcome, the witness sites it
+/// recorded, and every local declaration it still needs — each with the
+/// premise it must be demanded under (ADR 0038's helper premises).
+type CensusPass = (
+    CensusOutcome,
+    Vec<String>,
+    Vec<(typefacts::Location, Vec<typefacts::ParameterPremise>)>,
+);
+
 /// Whether one census pass reached a verdict.
 ///
 /// `NeedsTranscripts` is the acquisition phase's signal, never a verdict: the
@@ -8022,14 +8031,7 @@ fn census_creates_domain(
     declared: &typefacts::ExportValueTranscript,
     implementation: &typefacts::ExportImplementationTranscript,
     evidence: CensusEvidence<'_>,
-) -> Result<
-    (
-        CensusOutcome,
-        Vec<String>,
-        Vec<(typefacts::Location, Vec<typefacts::ParameterPremise>)>,
-    ),
-    TypeFactsCertificationError,
-> {
+) -> Result<CensusPass, TypeFactsCertificationError> {
     let refuse = |reason: String| TypeFactsCertificationError::UnsupportedDemand {
         demand: proof.id.clone(),
         reason,

@@ -209,7 +209,7 @@ use crate::{
 /// The startup/frame protocol Rust and the worker agree on. Bumping this
 /// invalidates every harness manifest digest, because the worker carries the
 /// string too.
-pub(crate) const PROBE_WORKER_PROTOCOL: &str = "solid-checker-runtime-probe-v5";
+pub(crate) const PROBE_WORKER_PROTOCOL: &str = "solid-checker-runtime-probe-v6";
 
 const STARTUP_FORMAT: &str = "solid-checker-probe-worker-startup";
 const RECIPE_CORPUS_FORMAT: &str = "solid-checker-probe-recipe-corpus";
@@ -870,6 +870,13 @@ fn run_probe_gates_inner(
             format!("reproduction-conditions:{}", reproduction.join(",")),
         ],
     };
+    // ADR 0039: the premise the run held under, in the receipt's probe-gate
+    // root. Absent for a tree with no admissible `.jsx` member, so every
+    // receipt of a package that publishes only compiled JavaScript is
+    // unchanged by this ADR.
+    if let Some(premise) = jsx_free_premise_field(workspace.jsx_free_modules()) {
+        identity.fields.push(premise);
+    }
     if let Some((module, _)) = inert {
         identity.fields.extend(module.binding());
     }
@@ -2527,6 +2534,11 @@ struct PrivateProbeWorkspace {
     /// substituted binary. The pin says what those bytes must be, so the census
     /// asserts the pin instead of asserting self-consistency.
     pinned: Vec<(String, String)>,
+    /// Every `.jsx` module of the private tree the checker proved JSX-free,
+    /// which the worker is allowed to execute as ECMAScript (ADR 0039). Empty
+    /// for a tree with no such member, and the premise is then absent from the
+    /// session and from the receipt alike.
+    jsx_free_modules: Vec<JsxFreeModule>,
     /// The baseline census, keyed by label.
     ///
     /// A map rather than a list, because both readers look a label *up*: a
@@ -2824,12 +2836,27 @@ impl PrivateProbeWorkspace {
                 WatchedInput::Contents(verifier),
             ));
         }
+        // ADR 0039: computed from the authenticated snapshots, never from the
+        // private copies, and only after every copy is in place so each
+        // admitted module names a file that exists. A dependency's members are
+        // walked as the package's own are: the veto of a graph node imports
+        // that node's package, and its `solid` condition is what publishes the
+        // `.jsx` in the first place.
+        let mut jsx_free_modules = jsx_free_modules_of(&package_directory, &plan.snapshot);
+        for (name, dependency) in dependencies {
+            if let Some(root) = dependency_roots.get(name) {
+                jsx_free_modules.extend(jsx_free_modules_of(root, dependency.snapshot));
+            }
+        }
+        jsx_free_modules.sort();
+        jsx_free_modules.dedup();
         let mut workspace = Self {
             directory,
             worker,
             recipes,
             runtime_target,
             execution,
+            jsx_free_modules,
             dependency_roots,
             condition_flags: interpreter_conditions
                 .iter()
@@ -2847,6 +2874,10 @@ impl PrivateProbeWorkspace {
         workspace.before = workspace.watch_digests()?;
         workspace.verify_pinned(&workspace.before)?;
         Ok(workspace)
+    }
+
+    fn jsx_free_modules(&self) -> &[JsxFreeModule] {
+        &self.jsx_free_modules
     }
 
     fn recipe(&self, claim_id: &str) -> Option<(&Path, &str)> {
@@ -3037,6 +3068,13 @@ impl PrivateProbeWorkspace {
                 .map_err(|error| ProbeHarnessError::Protocol(error.to_string()))?;
             if let Some(execution) = &self.execution {
                 session["execution"] = serde_json::to_value(execution)
+                    .map_err(|error| ProbeHarnessError::Protocol(error.to_string()))?;
+            }
+            // ADR 0039. Absent when nothing was admitted, so a worker that
+            // reads no such key installs no loader hook at all, and the
+            // ordinary published-bytes run is byte-for-byte the pre-ADR one.
+            if !self.jsx_free_modules.is_empty() {
+                session["jsxFreeEsm"] = serde_json::to_value(&self.jsx_free_modules)
                     .map_err(|error| ProbeHarnessError::Protocol(error.to_string()))?;
             }
             let session_bytes = serde_json::to_vec(&session)
@@ -4348,6 +4386,100 @@ fn safe_package_directory(name: &str) -> Result<PathBuf, ProbeHarnessError> {
 /// purpose: one definition of "how authenticated bytes enter the private
 /// workspace" means a dependency cannot be placed under weaker rules than the
 /// package under test.
+/// One `.jsx` member of an authenticated snapshot that the checker proved
+/// carries no JSX, with the digest the worker re-checks before executing it
+/// (ADR 0039).
+///
+/// `path` is the file inside the private tree; the bytes it names were written
+/// there from the authenticated snapshot and are covered by the watched
+/// census, so the worker's digest check is a second, independent answer rather
+/// than the only one.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Serialize)]
+pub(super) struct JsxFreeModule {
+    path: String,
+    sha256: String,
+}
+
+/// Every `.jsx` member of `snapshot` whose authenticated bytes parse as a
+/// module containing no JSX element and no JSX fragment, as the file it was
+/// written to under `root` (ADR 0039).
+///
+/// A `.jsx` extension is a bundler convention, not a syntax: a package that
+/// publishes a `solid` condition names its uncompiled sources `.jsx` so a
+/// consumer's Solid JSX transform picks them up, and most such modules — every
+/// one that declares helpers rather than markup — contain no JSX at all. The
+/// pinned interpreter refuses them for the extension alone.
+///
+/// The premise this admits is exactly "a JSX transform is the identity on a
+/// module with no JSX", and the admission is **positive and falsifiable**: the
+/// checker's own parser (the one the census reads authenticated bytes with)
+/// must parse the module and report an empty JSX element table and an empty
+/// JSX fragment table. A member that does not parse, is not UTF-8, or carries
+/// one JSX node is not admitted and its module keeps refusing.
+///
+/// The interpreter is the independent second answer. Every JSX form is a
+/// syntax error in ECMAScript, so a module this walk admitted wrongly throws
+/// inside the worker and withholds the candidate; it can never pass as
+/// something else.
+fn jsx_free_modules_of(root: &Path, snapshot: &super::ArtifactSnapshot) -> Vec<JsxFreeModule> {
+    let mut admitted = Vec::new();
+    for (relative, bytes) in snapshot.files() {
+        if !relative.ends_with(".jsx") {
+            continue;
+        }
+        let Ok(text) = std::str::from_utf8(bytes) else {
+            continue;
+        };
+        let Ok(facts) = solid_facts::ast::extract(relative, text) else {
+            continue;
+        };
+        if !facts.jsx_elements.is_empty() || !facts.jsx_fragments.is_empty() {
+            continue;
+        }
+        let Ok(relative_path) = single_safe_relative_path(relative) else {
+            continue;
+        };
+        // Canonicalized for the same reason the controlled profile's source
+        // path is: Node realpaths what it resolves, so on macOS it asks about
+        // `/private/var/…` where the private tree was created under `/var/…`,
+        // and the two spellings would never meet. A member that cannot be
+        // canonicalized is not on disk where this walk expects it and is not
+        // admitted.
+        let Ok(canonical) = fs::canonicalize(root.join(relative_path)) else {
+            continue;
+        };
+        admitted.push(JsxFreeModule {
+            path: canonical.to_string_lossy().into_owned(),
+            sha256: format!("sha256:{:x}", Sha256::digest(bytes)),
+        });
+    }
+    admitted
+}
+
+/// The identity field that records the premise in the receipt: how many
+/// modules were admitted and a digest over their sorted `path` and `sha256`
+/// pairs. Absent — like the whole premise — for a tree with no admissible
+/// `.jsx` member, so a receipt that names no such field was produced by a run
+/// that executed no `.jsx` module.
+fn jsx_free_premise_field(modules: &[JsxFreeModule]) -> Option<String> {
+    if modules.is_empty() {
+        return None;
+    }
+    let mut hash = Sha256::new();
+    hash.update(b"solid-checker:probe-harness-jsx-free-esm:v1");
+    for module in modules {
+        for value in [module.path.as_str(), module.sha256.as_str()] {
+            hash.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_be_bytes());
+            hash.update(value.as_bytes());
+        }
+    }
+    Some(format!(
+        "jsx-free-esm:{}:sha256:{:x}",
+        modules.len(),
+        hash.finalize()
+    ))
+}
+
 fn copy_snapshot_into(
     package_directory: &Path,
     snapshot: &super::ArtifactSnapshot,

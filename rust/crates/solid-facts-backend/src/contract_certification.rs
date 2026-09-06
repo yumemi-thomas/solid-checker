@@ -1755,6 +1755,26 @@ pub struct ArtifactSnapshot {
 }
 
 impl ArtifactSnapshot {
+    /// A snapshot built from member bytes alone, for tests that need an
+    /// authenticated tree without an archive to unpack.
+    #[cfg(test)]
+    pub(crate) fn for_test(
+        package_name: &str,
+        package_version: &str,
+        package_integrity: &str,
+        files: BTreeMap<String, Arc<[u8]>>,
+    ) -> Self {
+        Self {
+            package_name: package_name.to_owned(),
+            package_version: package_version.to_owned(),
+            package_integrity: package_integrity.to_owned(),
+            files: Arc::new(files),
+            directories: Arc::new(BTreeSet::new()),
+            root: format!("/snapshot/{package_name}"),
+            provenance_root: format!("/snapshot/{package_name}"),
+        }
+    }
+
     pub fn from_published(
         archive: &PublishedArchive,
         limits: SnapshotLimits,

@@ -106,6 +106,7 @@ const ownKeys = Object.keys;
 // about the failure it caused.
 const stringSlice = String.prototype.slice;
 const stringIndexOf = String.prototype.indexOf;
+const stringEndsWith = String.prototype.endsWith;
 
 // Nothing after this line may add a property to an intrinsic prototype, and
 // nothing here needs to. A package top level that tries — the
@@ -258,6 +259,49 @@ if (execution) {
   execution.loaded = false;
   execution.consumerCompleted = false;
   execution.stage = "requested";
+}
+// ADR 0039: the `.jsx` modules Rust proved carry no JSX, which this worker
+// may execute as ECMAScript. Read from the session *before* any package or
+// recipe code runs, and only in the ordinary published-bytes lane -- a
+// controlled-execution profile serves its own module set and never resolves a
+// `.jsx`.
+//
+// The hook is deliberately narrow in both directions. It answers only the
+// exact file URLs Rust named, each of which it re-reads and re-digests, so a
+// `.jsx` swapped under the private tree between Rust's admission and this load
+// throws instead of executing. And it *refuses* every other `.jsx` URL by
+// name, so a module the checker did not admit cannot reach the interpreter
+// through this hook and be reported as a plain load failure.
+//
+// Node is the independent second answer to the premise itself: every JSX form
+// is a syntax error in ECMAScript, so a module admitted in error throws here
+// and withholds the candidate rather than running as something else.
+const requestedJsxFreeEsm = session.jsxFreeEsm;
+if (!execution && Array.isArray(requestedJsxFreeEsm) && requestedJsxFreeEsm.length > 0) {
+  const jsxFreeByUrl = { __proto__: null };
+  for (const entry of requestedJsxFreeEsm) {
+    const record = createFrameRecord();
+    record.path = asString(entry.path);
+    record.sha256 = asString(entry.sha256);
+    jsxFreeByUrl[toFileUrl(record.path).href] = record;
+  }
+  installHooks({
+    load(url, context, next) {
+      if (!apply(stringEndsWith, url, [".jsx"])) return next(url, context);
+      if (!hasOwn(jsxFreeByUrl, url)) {
+        throw new ErrorConstructor(`no jsx-free premise covers ${url}`);
+      }
+      const admitted = jsxFreeByUrl[url];
+      const source = readBytes(admitted.path, "utf8");
+      if (digest(source) !== admitted.sha256) {
+        throw new ErrorConstructor(`jsx-free module ${url} is not the admitted bytes`);
+      }
+      if (context.conditions.includes("require")) {
+        throw new ErrorConstructor(`jsx-free module ${url} may not be consumed as CommonJS`);
+      }
+      return { format: "module", source, shortCircuit: true };
+    }
+  });
 }
 let outcome;
 try {

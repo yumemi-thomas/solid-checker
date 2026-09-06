@@ -1,5 +1,36 @@
 # Precision backlog
 
+## A `.jsx` module with no JSX executes as ECMAScript (2026-09-06)
+
+ADR 0039. A closure candidate whose veto did not complete is withheld by name
+(ADR 0036), and 62 of them on the corpus were the pinned interpreter refusing
+a file *extension*: `TypeError: Unknown file extension ".jsx"`. The modules
+behind them are not markup. A package that publishes a `solid` condition names
+its uncompiled sources `.jsx` so a consumer's JSX transform picks them up, and
+`@corvu/utils` ships 23 such files of which 20 contain no JSX at all.
+
+The checker now admits a `.jsx` member of an authenticated snapshot — the
+plan's own or a dependency's — when its own parser reports no JSX element and
+no JSX fragment, and the worker executes exactly those modules as ECMAScript
+through one `node:module` load hook that re-digests each file, refuses every
+`.jsx` URL outside the admitted set by name, and refuses CommonJS consumption.
+The premise stated is *a JSX transform is the identity on a module with no
+JSX*; the interpreter is its falsifier, since every JSX form is a syntax error
+in ECMAScript. The receipt carries `jsx-free-esm:<count>:sha256:<digest>`, and
+absent it a receipt was produced by a run that executed no `.jsx` module.
+Worker protocol v5 → v6.
+
+Measured: withheld 866 → 805, `vetoThrew` 62 → 1, statuses unchanged at 368
+certified / 30 refused.
+
+Recorded, not closed: the one remaining `vetoThrew` is pinned Node refusing to
+strip types from a `.ts` file under `node_modules` (`@kobalte/utils`), which is
+an erasure premise rather than an extension one. A `.jsx` module that really
+carries markup still withholds — three in `@corvu/utils` — and closing those is
+what remains of the roadmap's lever B, with the 1.x half still needing the
+independent Babel reproduction, because a receipt over our port's output is a
+receipt about the port.
+
 ## The declared-signature premise reaches a local helper (2026-09-06, protocol 23)
 
 ADR 0038 amended (lever C step 2). A helper has no declared signature to bind,

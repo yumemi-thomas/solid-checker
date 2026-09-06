@@ -547,6 +547,7 @@ fn watched_workspace(scratch: &Scratch) -> PrivateProbeWorkspace {
         recipes: BTreeMap::new(),
         runtime_target: snapshot.join("index.js"),
         execution: None,
+        jsx_free_modules: Vec::new(),
         dependency_roots: BTreeMap::from([(WATCHED_DEPENDENCY.to_owned(), dependency.clone())]),
         condition_flags: vec!["--conditions=import".into()],
         watched: vec![
@@ -1308,6 +1309,7 @@ fn a_repeated_watched_label_refuses_rather_than_being_merged() {
         recipes: BTreeMap::new(),
         runtime_target: workspace.runtime_target.clone(),
         execution: None,
+        jsx_free_modules: Vec::new(),
         dependency_roots: BTreeMap::new(),
         condition_flags: workspace.condition_flags.clone(),
         watched: workspace.watched.clone(),
@@ -2341,4 +2343,147 @@ fn a_conditional_leaf_follows_nodes_first_matching_key_and_backtracks() {
         ),
         ConditionalLeaf::Unmatched
     );
+}
+
+// ---------------------------------------------------------------------------
+// ADR 0039: the JSX-free `.jsx` premise
+// ---------------------------------------------------------------------------
+
+/// Writes the snapshot's members under a scratch root, exactly as
+/// `copy_snapshot_into` does before the admission walk runs, so the walk can
+/// canonicalize a path that is really on disk.
+fn jsx_tree(
+    scratch: &Scratch,
+    name: &str,
+    snapshot: &crate::contract_certification::ArtifactSnapshot,
+) -> PathBuf {
+    let root = scratch.path().join(name);
+    for (relative, bytes) in snapshot.files() {
+        let target = root.join(relative);
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).expect("a scratch directory");
+        }
+        fs::write(&target, bytes).expect("a scratch member");
+    }
+    fs::canonicalize(&root).expect("the scratch root is on disk")
+}
+
+fn jsx_snapshot(members: &[(&str, &str)]) -> crate::contract_certification::ArtifactSnapshot {
+    crate::contract_certification::ArtifactSnapshot::for_test(
+        "jsx-free",
+        "1.0.0",
+        "sha512-jsx-free",
+        members
+            .iter()
+            .map(|(path, source)| {
+                (
+                    (*path).to_owned(),
+                    std::sync::Arc::<[u8]>::from(source.as_bytes()),
+                )
+            })
+            .collect(),
+    )
+}
+
+/// A `.jsx` member is admitted only when the checker's own parser reports no
+/// JSX element and no JSX fragment in the authenticated bytes. Everything else
+/// keeps refusing: a module carrying markup, one carrying a fragment, one that
+/// does not parse, and every member that is not a `.jsx` file at all.
+#[test]
+fn only_a_jsx_member_that_parses_without_jsx_is_admitted() {
+    let scratch = Scratch::new("jsx-free-admission");
+    let snapshot = jsx_snapshot(&[
+        ("package.json", "{\"name\":\"jsx-free\"}"),
+        // Admitted: the shape a `solid` condition publishes for a module that
+        // declares helpers rather than markup.
+        (
+            "dist/helpers.jsx",
+            "export const dataIf = (on) => (on ? \"\" : void 0);\n",
+        ),
+        // Admitted: a re-export chain is still JSX-free.
+        (
+            "dist/index.jsx",
+            "export { dataIf } from \"./helpers.jsx\";\n",
+        ),
+        // Refused: one element.
+        (
+            "dist/markup.jsx",
+            "export const View = (props) => <div>{props.children}</div>;\n",
+        ),
+        // Refused: one fragment, which carries no element of its own.
+        (
+            "dist/fragment.jsx",
+            "export const Many = (items) => <>{items}</>;\n",
+        ),
+        // Refused: not parseable at all.
+        ("dist/broken.jsx", "export const oops = (;\n"),
+        // Never considered: the compiled sibling the `default` condition names.
+        (
+            "dist/index.js",
+            "export const dataIf = (on) => (on ? \"\" : void 0);\n",
+        ),
+    ]);
+
+    let root = jsx_tree(&scratch, "jsx-free", &snapshot);
+    let admitted = jsx_free_modules_of(&root, &snapshot);
+    let paths = admitted
+        .iter()
+        .map(|module| module.path.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        paths,
+        vec![
+            root.join("dist/helpers.jsx").to_string_lossy().into_owned(),
+            root.join("dist/index.jsx").to_string_lossy().into_owned(),
+        ],
+        "only the JSX-free `.jsx` members are admitted, by the path Node realpaths"
+    );
+    for module in &admitted {
+        assert!(
+            module.sha256.starts_with("sha256:") && module.sha256.len() == 71,
+            "each admitted module carries the digest of its authenticated bytes: {module:?}"
+        );
+    }
+
+    // The digest is of the *authenticated* bytes, so the worker's re-read of
+    // the private copy is a comparison against the snapshot rather than
+    // against itself.
+    let expected = format!(
+        "sha256:{:x}",
+        Sha256::digest(b"export const dataIf = (on) => (on ? \"\" : void 0);\n")
+    );
+    assert_eq!(admitted[0].sha256, expected);
+}
+
+/// The receipt field: absent when nothing was admitted — so a package that
+/// publishes only compiled JavaScript produces exactly the pre-ADR receipt —
+/// and otherwise a count and a digest that moves with any admitted path or
+/// digest.
+#[test]
+fn the_jsx_free_premise_field_names_the_admitted_set_and_is_absent_without_one() {
+    assert_eq!(jsx_free_premise_field(&[]), None);
+
+    let scratch = Scratch::new("jsx-free-premise");
+    let helpers = jsx_snapshot(&[(
+        "dist/helpers.jsx",
+        "export const dataIf = (on) => (on ? \"\" : void 0);\n",
+    )]);
+    let admitted = jsx_free_modules_of(&jsx_tree(&scratch, "here", &helpers), &helpers);
+    let field = jsx_free_premise_field(&admitted).expect("an admitted module states the premise");
+    assert!(
+        field.starts_with("jsx-free-esm:1:sha256:"),
+        "the field names the count and a digest: {field}"
+    );
+
+    // A different path under the same bytes, and the same path under different
+    // bytes, are different premises.
+    let elsewhere = jsx_free_modules_of(&jsx_tree(&scratch, "elsewhere", &helpers), &helpers);
+    assert_ne!(jsx_free_premise_field(&elsewhere), Some(field.clone()));
+    let rewritten_snapshot =
+        jsx_snapshot(&[("dist/helpers.jsx", "export const dataIf = () => 1;\n")]);
+    let rewritten = jsx_free_modules_of(
+        &jsx_tree(&scratch, "rewritten", &rewritten_snapshot),
+        &rewritten_snapshot,
+    );
+    assert_ne!(jsx_free_premise_field(&rewritten), Some(field));
 }

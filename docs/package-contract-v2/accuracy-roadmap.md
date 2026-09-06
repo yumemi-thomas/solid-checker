@@ -142,7 +142,20 @@ customization hooks. It reverses ADR 0006's premise that Node's resolver is
 the arbiter and its echo the proof, and duplicates the browser lane's
 resolution premise in a second lane. The browser lane already owns it.
 
-### B. A compiled-JSX controlled profile (24 candidates, one new premise)
+### B. A compiled-JSX controlled profile — mostly not a compilation problem (2026-09-06)
+
+**Corrected by measurement, and the measured part taken as ADR 0039.** This
+entry assumed the `vetoThrew` class was a `.jsx` runtime target needing
+compiled bytes. The reasons say otherwise: all 61 `.jsx` failures were the
+pinned interpreter refusing an *extension*
+(`TypeError: Unknown file extension ".jsx"`), on modules that are not markup —
+`@corvu/utils` publishes 23 `.jsx` files under its `solid` condition and 20 of
+them contain no JSX at all. A `.jsx` module the checker proves JSX-free now
+executes as ECMAScript under a stated premise (ADR 0039): `vetoThrew` 62 → 1,
+withheld 866 → 805, statuses unchanged. What remains of this lever is the
+genuine case — a `solid`-condition module that really does carry JSX (three in
+`@corvu/utils`) — for which the original design below stands.
+
 
 Both compilers are already workspace crates: `solidjs-compiler` (the official
 Solid 2 compiler, Rust) and `dom-expressions-compiler` (the 1.x port). A
