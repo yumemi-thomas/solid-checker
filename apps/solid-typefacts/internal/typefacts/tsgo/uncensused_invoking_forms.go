@@ -350,8 +350,8 @@ func (p *project) parameterSubjectRootsLocked(implementation *ast.Node) *paramet
 			parameter.AsParameterDeclaration().DotDotDotToken != nil {
 			continue
 		}
-		symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(name))
-		if symbol == nil || p.symbolIsAssignedLocked(symbol, implementation) {
+		symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(name))
+		if symbol == nil || p.parameterIsWrittenLocked(implementation, index, symbol) {
 			continue
 		}
 		roots.byParameterSymbol[symbol] = index
@@ -360,6 +360,24 @@ func (p *project) parameterSubjectRootsLocked(implementation *ast.Node) *paramet
 		return nil
 	}
 	return roots
+}
+
+// parameterIsWrittenLocked answers the ADR 0029 write question for one
+// parameter. Under a premise twin (ADR 0038) it is asked of the *accepted*
+// program's node for the same parameter: the twin is the same file with one
+// comment added, so the answer is the same, and the accepted program has
+// already walked that file's assignment targets once — where the twin's cold
+// checker would walk the whole file again for every twin built over it.
+func (p *project) parameterIsWrittenLocked(implementation *ast.Node, index int, symbol *ast.Symbol) bool {
+	if twin := p.formTwin; twin != nil && implementation == twin.implementation && twin.original != nil {
+		originals := twin.original.Parameters()
+		if index >= len(originals) || originals[index].Name() == nil {
+			return true
+		}
+		original := p.canonicalSymbol(p.checker.GetSymbolAtLocation(originals[index].Name()))
+		return original == nil || p.symbolIsAssignedLocked(original, twin.original)
+	}
+	return p.symbolIsAssignedLocked(symbol, implementation)
 }
 
 // mentionsArgumentsOrEval reports whether any identifier in the subtree spells
@@ -400,7 +418,7 @@ func (p *project) subjectParameterLocked(subject *ast.Node, roots *parameterSubj
 	if node == nil || !ast.IsIdentifier(node) {
 		return nil
 	}
-	symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(node))
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(node))
 	if symbol == nil {
 		return nil
 	}
@@ -618,7 +636,7 @@ func (p *project) accessorFormLocked(
 	if queried == nil {
 		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
 	}
-	symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(queried))
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(queried))
 	if symbol == nil {
 		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
 	}
@@ -673,7 +691,7 @@ func (p *project) objectAssignmentPatternMemberFormLocked(
 	if name == nil || !ast.IsIdentifier(name) {
 		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
 	}
-	symbol := p.canonicalSymbol(p.checker.GetPropertySymbolOfDestructuringAssignment(name))
+	symbol := p.canonicalSymbol(p.formChecker().GetPropertySymbolOfDestructuringAssignment(name))
 	if symbol == nil {
 		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
 	}
@@ -706,11 +724,11 @@ func (p *project) bindingElementAccessorFormLocked(
 		// A computed property name is not statically a key.
 		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
 	}
-	patternType := p.checker.GetTypeAtLocation(pattern)
+	patternType := p.formChecker().GetTypeAtLocation(pattern)
 	if patternType == nil {
 		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
 	}
-	symbol := p.canonicalSymbol(p.checker.GetPropertyOfType(patternType, name.Text()))
+	symbol := p.canonicalSymbol(p.formChecker().GetPropertyOfType(patternType, name.Text()))
 	if symbol == nil {
 		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
 	}
@@ -798,7 +816,7 @@ func (p *project) declarationCarriesRuntimeBytesLocked(declaration *ast.Node) bo
 	if p.program.IsSourceFileDefaultLibrary(sourceFile.Path()) {
 		return true
 	}
-	return !sourceFile.IsDeclarationFile && p.isCurrentSourceFile(sourceFile)
+	return !sourceFile.IsDeclarationFile && p.formIsRuntimeSourceFile(sourceFile)
 }
 
 // engineOwnedIterableContainers is the reviewed list of default-library
@@ -876,7 +894,7 @@ func (p *project) iterationFormLocked(
 		// pattern to resolve the property it reads. An *assignment* pattern is
 		// spelled ArrayLiteralExpression, not this kind, and is answered in
 		// classifyInvokingFormLocked without a type question.
-		return p.iterationProtocolClearedLocked(p.checker.GetTypeAtLocation(node))
+		return p.iterationProtocolClearedLocked(p.formChecker().GetTypeAtLocation(node))
 	}
 	return typefacts.UncensusedIterationProtocol, true
 }
@@ -889,7 +907,7 @@ func (p *project) iterationProtocolFormLocked(
 	if operand == nil {
 		return typefacts.UncensusedIterationProtocol, true
 	}
-	return p.iterationProtocolClearedLocked(p.checker.GetTypeAtLocation(operand))
+	return p.iterationProtocolClearedLocked(p.formChecker().GetTypeAtLocation(operand))
 }
 
 func (p *project) iterationProtocolClearedLocked(
@@ -933,7 +951,7 @@ func (p *project) provablyEngineOwnedIteratorLocked(iterated *checker.Type) bool
 	if len(constituents) == 0 {
 		return false
 	}
-	key := checker.Checker_getPropertyNameForKnownSymbolName(p.checker, "iterator")
+	key := checker.Checker_getPropertyNameForKnownSymbolName(p.formChecker(), "iterator")
 	if key == "" {
 		return false
 	}
@@ -944,7 +962,7 @@ func (p *project) provablyEngineOwnedIteratorLocked(iterated *checker.Type) bool
 		if constituent.Flags()&(checker.TypeFlagsAny|checker.TypeFlagsUnknown) != 0 {
 			return false
 		}
-		iterator := p.checker.GetPropertyOfType(constituent, key)
+		iterator := p.formChecker().GetPropertyOfType(constituent, key)
 		if iterator == nil || iterator.Flags&ast.SymbolFlagsOptional != 0 {
 			return false
 		}
@@ -980,7 +998,7 @@ func (p *project) awaitFormLocked(
 	if operand == nil {
 		return typefacts.UncensusedAwaitThen, true
 	}
-	if p.provablyEngineOwnedThenLocked(p.checker.GetTypeAtLocation(operand)) {
+	if p.provablyEngineOwnedThenLocked(p.formChecker().GetTypeAtLocation(operand)) {
 		return "", false
 	}
 	return typefacts.UncensusedAwaitThen, true
@@ -1006,7 +1024,7 @@ func (p *project) provablyEngineOwnedThenLocked(value *checker.Type) bool {
 			// immediately. `Promise.prototype.then` cannot be reached from it.
 			continue
 		}
-		then := p.checker.GetPropertyOfType(constituent, "then")
+		then := p.formChecker().GetPropertyOfType(constituent, "then")
 		if then == nil {
 			return false
 		}
@@ -1095,7 +1113,7 @@ func (p *project) coercionFormLocked(
 	if operand == nil {
 		return "", false
 	}
-	if !p.mayBeObjectTypedLocked(p.checker.GetTypeAtLocation(operand)) {
+	if !p.mayBeObjectTypedLocked(p.formChecker().GetTypeAtLocation(operand)) {
 		return "", false
 	}
 	return typefacts.UncensusedCoercion, true

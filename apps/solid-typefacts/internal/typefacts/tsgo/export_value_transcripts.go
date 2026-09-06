@@ -130,6 +130,11 @@ func (p *project) exportValueTranscriptLocked(
 	transcript.Value = p.invocationValueFactLocked(valueType)
 	transcript.CallablePaths = p.callablePathsLocked(valueType, demand.CallableDepth)
 	signatures := p.checker.GetSignaturesOfType(valueType, checker.SignatureKindCall)
+	// The declared signature, when there is exactly one, is also the premise
+	// the implementation's form census may classify under (ADR 0038): it is
+	// what the consumer compiles its arguments against, and what a synthesized
+	// veto samples from. Handed down as a fact, decided nothing about here.
+	var premise *declaredSignaturePremise
 	if len(signatures) == 1 {
 		declaration := p.currentSignatureDeclaration(signatures[0], target)
 		if declaration != nil {
@@ -137,6 +142,9 @@ func (p *project) exportValueTranscriptLocked(
 				signatures[0], declaration, target, typefacts.CallKindCall, demand.CallableDepth,
 			)
 			transcript.CallSignature = &selected
+			premise = &declaredSignaturePremise{
+				signature: signatures[0], declaration: declaration, target: target,
+			}
 		}
 	} else if len(signatures) > 1 {
 		// An overload set has no single signature, and inventing one would
@@ -164,6 +172,7 @@ func (p *project) exportValueTranscriptLocked(
 			ctx,
 			*demand.ImplementationLocation,
 			demand.CallableDepth,
+			premise,
 		)
 		transcript.Implementation = &implementation
 	}
@@ -201,6 +210,7 @@ func (p *project) exportImplementationTranscriptLocked(
 	ctx context.Context,
 	location typefacts.Location,
 	callableDepth int,
+	premise *declaredSignaturePremise,
 ) typefacts.ExportImplementationTranscript {
 	transcript := typefacts.ExportImplementationTranscript{Location: location}
 	sourceFile, err := p.sourceFileFor(location)
@@ -280,6 +290,21 @@ func (p *project) exportImplementationTranscriptLocked(
 	transcript.CallableReturns = p.callableReturnCensusesLocked(implementation)
 	transcript.Calls = p.implementationCallCensusLocked(implementation)
 	transcript.UncensusedInvokingForms = p.uncensusedInvokingFormCensusLocked(implementation)
+	// ADR 0038: when a form the classifier decides from a type was recorded
+	// over the parameters' own (`any`) types, classify the body once more
+	// under the export's declared signature, on a checked twin of the file.
+	// The twin is built only then — most bodies record no such form — and a
+	// twin that cannot be bound to the declaration leaves the census as it
+	// is, with the refusal stated for measurement.
+	if premise != nil && formsMayClearUnderTypes(transcript.UncensusedInvokingForms) {
+		premised := p.premisedFormCensusLocked(ctx, implementation, premise)
+		if premised.refusal != "" {
+			transcript.ParameterPremiseRefusal = premised.refusal
+		} else {
+			transcript.UncensusedInvokingForms = premised.forms
+			transcript.ParameterPremises = premised.premises
+		}
+	}
 	if len(transcript.ControlFlow.Unsupported) != 0 {
 		transcript.OpenReasons = append(transcript.OpenReasons, "controlFlowUnsupported")
 		return transcript

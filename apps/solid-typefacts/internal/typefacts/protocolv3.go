@@ -4,7 +4,15 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 20: an implementation transcript may state
+// TypeFactsHandshakeProtocol is 22: an export's root implementation transcript
+// may state ParameterPremises — that its uncensused-form census was classified
+// with each parameter bound to the type the export's declared call signature
+// gives that position, instead of an unannotated JavaScript parameter's `any`
+// (ADR 0038). An empty form list on such a transcript means "no form under the
+// declared signature", which a protocol-21 consumer would read as "no form at
+// all", so the number moves although the field is additive.
+// Protocol 21 changes what overloadOrdinal and overloadCount range over (see
+// below). Protocol 20: an implementation transcript may state
 // ImplementationOf — the declaration whose body its census walked when its own
 // declaration is a binding that aliases that function by identity
 // (`const defaultScheduler = systemSetTimeoutZero`, followed through a sibling
@@ -125,8 +133,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 21
-	TypeFactsSchemaSHA256             = "sha256:b3993c8aae676d361125a5b86832215ac0039a1ba90a61513d7facae30f123f6"
+	TypeFactsHandshakeProtocol uint64 = 22
+	TypeFactsSchemaSHA256             = "sha256:ccd57bc16f459dc14dde96055c0d9eebcc0ec0545bab03368242e3df121267f0"
 )
 
 type ServiceHandshake struct {

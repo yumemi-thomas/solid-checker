@@ -169,28 +169,45 @@ The 1.x reproduction is also the natural place for the `solid`-condition
 output imports `solid-js/web`, which is again resolved under the artifact
 case's conditions, so lever B depends on lever A's executor to run.
 
-### C. Type premises for the census over untyped runtime source (≈700 refusals, ≈100 sites)
+### C. Type premises for the census over untyped runtime source — root slice taken as ADR 0038 (2026-09-06)
 
 The census refuses `a - b` because `a` is `any`. But the veto for the same
 export already samples its arguments from the *declared* call signature, so
 the closure is already conditional on typed callers. Making the census state
 the same premise — "under the export's declared signature" — is consistent,
-not a relaxation:
+not a relaxation.
 
-1. Root: bind the declared signature's parameter types (the `.d.ts` the
-   consumer sees, already selected by `stated_call_signatures`) to the
-   implementation's parameters.
-2. Each callee walk: carry the call-site argument types as that callee's
-   parameter premises, so internal helpers with no declaration inherit types
-   from their callers instead of `any`.
-3. A form clears when the premise makes the operand provably primitive, and
-   still refuses on `unknown`, a bare type parameter, or an object type.
+**Step 1, taken.** The producer classifies the root implementation's form
+census on a checked twin of the JavaScript file carrying
+`@type {typeof import("<declaration module>").<name>}`, so the compiler's own
+contextual typing carries the declared types into the body (parameters, the
+returned arrow's parameters through the return type, a `map` callback through
+the declared element type). Each parameter's type on the twin must print
+identically to the declared signature's, the transcript states the premise,
+the verifier binds it byte for byte to the one signature the synthesized veto
+samples from, and the receipt records `census-premise:` sites. Measured on the
+corpus: withheld candidates 1093 → 904, `censusRefused` 992 → 786, coercion
+refusals 357 → 80 (60 → 15 distinct sites), iteration 97 → 90; the accessor
+class *rose* 348 → 398 because the cleared coercions were hiding accessor
+refusals behind them. Statuses unchanged (368 / 30).
 
-This is a producer change (protocol bump: the transcript names the premise
-under which each form cleared) and an ADR stating the premise. Yield is
-uncertain until measured: `motion`'s declarations type many helpers as
-`any` themselves. Prototype on `motion-dom` first and count how many of the
-44 coercion and 52 property-access sites clear before deciding.
+**Step 2, open.** Of the 15 coercion sites left, 11 are **local helpers**
+reached from an export whose own body cleared: `scalePoint` from
+`applyPointDelta`/`removePointDelta`, `calcLength` from `aspectRatio`,
+`mixNumber` from `transformAxis`, `wrap` from `getEasingForSegment`, `clamp`
+from `steps`, `binarySubdivide` from `cubicBezier`, `formatErrorMessage` from
+`warnOnce`, `hueToRgb`, `fillOffset`, `distance`. A helper has no declared
+signature; the premise for it is the **call-site argument types in the
+caller's twin**, spelled as `@param` tags per slot from the caller twin's
+checker, carried on the local-declaration demand, and bound the same way. A
+helper reached from two callers with different argument types takes the union.
+The remaining 4 sites are honest: `unknown` and generic parameters
+(`@solid-primitives/utils`'s `compare<T>`), and `any`-typed declarations.
+
+**Step 3, not a lever.** Accessor forms are unchanged by design (ADR 0034's
+rejection stands: a declared property type says nothing about a getter). The
+398 accessor refusals are the largest census class now; they are lever G
+below.
 
 ### D. Census callee vocabulary (≈130 refusals, ≈25 sites) — first slice taken 2026-09-06
 
@@ -269,10 +286,17 @@ closed claims per domain so the intermediate progress is visible.
    on four TanStack rows and one 113-entrypoint row, recorded above.
 3. **Lever D** — const-bound callees taken 2026-09-06; own-class methods and
    `new` on an own-source class remain (18 refusals, 3 sites in `motion-dom`).
-4. **Lever C** prototype on `motion-dom`, measured before its ADR.
+4. ~~Lever C step 1~~ — taken as ADR 0038; step 2 (helper premises from
+   call-site argument types) is the next census slice, ≈11 sites.
 5. **Lever B** ADR once A runs, Solid 2 first, 1.x with Babel reproduction.
 6. **Lever F** ADR: per-domain census terminators over the existing walk, then
    `callbacks`, then `reads`/`writes`.
+7. **Lever G** (new): the accessor class — 398 refusals at 73 sites after
+   ADR 0038, mostly writes into a parameter-rooted object (`axis.min = …`, a
+   `set-accessor` question ADR 0034 left to the `writes` domain), module-level
+   object-literal receivers whose initializer the census could inspect
+   (`isDragging[axis]`, `scaleCorrectors[key]`), and destructuring of locals.
+   Each needs its own premise; none is a type question.
 
 Nothing here is a `tsc` duplicate: every claim is about runtime reactive
 behavior the type system cannot express. Nothing here loosens a refusal without

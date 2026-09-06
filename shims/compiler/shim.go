@@ -14,6 +14,7 @@ import vfs "github.com/microsoft/typescript-go/internal/vfs"
 import _ "unsafe"
 
 type CheckerPool = compiler.CheckerPool
+type CompilerHost = compiler.CompilerHost
 
 const EmitOnlyForcedDts = compiler.EmitOnlyForcedDts
 

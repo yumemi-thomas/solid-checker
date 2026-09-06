@@ -46,14 +46,14 @@ Two of those tests plan from **this fixture's own `expected.json`** rather than
 from a synthesized closed candidate, which is the only way the
 generate-then-certify path is exercised anywhere in the repository:
 `the_generated_census_fixture_carries_every_creates_candidate_into_planning`
-(no producer; asserts the fourteen candidates survive into planning, each with
-its veto and its `DomainExhaustiveness` demand, and that all fourteen are
+(no producer; asserts the thirty-two candidates survive into planning, each with
+its veto and its `DomainExhaustiveness` demand, and that all thirty-two are
 withheld by name when no corpus is supplied) and
 `the_census_certifies_a_generated_creates_candidate_and_withholds_its_siblings`
 (one hand recipe, for `plain`; since ADR 0036 every sibling candidate —
 `creates` and the valueless exports' `returns` alike — is served by a
-synthesized veto, and the test pins the resulting partition: nine `creates` and
-seven `returns` closures, fourteen `creates` candidates and one `returns`
+synthesized veto, and the test pins the resulting partition: fourteen `creates`
+and seven `returns` closures, seventeen `creates` candidates and one `returns`
 candidate withheld with the census's reason, and `loopCall` withheld in both
 domains because its synthesized run never reports). They rebind exactly one field of the document, the
 package integrity token, because the corpus generates `fixture:sha256:…` and a
@@ -111,11 +111,16 @@ disposition, and the first call with none refuses the domain by name:
 | `nestedCallableParameterRead` | refuses: uncensused form | `items.map(item => item.value)`: `items.map` is rooted at the export's parameter, `item.value` at the arrow's own — the invoker's value, not this invocation's |
 | `callNonLibraryReceiver`, `callLibraryOutsideTable` | refuse: by-reference member | `.call` on a local function, and on `Array.prototype.slice`, which is a library member outside the reviewed table; both stay refused under the owner rule |
 | `setterOnParameter` | refuses: uncensused form | an accessor in write position; writes into a caller's object are a `writes`-domain question ADR 0034 does not open |
+| `typedCoercion` | **certifies** (ADR 0038) | `v > max ? max : v < min ? min : v` over parameters `index.d.ts` declares `number`. The form census is classified under the export's *declared* signature — the one the consumer compiles against and the synthesized veto samples from — on a checked twin of the file, so the operands are `number` and no coercion is recorded; the receipt carries a `census-premise:` site per parameter |
+| `untypedCoercion` | refuses: uncensused form (ADR 0038) | `value + 1` where the declaration says `unknown`: the premise binds, and `unknown` is not provably a non-object, so the coercion stands under it |
+| `returnedCallbackCoercion` | **certifies** (ADR 0038) | `(p) => p * step`: the declared return type `(p: number) => number` types the returned arrow's parameter contextually, and `step` is declared `number` |
+| `declaredMemberCoercion` | **certifies** (ADR 0038) | `axis.max - axis.min` with `axis: { min: number; max: number }`. The two reads stay unknown accessors — a declaration file is not runtime bytes — and are `parameter-rooted-accessor` (ADR 0034); the subtraction's operands are `number` under the premise |
+| `helperCoercion` | refuses: uncensused form (ADR 0038) | `subtract(a, b)` is a local recursion whose `x - y` is over the *helper's* parameters, which have no declared signature: the premise is the root's alone, and the coercion refuses at depth 1. ADR 0038's named frontier |
 | `iife` | refuses: unresolved callee | an immediately-invoked function expression. Its body is lexically inside the export and already walked, so the generator has no counterexample to name — and the census refuses the row by name: the producer resolves its callee to nothing at all. Which is why the walk keeps declining `expression-callee` rather than treating it as spurious |
 
 The `unresolved`, `taggedTemplate`, `spreadUntyped`, `labelledBreak`,
 `stdlibRefInvoker`, `reflectApply`, `reassignedHelper`, `callInitialized`,
-`iife` and the seven ADR 0034 boundary refusals arrive
+`iife`, the seven ADR 0034 boundary refusals and the two ADR 0038 ones arrive
 before any recipe matters, at witness acquisition. Their tests still supply a recipe
 (`probe-recipes/refused-export.mjs`), deliberately: without one the certifier
 would withhold the candidate and the row would certify with the domain open,
@@ -217,6 +222,14 @@ ran. None hands `session` or `harness` to the package.
   declared once**, and **`callInitialized`'s `wrappedHelper` must be
   initialized by a call.** The first pins the one indirection the census takes
   through a variable; the second pins that it takes no other.
+- **`typedCoercion`'s parameters must be unannotated in `index.js` and
+  `number` in `index.d.ts`**, and **`helperCoercion`'s coercion must sit in a
+  helper the export calls, not in the export.** The first pins that the census
+  reads the declared signature the consumer compiles against rather than the
+  implementation's own `any`; the second pins that the premise stops at the
+  root — a helper's parameters have no declaration to bind — which is the
+  follow-up ADR 0038 names. A JSDoc type on either function would be a
+  different premise: the producer refuses to annotate over an existing one.
 - **`dependency-consumer/plainConsumer` must not call into `solid-js`.** The
   gate has to be *reached* for that fixture to say anything about the
   workspace, and a dependency callee refuses the census by name first.

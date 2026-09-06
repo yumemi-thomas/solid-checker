@@ -140,7 +140,11 @@ handed to *this* invocation.
   `lib.dom` or package interface as inert, or an array type as excluding a
   Proxy. Rejected: a declaration is not the bytes that run, and the census's
   standing rule is that it may not be read as one. The parameter root is a
-  fact about *provenance*, which declarations cannot supply.
+  fact about *provenance*, which declarations cannot supply. (ADR 0038 later
+  admits declared types for the *type-decided* forms — coercion, iteration,
+  `await` — as a stated premise the receipt carries; it leaves this accessor
+  decision exactly as it is, because a declared property type says nothing
+  about whether the member is a getter.)
 - **Make the disposition flow-sensitive** so `relativeOffset`'s reassigned
   `child` qualifies while it still aliases the parameter. Rejected for this
   ADR: it needs a definite-assignment analysis in the producer and a new class

@@ -323,8 +323,42 @@ type ExportImplementationTranscript struct {
 	// refuse. The handshake protocol is what separates the two — see
 	// TypeFactsHandshakeProtocol.
 	UncensusedInvokingForms []UncensusedInvokingForm `cbor:"uncensusedInvokingForms,omitempty" json:"uncensusedInvokingForms,omitempty"`
-	Complete                bool                     `cbor:"complete,omitempty" json:"complete,omitempty"`
-	OpenReasons             []string                 `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+	// ParameterPremises states, when present, that UncensusedInvokingForms was
+	// classified with each of this implementation's parameters bound to the
+	// type the export's *declared* call signature gives that position — the
+	// signature a consumer compiles against and the one a synthesized veto
+	// samples from — rather than to the implicit `any` an unannotated
+	// JavaScript parameter carries (ADR 0038, handshake protocol 22). One entry
+	// per parameter, in position order; Type is the declared type's printed
+	// form, byte-identical to the corresponding
+	// SelectedSignature.Parameters[i].Value.Type.Text of the export's own
+	// transcript, which is how a consumer binds the premise to the signature
+	// it already holds.
+	//
+	// The producer states it only for the export's root implementation: a
+	// JavaScript function whose declared signature lives in a declaration
+	// file, with as many parameters as the signature, no rest parameter on
+	// either side, and every one of those types re-established on a checked
+	// twin of the file (see declared_signature_premise.go). Absent, the forms
+	// were classified over the parameters' own types, which is the strictly
+	// more refusing reading; an absent list is never a premise, and a consumer
+	// records a present one as a condition of whatever it concludes.
+	ParameterPremises []ParameterPremise `cbor:"parameterPremises,omitempty" json:"parameterPremises,omitempty"`
+	// ParameterPremiseRefusal names, when the producer had a declared signature
+	// to bind and a form that a type could have cleared but did not state
+	// ParameterPremises, why the binding was refused. Diagnostic only: a
+	// consumer decides nothing from it, and its absence means nothing.
+	ParameterPremiseRefusal string   `cbor:"parameterPremiseRefusal,omitempty" json:"parameterPremiseRefusal,omitempty"`
+	Complete                bool     `cbor:"complete,omitempty" json:"complete,omitempty"`
+	OpenReasons             []string `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+}
+
+// ParameterPremise is one parameter's declared-type binding under which an
+// implementation's uncensused-form census was classified (ADR 0038). See
+// ExportImplementationTranscript.ParameterPremises.
+type ParameterPremise struct {
+	Index int    `cbor:"index" json:"index"`
+	Type  string `cbor:"type" json:"type"`
 }
 
 // UncensusedInvokingFormKind is a closed enumeration. A consumer that receives

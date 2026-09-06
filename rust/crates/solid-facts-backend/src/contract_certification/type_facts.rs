@@ -635,7 +635,7 @@ fn acquire_census_local_transcripts(
                     locals: &locals,
                 };
                 if let Ok((CensusOutcome::NeedsTranscripts, _, wanted)) =
-                    census_creates_domain(plan, proof, export, implementation, evidence)
+                    census_creates_domain(plan, proof, export, transcript, implementation, evidence)
                 {
                     for location in wanted {
                         let known = locals.iter().any(|local| local.location == location)
@@ -3470,7 +3470,7 @@ fn verify_export_value_family(
                     ClosureCensus::Implementation,
                 )?;
                 let (outcome, census_sites, requested) =
-                    census_creates_domain(plan, proof, export, implementation, census)?;
+                    census_creates_domain(plan, proof, export, transcript, implementation, census)?;
                 if outcome == CensusOutcome::NeedsTranscripts {
                     // Verification has no session left to ask. Acquisition
                     // batches every local declaration the census names; one
@@ -7739,6 +7739,17 @@ const CENSUS_PARAMETER_ROOTED_SUBJECTS_PROTOCOL: u64 = 18;
 /// forbid.
 const CENSUS_COMPLETION_FORM_PROTOCOL: u64 = 19;
 
+/// The handshake protocol at which an export's root implementation transcript
+/// may state the declared-signature premise its uncensused-form census was
+/// classified under (ADR 0038). On such a transcript an empty form list means
+/// "no form *under the declared signature*", and a premise the census closes on
+/// is recorded as a condition of the closure; a producer below this protocol
+/// never classified anything under a premise, and reading its empty list with
+/// this census would be reading an unconditional claim, which is the weaker of
+/// the two and therefore the safe one — the constant exists so the dependency
+/// is named, as the three above are.
+const CENSUS_DECLARED_SIGNATURE_PREMISES_PROTOCOL: u64 = 22;
+
 /// One local declaration's own implementation transcript, keyed by the exact
 /// span it was demanded at.
 #[derive(Clone, Debug)]
@@ -7975,6 +7986,7 @@ fn census_creates_domain(
     plan: &CertificationPlan,
     proof: &ScheduledProofDemand,
     export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    declared: &typefacts::ExportValueTranscript,
     implementation: &typefacts::ExportImplementationTranscript,
     evidence: CensusEvidence<'_>,
 ) -> Result<(CensusOutcome, Vec<String>, Vec<typefacts::Location>), TypeFactsCertificationError> {
@@ -7982,6 +7994,14 @@ fn census_creates_domain(
         demand: proof.id.clone(),
         reason,
     };
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_DECLARED_SIGNATURE_PREMISES_PROTOCOL {
+        return Err(refuse(format!(
+            "implementation-census premise required: the declared-signature premise arrived at \
+             handshake protocol {CENSUS_DECLARED_SIGNATURE_PREMISES_PROTOCOL} and this build \
+             speaks {}",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
     if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_UNCENSUSED_FORMS_PROTOCOL {
         return Err(refuse(format!(
             "implementation-census premise required: the uncensused-invoking-form census arrived \
@@ -8047,6 +8067,15 @@ fn census_creates_domain(
     {
         run.visited.push(identity);
     }
+    // ADR 0038: the premise the root's form census was classified under, bound
+    // to the declared signature this same transaction samples the veto from,
+    // and recorded as a condition of the closure before any form is read.
+    census_root_premises(
+        &mut run,
+        implementation,
+        stated_call_signatures(declared).as_deref(),
+    )
+    .map_err(refuse)?;
     let step = census_transcript(&mut run, implementation, 0).map_err(refuse)?;
     let mut sites = std::mem::take(&mut run.sites);
     let outcome = match step {
@@ -8270,6 +8299,109 @@ fn certified_runtime_sources(plan: &CertificationPlan) -> std::collections::BTre
 /// Refusals are `String` because the *demand* owns the error: a census premise
 /// that fails is a refusal of the closure demand, not of the helper it was
 /// walking.
+/// The declared-signature premise of the root transcript (ADR 0038), bound and
+/// recorded.
+///
+/// A premise is admitted only against the export's **one** declared call
+/// signature — the same `stated_call_signatures` the synthesized veto samples
+/// from — with exactly one entry per declared parameter, in position order,
+/// each printing the type the signature states at that position. The
+/// comparison is byte equality of the producer's own printing on both sides:
+/// the premise names a type text, the signature's parameter fact carries the
+/// same printer's text, and a producer that classified under any other type
+/// than the one the consumer compiles against is refused here rather than
+/// recorded. Every admitted entry becomes a `census-premise:` witness site, so
+/// the receipt states the condition the closure holds under.
+///
+/// A transcript with no premise passes untouched: its forms were classified
+/// over the parameters' own types, which is the strictly more refusing reading
+/// and needs no condition.
+fn census_root_premises(
+    run: &mut CensusRun<'_>,
+    implementation: &typefacts::ExportImplementationTranscript,
+    declared: Option<&[typefacts::SelectedSignature]>,
+) -> Result<(), String> {
+    if implementation.parameter_premises.is_empty() {
+        return Ok(());
+    }
+    let at = format!(
+        "{}:{}..{}",
+        implementation.location.path,
+        implementation.location.start_byte,
+        implementation.location.end_byte
+    );
+    let signature = match declared {
+        Some([signature]) => signature,
+        Some(overloads) if !overloads.is_empty() => {
+            return Err(format!(
+                "creates census refuses a declared-signature premise at {at}: the export states \
+                 {} overloads and a premise binds exactly one declared signature",
+                overloads.len()
+            ));
+        }
+        _ => {
+            return Err(format!(
+                "creates census refuses a declared-signature premise at {at}: the export states no \
+                 declared call signature to bind it to"
+            ));
+        }
+    };
+    if signature.has_rest {
+        return Err(format!(
+            "creates census refuses a declared-signature premise at {at}: the declared signature \
+             has a rest parameter"
+        ));
+    }
+    if implementation.parameter_premises.len() != signature.parameters.len() {
+        return Err(format!(
+            "creates census refuses a declared-signature premise at {at}: {} premise(s) for a \
+             signature of {} parameter(s)",
+            implementation.parameter_premises.len(),
+            signature.parameters.len()
+        ));
+    }
+    // Every entry is checked before any is recorded, so a refusal leaves no
+    // partial condition in the witness set.
+    let mut sites = Vec::with_capacity(implementation.parameter_premises.len());
+    for (position, (premise, parameter)) in implementation
+        .parameter_premises
+        .iter()
+        .zip(&signature.parameters)
+        .enumerate()
+    {
+        if premise.index != position || parameter.index != position {
+            return Err(format!(
+                "creates census refuses a declared-signature premise at {at}: entry {position} \
+                 names parameter {} against declared parameter {}",
+                premise.index, parameter.index
+            ));
+        }
+        let declared_text = parameter
+            .value
+            .type_descriptor
+            .as_ref()
+            .map(|descriptor| descriptor.text.as_ref())
+            .unwrap_or("");
+        if premise.r#type.is_empty() || premise.r#type.as_ref() != declared_text {
+            return Err(format!(
+                "creates census refuses a declared-signature premise at {at}: parameter {position} \
+                 is premised {:?} but the declared signature states {:?}",
+                premise.r#type, declared_text
+            ));
+        }
+        sites.push(format!(
+            "census-premise:{}:{}:{}:{}:{}",
+            implementation.location.path,
+            implementation.location.start_byte,
+            implementation.location.end_byte,
+            position,
+            premise.r#type
+        ));
+    }
+    run.sites.extend(sites);
+    Ok(())
+}
+
 fn census_transcript(
     run: &mut CensusRun<'_>,
     implementation: &typefacts::ExportImplementationTranscript,
@@ -8277,6 +8409,20 @@ fn census_transcript(
 ) -> Result<CensusStep, String> {
     run.deepest = run.deepest.max(depth);
     census_transcript_is_censusable(implementation, depth)?;
+    if depth != 0 && !implementation.parameter_premises.is_empty() {
+        // The premise is a fact about the export's declared signature, which
+        // only the root has; a local declaration has no declaration a consumer
+        // compiles against, and a producer stating one for it is stating a
+        // premise this census never asked for and cannot bind (ADR 0038).
+        return Err(format!(
+            "creates census refuses a local declaration transcript at depth {depth} for {}:{}..{} \
+             that states a declared-signature premise: only the export's own implementation has \
+             a declared signature to bind",
+            implementation.location.path,
+            implementation.location.start_byte,
+            implementation.location.end_byte
+        ));
+    }
     // The declaration node this transcript describes, bound from the
     // authenticated bytes, and the one premise the producer's own transcript
     // cannot state about it: that those bytes are this artifact's runtime
@@ -17847,6 +17993,152 @@ mod tests {
 
     /// ADR 0034's boundary, form by form and call by call: a stated subject
     /// parameter admits only the two read-accessor kinds on a property or
+    /// A declared call signature as the export-value transcript states it, with
+    /// the given parameter type texts, for the premise tests below.
+    fn declared_signature_with(parameter_types: &[&str]) -> typefacts::SelectedSignature {
+        let value = |text: Option<&str>| {
+            let mut value = json!({
+                "callability": "nonCallable",
+                "constructability": "nonConstructable",
+                "primitive": {},
+            });
+            if let Some(text) = text {
+                value["type"] = json!({"text": text});
+            }
+            value
+        };
+        let parameters = parameter_types
+            .iter()
+            .enumerate()
+            .map(|(index, text)| json!({"index": index, "value": value(Some(text))}))
+            .collect::<Vec<_>>();
+        serde_json::from_value(json!({
+            "identity": "signature:useThing",
+            "declaration": {
+                "symbol": "symbol:useThing",
+                "name": "useThing",
+                "kind": "FunctionDeclaration",
+                "sourceFile": "/project/node_modules/consumer/dist/index.d.ts",
+                "location": {"path": "/project/node_modules/consumer/dist/index.d.ts", "startByte": 24, "endByte": 32},
+            },
+            "overloadOrdinal": 0,
+            "overloadCount": 1,
+            "minimumArgumentCount": parameter_types.len(),
+            "parameters": parameters,
+            "result": value(None),
+        }))
+        .expect("a valid selected signature")
+    }
+
+    fn premised_transcript(
+        premises: &[(usize, &str)],
+    ) -> typefacts::ExportImplementationTranscript {
+        let mut transcript = census_transcript_with(vec![], json!([]));
+        transcript.parameter_premises = premises
+            .iter()
+            .map(|(index, text)| typefacts::ParameterPremise {
+                index: *index,
+                r#type: (*text).into(),
+            })
+            .collect();
+        transcript
+    }
+
+    /// ADR 0038: a premise is recorded only when it names, position by
+    /// position and byte for byte, the one declared signature the export
+    /// states — the signature the synthesized veto samples from — and every
+    /// admitted entry is a witness site. Anything else refuses by name.
+    #[test]
+    fn creates_census_binds_a_declared_signature_premise_to_the_stated_signature() {
+        assert_eq!(CENSUS_DECLARED_SIGNATURE_PREMISES_PROTOCOL, 22);
+        const {
+            assert!(
+                typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+                    >= CENSUS_DECLARED_SIGNATURE_PREMISES_PROTOCOL
+            );
+        }
+        let certified = consumer_snapshot();
+        let roots = vec![consumer_root(&certified)];
+
+        let mut run = census_run(&certified, &roots);
+        let transcript = premised_transcript(&[(0, "number"), (1, "Axis")]);
+        census_root_premises(
+            &mut run,
+            &transcript,
+            Some(&[declared_signature_with(&["number", "Axis"])]),
+        )
+        .expect("a premise naming the declared signature is admitted");
+        assert_eq!(
+            run.sites,
+            vec![
+                "census-premise:/project/node_modules/consumer/dist/index.js:0:400:0:number",
+                "census-premise:/project/node_modules/consumer/dist/index.js:0:400:1:Axis",
+            ]
+        );
+
+        // No premise: nothing to bind, nothing recorded.
+        let mut run = census_run(&certified, &roots);
+        census_root_premises(&mut run, &census_transcript_with(vec![], json!([])), None)
+            .expect("an unpremised transcript passes");
+        assert!(run.sites.is_empty());
+
+        for (premises, declared, wants) in [
+            (
+                vec![(0, "number"), (1, "unknown")],
+                Some(vec![declared_signature_with(&["number", "Axis"])]),
+                "parameter 1 is premised \"unknown\" but the declared signature states \"Axis\"",
+            ),
+            (
+                vec![(0, "number")],
+                Some(vec![declared_signature_with(&["number", "Axis"])]),
+                "1 premise(s) for a signature of 2 parameter(s)",
+            ),
+            (
+                vec![(1, "Axis"), (0, "number")],
+                Some(vec![declared_signature_with(&["number", "Axis"])]),
+                "entry 0 names parameter 1",
+            ),
+            (
+                vec![(0, "number")],
+                Some(vec![
+                    declared_signature_with(&["number"]),
+                    declared_signature_with(&["string"]),
+                ]),
+                "states 2 overloads",
+            ),
+            (
+                vec![(0, "number")],
+                None,
+                "states no declared call signature",
+            ),
+            (
+                vec![(0, "")],
+                Some(vec![declared_signature_with(&[""])]),
+                "parameter 0 is premised \"\"",
+            ),
+        ] {
+            let mut run = census_run(&certified, &roots);
+            let error = census_root_premises(
+                &mut run,
+                &premised_transcript(&premises),
+                declared.as_deref(),
+            )
+            .expect_err("a premise that does not name the declared signature refuses");
+            assert!(error.contains(wants), "{error}");
+            assert!(run.sites.is_empty(), "{error}");
+        }
+
+        // A local declaration has no declared signature; a premise stated on
+        // one refuses before its body is read.
+        let mut run = census_run(&certified, &roots);
+        let error = census_transcript(&mut run, &premised_transcript(&[(0, "number")]), 1)
+            .expect_err("a premised local transcript refuses");
+        assert!(
+            error.contains("states a declared-signature premise"),
+            "{error}"
+        );
+    }
+
     /// element access; a `.call` admits only a reviewed this-protocol receiver
     /// with a rooted `this`.
     #[test]

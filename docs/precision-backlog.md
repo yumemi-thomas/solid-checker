@@ -1,5 +1,52 @@
 # Precision backlog
 
+## The `creates` census classifies under the export's declared signature (2026-09-06)
+
+ADR 0038 (lever C of the accuracy roadmap, root slice). The uncensused-form
+census of an export's root implementation is now classified with each
+JavaScript parameter bound to the type the export's declared call signature
+gives its position — the `.d.ts` the consumer compiles against and the
+signature the synthesized veto (ADR 0036) already samples from — instead of
+the implicit `any` of an unannotated parameter. The producer builds a checked
+twin of the file carrying `@type {typeof import("<declaration module>").<name>}`
+and lets the compiler's contextual typing carry the types into the body;
+every parameter's type on the twin must print identically to the declared one
+or the premise is dropped. The transcript states `parameterPremises`
+(handshake protocol 21 → 22), the verifier binds each entry byte for byte to
+the export's one declared signature, and the receipt carries a
+`census-premise:` site per parameter. Accessor forms are untouched (ADR 0034's
+rejection of declared types as accessor evidence stands), and the premise
+stops at the root: a local helper's parameters have no declaration to bind.
+
+Measured on the 2026-09-06 corpus: withheld `creates` candidates 1093 → 904;
+`censusRefused` 992 → 786; coercion refusals 357 → 80 (60 → 15 distinct
+sites); iteration 97 → 90; the accessor class rose 348 → 398 because the
+cleared coercions had hidden accessor refusals behind them. Statuses
+unchanged, 368 certified / 30 refused. `exportsProven` does not move: closing
+`creates` alone closes no export.
+
+The benchmark report is deliberately **not** repinned with this change. CPU
+accounting over alternating runs shows the new binaries cost what the previous
+ones did (HEAD 1655 and 1788 CPU-seconds against 1649 after the twin's
+per-file assignment walk was routed to the accepted program), but the machine
+ran the *previous* binaries at 155–165 s wall that day against a 117 s pin
+and a 150 s budget, so any pin taken would have recorded the machine, not the
+change. The regenerated report was identical to the pinned one in everything
+but timing.
+
+Recorded, not closed: 11 of the 15 remaining coercion sites are local helpers
+(`scalePoint`, `calcLength`, `mixNumber`, `wrap`, `clamp`, `binarySubdivide`,
+`formatErrorMessage`, `hueToRgb`, `fillOffset`, `distance`) reached from an
+export whose own body cleared — the follow-up is to carry the call-site
+argument types from the caller's twin as the helper's premise; `unknown`,
+generic and `any`-declared parameters refuse honestly; a declaration already
+carrying a typed JSDoc tag is not annotated over. The default-library accessor
+premise (`lib.dom` property signatures read as data properties) now reaches
+JavaScript bodies through the declared types — not new, newly common, and
+stated in the ADR. Pinned in `implementation-census-creates`
+(`typedCoercion`, `returnedCallbackCoercion`, `declaredMemberCoercion`
+certify; `untypedCoercion`, `helperCoercion` refuse).
+
 ## Undecided candidates withhold, and vetoes are synthesized (2026-09-05)
 
 ADR 0036. A proposed closure candidate the implementation census cannot decide

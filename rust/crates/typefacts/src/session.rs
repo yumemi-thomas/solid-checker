@@ -3685,6 +3685,8 @@ mod tests {
             callable_returns: Vec::new(),
             calls: Vec::new(),
             uncensused_invoking_forms: Vec::new(),
+            parameter_premises: Vec::new(),
+            parameter_premise_refusal: "".into(),
             complete: false,
             open_reasons: Vec::new(),
         }

@@ -606,6 +606,28 @@ accessor-census disposition below; see
   the population that was blocked by it the *first* refusal was already
   `property-access-unknown-accessor` on an object spread; it removes a whole
   class of over-refusal standing behind that one.
+- **A coercion, iteration or `await` over a parameter whose declared type
+  does not make it provably primitive or engine-owned** — narrowed by ADR 0038
+  (2026-09-06). The form census of an export's *root* implementation is now
+  classified under the export's **declared call signature**: the producer
+  annotates a checked twin of the JavaScript file with
+  `@type {typeof import("<declaration module>").<name>}`, re-establishes every
+  parameter's declared type on the twin, and the compiler's own contextual
+  typing carries those types into the body — through the parameters, through
+  the return type into a returned arrow, through a declared array's element
+  type into a `map` callback. `v > max` over parameters declared `number`
+  records no form; `value + 1` over `unknown`, a spread of an
+  `Iterable<number>`, and every operand of a **local helper's** own parameter
+  still refuse — a helper has no declared signature, and carrying call-site
+  argument types to it is the follow-up ADR 0038 names. The verifier binds each
+  stated premise to the one declared signature the synthesized veto samples
+  from, byte for byte, and records it as a `census-premise:` witness; a premise
+  on a local transcript, or one naming any other type, refuses. Pinned in
+  `implementation-census-creates`: `typedCoercion`, `returnedCallbackCoercion`
+  and `declaredMemberCoercion` certify; `untypedCoercion` and `helperCoercion`
+  refuse. Accessor forms are untouched: a declaration file is not runtime
+  bytes, and ADR 0034's rejection of declared types *as accessor evidence*
+  stands.
 - **An export whose callee reads a property the compiler resolves no symbol
   for**, *unless the receiver is the export's own parameter* (ADR 0034). The
   `member-property-unresolved`, `member-receiver-unresolved` and

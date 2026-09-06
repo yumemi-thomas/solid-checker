@@ -3163,6 +3163,12 @@ func (p *project) assignmentTargetSymbolsLocked(
 	sourceFile *ast.SourceFile,
 ) map[*ast.Symbol]struct{} {
 	assigned := make(map[*ast.Symbol]struct{})
+	// The file's own checker: a premise twin's file (ADR 0038) was bound by the
+	// twin program, every other file by the accepted one.
+	fileChecker := p.checker
+	if p.formTwin != nil && sourceFile == p.formTwin.file {
+		fileChecker = p.formTwin.checker
+	}
 	var visit func(*ast.Node)
 	visit = func(node *ast.Node) {
 		if node == nil {
@@ -3170,7 +3176,7 @@ func (p *project) assignmentTargetSymbolsLocked(
 		}
 		if ast.IsIdentifier(node) && !ast.IsDeclarationNameOrImportPropertyName(node) &&
 			!ast.IsPartOfTypeNode(node) && ast.GetAssignmentTarget(node) != nil {
-			if symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(node)); symbol != nil {
+			if symbol := p.canonicalSymbol(fileChecker.GetSymbolAtLocation(node)); symbol != nil {
 				assigned[symbol] = struct{}{}
 			}
 		}

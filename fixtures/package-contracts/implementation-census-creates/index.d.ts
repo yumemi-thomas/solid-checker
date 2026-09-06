@@ -35,5 +35,15 @@ export declare function nestedCallableParameterRead(items: Array<{ value: unknow
 export declare function callNonLibraryReceiver(value: unknown): unknown;
 export declare function callLibraryOutsideTable(value: unknown): unknown;
 export declare function setterOnParameter(source: { value: unknown }): void;
+// ADR 0038: these signatures are the premise the form census classifies the
+// runtime bodies under. `typedCoercion`, `returnedCallbackCoercion` and
+// `declaredMemberCoercion` certify because of the types stated here;
+// `untypedCoercion` refuses on `unknown`, and `helperCoercion` refuses because
+// its helper's parameters have no declaration to bind.
+export declare function typedCoercion(min: number, max: number, v: number): number;
+export declare function untypedCoercion(value: unknown): unknown;
+export declare function returnedCallbackCoercion(step: number): (p: number) => number;
+export declare function declaredMemberCoercion(axis: { min: number; max: number }): number;
+export declare function helperCoercion(a: number, b: number): number;
 // An immediately-invoked function expression: this census refuses it.
 export declare function iife(value: number): number;

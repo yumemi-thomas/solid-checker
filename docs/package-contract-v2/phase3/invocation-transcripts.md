@@ -277,3 +277,15 @@ overloaded function analyzed from source counted its implementation body and
 reported `overloadCount == len + 1`, which the consumer's completeness check
 refused. The count is part of the selected-signature identity, so the number
 moves with the meaning (docs/precision-backlog.md, "Protocol 21").
+
+Protocol 22 (2026-09-06, ADR 0038) lets an export's *root* implementation
+transcript state `parameterPremises`: its `uncensusedInvokingForms` was
+classified with each parameter bound to the type the export's declared call
+signature gives that position, on a checked twin of the JavaScript file, rather
+than to an unannotated parameter's `any`. Each entry's `type` is the declared
+type's printed form, byte-identical to the export transcript's
+`callSignature.parameters[i].value.type.text`, which is how the consumer binds
+the premise to the signature it already holds. `parameterPremiseRefusal` is
+diagnostic only. An empty form list on a premised transcript means "no form
+under the declared signature", which a protocol-21 consumer would read as "no
+form at all", so the handshake moves although the fields are additive.

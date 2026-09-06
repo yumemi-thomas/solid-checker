@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:b3993c8aae676d361125a5b86832215ac0039a1ba90a61513d7facae30f123f6";
+    "sha256:ccd57bc16f459dc14dde96055c0d9eebcc0ec0545bab03368242e3df121267f0";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -138,6 +138,12 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
+// Protocol 22 lets an export's root implementation transcript state
+// `parameterPremises`: its uncensused-form census was classified with each
+// parameter bound to the type the export's declared call signature gives that
+// position rather than an unannotated JavaScript parameter's `any` (ADR 0038).
+// An empty form list on such a transcript means "no form under the declared
+// signature"; a protocol-21 consumer would read it as "no form at all".
 // Protocol 21 makes `overloadOrdinal` and `overloadCount` range over the
 // declarations that state a call signature — TypeScript's overload set, the
 // bodiless declarations — instead of every declaration of the signature's kind.
@@ -161,7 +167,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // producer is never "not rooted".
 // Protocol 17 includes exact-null loose equality in the positive
 // uncensused-form classifier. Protocol 16 added unchanged-parameter identity.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 21;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 22;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

@@ -47,6 +47,13 @@
 // And the one indirection the census does take since 2026-09-06: `constBound`
 // calls an arrow a `const` holds, followed through its unwritten,
 // once-declared binding.
+//
+// And the premise the form census classifies under since ADR 0038: the
+// export's declared signature in `index.d.ts`. `typedCoercion`,
+// `returnedCallbackCoercion` and `declaredMemberCoercion` certify on
+// coercions that were `any` before; `untypedCoercion` (declared `unknown`) and
+// `helperCoercion` (the coercion is a helper's, which has no declaration)
+// refuse and pin the boundary.
 
 function never() {}
 
@@ -377,6 +384,48 @@ export function callLibraryOutsideTable(value) {
 // are a `writes`-domain question ADR 0034 does not open. **Refuses.**
 export function setterOnParameter(source) {
   source.value = 1;
+}
+
+// ADR 0038: the form census is classified under the export's *declared*
+// signature. `index.d.ts` types every parameter below, and the unannotated
+// JavaScript parameter that was `any` — so that `v > max` might reach a
+// `valueOf` — is `number` under the premise, which no coercion can reach. The
+// certificate records the premise; the four exports after this one pin its
+// boundary.
+export function typedCoercion(min, max, v) {
+  return v > max ? max : v < min ? min : v;
+}
+
+// The declared type is `unknown`, which is not provably a non-object: the
+// premise binds and the coercion stands under it. **Refuses.**
+export function untypedCoercion(value) {
+  return value + 1;
+}
+
+// The declared signature's *return type* types the returned arrow's parameter
+// contextually — `(p: number) => number` — so `p * step` clears too.
+// **Certifies.**
+export function returnedCallbackCoercion(step) {
+  return (p) => p * step;
+}
+
+// A declared object type. The reads of `.max` and `.min` stay unknown
+// accessors — a declaration file is not runtime bytes — and are dispositioned
+// as parameter-rooted (ADR 0034); the subtraction's operands are `number`
+// under the premise. **Certifies.**
+export function declaredMemberCoercion(axis) {
+  return axis.max - axis.min;
+}
+
+// The coercion sits in a local helper, whose parameters have no declared
+// signature: the premise is the root's alone, and `x - y` refuses at depth 1.
+// This is ADR 0038's named frontier. **Refuses.**
+function subtract(x, y) {
+  return x - y;
+}
+
+export function helperCoercion(a, b) {
+  return subtract(a, b);
 }
 
 const registryObject = { value: 1 };

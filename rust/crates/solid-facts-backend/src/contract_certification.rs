@@ -5746,9 +5746,7 @@ mod tests {
         )
         .expect("encode the candidate");
         let closes_nothing = |outcome: Result<(), super::Policy2FinalizationError>| {
-            let error = outcome
-                .err()
-                .expect("a case that closes no claim has no receipt");
+            let error = outcome.expect_err("a case that closes no claim has no receipt");
             assert!(
                 matches!(
                     &error,
@@ -11476,13 +11474,15 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 29] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 34] = [
         "callInitialized",
         "callLibraryOutsideTable",
         "callNonLibraryReceiver",
         "constBound",
         "cycle",
+        "declaredMemberCoercion",
         "deep",
+        "helperCoercion",
         "iife",
         "labelledBreak",
         "loopCall",
@@ -11494,6 +11494,7 @@ export const value = phantom;
         "plain",
         "reassignedHelper",
         "reflectApply",
+        "returnedCallbackCoercion",
         "setterOnParameter",
         "spreadArgs",
         "spreadUntyped",
@@ -11501,7 +11502,9 @@ export const value = phantom;
         "switchBreak",
         "taggedTemplate",
         "toStringTagViaCall",
+        "typedCoercion",
         "unresolved",
+        "untypedCoercion",
         "viaHelperChain",
         "whileBreak",
         "writtenAfterRead",
@@ -12641,7 +12644,9 @@ export const value = phantom;
             "callNonLibraryReceiver",
             "constBound",
             "cycle",
+            "declaredMemberCoercion",
             "deep",
+            "helperCoercion",
             "labelledBreak",
             "loopCall",
             "memberParameterRooted",
@@ -12652,6 +12657,7 @@ export const value = phantom;
             "plain",
             "reassignedHelper",
             "reflectApply",
+            "returnedCallbackCoercion",
             "setterOnParameter",
             "spreadArgs",
             "spreadUntyped",
@@ -12659,6 +12665,8 @@ export const value = phantom;
             "switchBreak",
             "taggedTemplate",
             "toStringTagViaCall",
+            "typedCoercion",
+            "untypedCoercion",
             "viaHelperChain",
             "whileBreak",
             "writtenAfterRead",
@@ -12859,13 +12867,15 @@ export const value = phantom;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
-    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 27] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 32] = [
         "callInitialized",
         "callLibraryOutsideTable",
         "callNonLibraryReceiver",
         "constBound",
         "cycle",
+        "declaredMemberCoercion",
         "deep",
+        "helperCoercion",
         "labelledBreak",
         "loopCall",
         "memberParameterRooted",
@@ -12876,6 +12886,7 @@ export const value = phantom;
         "plain",
         "reassignedHelper",
         "reflectApply",
+        "returnedCallbackCoercion",
         "setterOnParameter",
         "spreadArgs",
         "spreadUntyped",
@@ -12883,6 +12894,8 @@ export const value = phantom;
         "switchBreak",
         "taggedTemplate",
         "toStringTagViaCall",
+        "typedCoercion",
+        "untypedCoercion",
         "viaHelperChain",
         "whileBreak",
         "writtenAfterRead",
@@ -12898,24 +12911,32 @@ export const value = phantom;
     /// and recurses into no callee. `constBound` closes since 2026-09-06 —
     /// the arrow its `const` holds is followed through the binding — while
     /// `callInitialized`, whose `const` holds a call's result, is refused.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 11] = [
+    /// `typedCoercion`, `returnedCallbackCoercion` and `declaredMemberCoercion`
+    /// close under the declared-signature premise (ADR 0038); `untypedCoercion`
+    /// (declared `unknown`) and `helperCoercion` (the coercion is a helper's,
+    /// which has no declared signature) are refused.
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 14] = [
         "constBound",
         "cycle",
+        "declaredMemberCoercion",
         "memberParameterRooted",
         "noRecipe",
         "overloaded",
         "plain",
+        "returnedCallbackCoercion",
         "spreadArgs",
         "switchBreak",
         "toStringTagViaCall",
+        "typedCoercion",
         "viaHelperChain",
         "whileBreak",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 16] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 18] = [
         ("callInitialized", "census"),
         ("callLibraryOutsideTable", "census"),
         ("callNonLibraryReceiver", "census"),
         ("deep", "census"),
+        ("helperCoercion", "census"),
         ("labelledBreak", "census"),
         ("loopCall", "veto"),
         ("moduleReceiverRead", "census"),
@@ -12926,6 +12947,7 @@ export const value = phantom;
         ("spreadUntyped", "census"),
         ("stdlibRefInvoker", "census"),
         ("taggedTemplate", "census"),
+        ("untypedCoercion", "census"),
         ("writtenAfterRead", "census"),
         ("writtenBeforeRead", "census"),
     ];

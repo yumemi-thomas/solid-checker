@@ -83,6 +83,22 @@ type project struct {
 	// rather than once per returned-callable resolution. Checker-owned symbol
 	// pointers make it generation-scoped, like runtimePaths.
 	assignedSymbols map[*ast.SourceFile]map[*ast.Symbol]struct{}
+	// formTwin is set for exactly the duration of an uncensused-form census
+	// classified under a declared-signature premise (ADR 0038): the checked
+	// twin of the implementation's file whose checker answers every type and
+	// symbol question the form classifiers ask. Nil otherwise, which routes
+	// those questions to the accepted program's own checker. It is a field
+	// rather than a parameter because the classifiers are reached through
+	// canonicalSymbol and symbolIsAssignedLocked, which every other census
+	// shares; see formChecker.
+	formTwin *premiseTwin
+	// premiseCensuses memoizes, per generation, the outcome of classifying an
+	// implementation's form census under a declared-signature premise, keyed
+	// by the implementation's span and the exact annotation the twin carried.
+	// Every proof family of an export demands the same implementation
+	// transcript, and the twin — a program rebuild and a cold checker — is
+	// the one part of that transcript worth not paying nine times.
+	premiseCensuses map[premiseCensusKey]premiseCensusResult
 	// calleeInvocations memoizes what a callable's body does with its own
 	// parameters, per callee symbol *and the depth it was asked at*, for the
 	// accepted generation. The descent reads a whole body per callee and real
@@ -287,6 +303,7 @@ func (p *project) ReleaseAnalysisState() {
 	}
 	p.checker = nil
 	p.checkerPool.drop()
+	p.premiseCensuses = nil
 	p.idsBySymbol = make(map[*ast.Symbol]typefacts.SymbolID)
 	p.symbolsByID = make(map[typefacts.SymbolID]*ast.Symbol)
 	p.exportedIdentities = nil
@@ -565,6 +582,7 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.checker = typeChecker
 	p.checkerPool = program.GetCheckerPool().(*singleCheckerPool)
 	p.release = release
+	p.premiseCensuses = nil
 	p.fs = candidateFS
 	p.versions = candidateVersions
 	p.generation++
@@ -1835,13 +1853,36 @@ func (p *project) canonicalSymbol(symbol *ast.Symbol) *ast.Symbol {
 		if symbol == nil || symbol.Flags&ast.SymbolFlagsAlias == 0 {
 			break
 		}
-		original := p.checker.GetAliasedSymbol(symbol)
+		original := p.formChecker().GetAliasedSymbol(symbol)
 		if original == nil || original == symbol {
 			break
 		}
 		symbol = original
 	}
 	return symbol
+}
+
+// formChecker is the checker the uncensused-form census asks: the premise
+// twin's while one is active (ADR 0038), the accepted program's otherwise.
+// Every symbol the twin's classifiers see was bound by the twin program, and
+// asking the accepted checker about it would answer about a node it never
+// checked; every symbol outside a twin census is the accepted program's.
+func (p *project) formChecker() *checker.Checker {
+	if p.formTwin != nil {
+		return p.formTwin.checker
+	}
+	return p.checker
+}
+
+// formIsRuntimeSourceFile is isCurrentSourceFile's reading for the form
+// census: the twin's own source file object is the accepted program's file at
+// that path re-parsed with one comment added, so a declaration inside it is
+// the same runtime bytes the accepted program carries.
+func (p *project) formIsRuntimeSourceFile(sourceFile *ast.SourceFile) bool {
+	if p.formTwin != nil && sourceFile == p.formTwin.file {
+		return true
+	}
+	return p.isCurrentSourceFile(sourceFile)
 }
 
 func declarationKind(node *ast.Node) string {

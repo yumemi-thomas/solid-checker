@@ -11,6 +11,7 @@ import ast "github.com/microsoft/typescript-go/internal/ast"
 import _ "unsafe"
 
 type Diagnostic = ast.Diagnostic
+type SourceFileParseOptions = ast.SourceFileParseOptions
 
 //go:linkname GetNodeAtPosition github.com/microsoft/typescript-go/internal/ast.GetNodeAtPosition
 func GetNodeAtPosition(file *ast.SourceFile, position int, includeJSDoc bool) *ast.Node
@@ -257,3 +258,7 @@ type Kind = ast.Kind
 const SymbolFlagsAlias = ast.SymbolFlagsAlias
 const SymbolFlagsOptional = ast.SymbolFlagsOptional
 const SymbolFlagsValue = ast.SymbolFlagsValue
+const SymbolFlagsClass = ast.SymbolFlagsClass
+const SymbolFlagsInterface = ast.SymbolFlagsInterface
+const SymbolFlagsEnum = ast.SymbolFlagsEnum
+const SymbolFlagsTypeAlias = ast.SymbolFlagsTypeAlias

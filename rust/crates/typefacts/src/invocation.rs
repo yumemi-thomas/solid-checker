@@ -392,6 +392,16 @@ pub enum ImplementationCompletionForm {
 /// Exact runtime implementation selected independently of the declaration
 /// expression used by [`ExportValueTranscript`]. This is not an invented
 /// invocation: the producer inspects the snapshot-replayed binding itself.
+/// One parameter's declared-type binding under which an implementation's
+/// uncensused-form census was classified (ADR 0038). See
+/// [`ExportImplementationTranscript::parameter_premises`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ParameterPremise {
+    pub index: usize,
+    pub r#type: Arc<str>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExportImplementationTranscript {
@@ -465,6 +475,30 @@ pub struct ExportImplementationTranscript {
     /// seven gates it actually asserts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub uncensused_invoking_forms: Vec<UncensusedInvokingForm>,
+    /// The declared-signature premise [`Self::uncensused_invoking_forms`] was
+    /// classified under, when the producer bound one (ADR 0038, handshake
+    /// protocol 22): one entry per parameter of this implementation, in
+    /// position order, each naming the type the export's *declared* call
+    /// signature gives that position — printed byte-identically to the
+    /// corresponding `SelectedParameter.value.type.text` of the export's own
+    /// transcript, which is how a consumer binds the premise to the signature
+    /// it already holds and the synthesized veto already samples from.
+    ///
+    /// Present, the forms were classified with the implementation's parameters
+    /// carrying those types instead of the implicit `any` an unannotated
+    /// JavaScript parameter has, and a consumer that closes a domain on the
+    /// resulting census records every entry as a condition of the closure.
+    /// Absent, the forms were classified over the parameters' own types, the
+    /// strictly more refusing reading; an empty list is never a premise. The
+    /// producer states it only on the export's root implementation, never on a
+    /// local declaration's transcript.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parameter_premises: Vec<ParameterPremise>,
+    /// Why the producer, holding a declared signature and a form a type could
+    /// have cleared, stated no premise. Diagnostic only; a consumer decides
+    /// nothing from it and reads nothing into its absence.
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub parameter_premise_refusal: Arc<str>,
     /// The conjunction of seven independent gates, every one of which the
     /// producer clears before setting this — and nothing else.
     ///
