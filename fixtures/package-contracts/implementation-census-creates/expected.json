@@ -4,15 +4,17 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "b8e992d4a5670ff65c4864a58fab89eb92543efdeb885778a987066934f61c8f",
+            "closureSha256": "f37dfffcb4148468d82c18448c831f08330922121718ffc9c74e9e2e243a6667",
             "path": "./index.js",
-            "sha256": "061bf896dc778770fba665d964ba4a8a826303a8b8e524492d85d73411d515cf"
+            "sha256": "ecc7c9141ac586d68e4230d008afe075db6817604f3c34661d7e7c44db90ad4c"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "fa6bef04fe45fd6f6c9d6cd5fe7379c8cee7c7c3a52fa22f7f6c9adece7f34ee"
+            "sha256": "366f46d4b503cd2aae31411287d18b8e7c3ac6de05545c142f7b8bfe2c555c7e"
           },
           "exports": {
+            "accessorTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "arrayRestRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "awaitIterateParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "callInitialized": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "callLibraryOutsideTable": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -43,11 +45,17 @@
             "nestedCallableParameterRead": "summary-8e800eff6ddbdabfd339f5dfad278e3aa7623ae76cb8598687f1d3fbdd01821f",
             "noRecipe": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
             "overloaded": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
+            "ownArrayRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "ownRestSpread": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "ownTableMemberRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "ownTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "ownTableWrite": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "patternElementDefault": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "patternParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "patternParameterDefault": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "patternRestParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "plain": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
+            "protoTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "reassignedHelper": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "reflectApply": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "returnedCallbackCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -68,7 +76,8 @@
             "viaHelperChain": "summary-5f5b804e83be5aede7d0abaf2dc45cc361fe1b11fc38c0a3ccf72ca6ebf6f4dc",
             "whileBreak": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "writtenAfterRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "writtenBeforeRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "writtenBeforeRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "writtenTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",

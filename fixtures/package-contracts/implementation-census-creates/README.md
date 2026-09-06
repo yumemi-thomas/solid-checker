@@ -271,3 +271,12 @@ ran. None hands `session` or `harness` to the package.
 - **`localBindingFromParameter` must bind twice.** One declaration would pin
   the leg but not the fixpoint — the second declaration roots only once the
   first has, and a single-pass implementation would pass a one-hop fixture.
+- **The ADR 0044 tables must be read with a computed key, and `key`/`index`
+  must stay `any` in `index.d.ts`.** A literal key binds a data property and
+  records no form at all — which is the very premise these exports make
+  explicit, so a literal-key fixture would certify vacuously and pin nothing.
+  `accessorTable` must keep its getter, `protoTable` its `__proto__:` member,
+  and `mutableTable` its module-level reassignment: each is the one thing that
+  disqualifies an otherwise data-only literal. `ownTableMemberRead` must read
+  one level further than `ownTableRead` over the *same* table, so the pair
+  pins that the premise roots a direct reference and never a chain.

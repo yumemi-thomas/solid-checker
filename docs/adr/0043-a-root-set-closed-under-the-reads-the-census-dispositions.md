@@ -102,7 +102,10 @@ Each exclusion is a value that is not the caller's, or one this walk cannot
 choose between:
 
 - a **rest** parameter and a **rest** element — the array and the object are
-  ones the engine built, which is the fact ADR 0042 already turns on;
+  ones the engine built, which is the fact ADR 0042 already turns on. Not the
+  caller's, so not rooted *here*; ADR 0044 roots an object rest element as a
+  value this program built, and `patternRestParameter` certifies under that
+  premise rather than this one;
 - a binding element carrying **its own default**, and a parameter pattern
   carrying one — the default value is an object *this* code created, the case
   ADR 0034 excluded a defaulted parameter for and the case ADR 0041 named when
@@ -146,7 +149,8 @@ choose between:
   `patternParameter`, `localBindingFromParameter` and `localPatternFromParameter`
   certify; `defaultedFromModuleValue`, `defaultedFromDefaulted`,
   `patternParameterDefault`, `patternElementDefault`, `patternRestParameter`,
-  `localBindingWritten` and `localBindingFromCall` refuse.
+  `localBindingWritten` and `localBindingFromCall` refuse (`patternRestParameter`
+  until ADR 0044, which roots the rest object as this program's).
 - **A trap the fixture records.** Three of those negatives first certified
   *vacuously*: written `source = { value: 1 }`, the compiler binds `value` as a
   data property of a literal in the same file, so the producer records no form

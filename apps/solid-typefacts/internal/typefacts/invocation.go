@@ -527,6 +527,13 @@ const (
 	// that names another such slot, so the value is caller-supplied whether or
 	// not an argument was passed here.
 	SubjectRootParameterDefault SubjectRootDerivation = "parameter-default"
+	// SubjectRootOwnLiteral is ADR 0044's: the subject is a binding this
+	// program initialized from an **object or array literal**, or from a rest
+	// element of a destructuring, whose every own property the specification
+	// creates with CreateDataPropertyOrThrow. No SubjectParameter accompanies
+	// it — the value is not the caller's, it is this program's — and
+	// SubjectDeclaration names the binding instead.
+	SubjectRootOwnLiteral SubjectRootDerivation = "own-literal"
 )
 
 type UncensusedInvokingForm struct {
@@ -602,6 +609,18 @@ type UncensusedInvokingForm struct {
 	// form, exactly as the control-flow incompleteness classes are read: a
 	// value a later revision adds arrives as a refusal rather than as silence.
 	SubjectRoot SubjectRootDerivation `cbor:"subjectRoot,omitempty" json:"subjectRoot,omitempty"`
+	// SubjectDeclaration is the exact source range of the variable declaration
+	// the subject is rooted at, stated for SubjectRootOwnLiteral and for that
+	// derivation alone (ADR 0044, handshake protocol 28).
+	//
+	// It is what a consumer can check for itself. Every other derivation names
+	// a *parameter* of the transcript's own declaration, which the consumer
+	// already holds; this one names a binding elsewhere in the file, and the
+	// premise turns on that binding sitting in the analyzed artifact's own
+	// runtime source rather than in a declaration file or a dependency. A
+	// consumer must refuse an own-literal subject whose declaration it cannot
+	// place there.
+	SubjectDeclaration *Location `cbor:"subjectDeclaration,omitempty" json:"subjectDeclaration,omitempty"`
 }
 
 type ParameterValueSource struct {

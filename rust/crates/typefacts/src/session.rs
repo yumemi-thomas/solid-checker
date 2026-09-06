@@ -3764,6 +3764,7 @@ mod tests {
             subject_parameter: None,
             subject_write: false,
             subject_root: String::new(),
+            subject_declaration: None,
         }
     }
 

@@ -86,3 +86,15 @@ export declare function localPatternFromParameter(source: {
 }): unknown;
 export declare function localBindingWritten(source: { inner: any }): unknown;
 export declare function localBindingFromCall(source: { text: string }): unknown;
+// ADR 0044: a value this program built. `key` and `index` stay `any` so the
+// element access keeps a computed key the checker resolves no symbol for —
+// a literal key would bind a data property and record no form at all.
+export declare function ownTableRead(key: any): unknown;
+export declare function ownArrayRead(index: any): unknown;
+export declare function ownTableWrite(key: any): void;
+export declare function ownRestSpread(source: any): unknown;
+export declare function accessorTableRead(key: any): unknown;
+export declare function protoTableRead(key: any): unknown;
+export declare function writtenTableRead(key: any): unknown;
+export declare function ownTableMemberRead(key: any): unknown;
+export declare function arrayRestRead(source: any): unknown;

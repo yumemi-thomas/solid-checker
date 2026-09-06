@@ -83,6 +83,13 @@ type project struct {
 	// rather than once per returned-callable resolution. Checker-owned symbol
 	// pointers make it generation-scoped, like runtimePaths.
 	assignedSymbols map[*ast.SourceFile]map[*ast.Symbol]struct{}
+	// ownLiteralSymbols memoizes ADR 0044's answer per symbol: the variable
+	// declaration a name is bound to when this program initialized it from an
+	// object or array literal, or nil. Keyed by symbol rather than by file
+	// because a module-level lookup table is read through an *import* at its
+	// use site, so the declaration is behind an alias. A premise twin is a
+	// different program with different symbols and never shares entries.
+	ownLiteralSymbols map[*ast.Symbol]*ast.Node
 	// formTwin is set for exactly the duration of an uncensused-form census
 	// classified under a declared-signature premise (ADR 0038): the checked
 	// twin of the implementation's file whose checker answers every type and

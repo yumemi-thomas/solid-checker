@@ -316,8 +316,12 @@ func (p *project) uncensusedInvokingFormCensusLocked(
 				enclosingLocation := nodeLocation(enclosing)
 				form.EnclosingCallable = &enclosingLocation
 			}
-			form.SubjectParameter, form.SubjectWrite, form.SubjectRoot =
-				p.accessorFormSubjectParameterLocked(node, kind, roots)
+			if _, _, subject := p.accessorFormSubjectParameterLocked(node, kind, roots); subject != nil {
+				form.SubjectParameter = subject.parameter
+				form.SubjectWrite = subject.write
+				form.SubjectRoot = subject.derivation
+				form.SubjectDeclaration = subject.declaration
+			}
 			forms = append(forms, form)
 		},
 	)
@@ -435,10 +439,131 @@ func (p *project) parameterSubjectRootsLocked(implementation *ast.Node) *paramet
 		}
 	}
 	p.rootLocalDeclarationsLocked(implementation, roots)
-	if len(roots.bySymbol) == 0 {
+	return roots
+}
+
+// ownLiteralDeclarationLocked answers the variable declaration a name is bound
+// to when this program initialized it from an object or array literal, or from
+// an object pattern's rest element (ADR 0044), and nil otherwise.
+//
+// The lookup is by **symbol**, not by file, because the shape that matters is a
+// module-level lookup table declared in one module and read in another: at the
+// use site the identifier binds an import, so the declaration this premise is
+// about lives behind an alias. The write check is asked over the declaring
+// file, which is where an assignment to that binding would be.
+//
+// Memoized per symbol. A premise twin is a different program with different
+// symbols, so its entries never mix with the accepted program's.
+func (p *project) ownLiteralDeclarationLocked(symbol *ast.Symbol) *ast.Node {
+	if symbol == nil {
 		return nil
 	}
-	return roots
+	if declaration, computed := p.ownLiteralSymbols[symbol]; computed {
+		return declaration
+	}
+	declaration := p.resolveOwnLiteralDeclarationLocked(symbol)
+	if p.ownLiteralSymbols == nil {
+		p.ownLiteralSymbols = make(map[*ast.Symbol]*ast.Node)
+	}
+	p.ownLiteralSymbols[symbol] = declaration
+	return declaration
+}
+
+func (p *project) resolveOwnLiteralDeclarationLocked(symbol *ast.Symbol) *ast.Node {
+	target := symbol
+	if target.Flags&ast.SymbolFlagsAlias != 0 {
+		target = p.canonicalSymbol(p.formChecker().GetAliasedSymbol(target))
+		if target == nil {
+			return nil
+		}
+	}
+	if len(target.Declarations) != 1 || target.Declarations[0] == nil {
+		return nil
+	}
+	declaration := target.Declarations[0]
+	switch {
+	case ast.IsVariableDeclaration(declaration):
+		name := declaration.Name()
+		if name == nil || !ast.IsIdentifier(name) {
+			return nil
+		}
+		initializer := declaration.Initializer()
+		if initializer == nil || !ownDataOnlyLiteral(identityPreservingUnwrap(initializer)) {
+			return nil
+		}
+	case ast.IsBindingElement(declaration):
+		// A **rest** element of an object pattern: CopyDataProperties builds
+		// what it binds, so its own properties are data properties whatever the
+		// source's were — the same fact ADR 0043 excludes a rest element from
+		// *parameter* rooting for. An array pattern's rest element is not here:
+		// its elements come from the source's iterator, which is the source's
+		// code and an iteration question.
+		name := declaration.Name()
+		if name == nil || !ast.IsIdentifier(name) || !isObjectRestElementName(name) {
+			return nil
+		}
+	default:
+		return nil
+	}
+	if p.symbolIsAssignedLocked(target, declaration) {
+		return nil
+	}
+	return declaration
+}
+
+// isObjectRestElementName reports whether an identifier is the binding of a
+// **rest** element of an object pattern.
+func isObjectRestElementName(name *ast.Node) bool {
+	parent := name.Parent
+	if parent == nil || !ast.IsBindingElement(parent) {
+		return false
+	}
+	element := parent.AsBindingElement()
+	if element == nil || element.DotDotDotToken == nil {
+		return false
+	}
+	return parent.Parent != nil && ast.IsObjectBindingPattern(parent.Parent)
+}
+
+// ownDataOnlyLiteral reports whether an expression is an object or array
+// literal every own property of which the specification creates as a **data**
+// property.
+//
+// For an object literal that means no `get`/`set` member and no `__proto__:`
+// member — the second sets the prototype rather than a property, which would
+// replace the one prototype chain this premise reasons about. A spread member
+// is admitted: CopyDataProperties creates data properties whatever the source
+// held, which is the whole point. A method or a shorthand is a data property
+// holding a function.
+//
+// For an array literal every element is created by index with
+// CreateDataPropertyOrThrow, a spread element included, so no member needs
+// inspecting at all.
+func ownDataOnlyLiteral(node *ast.Node) bool {
+	if node == nil {
+		return false
+	}
+	switch {
+	case ast.IsArrayLiteralExpression(node):
+		return true
+	case ast.IsObjectLiteralExpression(node):
+		for _, property := range node.AsObjectLiteralExpression().Properties.Nodes {
+			switch nodeKindName(property) {
+			case "GetAccessor", "SetAccessor":
+				return false
+			}
+			if name := property.Name(); name != nil && ast.IsIdentifier(name) &&
+				name.Text() == "__proto__" {
+				return false
+			}
+			if name := property.Name(); name != nil && ast.IsStringLiteral(name) &&
+				name.Text() == "__proto__" {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // parameterIsWrittenLocked answers the ADR 0029 write question for one
@@ -574,15 +699,21 @@ func (p *project) rootLocalDeclarationsLocked(
 			if name == nil || initializer == nil {
 				continue
 			}
+			// Only a caller-provenance root propagates through a local
+			// binding. An own literal roots a direct reference alone
+			// (ADR 0044): what one of its properties *holds* is an arbitrary
+			// value, so `const item = table[key]` names nothing this premise
+			// can speak for.
 			root := p.subjectRootLocked(initializer, roots)
-			if root == nil {
+			if root == nil || root.parameter == nil {
 				continue
 			}
+			derived := subjectRoot{index: *root.parameter, derivation: root.derivation}
 			switch {
 			case ast.IsIdentifier(name):
-				added = p.rootNameLocked(implementation, name, *root, roots) || added
+				added = p.rootNameLocked(implementation, name, derived, roots) || added
 			case ast.IsObjectBindingPattern(name):
-				added = p.rootBoundNamesLocked(implementation, name, *root, roots) || added
+				added = p.rootBoundNamesLocked(implementation, name, derived, roots) || added
 			}
 		}
 		if !added {
@@ -598,9 +729,29 @@ func (p *project) rootLocalDeclarationsLocked(
 // nested callable's own parameter, a literal — answers nil.
 func (p *project) subjectRootLocked(
 	subject *ast.Node, roots *parameterSubjectRoots,
-) *subjectRoot {
+) *resolvedSubject {
 	if roots == nil {
 		return nil
+	}
+	// An own literal roots only a **direct** reference. `table[key]` reads a
+	// data property of the literal, but what that property *holds* is an
+	// arbitrary value, so `table[key].member` is a second read this premise
+	// says nothing about — and refuses, while the inner one clears.
+	if direct := identityPreservingUnwrap(subject); direct != nil && ast.IsIdentifier(direct) {
+		if symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(direct)); symbol != nil {
+			if _, caller := roots.bySymbol[symbol]; !caller {
+				// A symbol the caller-provenance legs rooted keeps that
+				// reading: it is the stronger fact and the one a consumer of
+				// ADR 0034 has reviewed.
+				if declaration := p.ownLiteralDeclarationLocked(symbol); declaration != nil {
+					location := nodeLocation(declaration)
+					return &resolvedSubject{
+						derivation:  typefacts.SubjectRootOwnLiteral,
+						declaration: &location,
+					}
+				}
+			}
+		}
 	}
 	node := identityPreservingUnwrap(subject)
 	for node != nil && (ast.IsPropertyAccessExpression(node) || nodeKindName(node) == "ElementAccessExpression") {
@@ -617,7 +768,19 @@ func (p *project) subjectRootLocked(
 	if !rooted {
 		return nil
 	}
-	return &root
+	index := root.index
+	return &resolvedSubject{parameter: &index, derivation: root.derivation}
+}
+
+// resolvedSubject is what one form's subject resolved to: the derivation that
+// rooted it, and exactly the accompanying fact that derivation carries — a
+// parameter index for the caller-provenance derivations, a declaration
+// location for the own-literal one.
+type resolvedSubject struct {
+	parameter   *int
+	derivation  typefacts.SubjectRootDerivation
+	declaration *typefacts.Location
+	write       bool
 }
 
 // subjectParameterLocked answers the parameter a subject is rooted at under
@@ -631,8 +794,7 @@ func (p *project) subjectParameterLocked(subject *ast.Node, roots *parameterSubj
 	if root == nil || root.derivation != typefacts.SubjectRootParameter {
 		return nil
 	}
-	index := root.index
-	return &index
+	return root.parameter
 }
 
 // accessorFormSubjectParameterLocked states the subject parameter of an
@@ -655,27 +817,27 @@ func (p *project) accessorFormSubjectParameterLocked(
 	node *ast.Node,
 	kind typefacts.UncensusedInvokingFormKind,
 	roots *parameterSubjectRoots,
-) (*int, bool, typefacts.SubjectRootDerivation) {
+) (*int, bool, *resolvedSubject) {
 	if roots == nil {
-		return nil, false, ""
+		return nil, false, nil
 	}
 	switch kind {
 	case typefacts.UncensusedGetAccessor, typefacts.UncensusedSetAccessor,
 		typefacts.UncensusedPropertyAccessUnknownAccessor,
 		typefacts.UncensusedIterationProtocol:
 	default:
-		return nil, false, ""
+		return nil, false, nil
 	}
 	subjectExpression, write := accessorFormSubjectExpression(node)
 	if subjectExpression == nil {
-		return nil, false, ""
+		return nil, false, nil
 	}
 	root := p.subjectRootLocked(subjectExpression, roots)
 	if root == nil {
-		return nil, false, ""
+		return nil, false, nil
 	}
-	index := root.index
-	return &index, write, root.derivation
+	root.write = write
+	return root.parameter, write, root
 }
 
 // accessorFormSubjectExpression answers the expression whose value the form

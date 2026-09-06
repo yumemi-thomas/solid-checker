@@ -11494,7 +11494,9 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 56] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 65] = [
+        "accessorTableRead",
+        "arrayRestRead",
         "awaitIterateParameter",
         "callInitialized",
         "callLibraryOutsideTable",
@@ -11525,11 +11527,17 @@ export const value = phantom;
         "nestedCallableParameterRead",
         "noRecipe",
         "overloaded",
+        "ownArrayRead",
+        "ownRestSpread",
+        "ownTableMemberRead",
+        "ownTableRead",
+        "ownTableWrite",
         "patternElementDefault",
         "patternParameter",
         "patternParameterDefault",
         "patternRestParameter",
         "plain",
+        "protoTableRead",
         "reassignedHelper",
         "reflectApply",
         "returnedCallbackCoercion",
@@ -11551,6 +11559,7 @@ export const value = phantom;
         "whileBreak",
         "writtenAfterRead",
         "writtenBeforeRead",
+        "writtenTableRead",
     ];
 
     /// The census fixture as one published artifact, proposing `creates: []`
@@ -11559,12 +11568,13 @@ export const value = phantom;
     /// The census fixture's exports whose valueless-completion walk is clean
     /// (ADR 0035): block-bodied, neither `async` nor generator, and no
     /// `return` carrying an expression in their own body.
-    const CENSUS_FIXTURE_VALUELESS_EXPORTS: [&str; 12] = [
+    const CENSUS_FIXTURE_VALUELESS_EXPORTS: [&str; 13] = [
         "chainModuleCallbacks",
         "cycle",
         "deep",
         "labelledBreak",
         "loopCall",
+        "ownTableWrite",
         "setterOnModuleValue",
         "setterOnParameter",
         "stdlibRefInvoker",
@@ -12684,6 +12694,8 @@ export const value = phantom;
     #[test]
     fn the_generated_census_fixture_carries_every_creates_candidate_into_planning() {
         let proposing = [
+            "accessorTableRead",
+            "arrayRestRead",
             "awaitIterateParameter",
             "callInitialized",
             "callLibraryOutsideTable",
@@ -12713,11 +12725,17 @@ export const value = phantom;
             "nestedCallableParameterRead",
             "noRecipe",
             "overloaded",
+            "ownArrayRead",
+            "ownRestSpread",
+            "ownTableMemberRead",
+            "ownTableRead",
+            "ownTableWrite",
             "patternElementDefault",
             "patternParameter",
             "patternParameterDefault",
             "patternRestParameter",
             "plain",
+            "protoTableRead",
             "reassignedHelper",
             "reflectApply",
             "returnedCallbackCoercion",
@@ -12738,6 +12756,7 @@ export const value = phantom;
             "whileBreak",
             "writtenAfterRead",
             "writtenBeforeRead",
+            "writtenTableRead",
         ];
         let plan = census_generated_fixture_plan();
         let creates = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates));
@@ -12934,7 +12953,9 @@ export const value = phantom;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
-    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 54] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 63] = [
+        "accessorTableRead",
+        "arrayRestRead",
         "awaitIterateParameter",
         "callInitialized",
         "callLibraryOutsideTable",
@@ -12964,11 +12985,17 @@ export const value = phantom;
         "nestedCallableParameterRead",
         "noRecipe",
         "overloaded",
+        "ownArrayRead",
+        "ownRestSpread",
+        "ownTableMemberRead",
+        "ownTableRead",
+        "ownTableWrite",
         "patternElementDefault",
         "patternParameter",
         "patternParameterDefault",
         "patternRestParameter",
         "plain",
+        "protoTableRead",
         "reassignedHelper",
         "reflectApply",
         "returnedCallbackCoercion",
@@ -12989,6 +13016,7 @@ export const value = phantom;
         "whileBreak",
         "writtenAfterRead",
         "writtenBeforeRead",
+        "writtenTableRead",
     ];
     /// What the census fixture's generated candidates come to under ADR 0036:
     /// the exports whose census passes and whose (hand or synthesized) veto
@@ -13018,7 +13046,7 @@ export const value = phantom;
     /// types to the helper as its premise; `untypedCoercion` (declared
     /// `unknown`), `helperSpreadCoercion` (a spread carries no slot) and
     /// `helperUntypedArgument` (an `any` slot) are refused.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 25] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 30] = [
         "chainCallbacks",
         "constBound",
         "cycle",
@@ -13031,7 +13059,12 @@ export const value = phantom;
         "memberParameterRooted",
         "noRecipe",
         "overloaded",
+        "ownArrayRead",
+        "ownRestSpread",
+        "ownTableRead",
+        "ownTableWrite",
         "patternParameter",
+        "patternRestParameter",
         "plain",
         "returnedCallbackCoercion",
         "setterOnParameter",
@@ -13045,7 +13078,9 @@ export const value = phantom;
         "viaHelperChain",
         "whileBreak",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 29] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 33] = [
+        ("accessorTableRead", "census"),
+        ("arrayRestRead", "census"),
         ("awaitIterateParameter", "census"),
         ("callInitialized", "census"),
         ("callLibraryOutsideTable", "census"),
@@ -13063,9 +13098,10 @@ export const value = phantom;
         ("loopCall", "veto"),
         ("moduleReceiverRead", "census"),
         ("nestedCallableParameterRead", "census"),
+        ("ownTableMemberRead", "census"),
         ("patternElementDefault", "census"),
         ("patternParameterDefault", "census"),
-        ("patternRestParameter", "census"),
+        ("protoTableRead", "census"),
         ("reassignedHelper", "census"),
         ("reflectApply", "census"),
         ("setterOnModuleValue", "census"),
@@ -13075,11 +13111,13 @@ export const value = phantom;
         ("untypedCoercion", "census"),
         ("writtenAfterRead", "census"),
         ("writtenBeforeRead", "census"),
+        ("writtenTableRead", "census"),
     ];
-    const CENSUS_FIXTURE_GENERATED_RETURNS_CLOSED: [&str; 10] = [
+    const CENSUS_FIXTURE_GENERATED_RETURNS_CLOSED: [&str; 11] = [
         "chainModuleCallbacks",
         "cycle",
         "deep",
+        "ownTableWrite",
         "setterOnModuleValue",
         "setterOnParameter",
         "stdlibRefInvoker",
@@ -13453,10 +13491,71 @@ export const value = phantom;
         }
     }
 
+    /// ADR 0044: a value *this program* built. Every own property of an object
+    /// or array literal is created with CreateDataPropertyOrThrow, so reading
+    /// any member of one reaches a data property or the engine's own prototype
+    /// chain — and the census already takes that premise wherever the key is a
+    /// literal, silently, by recording no form. These four make it explicit
+    /// for the computed key, which is the case the checker resolves no symbol
+    /// for; `ownRestSpread` adds the object rest element, whose result
+    /// CopyDataProperties builds the same way.
+    #[test]
+    fn the_probe_gate_tracer_census_closes_a_read_of_a_value_this_program_built() {
+        for export in [
+            "ownTableRead",
+            "ownArrayRead",
+            "ownTableWrite",
+            "ownRestSpread",
+            // ADR 0043's rest-element negative, whose object the engine built
+            // — which is exactly what roots it here. A parameter pattern's
+            // rest element is built by the same CopyDataProperties.
+            "patternRestParameter",
+        ] {
+            let Some((_, outcome)) = census_certify(export, Some("root-closure.mjs")) else {
+                return;
+            };
+            let finalized = outcome
+                .unwrap_or_else(|error| panic!("{export} certifies under ADR 0044: {error}"));
+            assert!(
+                finalized.withheld_closures().is_empty(),
+                "{export}: {:?}",
+                finalized.withheld_closures()
+            );
+            assert!(
+                creates_is_closed_in(finalized.canonical_main(), export),
+                "{export}"
+            );
+        }
+    }
+
+    /// Its boundary. Each of these is a value whose own properties this program
+    /// did *not* create as data properties, or one it may no longer hold, or
+    /// one the premise never spoke for.
+    #[test]
+    fn the_probe_gate_tracer_census_stops_at_the_own_literals_boundary() {
+        for export in [
+            // A literal that installs a getter of this module's own.
+            "accessorTableRead",
+            // A literal that replaces its prototype.
+            "protoTableRead",
+            // A binding the module writes.
+            "writtenTableRead",
+            // One level further in: what a data property holds is arbitrary.
+            "ownTableMemberRead",
+            // An array pattern's rest element, whose elements came from the
+            // source's iterator.
+            "arrayRestRead",
+        ] {
+            assert_census_withholds(export, &["uncensused invoking form"]);
+        }
+    }
+
     /// The boundary of that closure, one refusal each. Every one of these is a
-    /// value the declaration itself may have made, or one the engine made, or
-    /// one nothing roots at all — and the premise is not flow-sensitive, which
-    /// is what `localBindingWritten` pins.
+    /// value the declaration itself may have made, or one nothing roots at all
+    /// — and the premise is not flow-sensitive, which is what
+    /// `localBindingWritten` pins. The rest element that used to sit here
+    /// certifies since ADR 0044, under the own-literal premise rather than this
+    /// one.
     #[test]
     fn the_probe_gate_tracer_census_stops_at_the_root_closures_boundary() {
         for export in [
@@ -13467,8 +13566,6 @@ export const value = phantom;
             // A default on the pattern, and a default on the element.
             "patternParameterDefault",
             "patternElementDefault",
-            // A rest element: the object is the engine's, not the caller's.
-            "patternRestParameter",
             // A written local, and a local bound from a call result.
             "localBindingWritten",
             "localBindingFromCall",

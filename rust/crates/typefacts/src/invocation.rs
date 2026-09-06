@@ -689,6 +689,17 @@ pub struct UncensusedInvokingForm {
     /// collapsing into a reviewed arm.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub subject_root: String,
+    /// The exact source range of the variable declaration an `own-literal`
+    /// subject is rooted at, and stated for that derivation alone (ADR 0044,
+    /// handshake protocol 28).
+    ///
+    /// It is the half of that premise a consumer can check for itself. Every
+    /// other derivation names a parameter of the transcript's own declaration;
+    /// this one names a binding elsewhere in the file, and the premise turns on
+    /// that binding sitting in the analyzed artifact's own **runtime source**
+    /// rather than in a declaration file or a dependency.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject_declaration: Option<Location>,
 }
 
 /// The closed vocabulary of invoking forms the call census does not record.

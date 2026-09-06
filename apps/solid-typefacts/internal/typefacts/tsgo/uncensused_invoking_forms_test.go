@@ -1359,7 +1359,14 @@ func TestExportValueDemandDigestSeparatesLocalDeclarationLocations(t *testing.T)
 // ADR 0040 adds write position to that, and the position is stated beside the
 // subject, so the two are separable by a consumer that must refuse one of
 // them.
-const subjectSource = `const registry: any = { value: 1, inner: [{ value: 2 }] };
+const subjectTableSource = `export const importedTable: any = { first: { value: 1 } };
+export let importedWrittenTable: any = { first: 1 };
+importedWrittenTable = { second: 2 };
+`
+
+const subjectSource = `import { importedTable, importedWrittenTable } from "./tables.js";
+
+const registry: any = { value: 1, inner: [{ value: 2 }] };
 
 export function parameterRead(source: any): unknown {
 	return source.value;
@@ -1394,6 +1401,62 @@ export function defaultedParameter(source: any = registry): unknown {
 
 export function destructuredParameter({ inner }: any): unknown {
 	return inner.value;
+}
+
+// ADR 0044: values this program built.
+const ownTable: any = { first: { value: 1 } };
+// The shape that matters most: a lookup table declared in one module and read
+// in another, so the identifier at the use site binds an import.
+export function importedTableRead(key: any): unknown {
+	return importedTable[key];
+}
+
+export function importedWrittenTableRead(key: any): unknown {
+	return importedWrittenTable[key];
+}
+
+const ownArray: any = ["first", "second"];
+const ownAccessorTable: any = {
+	get first() {
+		return 1;
+	},
+};
+const ownProtoTable: any = { __proto__: registry, first: 1 };
+let ownWrittenTable: any = { first: 1 };
+ownWrittenTable = registry;
+
+export function ownTableRead(key: any): unknown {
+	return ownTable[key];
+}
+
+export function ownArrayRead(index: any): unknown {
+	return ownArray[index];
+}
+
+export function ownTableMemberRead(key: any): unknown {
+	return ownTable[key].value;
+}
+
+export function ownAccessorTableRead(key: any): unknown {
+	return ownAccessorTable[key];
+}
+
+export function ownProtoTableRead(key: any): unknown {
+	return ownProtoTable[key];
+}
+
+export function ownWrittenTableRead(key: any): unknown {
+	return ownWrittenTable[key];
+}
+
+export function ownRestSpread(source: any): unknown {
+	const { first, ...rest } = source;
+	return first === undefined ? { ...rest } : first;
+}
+
+export function ownArrayRestRead(source: any): unknown {
+	const [, ...tail] = source;
+	return tail[0];
 }
 
 // ADR 0043: the root set closed under the reads the census dispositions.
@@ -1478,7 +1541,10 @@ export function localViaCall(value: unknown): unknown {
 `
 
 func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises(t *testing.T) {
-	analyzer, dir := markerProject(t, map[string]string{"subjects.ts": subjectSource})
+	analyzer, dir := markerProject(t, map[string]string{
+		"subjects.ts": subjectSource,
+		"tables.ts":   subjectTableSource,
+	})
 	path := filepath.Join(dir, "subjects.ts")
 	zero, one := 0, 1
 	for _, testCase := range []struct {
@@ -1518,6 +1584,26 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 		// holds afterwards is not, and neither is a call result.
 		{"localBindingWritten", []*int{&zero, nil}},
 		{"localBindingFromCall", []*int{&zero, nil}},
+		// ADR 0044: a value this program built states no parameter at all —
+		// the premise is not about the caller — so `want` is nil for every one
+		// of these and the derivation below is what separates them.
+		{"ownTableRead", []*int{nil}},
+		{"ownArrayRead", []*int{nil}},
+		// The outer read of a chain refuses; the inner one is the first form.
+		{"ownTableMemberRead", []*int{nil, nil}},
+		{"ownAccessorTableRead", []*int{nil}},
+		{"ownProtoTableRead", []*int{nil}},
+		{"ownWrittenTableRead", []*int{nil}},
+		// The pattern's own elements are rooted at the parameter; the spread of
+		// the rest element is the own-literal form.
+		{"ownRestSpread", []*int{&zero, &zero, nil}},
+		// The array pattern's iteration is parameter-rooted; the read of what
+		// it bound is not covered at all.
+		{"ownArrayRestRead", []*int{&zero, nil}},
+		// The cross-module case: the identifier binds an import, and the
+		// declaration this premise is about is behind the alias.
+		{"importedTableRead", []*int{nil}},
+		{"importedWrittenTableRead", []*int{nil}},
 		// ADR 0040: a write into the caller's object roots exactly as a read
 		// of it does, and says so.
 		{"setterOnParameter", []*int{&zero}},
@@ -1581,23 +1667,35 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 		{"localBindingFromParameter", typefacts.SubjectRootParameter},
 		{"localPatternFromParameter", typefacts.SubjectRootParameter},
 		{"defaultedFromParameter", typefacts.SubjectRootParameterDefault},
+		{"ownTableRead", typefacts.SubjectRootOwnLiteral},
+		{"ownArrayRead", typefacts.SubjectRootOwnLiteral},
+		{"ownRestSpread", typefacts.SubjectRootOwnLiteral},
+		{"importedTableRead", typefacts.SubjectRootOwnLiteral},
 	} {
 		transcript := implementationTranscriptFor(t, analyzer, path, subjectSource, testCase.export)
 		var stated int
 		for _, form := range transcript.UncensusedInvokingForms {
-			if form.SubjectParameter == nil {
-				if form.SubjectRoot != "" {
-					t.Fatalf("%s: an unrooted form states derivation %q", testCase.export, form.SubjectRoot)
+			if form.SubjectRoot == "" {
+				if form.SubjectParameter != nil || form.SubjectDeclaration != nil {
+					t.Fatalf("%s: a form states a subject with no derivation", testCase.export)
 				}
 				continue
 			}
-			stated++
-			if form.SubjectRoot != testCase.derivation {
-				t.Fatalf("%s: derivation = %q, want %q", testCase.export, form.SubjectRoot, testCase.derivation)
+			// An own-literal subject carries a declaration and never an index;
+			// every other derivation is the exact opposite.
+			if (form.SubjectRoot == typefacts.SubjectRootOwnLiteral) !=
+				(form.SubjectDeclaration != nil) ||
+				(form.SubjectRoot == typefacts.SubjectRootOwnLiteral) ==
+					(form.SubjectParameter != nil) {
+				t.Fatalf("%s: derivation %q carries the wrong companion fact", testCase.export, form.SubjectRoot)
 			}
+			if form.SubjectRoot != testCase.derivation {
+				continue
+			}
+			stated++
 		}
 		if stated == 0 {
-			t.Fatalf("%s: no form states a subject", testCase.export)
+			t.Fatalf("%s: no form states derivation %q", testCase.export, testCase.derivation)
 		}
 	}
 }

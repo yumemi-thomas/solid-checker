@@ -1,5 +1,43 @@
 # Precision backlog
 
+## A value this program built (2026-09-07)
+
+ADR 0044, the sixth slice of the lever ADR 0034 opened and the first in it that
+is not a claim about the caller. A binding this program initialized from an
+object or array literal, or from an object pattern's rest element, has only
+data properties — the specification creates every one of them with
+CreateDataPropertyOrThrow — so a form whose subject is a *direct* reference to
+it reaches a data property or the engine's own prototype chain. It travels as
+`subjectRoot: own-literal` with `subjectDeclaration` and no parameter; the
+verifier places the declaration in the artifact's own runtime source before
+reading the premise; the receipt records `own-literal-accessor`,
+`own-literal-accessor-write` or `own-literal-iterable`. Handshake protocol
+27 → 28.
+
+**The premise was already taken, silently.** `table.member` records no form at
+all, because the compiler binds the member to a `PropertyAssignment` in runtime
+source and the accessor classifier sees no accessor. Only the computed key
+refused, and it refused because the checker resolves no symbol — the object had
+not changed. So the hole this premise carries (a third party calling
+`Object.defineProperty` on an exported table) is a hole the census has carried
+since the classifier was written; this ADR writes it down and puts it in every
+receipt that rests on it, which is the precondition for ever closing it.
+
+Measured: withheld 662 → 631, `censusRefused` 605 → 574, element reads
+103 → 46, spreads 41 → 29, statuses unchanged at 368 / 30. **Thirty-one
+candidates.** Twelve of them arrived only when the alias was followed: the
+tables are declared in one module and read in another, and a first draft that
+scanned the censusing file measured 643.
+
+Recorded, not closed: an initializer that is anything but a literal (a call,
+`new`, a conditional); a literal installing a `get`/`set` or a `__proto__:`
+member; an array pattern's rest element (its elements came from the source's
+iterator); a written or twice-declared binding; a chain — `table[k].x` refuses
+while `table[k]` clears, because what a data property holds is arbitrary. The
+next tranche is measured and named: the fresh array a reviewed default-library
+member returns (`String.prototype.match`, `split`, `Array.prototype.filter`),
+which is the same specification argument over a table of members.
+
 ## A root set closed under the reads the census dispositions (2026-09-06)
 
 ADR 0043, the fifth slice of ADR 0034's premise, taking the case ADR 0041

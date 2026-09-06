@@ -4,7 +4,16 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 27: a stated SubjectParameter is accompanied
+// TypeFactsHandshakeProtocol is 28: a form's subject may be rooted at a
+// binding this program initialized from an **object or array literal**, or
+// from an object pattern's rest element — SubjectRoot `own-literal`, with
+// SubjectDeclaration naming the binding and no SubjectParameter at all
+// (ADR 0044). Every own property of such a value is created by
+// CreateDataPropertyOrThrow, so reading any member of it, computed key
+// included, reaches a data property or the engine's own prototype chain. A
+// protocol-27 consumer required a subject parameter beside every derivation
+// and would refuse the shape, so the number moves.
+// Protocol 27: a stated SubjectParameter is accompanied
 // by SubjectRoot, the derivation that rooted the form's subject at that slot
 // (ADR 0043). The root set is closed under the reads the census already
 // dispositions — a name an object binding pattern in parameter position binds,
@@ -167,8 +176,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 27
-	TypeFactsSchemaSHA256             = "sha256:5550ff0756cdccb6b1dbaf55a4a9c9f06992d99da53e1b07242c5805b28ac081"
+	TypeFactsHandshakeProtocol uint64 = 28
+	TypeFactsSchemaSHA256             = "sha256:5ae2668c77f09c6a9e067c51785992bcaa7c3b7cc37449310908a1b05465bcc0"
 )
 
 type ServiceHandshake struct {

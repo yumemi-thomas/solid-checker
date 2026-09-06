@@ -7715,6 +7715,9 @@ enum CensusDisposition {
     ParameterRootedAccessorWrite,
     ParameterRootedIterable,
     ParameterRootedElement,
+    OwnLiteralAccessor,
+    OwnLiteralAccessorWrite,
+    OwnLiteralIterable,
     StandardLibrary,
     DialectAxiom,
     LocalRecursion,
@@ -7730,6 +7733,9 @@ impl CensusDisposition {
             Self::ParameterRootedAccessorWrite => "parameter-rooted-accessor-write",
             Self::ParameterRootedIterable => "parameter-rooted-iterable",
             Self::ParameterRootedElement => "parameter-rooted-element",
+            Self::OwnLiteralAccessor => "own-literal-accessor",
+            Self::OwnLiteralAccessorWrite => "own-literal-accessor-write",
+            Self::OwnLiteralIterable => "own-literal-iterable",
             Self::StandardLibrary => "standard-library",
             Self::DialectAxiom => "dialect-axiom",
             Self::LocalRecursion => "local-recursion",
@@ -7806,6 +7812,15 @@ const CENSUS_PARAMETER_ROOTED_READ_FORMS_PROTOCOL: u64 = 25;
 /// premise is the absence-as-evidence this census exists to prevent. The
 /// predicate refuses an empty derivation for the same reason, so this constant
 /// is belt beside that check rather than the only guard.
+/// The handshake protocol at which a form's subject could be rooted at a
+/// binding this program built rather than at a parameter (ADR 0044).
+///
+/// A protocol-27 producer states a derivation only beside a subject parameter,
+/// so `own-literal` cannot arrive from one; the constant is what lets the
+/// disposition below read the absence of a parameter as part of a stated
+/// premise rather than as a missing field.
+const CENSUS_OWN_LITERAL_SUBJECT_PROTOCOL: u64 = 28;
+
 const CENSUS_SUBJECT_ROOT_DERIVATION_PROTOCOL: u64 = 27;
 
 const CENSUS_PARAMETER_ROOTED_ITERATION_PROTOCOL: u64 = 26;
@@ -8118,6 +8133,14 @@ fn census_creates_domain(
             "implementation-census premise required: the uncensused-invoking-form census arrived \
              at handshake protocol {CENSUS_UNCENSUSED_FORMS_PROTOCOL} and this build speaks {}, \
              so an empty form list would be an absence read as an enumeration",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_OWN_LITERAL_SUBJECT_PROTOCOL {
+        return Err(refuse(format!(
+            "implementation-census premise required: a subject rooted at a literal this program \
+             built arrived at handshake protocol {CENSUS_OWN_LITERAL_SUBJECT_PROTOCOL} and this \
+             build speaks {}",
             typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
         )));
     }
@@ -8591,14 +8614,7 @@ fn census_transcript_calls(
         if form.reach == Reachability::Unreachable {
             continue;
         }
-        if census_form_is_parameter_rooted_accessor(form) {
-            let disposition = match (form.kind, form.subject_write) {
-                (typefacts::UncensusedInvokingFormKind::IterationProtocol, _) => {
-                    CensusDisposition::ParameterRootedIterable
-                }
-                (_, true) => CensusDisposition::ParameterRootedAccessorWrite,
-                (_, false) => CensusDisposition::ParameterRootedAccessor,
-            };
+        if let Some(disposition) = census_form_disposition(run, form) {
             run.sites.push(census_form_site(form, disposition));
             continue;
         }
@@ -9833,21 +9849,64 @@ fn census_local_declaration_identity(
 /// [`typefacts::UncensusedInvokingForm::subject_write`] marks: there the
 /// assignment into the caller's object is the export's own operation, and no
 /// question of whose code runs excuses it.
-fn census_form_is_parameter_rooted_accessor(form: &typefacts::UncensusedInvokingForm) -> bool {
+fn census_form_disposition(
+    run: &CensusRun<'_>,
+    form: &typefacts::UncensusedInvokingForm,
+) -> Option<CensusDisposition> {
+    // ADR 0043: which premise rooted the subject. An unreviewed spelling
+    // refuses, so a derivation a later producer adds arrives here as a refusal
+    // rather than as the weaker claim — and so does an **absent** one, which is
+    // what a protocol-26 producer's every rooted form decodes to.
+    match form.subject_root.as_str() {
+        // The caller's value, under one branch or two.
+        "parameter" | "parameter-default" => {
+            form.subject_parameter?;
+            if !census_form_shape_reads_the_subject(form) {
+                return None;
+            }
+            Some(match (form.kind, form.subject_write) {
+                (typefacts::UncensusedInvokingFormKind::IterationProtocol, _) => {
+                    CensusDisposition::ParameterRootedIterable
+                }
+                (_, true) => CensusDisposition::ParameterRootedAccessorWrite,
+                (_, false) => CensusDisposition::ParameterRootedAccessor,
+            })
+        }
+        // ADR 0044: a value *this program* built, whose every own property the
+        // specification created with CreateDataPropertyOrThrow. Not a claim
+        // about the caller, so no parameter accompanies it — and the one half
+        // this side can check for itself is that the binding sits in the
+        // artifact's own runtime source, which is asked rather than inherited.
+        "own-literal" => {
+            if form.subject_parameter.is_some() {
+                return None;
+            }
+            let declaration = form.subject_declaration.as_ref()?;
+            let (_, relative) = census_certified_relative_path(run, &declaration.path)?;
+            if !run.runtime_sources.contains(&relative) {
+                return None;
+            }
+            if !census_form_shape_reads_the_subject(form) {
+                return None;
+            }
+            Some(match (form.kind, form.subject_write) {
+                (typefacts::UncensusedInvokingFormKind::IterationProtocol, _) => {
+                    CensusDisposition::OwnLiteralIterable
+                }
+                (_, true) => CensusDisposition::OwnLiteralAccessorWrite,
+                (_, false) => CensusDisposition::OwnLiteralAccessor,
+            })
+        }
+        _ => None,
+    }
+}
+
+/// Whether the form's kind and node kind are a shape this census has reviewed
+/// as *reading properties of its subject*. The premise is about the subject's
+/// provenance; this is the other half — that the form's reach really is the
+/// subject's members and nothing else.
+fn census_form_shape_reads_the_subject(form: &typefacts::UncensusedInvokingForm) -> bool {
     use typefacts::UncensusedInvokingFormKind as Kind;
-    if form.subject_parameter.is_none() {
-        return false;
-    }
-    // ADR 0043: which premise rooted the subject. Both reviewed spellings say
-    // the value is one the caller passed — the second under either of two
-    // branches — and an unreviewed spelling refuses, so a derivation a later
-    // producer adds arrives here as a refusal rather than as the weaker claim.
-    if !matches!(
-        form.subject_root.as_str(),
-        "parameter" | "parameter-default"
-    ) {
-        return false;
-    }
     // ADR 0042: the iteration protocol on a caller-supplied value. Its
     // `Symbol.iterator`, the `next` calls that follow it and any `return` on
     // early exit all sit on the object the caller passed, so the code that runs
@@ -18376,6 +18435,86 @@ mod tests {
         let mut run = census_run(&certified, &roots);
         let bare_setter = census_transcript_with(vec![], json!([form("set-accessor", json!({}))]));
         assert!(census_transcript(&mut run, &bare_setter, 0, &[]).is_err());
+    }
+
+    /// ADR 0044: a subject rooted at a value this program built. The premise
+    /// carries no parameter at all — it is not a claim about the caller — and
+    /// the half this side checks for itself is that the binding's declaration
+    /// sits in the artifact's own **runtime source**, which is what keeps a
+    /// literal in a declaration file or a dependency from qualifying.
+    #[test]
+    fn creates_census_dispositions_a_read_of_a_value_this_program_built() {
+        assert_eq!(CENSUS_OWN_LITERAL_SUBJECT_PROTOCOL, 28);
+        const {
+            assert!(
+                typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL >= CENSUS_OWN_LITERAL_SUBJECT_PROTOCOL
+            );
+        }
+        let certified = consumer_snapshot();
+        let roots = vec![consumer_root(&certified)];
+        let source = "/project/node_modules/consumer/dist/index.js";
+        let form = |extra: serde_json::Value| {
+            let mut value = json!({
+                "kind": "property-access-unknown-accessor",
+                "nodeKind": "ElementAccessExpression",
+                "location": {"path": source, "startByte": 340, "endByte": 356},
+                "reach": "reachable",
+                "subjectRoot": "own-literal",
+            });
+            let object = value.as_object_mut().expect("an object");
+            for (key, replacement) in extra.as_object().expect("an object") {
+                object.insert(key.clone(), replacement.clone());
+            }
+            json!([value])
+        };
+        let declared = json!({
+            "subjectDeclaration": {"path": source, "startByte": 10, "endByte": 40}
+        });
+
+        let mut run = census_run(&certified, &roots);
+        let built = census_transcript_with(vec![], form(declared.clone()));
+        assert_eq!(
+            census_transcript(&mut run, &built, 0, &[]),
+            Ok(CensusStep::Decided)
+        );
+        assert_eq!(
+            run.sites,
+            vec![format!(
+                "census-form:{source}:340:356:property-access-unknown-accessor:reachable:own-literal-accessor:own-literal"
+            )]
+        );
+
+        // A write into such a value is the same premise: setting a member of a
+        // data-only object runs no user code either.
+        let mut run = census_run(&certified, &roots);
+        let mut written = declared.as_object().expect("an object").clone();
+        written.insert("subjectWrite".into(), json!(true));
+        let write = census_transcript_with(vec![], form(serde_json::Value::Object(written)));
+        assert_eq!(
+            census_transcript(&mut run, &write, 0, &[]),
+            Ok(CensusStep::Decided)
+        );
+        assert!(run.sites[0].ends_with("own-literal-accessor-write:own-literal"));
+
+        // The boundary: no declaration at all, a declaration outside the
+        // artifact's runtime source, and a parameter index beside a derivation
+        // that must not carry one.
+        for extra in [
+            json!({}),
+            json!({"subjectDeclaration": {"path": "/toolchain/lib/lib.es5.d.ts", "startByte": 0, "endByte": 4}}),
+            {
+                let mut both = declared.as_object().expect("an object").clone();
+                both.insert("subjectParameter".into(), json!(0));
+                serde_json::Value::Object(both)
+            },
+        ] {
+            let mut run = census_run(&certified, &roots);
+            let refused = census_transcript_with(vec![], form(extra.clone()));
+            assert!(
+                census_transcript(&mut run, &refused, 0, &[]).is_err(),
+                "{extra} is not a stated own-literal premise"
+            );
+        }
     }
 
     /// ADR 0041: an object spread's operand and an object pattern's source are

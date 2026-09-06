@@ -604,9 +604,11 @@ export function patternElementDefault({ inner = untypedRegistry }) {
 }
 
 // A *rest* element of a parameter pattern. The object is one the engine built
-// with CopyDataProperties rather than one the caller passed, and no premise
-// here covers it. Its sibling `first` is rooted, so the read that refuses is
-// the rest element's alone. **Refuses.**
+// with CopyDataProperties rather than one the caller passed, so ADR 0043 does
+// not root it at the parameter — and ADR 0044 roots it as an **own literal**
+// for exactly that reason: every own property of it is a data property. Its
+// sibling `first` is the caller's; `rest` is this program's; both clear.
+// Refused between the two ADRs, **certifies** since ADR 0044.
 export function patternRestParameter({ first, ...rest }) {
   return first === undefined ? rest.value : first;
 }
@@ -642,4 +644,87 @@ export function localBindingWritten(source) {
 export function localBindingFromCall(source) {
   const inner = JSON.parse(source.text);
   return inner.value;
+}
+
+// ---------------------------------------------------------------------------
+// ADR 0044: a value *this program* built. Every own property of an object or
+// array literal is created with CreateDataPropertyOrThrow, so reading any
+// member of one — a computed key included, which is exactly the case the
+// checker resolves no symbol for — reaches a data property or the engine's own
+// prototype chain. The census already takes this premise wherever the key is a
+// literal, silently, by recording no form; these exports make it explicit.
+// ---------------------------------------------------------------------------
+
+const lookupTable = { first: { value: 1 }, second: { value: 2 } };
+const orderedKeys = ["first", "second"];
+const accessorTable = {
+  get first() {
+    return 1;
+  },
+};
+const protoTable = { __proto__: untypedRegistry, first: 1 };
+let mutableTable = { first: 1 };
+mutableTable = untypedRegistry;
+
+// A computed key on a module-level object literal. **Certifies.**
+export function ownTableRead(key) {
+  return lookupTable[key];
+}
+
+// The same on an array literal: every element is created by index.
+// **Certifies.**
+export function ownArrayRead(index) {
+  return orderedKeys[index];
+}
+
+// The same in *write* position. Setting a member of a data-only object runs no
+// user code either — and where the key reaches `Object.prototype`, the one
+// accessor there is the engine's. **Certifies.**
+export function ownTableWrite(key) {
+  lookupTable[key] = { value: 1 };
+}
+
+// A local built by an object pattern's **rest** element: CopyDataProperties
+// creates data properties whatever the source held, which is the same fact
+// ADR 0043 excludes a rest element from *parameter* rooting for. The spread of
+// it is the form that clears. **Certifies.**
+export function ownRestSpread(source) {
+  const { first, ...rest } = source;
+  return first === undefined ? { ...rest } : first;
+}
+
+// A literal that installs a **getter**. Reading a member of it may run this
+// module's own accessor, which is the one thing the premise rules out.
+// **Refuses.**
+export function accessorTableRead(key) {
+  return accessorTable[key];
+}
+
+// A literal carrying a `__proto__:` member. That sets the prototype rather
+// than a property, replacing the one chain this premise reasons about.
+// **Refuses.**
+export function protoTableRead(key) {
+  return protoTable[key];
+}
+
+// A binding this module **writes**: it may hold something other than the
+// literal by the time it is read. **Refuses.**
+export function writtenTableRead(key) {
+  return mutableTable[key];
+}
+
+// One level further in. What a data property *holds* is an arbitrary value, so
+// the outer read refuses while the inner one clears — the premise roots a
+// direct reference, never a chain. **Refuses.**
+export function ownTableMemberRead(key) {
+  return lookupTable[key].value;
+}
+
+// An **array** pattern's rest element. Its elements come from the source's
+// iterator, which is the source's code, so this is an iteration question and
+// no ADR has reviewed it. The pattern's own iteration clears — `source` is
+// parameter-rooted — and the read of what it bound refuses. **Refuses.**
+export function arrayRestRead(source) {
+  const [, ...tail] = source;
+  return tail[0];
 }

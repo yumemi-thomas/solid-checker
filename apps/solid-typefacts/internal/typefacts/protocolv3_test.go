@@ -34,9 +34,9 @@ func TestTypeFactsSchemaHashMatchesFrozenSchema(t *testing.T) {
 // and the fact that the digest above is the schema file's. The third, the build
 // id, is stamped at link time and is covered by the Rust process tests.
 func TestHandshakeDeclaresTheOperationSetsProtocol(t *testing.T) {
-	if typefacts.TypeFactsHandshakeProtocol != 27 {
+	if typefacts.TypeFactsHandshakeProtocol != 28 {
 		t.Fatalf(
-			"handshake protocol = %d, want 27: every stated subject parameter names the derivation that rooted it, over a closed two-value set whose second value, a parameter's default, is a different claim from the caller's own argument",
+			"handshake protocol = %d, want 28: a subject may be rooted at an object or array literal this program built, which carries a declaration location and no parameter index at all",
 			typefacts.TypeFactsHandshakeProtocol,
 		)
 	}

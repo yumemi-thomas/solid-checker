@@ -396,6 +396,25 @@ closed claims per domain so the intermediate progress is visible.
    or `toString`, which is code in the caller's own artifact. ADR 0034 listed
    coercion among the forms it did not review; nothing since has reviewed it.
 
+   The fifth slice is ADR 0044, and it is the first in the lever that is not
+   about the caller: **a value this program built**. A binding initialized
+   from an object or array literal, or from an object pattern's rest element,
+   has only data properties, so a computed-key read of it — the case the
+   checker resolves no symbol for — reaches a data property or the engine's
+   prototype chain. The census already took that premise silently wherever the
+   key was a literal, by recording no form; the ADR names it, carries it in the
+   receipt, and follows an import to the declaring module, which is where the
+   tables that dominate the class live. Measured: withheld 662 → 631,
+   `censusRefused` 605 → 574, element reads 103 → 46. **Thirty-one
+   candidates.** The residue of the accessor class is now 98 property reads
+   whose receiver is a call result, a host object, a written local or a
+   `delete`, and the element reads left are default-library array results
+   (`match[2]`, `value.split("/*")[0]`, `resolvedKeyframes[index]`) — a table
+   of fresh-array-returning members to review, which is its own slice. The
+   coercion class at 107 is unchanged and is now the largest by a margin;
+   its dominant shape is arithmetic on a **local helper's return** typed `any`
+   (`scalePoint(…) + translate`), which is lever C's territory, not this one's.
+
    The second slice is ADR 0041: a spread's operand and an object pattern's
    source are subjects under the same premise. It removed the destructuring
    class (`BindingElement` 42 → 6) but closed only **six** candidates, because
