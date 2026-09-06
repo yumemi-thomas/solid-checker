@@ -4,7 +4,18 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 26: an iteration form may state the parameter
+// TypeFactsHandshakeProtocol is 27: a stated SubjectParameter is accompanied
+// by SubjectRoot, the derivation that rooted the form's subject at that slot
+// (ADR 0043). The root set is closed under the reads the census already
+// dispositions — a name an object binding pattern in parameter position binds,
+// and a name a local declaration binds from an already-rooted initializer,
+// carry `parameter`, because naming an intermediate does not change whose
+// value it is — while a **defaulted** parameter whose default names another
+// rooted parameter carries `parameter-default`, a claim about two branches
+// rather than one. A protocol-26 consumer received a subject with no
+// derivation and would read the second as the first, so the number moves
+// although the field is additive.
+// Protocol 26: an iteration form may state the parameter
 // its iterated value is rooted at, and a call may state
 // CalleeIteratedParameter — the parameter-rooted iterable whose iteration
 // produced the callee (ADR 0042). A rest parameter's array is also no longer
@@ -156,8 +167,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 26
-	TypeFactsSchemaSHA256             = "sha256:cc416d14b5f222ad4495cc526f69172bacce2ccf8cd796d6338da076fa9da490"
+	TypeFactsHandshakeProtocol uint64 = 27
+	TypeFactsSchemaSHA256             = "sha256:5550ff0756cdccb6b1dbaf55a4a9c9f06992d99da53e1b07242c5805b28ac081"
 )
 
 type ServiceHandshake struct {

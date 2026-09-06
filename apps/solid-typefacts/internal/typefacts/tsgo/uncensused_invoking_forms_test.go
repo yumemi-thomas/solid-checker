@@ -1396,6 +1396,49 @@ export function destructuredParameter({ inner }: any): unknown {
 	return inner.value;
 }
 
+// ADR 0043: the root set closed under the reads the census dispositions.
+export function defaultedFromParameter(axis: any, sourceAxis: any = axis): unknown {
+	return sourceAxis.min;
+}
+
+export function defaultedFromDefaulted(axis: any, mid: any = axis, tail: any = mid): unknown {
+	return tail.min;
+}
+
+export function patternParameterDefault({ inner }: any = registry): unknown {
+	return inner.value;
+}
+
+export function patternElementDefault({ inner = registry }: any): unknown {
+	return inner.value;
+}
+
+export function patternRestParameter({ first, ...rest }: any): unknown {
+	return first === undefined ? rest.value : first;
+}
+
+export function localBindingFromParameter(source: any): unknown {
+	const inner = source.inner;
+	const leaf = inner.value;
+	return leaf.text;
+}
+
+export function localPatternFromParameter(source: any): unknown {
+	const { inner } = source;
+	return inner.value;
+}
+
+export function localBindingWritten(source: any): unknown {
+	let inner = source.inner;
+	inner = registry;
+	return inner.value;
+}
+
+export function localBindingFromCall(source: any): unknown {
+	const inner = JSON.parse(source.text);
+	return inner.value;
+}
+
 export function setterOnParameter(source: any): void {
 	source.value = 1;
 }
@@ -1437,7 +1480,7 @@ export function localViaCall(value: unknown): unknown {
 func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises(t *testing.T) {
 	analyzer, dir := markerProject(t, map[string]string{"subjects.ts": subjectSource})
 	path := filepath.Join(dir, "subjects.ts")
-	zero := 0
+	zero, one := 0, 1
 	for _, testCase := range []struct {
 		export string
 		want   []*int
@@ -1449,7 +1492,32 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 		{"moduleRead", []*int{nil}},
 		{"nestedParameterRead", []*int{nil}},
 		{"defaultedParameter", []*int{nil}},
-		{"destructuredParameter", []*int{nil}},
+		// ADR 0043: a name the parameter's own object pattern bound reads a
+		// property of the caller's argument, so it is rooted at that slot.
+		{"destructuredParameter", []*int{&zero}},
+		// The default names a rooted parameter, so the value is the caller's
+		// under either branch.
+		{"defaultedFromParameter", []*int{&one}},
+		// The default names a parameter that is *itself* defaulted: a second
+		// hop this build does not review.
+		{"defaultedFromDefaulted", []*int{nil}},
+		// A default on the pattern, and a default on the element: either may
+		// hold an object this code created.
+		{"patternParameterDefault", []*int{nil}},
+		{"patternElementDefault", []*int{nil}},
+		// The rest element's object is the engine's, not the caller's: the one
+		// read of it states no subject.
+		{"patternRestParameter", []*int{nil}},
+		// Two hops through local declarations, which is the fixpoint: the
+		// second declaration roots only once the first has.
+		{"localBindingFromParameter", []*int{&zero, &zero, &zero}},
+		// The pattern's own element is rooted (ADR 0041) and so is the read of
+		// what it bound (ADR 0043).
+		{"localPatternFromParameter", []*int{&zero, &zero}},
+		// The initializing read is rooted either way; what the written local
+		// holds afterwards is not, and neither is a call result.
+		{"localBindingWritten", []*int{&zero, nil}},
+		{"localBindingFromCall", []*int{&zero, nil}},
 		// ADR 0040: a write into the caller's object roots exactly as a read
 		// of it does, and says so.
 		{"setterOnParameter", []*int{&zero}},
@@ -1498,6 +1566,38 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 		}
 		if rooted.SubjectWrite != testCase.write {
 			t.Fatalf("%s: subject write = %v, want %v", testCase.export, rooted.SubjectWrite, testCase.write)
+		}
+	}
+
+	// ADR 0043: a stated subject always names the derivation that rooted it,
+	// and a parameter's *default* is a different claim from the caller's own
+	// argument, so the two never read alike.
+	for _, testCase := range []struct {
+		export     string
+		derivation typefacts.SubjectRootDerivation
+	}{
+		{"parameterRead", typefacts.SubjectRootParameter},
+		{"destructuredParameter", typefacts.SubjectRootParameter},
+		{"localBindingFromParameter", typefacts.SubjectRootParameter},
+		{"localPatternFromParameter", typefacts.SubjectRootParameter},
+		{"defaultedFromParameter", typefacts.SubjectRootParameterDefault},
+	} {
+		transcript := implementationTranscriptFor(t, analyzer, path, subjectSource, testCase.export)
+		var stated int
+		for _, form := range transcript.UncensusedInvokingForms {
+			if form.SubjectParameter == nil {
+				if form.SubjectRoot != "" {
+					t.Fatalf("%s: an unrooted form states derivation %q", testCase.export, form.SubjectRoot)
+				}
+				continue
+			}
+			stated++
+			if form.SubjectRoot != testCase.derivation {
+				t.Fatalf("%s: derivation = %q, want %q", testCase.export, form.SubjectRoot, testCase.derivation)
+			}
+		}
+		if stated == 0 {
+			t.Fatalf("%s: no form states a subject", testCase.export)
 		}
 	}
 }

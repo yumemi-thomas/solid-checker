@@ -668,6 +668,27 @@ pub struct UncensusedInvokingForm {
     /// apart must not read the subject, which is why the handshake moves.
     #[serde(default, skip_serializing_if = "is_false")]
     pub subject_write: bool,
+    /// How this form's [`Self::subject_parameter`] was rooted at that slot
+    /// (ADR 0043, handshake protocol 27). Present exactly when the subject is,
+    /// over a closed two-value set:
+    ///
+    /// - `parameter` — ADR 0034's premise unchanged: the value the caller
+    ///   passed at that slot, read directly or through a chain the census
+    ///   already dispositions. Since protocol 27 that also covers a name an
+    ///   **object binding pattern in parameter position** bound and a name a
+    ///   **local declaration** bound from an already-rooted initializer,
+    ///   because naming an intermediate does not change whose value it is.
+    /// - `parameter-default` — the slot carries a **default** naming another
+    ///   slot rooted the first way, so the value is caller-supplied under
+    ///   either branch. A different claim, and a consumer that has reviewed
+    ///   only ADR 0034 must refuse it.
+    ///
+    /// **An unrecognized spelling is unreviewed, not weaker.** The field is a
+    /// `String` rather than an enum precisely so a value a later producer adds
+    /// decodes and refuses by name instead of failing the whole transcript or
+    /// collapsing into a reviewed arm.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub subject_root: String,
 }
 
 /// The closed vocabulary of invoking forms the call census does not record.

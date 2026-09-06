@@ -512,6 +512,23 @@ const (
 //     that no proxy trap ran must obtain that premise elsewhere.
 //   - An optional call, `f?.(x)`. It is already a CallExpression in the AST,
 //     so the call census records it like any other call.
+//
+// SubjectRootDerivation names how an uncensused invoking form's subject was
+// rooted at a parameter. See UncensusedInvokingForm.SubjectRoot for the
+// premise each spelling carries and for why a consumer must refuse one it has
+// not reviewed.
+type SubjectRootDerivation string
+
+const (
+	// SubjectRootParameter is ADR 0034's premise: the value at that parameter
+	// slot is the one the caller passed.
+	SubjectRootParameter SubjectRootDerivation = "parameter"
+	// SubjectRootParameterDefault is ADR 0043's: the slot carries a default
+	// that names another such slot, so the value is caller-supplied whether or
+	// not an argument was passed here.
+	SubjectRootParameterDefault SubjectRootDerivation = "parameter-default"
+)
+
 type UncensusedInvokingForm struct {
 	Kind UncensusedInvokingFormKind `cbor:"kind" json:"kind"`
 	// NodeKind is the compiler's own name for the node's syntax kind, with the
@@ -562,6 +579,29 @@ type UncensusedInvokingForm struct {
 	// A consumer that cannot tell the positions apart must not read the
 	// subject at all, which is why the number moves with the field.
 	SubjectWrite bool `cbor:"subjectWrite,omitempty" json:"subjectWrite,omitempty"`
+	// SubjectRoot accompanies SubjectParameter and names **how** the subject
+	// was rooted at that parameter (ADR 0043, handshake protocol 27). It is
+	// present exactly when SubjectParameter is, and its value is one of a
+	// closed, reviewed set:
+	//
+	//   - SubjectRootParameter — the subject is the parameter itself, or a
+	//     chain of property and element reads whose innermost receiver is, or
+	//     a name the parameter's own binding pattern bound, or a name a local
+	//     declaration bound from such a value. Every one of these reads a
+	//     value the caller passed at that slot, which is ADR 0034's premise
+	//     unchanged: naming an intermediate does not change whose value it is.
+	//   - SubjectRootParameterDefault — the subject is rooted at a parameter
+	//     that carries a **default**, whose default expression is itself a
+	//     reference to a parameter rooted the first way. The value is then the
+	//     caller's argument at this slot when one was passed and the caller's
+	//     argument at the default's slot when none was, so it is caller-supplied
+	//     under either branch — but it is a *different* claim from the first,
+	//     and a consumer that has reviewed only the first must refuse it.
+	//
+	// A consumer must treat an unknown spelling as unreviewed and refuse the
+	// form, exactly as the control-flow incompleteness classes are read: a
+	// value a later revision adds arrives as a refusal rather than as silence.
+	SubjectRoot SubjectRootDerivation `cbor:"subjectRoot,omitempty" json:"subjectRoot,omitempty"`
 }
 
 type ParameterValueSource struct {

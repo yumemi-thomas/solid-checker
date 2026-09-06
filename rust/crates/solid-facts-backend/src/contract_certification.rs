@@ -11494,7 +11494,7 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 45] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 56] = [
         "awaitIterateParameter",
         "callInitialized",
         "callLibraryOutsideTable",
@@ -11505,6 +11505,9 @@ export const value = phantom;
         "cycle",
         "declaredMemberCoercion",
         "deep",
+        "defaultedFromDefaulted",
+        "defaultedFromModuleValue",
+        "defaultedFromParameter",
         "destructureModuleValue",
         "destructureParameter",
         "helperCoercion",
@@ -11512,12 +11515,20 @@ export const value = phantom;
         "helperUntypedArgument",
         "iife",
         "labelledBreak",
+        "localBindingFromCall",
+        "localBindingFromParameter",
+        "localBindingWritten",
+        "localPatternFromParameter",
         "loopCall",
         "memberParameterRooted",
         "moduleReceiverRead",
         "nestedCallableParameterRead",
         "noRecipe",
         "overloaded",
+        "patternElementDefault",
+        "patternParameter",
+        "patternParameterDefault",
+        "patternRestParameter",
         "plain",
         "reassignedHelper",
         "reflectApply",
@@ -12683,18 +12694,29 @@ export const value = phantom;
             "cycle",
             "declaredMemberCoercion",
             "deep",
+            "defaultedFromDefaulted",
+            "defaultedFromModuleValue",
+            "defaultedFromParameter",
             "destructureModuleValue",
             "destructureParameter",
             "helperCoercion",
             "helperSpreadCoercion",
             "helperUntypedArgument",
             "labelledBreak",
+            "localBindingFromCall",
+            "localBindingFromParameter",
+            "localBindingWritten",
+            "localPatternFromParameter",
             "loopCall",
             "memberParameterRooted",
             "moduleReceiverRead",
             "nestedCallableParameterRead",
             "noRecipe",
             "overloaded",
+            "patternElementDefault",
+            "patternParameter",
+            "patternParameterDefault",
+            "patternRestParameter",
             "plain",
             "reassignedHelper",
             "reflectApply",
@@ -12912,7 +12934,7 @@ export const value = phantom;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
-    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 43] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 54] = [
         "awaitIterateParameter",
         "callInitialized",
         "callLibraryOutsideTable",
@@ -12923,18 +12945,29 @@ export const value = phantom;
         "cycle",
         "declaredMemberCoercion",
         "deep",
+        "defaultedFromDefaulted",
+        "defaultedFromModuleValue",
+        "defaultedFromParameter",
         "destructureModuleValue",
         "destructureParameter",
         "helperCoercion",
         "helperSpreadCoercion",
         "helperUntypedArgument",
         "labelledBreak",
+        "localBindingFromCall",
+        "localBindingFromParameter",
+        "localBindingWritten",
+        "localPatternFromParameter",
         "loopCall",
         "memberParameterRooted",
         "moduleReceiverRead",
         "nestedCallableParameterRead",
         "noRecipe",
         "overloaded",
+        "patternElementDefault",
+        "patternParameter",
+        "patternParameterDefault",
+        "patternRestParameter",
         "plain",
         "reassignedHelper",
         "reflectApply",
@@ -12985,16 +13018,20 @@ export const value = phantom;
     /// types to the helper as its premise; `untypedCoercion` (declared
     /// `unknown`), `helperSpreadCoercion` (a spread carries no slot) and
     /// `helperUntypedArgument` (an `any` slot) are refused.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 21] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 25] = [
         "chainCallbacks",
         "constBound",
         "cycle",
         "declaredMemberCoercion",
+        "defaultedFromParameter",
         "destructureParameter",
         "helperCoercion",
+        "localBindingFromParameter",
+        "localPatternFromParameter",
         "memberParameterRooted",
         "noRecipe",
         "overloaded",
+        "patternParameter",
         "plain",
         "returnedCallbackCoercion",
         "setterOnParameter",
@@ -13008,20 +13045,27 @@ export const value = phantom;
         "viaHelperChain",
         "whileBreak",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 22] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 29] = [
         ("awaitIterateParameter", "census"),
         ("callInitialized", "census"),
         ("callLibraryOutsideTable", "census"),
         ("callNonLibraryReceiver", "census"),
         ("chainModuleCallbacks", "census"),
         ("deep", "census"),
+        ("defaultedFromDefaulted", "census"),
+        ("defaultedFromModuleValue", "census"),
         ("destructureModuleValue", "census"),
         ("helperSpreadCoercion", "census"),
         ("helperUntypedArgument", "census"),
         ("labelledBreak", "census"),
+        ("localBindingFromCall", "census"),
+        ("localBindingWritten", "census"),
         ("loopCall", "veto"),
         ("moduleReceiverRead", "census"),
         ("nestedCallableParameterRead", "census"),
+        ("patternElementDefault", "census"),
+        ("patternParameterDefault", "census"),
+        ("patternRestParameter", "census"),
         ("reassignedHelper", "census"),
         ("reflectApply", "census"),
         ("setterOnModuleValue", "census"),
@@ -13369,6 +13413,68 @@ export const value = phantom;
             finalized.canonical_main(),
             "spreadUntyped"
         ));
+    }
+
+    /// ADR 0043: the root set closed under the reads this census already
+    /// dispositions. Each of the four certifying exports reaches exactly what
+    /// its ADR 0034 spelling reaches — `defaultedFromParameter` is
+    /// `sourceAxis.min` where `sourceAxis` defaults to another parameter,
+    /// `patternParameter` is `inner.value` where `inner` is what the
+    /// parameter's own pattern bound, and the two local exports name an
+    /// intermediate the read chain would otherwise have spelled inline.
+    ///
+    /// The point of running all four end to end rather than only in the
+    /// verifier's unit tests is that the *producer* has to root them: the
+    /// premise lives in `parameterSubjectRootsLocked`, and a fixture that only
+    /// exercised a hand-written transcript would pin the consumer's half of a
+    /// fact nothing produces.
+    #[test]
+    fn the_probe_gate_tracer_census_closes_a_root_derived_by_naming_an_intermediate() {
+        for export in [
+            "defaultedFromParameter",
+            "patternParameter",
+            "localBindingFromParameter",
+            "localPatternFromParameter",
+        ] {
+            let Some((_, outcome)) = census_certify(export, Some("root-closure.mjs")) else {
+                return;
+            };
+            let finalized = outcome
+                .unwrap_or_else(|error| panic!("{export} certifies under ADR 0043: {error}"));
+            assert!(
+                finalized.withheld_closures().is_empty(),
+                "{export}: {:?}",
+                finalized.withheld_closures()
+            );
+            assert!(
+                creates_is_closed_in(finalized.canonical_main(), export),
+                "{export}"
+            );
+        }
+    }
+
+    /// The boundary of that closure, one refusal each. Every one of these is a
+    /// value the declaration itself may have made, or one the engine made, or
+    /// one nothing roots at all — and the premise is not flow-sensitive, which
+    /// is what `localBindingWritten` pins.
+    #[test]
+    fn the_probe_gate_tracer_census_stops_at_the_root_closures_boundary() {
+        for export in [
+            // A default that is an object literal this code wrote.
+            "defaultedFromModuleValue",
+            // A default naming a parameter that is itself defaulted.
+            "defaultedFromDefaulted",
+            // A default on the pattern, and a default on the element.
+            "patternParameterDefault",
+            "patternElementDefault",
+            // A rest element: the object is the engine's, not the caller's.
+            "patternRestParameter",
+            // A written local, and a local bound from a call result.
+            "localBindingWritten",
+            "localBindingFromCall",
+        ] {
+            assert_census_withholds(export, &["uncensused invoking form"]);
+        }
     }
 
     /// The pair, and the whole precision of the iteration arm: `spreadArgs`

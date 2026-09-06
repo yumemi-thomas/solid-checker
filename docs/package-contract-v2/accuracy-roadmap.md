@@ -378,6 +378,24 @@ closed claims per domain so the intermediate progress is visible.
    leaf is what made the difference; the two slices before it cleared forms
    that were merely first in a queue.
 
+   The fourth slice is ADR 0043, and it takes the case ADR 0041 deferred by
+   name: **the root set is closed under the reads the census already
+   dispositions**. A name a parameter's own object pattern bound, and a name a
+   local declaration bound from an already-rooted initializer, hold the
+   caller's value as surely as the chain they abbreviate — erase the
+   intermediate and the census already certifies the result — while a
+   parameter's *default* naming another parameter is caller-supplied under
+   either branch and travels under its own derivation so the two never read
+   alike. Measured: withheld 675 → 662, `censusRefused` 618 → 605, the accessor
+   class 285 → 248. **Thirteen candidates**, which is the ADR 0041 pattern
+   rather than the ADR 0042 one: the bodies it unblocked refuse at their next
+   form, and **coercion is now the largest class in the lever** at 107
+   refusals, up from 83. That is the measurement naming the next slice, and it
+   is the same argument one more time — `point -= translate` on a
+   parameter-rooted operand runs the caller's `Symbol.toPrimitive`, `valueOf`
+   or `toString`, which is code in the caller's own artifact. ADR 0034 listed
+   coercion among the forms it did not review; nothing since has reviewed it.
+
    The second slice is ADR 0041: a spread's operand and an object pattern's
    source are subjects under the same premise. It removed the destructuring
    class (`BindingElement` 42 → 6) but closed only **six** candidates, because
@@ -388,9 +406,13 @@ closed claims per domain so the intermediate progress is visible.
    reading one invokes nothing, *provided* nothing installed an accessor on the
    local between its creation and the read. Proving that is an escape
    question — the local must not reach code the census cannot see — and it is
-   the first premise in this lever that is not about provenance. After it, 122
-   property reads and 108 element reads on receivers that are neither
-   parameter-rooted nor engine-built remain.
+   the first premise in this lever that is not about provenance. After
+   ADR 0043 that residue is 98 property reads and 103 element reads on
+   receivers that are neither parameter-rooted nor engine-built — module-level
+   lookup tables (`scaleCorrectors[key]`, `transformPropOrder[i]`,
+   `supportedWaapiEasing[easing]`), locals the engine built (`vars[key]`,
+   `match[2]`, `value.split("/*")[0]`), and call results, which is a third
+   premise again.
 
 Nothing here is a `tsc` duplicate: every claim is about runtime reactive
 behavior the type system cannot express. Nothing here loosens a refusal without

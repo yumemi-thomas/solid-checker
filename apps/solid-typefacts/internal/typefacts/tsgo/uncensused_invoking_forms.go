@@ -316,7 +316,7 @@ func (p *project) uncensusedInvokingFormCensusLocked(
 				enclosingLocation := nodeLocation(enclosing)
 				form.EnclosingCallable = &enclosingLocation
 			}
-			form.SubjectParameter, form.SubjectWrite =
+			form.SubjectParameter, form.SubjectWrite, form.SubjectRoot =
 				p.accessorFormSubjectParameterLocked(node, kind, roots)
 			forms = append(forms, form)
 		},
@@ -324,40 +324,118 @@ func (p *project) uncensusedInvokingFormCensusLocked(
 	return forms
 }
 
-// parameterSubjectRoots is the ADR 0034 premise set for one declaration: the
-// parameters a form's subject may be rooted at, or nil when the declaration
+// subjectRoot is one entry of the premise set: the parameter slot whose value
+// a name holds, and the derivation that rooted it there.
+type subjectRoot struct {
+	index      int
+	derivation typefacts.SubjectRootDerivation
+}
+
+// parameterSubjectRoots is the premise set for one declaration: every name
+// whose value is the caller's, keyed by symbol, or nil when the declaration
 // admits none.
 //
-// A parameter qualifies when its binding is a plain identifier with no
-// initializer and no rest token, and the identifier is written nowhere in its
-// file. A defaulted parameter is excluded because the default value is an
-// object *this* code created, not one the caller handed over; a rest parameter
-// because the array is the engine's; a destructured element because the
-// pattern already read a property the caller's object may compute. The whole
-// declaration is excluded when it mentions `arguments` or `eval`, either of
-// which can rebind a parameter without a visible assignment.
+// ADR 0034 seeded it with the parameters themselves. ADR 0043 closes it under
+// the reads the census already dispositions, because **naming an intermediate
+// must not change whose value it is**: `const style = props.style` reaches
+// exactly what `props.style` reaches, and `function f({ x })` reaches exactly
+// what `function f(a)` plus `a.x` reaches. Four legs, and each is separately
+// reviewed in the ADR:
+//
+//   - a parameter whose binding is a plain identifier with no initializer and
+//     no rest token, written nowhere in its file (ADR 0034, unchanged);
+//   - a name an **object binding pattern in parameter position** binds, when
+//     the parameter carries no default — the pattern reads a property of the
+//     caller's argument, so what it binds is the caller's;
+//   - a name a **local variable declaration** binds from an initializer that
+//     is itself rooted, to a fixpoint, so a chain of intermediates roots too;
+//   - a **defaulted** parameter whose default expression is a reference to a
+//     parameter rooted the first way. The value is then caller-supplied under
+//     either branch — the argument at this slot, or the argument at the
+//     default's — which is a different claim, and it travels under its own
+//     derivation spelling so a consumer that has reviewed only ADR 0034 can
+//     refuse it.
+//
+// What stays out, and why: a **rest** parameter and a **rest** element,
+// because the array or object is the engine's rather than the caller's; a
+// binding element carrying its own default, and a parameter pattern carrying
+// one, because the default value is an object *this* code created; a name
+// bound by a `for…of` or `for…in` head, which has no initializer to root; a
+// symbol with more than one declaration, whose running declaration this walk
+// cannot choose. The whole declaration is excluded when it mentions
+// `arguments` or `eval`, either of which can rebind a name without a visible
+// assignment.
 type parameterSubjectRoots struct {
-	byParameterSymbol map[*ast.Symbol]int
+	bySymbol map[*ast.Symbol]subjectRoot
 }
 
 func (p *project) parameterSubjectRootsLocked(implementation *ast.Node) *parameterSubjectRoots {
 	if implementation == nil || mentionsArgumentsOrEval(implementation) {
 		return nil
 	}
-	roots := &parameterSubjectRoots{byParameterSymbol: make(map[*ast.Symbol]int)}
-	for index, parameter := range implementation.Parameters() {
+	roots := &parameterSubjectRoots{bySymbol: make(map[*ast.Symbol]subjectRoot)}
+	parameters := implementation.Parameters()
+	for index, parameter := range parameters {
+		declaration := parameter.AsParameterDeclaration()
 		name := parameter.Name()
-		if name == nil || !ast.IsIdentifier(name) || parameter.Initializer() != nil ||
-			parameter.AsParameterDeclaration().DotDotDotToken != nil {
+		if declaration == nil || name == nil || declaration.DotDotDotToken != nil ||
+			parameter.Initializer() != nil {
+			continue
+		}
+		root := subjectRoot{index: index, derivation: typefacts.SubjectRootParameter}
+		if ast.IsIdentifier(name) {
+			symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(name))
+			if symbol == nil || p.parameterIsWrittenLocked(implementation, index, symbol) {
+				continue
+			}
+			roots.bySymbol[symbol] = root
+			continue
+		}
+		// The pattern destructures the caller's argument directly. Its own
+		// reads record no form — the body walk starts at the body, so a
+		// parameter's pattern is never observed — but what it binds is a
+		// property of the caller's object, exactly as a receiver chain's
+		// innermost read is.
+		p.rootBoundNamesLocked(implementation, name, root, roots)
+	}
+	// A defaulted parameter whose default names another rooted parameter. Run
+	// after the seed so the default's own slot is already known, and taking
+	// only a source rooted as a plain parameter: a default naming a *defaulted*
+	// parameter is a second hop this ADR does not review.
+	for index, parameter := range parameters {
+		declaration := parameter.AsParameterDeclaration()
+		name := parameter.Name()
+		initializer := parameter.Initializer()
+		if declaration == nil || name == nil || initializer == nil ||
+			declaration.DotDotDotToken != nil || !ast.IsIdentifier(name) {
+			continue
+		}
+		defaulted := identityPreservingUnwrap(initializer)
+		if defaulted == nil || !ast.IsIdentifier(defaulted) {
+			continue
+		}
+		source := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(defaulted))
+		if source == nil {
+			continue
+		}
+		if root, rooted := roots.bySymbol[source]; !rooted ||
+			root.derivation != typefacts.SubjectRootParameter {
 			continue
 		}
 		symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(name))
 		if symbol == nil || p.parameterIsWrittenLocked(implementation, index, symbol) {
 			continue
 		}
-		roots.byParameterSymbol[symbol] = index
+		if _, taken := roots.bySymbol[symbol]; taken {
+			continue
+		}
+		roots.bySymbol[symbol] = subjectRoot{
+			index:      index,
+			derivation: typefacts.SubjectRootParameterDefault,
+		}
 	}
-	if len(roots.byParameterSymbol) == 0 {
+	p.rootLocalDeclarationsLocked(implementation, roots)
+	if len(roots.bySymbol) == 0 {
 		return nil
 	}
 	return roots
@@ -402,13 +480,125 @@ func mentionsArgumentsOrEval(root *ast.Node) bool {
 	return dynamic
 }
 
-// subjectParameterLocked answers the qualifying parameter a subject expression
-// is rooted at: the expression, after identity-preserving unwrapping, is either
-// a reference to such a parameter or a chain of property, element and
-// optional-chain reads whose innermost receiver is one. Anything else — a call
-// result, a module binding, a nested callable's own parameter, a literal —
-// answers nil.
-func (p *project) subjectParameterLocked(subject *ast.Node, roots *parameterSubjectRoots) *int {
+// rootBoundNamesLocked roots every plain identifier an object binding pattern
+// binds at `root`, and recurses through a nested object pattern because that
+// reads a property of a property of the same value.
+//
+// A rest element is skipped: the object it binds is one the engine built with
+// CopyDataProperties, not the caller's. An element carrying its own default is
+// skipped: it may hold an object *this* code created.
+func (p *project) rootBoundNamesLocked(
+	implementation *ast.Node,
+	pattern *ast.Node,
+	root subjectRoot,
+	roots *parameterSubjectRoots,
+) bool {
+	if pattern == nil || !ast.IsObjectBindingPattern(pattern) {
+		return false
+	}
+	var added bool
+	for _, element := range pattern.AsBindingPattern().Elements.Nodes {
+		binding := element.AsBindingElement()
+		name := element.Name()
+		if binding == nil || name == nil || binding.DotDotDotToken != nil ||
+			binding.Initializer != nil {
+			continue
+		}
+		if ast.IsObjectBindingPattern(name) {
+			added = p.rootBoundNamesLocked(implementation, name, root, roots) || added
+			continue
+		}
+		if !ast.IsIdentifier(name) {
+			continue
+		}
+		added = p.rootNameLocked(implementation, name, root, roots) || added
+	}
+	return added
+}
+
+// rootNameLocked roots one declared identifier at `root`, when its symbol has
+// exactly this one declaration and nothing in its file writes it.
+//
+// The single-declaration check is the same reasoning the census's own
+// `census_local_binding_is_stable` applies to a callee: a name the binder
+// merged from two declarations has a running declaration this walk cannot
+// choose, so it is refused rather than guessed.
+func (p *project) rootNameLocked(
+	implementation *ast.Node,
+	name *ast.Node,
+	root subjectRoot,
+	roots *parameterSubjectRoots,
+) bool {
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(name))
+	if symbol == nil || len(symbol.Declarations) != 1 {
+		return false
+	}
+	if _, taken := roots.bySymbol[symbol]; taken {
+		return false
+	}
+	if p.symbolIsAssignedLocked(symbol, implementation) {
+		return false
+	}
+	roots.bySymbol[symbol] = root
+	return true
+}
+
+// rootLocalDeclarationsLocked roots every local declaration in the
+// implementation's subtree whose initializer is itself rooted, to a fixpoint
+// so that `const a = p.x; const b = a.y;` roots both.
+//
+// The derivation travels with the value: a local bound from a
+// `parameter-default` root is caller-supplied under exactly the same two
+// branches, and says so.
+func (p *project) rootLocalDeclarationsLocked(
+	implementation *ast.Node,
+	roots *parameterSubjectRoots,
+) {
+	var declarations []*ast.Node
+	var collect func(*ast.Node)
+	collect = func(node *ast.Node) {
+		if node == nil {
+			return
+		}
+		if ast.IsVariableDeclaration(node) {
+			declarations = append(declarations, node)
+		}
+		node.ForEachChild(func(child *ast.Node) bool { collect(child); return false })
+	}
+	collect(implementation)
+	for range declarations {
+		var added bool
+		for _, declaration := range declarations {
+			name := declaration.Name()
+			initializer := declaration.Initializer()
+			if name == nil || initializer == nil {
+				continue
+			}
+			root := p.subjectRootLocked(initializer, roots)
+			if root == nil {
+				continue
+			}
+			switch {
+			case ast.IsIdentifier(name):
+				added = p.rootNameLocked(implementation, name, *root, roots) || added
+			case ast.IsObjectBindingPattern(name):
+				added = p.rootBoundNamesLocked(implementation, name, *root, roots) || added
+			}
+		}
+		if !added {
+			return
+		}
+	}
+}
+
+// subjectRootLocked answers the root a subject expression's value carries: the
+// expression, after identity-preserving unwrapping, is either a reference to a
+// rooted name or a chain of property, element and optional-chain reads whose
+// innermost receiver is one. Anything else — a call result, a module binding, a
+// nested callable's own parameter, a literal — answers nil.
+func (p *project) subjectRootLocked(
+	subject *ast.Node, roots *parameterSubjectRoots,
+) *subjectRoot {
 	if roots == nil {
 		return nil
 	}
@@ -423,10 +613,25 @@ func (p *project) subjectParameterLocked(subject *ast.Node, roots *parameterSubj
 	if symbol == nil {
 		return nil
 	}
-	index, ok := roots.byParameterSymbol[symbol]
-	if !ok {
+	root, rooted := roots.bySymbol[symbol]
+	if !rooted {
 		return nil
 	}
+	return &root
+}
+
+// subjectParameterLocked answers the parameter a subject is rooted at under
+// **ADR 0034's premise alone** — the value the caller passed at that slot.
+//
+// Consumers of the wider root set read the derivation and decide for
+// themselves; this narrow reading exists for the `this` receiver of a
+// `.call`/`.apply`, whose consumer has reviewed that premise and no other.
+func (p *project) subjectParameterLocked(subject *ast.Node, roots *parameterSubjectRoots) *int {
+	root := p.subjectRootLocked(subject, roots)
+	if root == nil || root.derivation != typefacts.SubjectRootParameter {
+		return nil
+	}
+	index := root.index
 	return &index
 }
 
@@ -450,26 +655,27 @@ func (p *project) accessorFormSubjectParameterLocked(
 	node *ast.Node,
 	kind typefacts.UncensusedInvokingFormKind,
 	roots *parameterSubjectRoots,
-) (*int, bool) {
+) (*int, bool, typefacts.SubjectRootDerivation) {
 	if roots == nil {
-		return nil, false
+		return nil, false, ""
 	}
 	switch kind {
 	case typefacts.UncensusedGetAccessor, typefacts.UncensusedSetAccessor,
 		typefacts.UncensusedPropertyAccessUnknownAccessor,
 		typefacts.UncensusedIterationProtocol:
 	default:
-		return nil, false
+		return nil, false, ""
 	}
 	subjectExpression, write := accessorFormSubjectExpression(node)
 	if subjectExpression == nil {
-		return nil, false
+		return nil, false, ""
 	}
-	subject := p.subjectParameterLocked(subjectExpression, roots)
-	if subject == nil {
-		return nil, false
+	root := p.subjectRootLocked(subjectExpression, roots)
+	if root == nil {
+		return nil, false, ""
 	}
-	return subject, write
+	index := root.index
+	return &index, write, root.derivation
 }
 
 // accessorFormSubjectExpression answers the expression whose value the form
@@ -529,12 +735,11 @@ func accessorFormSubjectExpression(node *ast.Node) (*ast.Node, bool) {
 // pattern containing `element` destructures, or nil when this build has not
 // reviewed where that value comes from.
 //
-// Only a variable declaration with an initializer qualifies today. A
-// *parameter* pattern destructures the caller's argument directly, which is the
-// same provenance by a shorter route, but it also admits a default
-// (`function f({ a } = {})`) whose object this code created — the case ADR 0034
-// excludes a defaulted parameter for — so it is left unstated rather than
-// decided here.
+// Only a variable declaration with an initializer qualifies, and that is not a
+// restriction on parameter patterns so much as a fact about where forms come
+// from: the body walk starts at the body, so a *parameter's* own pattern is
+// never observed and records no form to root. What it binds is rooted instead,
+// by parameterSubjectRootsLocked (ADR 0043).
 func bindingPatternSubjectExpression(element *ast.Node) *ast.Node {
 	// Called with a binding *element* for an object pattern's reads and with
 	// the array *pattern itself* for the iteration it performs; the climb is

@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "4f84609bdd54c03fdb3816bbc4e628833cf3c1b0a719bd0d0e3fd8ecfa3df63e",
+            "closureSha256": "b8e992d4a5670ff65c4864a58fab89eb92543efdeb885778a987066934f61c8f",
             "path": "./index.js",
-            "sha256": "ae1836a3851cfc91253e3fb3e8944c80878f131029baabde8356f0c552401853"
+            "sha256": "061bf896dc778770fba665d964ba4a8a826303a8b8e524492d85d73411d515cf"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "8019a681b805bedc81600549aa533dc294988507a47122de7084cbc2da9467cf"
+            "sha256": "fa6bef04fe45fd6f6c9d6cd5fe7379c8cee7c7c3a52fa22f7f6c9adece7f34ee"
           },
           "exports": {
             "awaitIterateParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -23,6 +23,9 @@
             "cycle": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "declaredMemberCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "deep": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
+            "defaultedFromDefaulted": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "defaultedFromModuleValue": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "defaultedFromParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "destructureModuleValue": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "destructureParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "helperCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -30,12 +33,20 @@
             "helperUntypedArgument": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "iife": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "labelledBreak": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
+            "localBindingFromCall": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "localBindingFromParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "localBindingWritten": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "localPatternFromParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "loopCall": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "memberParameterRooted": "summary-ddf5532c3690413bd5fb17a8801570de0cf52ea8396fc52149f3c37a810cb674",
             "moduleReceiverRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "nestedCallableParameterRead": "summary-8e800eff6ddbdabfd339f5dfad278e3aa7623ae76cb8598687f1d3fbdd01821f",
             "noRecipe": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
             "overloaded": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
+            "patternElementDefault": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "patternParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "patternParameterDefault": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "patternRestParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "plain": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
             "reassignedHelper": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "reflectApply": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",

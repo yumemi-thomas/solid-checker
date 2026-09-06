@@ -7795,6 +7795,19 @@ const CENSUS_PARAMETER_ROOTED_READ_FORMS_PROTOCOL: u64 = 25;
 /// protocol-25 producer states neither, and also still records a rest
 /// parameter's array as an iteration form, so this build would be reading two
 /// facts it never sent.
+/// The handshake protocol at which every stated
+/// [`typefacts::UncensusedInvokingForm::subject_parameter`] became accompanied
+/// by [`typefacts::UncensusedInvokingForm::subject_root`], the derivation that
+/// rooted it (ADR 0043).
+///
+/// The number is the discriminator because the field is a `String` that
+/// defaults to empty: against a protocol-26 producer every rooted form would
+/// decode with no derivation, and reading that as the reviewed `parameter`
+/// premise is the absence-as-evidence this census exists to prevent. The
+/// predicate refuses an empty derivation for the same reason, so this constant
+/// is belt beside that check rather than the only guard.
+const CENSUS_SUBJECT_ROOT_DERIVATION_PROTOCOL: u64 = 27;
+
 const CENSUS_PARAMETER_ROOTED_ITERATION_PROTOCOL: u64 = 26;
 
 /// The handshake protocol at which an implementation transcript states its
@@ -8105,6 +8118,15 @@ fn census_creates_domain(
             "implementation-census premise required: the uncensused-invoking-form census arrived \
              at handshake protocol {CENSUS_UNCENSUSED_FORMS_PROTOCOL} and this build speaks {}, \
              so an empty form list would be an absence read as an enumeration",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_SUBJECT_ROOT_DERIVATION_PROTOCOL {
+        return Err(refuse(format!(
+            "implementation-census premise required: a stated subject's root derivation arrived at \
+             handshake protocol {CENSUS_SUBJECT_ROOT_DERIVATION_PROTOCOL} and this build speaks \
+             {}, so a subject rooted through a parameter's default would be read as one the \
+             caller passed",
             typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
         )));
     }
@@ -9816,6 +9838,16 @@ fn census_form_is_parameter_rooted_accessor(form: &typefacts::UncensusedInvoking
     if form.subject_parameter.is_none() {
         return false;
     }
+    // ADR 0043: which premise rooted the subject. Both reviewed spellings say
+    // the value is one the caller passed — the second under either of two
+    // branches — and an unreviewed spelling refuses, so a derivation a later
+    // producer adds arrives here as a refusal rather than as the weaker claim.
+    if !matches!(
+        form.subject_root.as_str(),
+        "parameter" | "parameter-default"
+    ) {
+        return false;
+    }
     // ADR 0042: the iteration protocol on a caller-supplied value. Its
     // `Symbol.iterator`, the `next` calls that follow it and any `return` on
     // early exit all sit on the object the caller passed, so the code that runs
@@ -9845,18 +9877,23 @@ fn census_form_is_parameter_rooted_accessor(form: &typefacts::UncensusedInvoking
     )
 }
 
+/// One form's witness line, carrying the derivation that rooted its subject
+/// (ADR 0043) so a receipt says which premise the site held under. A site
+/// rooted through a parameter's **default** asserts something about two
+/// branches rather than one, and the two must not read alike in a receipt.
 fn census_form_site(
     form: &typefacts::UncensusedInvokingForm,
     disposition: CensusDisposition,
 ) -> String {
     format!(
-        "census-form:{}:{}:{}:{}:{}:{}",
+        "census-form:{}:{}:{}:{}:{}:{}:{}",
         form.location.path,
         form.location.start_byte,
         form.location.end_byte,
         uncensused_invoking_form_kind_name(form.kind),
         reachability_name(form.reach),
-        disposition.wire_name()
+        disposition.wire_name(),
+        form.subject_root
     )
 }
 
@@ -18168,6 +18205,7 @@ mod tests {
                 "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 260, "endByte": 270},
                 "reach": "reachable",
                 "subjectParameter": 0,
+                "subjectRoot": "parameter",
             }]),
         );
         let mut run = census_run(&certified, &roots);
@@ -18185,7 +18223,7 @@ mod tests {
                 "census-call:/project/node_modules/consumer/dist/index.js:200:210:call:unreachable:unreachable",
                 "census-call:/project/node_modules/consumer/dist/index.js:220:250:call:reachable:parameter-rooted-accessor",
                 "census-dialect-axiom:@solidjs/signals@2.0.0-rc.3#sha512-/yPhTf3xS1FRR4MX:createTrackedEffect:creates",
-                "census-form:/project/node_modules/consumer/dist/index.js:260:270:property-access-unknown-accessor:reachable:parameter-rooted-accessor",
+                "census-form:/project/node_modules/consumer/dist/index.js:260:270:property-access-unknown-accessor:reachable:parameter-rooted-accessor:parameter",
             ]
         );
     }
@@ -18228,7 +18266,7 @@ mod tests {
             vec![],
             json!([form(
                 "property-access-unknown-accessor",
-                json!({"subjectParameter": 0, "subjectWrite": true})
+                json!({"subjectParameter": 0, "subjectWrite": true, "subjectRoot": "parameter"})
             )]),
         );
         assert_eq!(
@@ -18238,7 +18276,7 @@ mod tests {
         assert_eq!(
             run.sites,
             vec![format!(
-                "census-form:{source}:260:270:property-access-unknown-accessor:reachable:parameter-rooted-accessor-write"
+                "census-form:{source}:260:270:property-access-unknown-accessor:reachable:parameter-rooted-accessor-write:parameter"
             )]
         );
 
@@ -18248,14 +18286,17 @@ mod tests {
             vec![],
             json!([form(
                 "set-accessor",
-                json!({"subjectParameter": 1, "subjectWrite": true})
+                json!({"subjectParameter": 1, "subjectWrite": true, "subjectRoot": "parameter"})
             )]),
         );
         assert_eq!(
             census_transcript(&mut run, &setter, 0, &[]),
             Ok(CensusStep::Decided)
         );
-        assert!(run.sites[0].ends_with("set-accessor:reachable:parameter-rooted-accessor-write"));
+        assert!(
+            run.sites[0]
+                .ends_with("set-accessor:reachable:parameter-rooted-accessor-write:parameter")
+        );
 
         // The read premise still records the read disposition, so the two are
         // distinguishable in the receipt.
@@ -18264,14 +18305,56 @@ mod tests {
             vec![],
             json!([form(
                 "property-access-unknown-accessor",
-                json!({"subjectParameter": 0})
+                json!({"subjectParameter": 0, "subjectRoot": "parameter"})
             )]),
         );
         assert_eq!(
             census_transcript(&mut run, &read, 0, &[]),
             Ok(CensusStep::Decided)
         );
-        assert!(run.sites[0].ends_with(":reachable:parameter-rooted-accessor"));
+        assert!(run.sites[0].ends_with(":reachable:parameter-rooted-accessor:parameter"));
+
+        // ADR 0043: a subject rooted through a parameter's **default** is a
+        // claim about two branches, and the receipt keeps the two apart.
+        let mut run = census_run(&certified, &roots);
+        let defaulted = census_transcript_with(
+            vec![],
+            json!([form(
+                "property-access-unknown-accessor",
+                json!({"subjectParameter": 1, "subjectRoot": "parameter-default"})
+            )]),
+        );
+        assert_eq!(
+            census_transcript(&mut run, &defaulted, 0, &[]),
+            Ok(CensusStep::Decided)
+        );
+        assert!(
+            run.sites[0].ends_with(":reachable:parameter-rooted-accessor:parameter-default"),
+            "{}",
+            run.sites[0]
+        );
+
+        // A derivation this build has not reviewed refuses, rather than being
+        // read as the weaker premise. So does an absent one, which is what a
+        // protocol-26 producer's every rooted form decodes to.
+        for root in [json!({}), json!({"subjectRoot": "parameter-escape"})] {
+            let mut run = census_run(&certified, &roots);
+            let mut extra = json!({"subjectParameter": 0});
+            for (key, value) in root.as_object().expect("an object") {
+                extra
+                    .as_object_mut()
+                    .expect("an object")
+                    .insert(key.clone(), value.clone());
+            }
+            let unreviewed = census_transcript_with(
+                vec![],
+                json!([form("property-access-unknown-accessor", extra)]),
+            );
+            assert!(
+                census_transcript(&mut run, &unreviewed, 0, &[]).is_err(),
+                "{root} is not a reviewed derivation"
+            );
+        }
 
         // No stated subject: refused in either position, as before.
         for extra in [json!({}), json!({"subjectWrite": true})] {
@@ -18321,6 +18404,7 @@ mod tests {
                     "location": {"path": source, "startByte": 300, "endByte": 312},
                     "reach": "reachable",
                     "subjectParameter": 0,
+                    "subjectRoot": "parameter",
                 }]),
             );
             assert_eq!(
@@ -18331,7 +18415,7 @@ mod tests {
             assert_eq!(
                 run.sites,
                 vec![format!(
-                    "census-form:{source}:300:312:property-access-unknown-accessor:reachable:parameter-rooted-accessor"
+                    "census-form:{source}:300:312:property-access-unknown-accessor:reachable:parameter-rooted-accessor:parameter"
                 )],
                 "{node_kind} records the read disposition"
             );
@@ -18364,6 +18448,7 @@ mod tests {
                     "location": {"path": source, "startByte": 320, "endByte": 340},
                     "reach": "reachable",
                     "subjectParameter": 0,
+                    "subjectRoot": "parameter",
                 }]),
             );
             assert_eq!(
@@ -18374,7 +18459,7 @@ mod tests {
             assert_eq!(
                 run.sites,
                 vec![format!(
-                    "census-form:{source}:320:340:iteration-protocol:reachable:parameter-rooted-iterable"
+                    "census-form:{source}:320:340:iteration-protocol:reachable:parameter-rooted-iterable:parameter"
                 )],
                 "{node_kind}"
             );
@@ -18856,6 +18941,7 @@ mod tests {
                 "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 260, "endByte": 270},
                 "reach": "reachable",
                 "subjectParameter": subject,
+                "subjectRoot": "parameter",
             }])
         };
         // Admitted: both read-accessor kinds, on either access node kind.

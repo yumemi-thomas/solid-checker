@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:cc416d14b5f222ad4495cc526f69172bacce2ccf8cd796d6338da076fa9da490";
+    "sha256:5550ff0756cdccb6b1dbaf55a4a9c9f06992d99da53e1b07242c5805b28ac081";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -138,6 +138,16 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
+// Protocol 27 accompanies every stated `subjectParameter` with `subjectRoot`,
+// the derivation that rooted the subject at that slot, over a closed two-value
+// set (ADR 0043). `parameter` is ADR 0034's premise unchanged and now covers
+// three spellings of the same value — the parameter, a name its own object
+// binding pattern bound, and a name a local declaration bound from an
+// already-rooted initializer — because naming an intermediate does not change
+// whose value it is. `parameter-default` is the new claim: the slot carries a
+// default naming another rooted slot, so the value is caller-supplied under
+// either branch. A protocol-26 consumer received a subject with no derivation
+// and would read the second as the first.
 // Protocol 26 lets an iteration form state the parameter its iterated value is
 // rooted at, and a call state `calleeIteratedParameter` — the parameter-rooted
 // iterable whose iteration produced the callee (ADR 0042). A rest parameter's
@@ -190,7 +200,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // producer is never "not rooted".
 // Protocol 17 includes exact-null loose equality in the positive
 // uncensused-form classifier. Protocol 16 added unchanged-parameter identity.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 26;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 27;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

@@ -544,3 +544,102 @@ export function iife(value) {
     return value;
   })();
 }
+
+// ---------------------------------------------------------------------------
+// ADR 0043: the root set is closed under the reads this census already
+// dispositions. Naming an intermediate does not change whose value it is, so
+// each of the four legs below reaches exactly what the ADR 0034 spelling of
+// the same value reaches — and the one leg that is a *different* claim, a
+// parameter's default, says so in its receipt site.
+// ---------------------------------------------------------------------------
+
+// A parameter carrying a default that names another rooted parameter. The
+// value is the caller's argument at this slot when one was passed and the
+// caller's argument at `axis` when none was, so the accessor is the caller's
+// code under either branch. The site records `parameter-default`, not
+// `parameter`. **Certifies.**
+export function defaultedFromParameter(axis, sourceAxis = axis) {
+  return sourceAxis.min;
+}
+
+// A parameter whose default is a value *this* module made. When the caller
+// omits the argument the accessor that may run is this module's own, which is
+// exactly what ADR 0034 excluded a defaulted parameter for. **Refuses.**
+//
+// The default is the untyped module value rather than an object literal, and
+// the trap is worth naming: written `source = { value: 1 }` the compiler binds
+// `value` as a **data property of a literal in this file**, so it records no
+// form at all and the export certifies without the census ever reaching the
+// premise — the same vacuity `setterOnModuleValue` guards against.
+export function defaultedFromModuleValue(source = untypedRegistry) {
+  return source.value;
+}
+
+// A default naming a parameter that is *itself* defaulted. A second hop this
+// ADR does not review: only a source rooted as a plain parameter carries the
+// premise forward. **Refuses.**
+export function defaultedFromDefaulted(axis, mid = axis, tail = mid) {
+  return tail.min;
+}
+
+// An object binding pattern in *parameter* position, with no default on the
+// parameter and none on the element. The pattern reads a property of the
+// caller's argument, so what it binds is the caller's — the same value
+// `f(source)` plus `source.inner` names. **Certifies.**
+export function patternParameter({ inner }) {
+  return inner.value;
+}
+
+// The same pattern carrying a *parameter* default. When the caller omits the
+// argument the pattern destructures an object this code wrote, so `inner` may
+// hold this module's own value. **Refuses.**
+export function patternParameterDefault({ inner } = untypedRegistry) {
+  return inner.value;
+}
+
+// A binding element carrying *its own* default, for the same reason one slot
+// down. **Refuses.**
+export function patternElementDefault({ inner = untypedRegistry }) {
+  return inner.value;
+}
+
+// A *rest* element of a parameter pattern. The object is one the engine built
+// with CopyDataProperties rather than one the caller passed, and no premise
+// here covers it. Its sibling `first` is rooted, so the read that refuses is
+// the rest element's alone. **Refuses.**
+export function patternRestParameter({ first, ...rest }) {
+  return first === undefined ? rest.value : first;
+}
+
+// A local bound from an already-rooted read, twice over: `inner.value.text`
+// spelled across two declarations reaches exactly what `source.inner.value`
+// reaches, which ADR 0034 dispositions. Pins the fixpoint — the second
+// declaration roots only once the first has. **Certifies.**
+export function localBindingFromParameter(source) {
+  const inner = source.inner;
+  const leaf = inner.value;
+  return leaf.text;
+}
+
+// A local bound by a *pattern* over a rooted value: the same fact by the same
+// route, one property deep. **Certifies.**
+export function localPatternFromParameter(source) {
+  const { inner } = source;
+  return inner.value;
+}
+
+// A local the declaration *writes*. The binding may hold something other than
+// the value it was initialized with by the time it is read, so nothing roots
+// it — the premise is not flow-sensitive, and says so. **Refuses.**
+export function localBindingWritten(source) {
+  let inner = source.inner;
+  inner = untypedRegistry;
+  return inner.value;
+}
+
+// A local bound from a *call result*. What the call returned is rooted at
+// nothing, so the read of it refuses exactly as it did before. **Refuses.**
+export function localBindingFromCall(source) {
+  const inner = JSON.parse(source.text);
+  return inner.value;
+}

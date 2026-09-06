@@ -62,3 +62,27 @@ export declare function helperSpreadCoercion(a: number, b: number): number;
 export declare function helperUntypedArgument(a: number): number;
 // An immediately-invoked function expression: this census refuses it.
 export declare function iife(value: number): number;
+// ADR 0043: the root set closed under the reads the census dispositions. The
+// four legs and their boundaries, one export each.
+export declare function defaultedFromParameter(
+  axis: { min: unknown },
+  sourceAxis?: { min: unknown },
+): unknown;
+export declare function defaultedFromModuleValue(source?: any): unknown;
+export declare function defaultedFromDefaulted(
+  axis: { min: unknown },
+  mid?: { min: unknown },
+  tail?: { min: unknown },
+): unknown;
+export declare function patternParameter(source: { inner: { value: unknown } }): unknown;
+export declare function patternParameterDefault(source?: any): unknown;
+export declare function patternElementDefault(source: any): unknown;
+export declare function patternRestParameter(source: any): unknown;
+export declare function localBindingFromParameter(source: {
+  inner: { value: { text: unknown } };
+}): unknown;
+export declare function localPatternFromParameter(source: {
+  inner: { value: unknown };
+}): unknown;
+export declare function localBindingWritten(source: { inner: any }): unknown;
+export declare function localBindingFromCall(source: { text: string }): unknown;

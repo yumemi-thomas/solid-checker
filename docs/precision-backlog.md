@@ -1,5 +1,49 @@
 # Precision backlog
 
+## A root set closed under the reads the census dispositions (2026-09-06)
+
+ADR 0043, the fifth slice of ADR 0034's premise, taking the case ADR 0041
+deferred by name. The root set was the parameter list, filtered; it is now
+closed under the reads this census already dispositions, on the ground that
+**naming an intermediate does not change whose value it is**. Three legs are
+ADR 0034 restated — a name a parameter's own object binding pattern bound, a
+name a local declaration bound from an already-rooted initializer (to a
+fixpoint), and the chain reads that already worked — and one is a genuinely
+different claim: a parameter whose **default** names another rooted parameter
+holds the caller's argument at its own slot or at the default's, which is
+caller-supplied under either branch. Every stated subject now names the
+derivation that rooted it (`subjectRoot`, a closed two-value set), and an
+unreviewed or absent spelling refuses rather than reading as the weaker one.
+Handshake protocol 26 → 27.
+
+Measured: withheld 675 → 662, `censusRefused` 618 → 605, the accessor class
+285 → 248, statuses unchanged at 368 certified / 30 refused. **Thirteen
+candidates**, which is the ADR 0041 pattern and not the ADR 0042 one — the
+bodies it unblocked refuse at their next form, and **coercion is now the
+largest class in this lever** at 107 refusals, up from 83. The residue of the
+accessor class is 98 property reads and 103 element reads whose receiver is a
+module-level lookup table, a local the engine built, or a call result: a third
+premise, and an escape question rather than a provenance one.
+
+Recorded, not closed: a rest parameter and a rest element (the container is the
+engine's); a binding element or parameter pattern carrying its own default (the
+value may be one this code made); a default that is not a bare identifier, and
+a default naming a parameter that is itself defaulted; a name bound by a
+`for…of`/`for…in` head; a symbol with more than one declaration; anything
+written anywhere in its file. The `const style = props.style` leg inherits
+ADR 0034's known limit exactly and adds none — if *this* module wrote an
+accessor-bearing object onto the caller's object earlier, that accessor is this
+module's, which is a `writes`-domain fact and is as true of `props.style.x`
+written inline.
+
+**A vacuity trap the fixture now guards.** Three of the ADR's negative exports
+first certified without the census reaching the premise at all: written
+`source = { value: 1 }`, the compiler binds `value` as a data property of a
+literal in the same file, so the producer records **no form**. They sit on the
+untyped module value instead. Any future negative fixture over a defaulted or
+destructured parameter has to check that a form exists before it can claim to
+pin a refusal — the same guard `setterOnModuleValue` carries for ADR 0040.
+
 ## The iteration protocol, by whose value is iterated (2026-09-06)
 
 ADR 0042, the fourth slice of ADR 0034's premise and the one that paid. The

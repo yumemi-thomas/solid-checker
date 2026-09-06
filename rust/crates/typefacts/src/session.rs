@@ -3763,6 +3763,7 @@ mod tests {
             captured: false,
             subject_parameter: None,
             subject_write: false,
+            subject_root: String::new(),
         }
     }
 

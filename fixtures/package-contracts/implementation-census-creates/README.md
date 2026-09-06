@@ -252,3 +252,22 @@ ran. None hands `session` or `harness` to the package.
   and executed there; the recipe refuses the gate on any other answer, and an
   untracked stub removes the only fixture that proves a consumer recipe can
   import the package under test at all.
+- **The ADR 0043 negatives must sit on `untypedRegistry`, never on an object
+  literal.** Written `defaultedFromModuleValue(source = { value: 1 })` the
+  compiler binds `value` as a **data property of a literal in this file**, so
+  the producer records no form at all and the export certifies without the
+  census ever reaching the premise. All three defaults —
+  `defaultedFromModuleValue`, `patternParameterDefault`,
+  `patternElementDefault` — did exactly that on their first draft. The same
+  vacuity that `setterOnModuleValue` guards for ADR 0040: a negative over a
+  member of a value this module wrote has to be a member the compiler cannot
+  bind, or it pins nothing.
+- **`defaultedFromParameter`'s default must be a bare reference to another
+  parameter, `defaultedFromDefaulted`'s must name a *defaulted* one, and
+  `patternRestParameter` must keep a plain sibling beside its rest element.**
+  The three pin the derivation boundary: one reviewed hop from a rooted
+  parameter, not a chain, and a rest element's object is the engine's however
+  its siblings are rooted.
+- **`localBindingFromParameter` must bind twice.** One declaration would pin
+  the leg but not the fixpoint — the second declaration roots only once the
+  first has, and a single-pass implementation would pass a one-hop fixture.
