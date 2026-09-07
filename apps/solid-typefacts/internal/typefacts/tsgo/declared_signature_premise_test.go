@@ -65,8 +65,46 @@ function lengthOf(axis) {
   return axis.max - axis.min;
 }
 
+export function applyBoxDelta(box, { x, y }) {
+  applyAxisDelta(box.x, x.translate, x.scale, x.originPoint);
+}
+
+function applyAxisDelta(axis, translate = 0, scale = 1, originPoint, boxScale) {
+  axis.min = applyPointDelta(axis.min, translate, scale, originPoint, boxScale);
+}
+
+function applyPointDelta(point, translate, scale, originPoint, boxScale) {
+  if (boxScale !== undefined) {
+    point = scalePoint(point, boxScale, originPoint);
+  }
+  return scalePoint(point, scale, originPoint) + translate;
+}
+
+function scalePoint(point, scale, originPoint) {
+  const distanceFromOrigin = point - originPoint;
+  const scaled = scale * distanceFromOrigin;
+  return originPoint + scaled;
+}
+
+function scaleWithin(value, factor, bias) {
+  return value * factor + bias;
+}
+
+function widenWithin(value, bias) {
+  bias = 1;
+  return value + bias;
+}
+
 export function viaAxisHelper(axis) {
   return lengthOf(axis);
+}
+
+export function omitsTrailingArgument(value) {
+  return scaleWithin(value, 2);
+}
+
+export function omitsWrittenArgument(value) {
+  return widenWithin(value);
 }
 `
 
@@ -85,6 +123,12 @@ export declare const mirrorAlias: (easing: EasingFunction) => EasingFunction;
 export type BezierDefinition = [number, number, number, number];
 export declare const aliasTuple: (definition: BezierDefinition) => string;
 export declare function viaAxisHelper(axis: Axis): number;
+export declare interface AxisDelta { translate: number; scale: number; originPoint: number }
+export declare interface BoxDelta { x: AxisDelta; y: AxisDelta }
+export declare interface Box { x: Axis; y: Axis }
+export declare function applyBoxDelta(box: Box, delta: BoxDelta): void;
+export declare function omitsTrailingArgument(value: number): number;
+export declare function omitsWrittenArgument(value: number): number;
 export type ClampFn = typeof clamp;
 export declare const clampConst: (min: number, max: number, v: number) => number;
 `
@@ -108,8 +152,8 @@ func premiseProjectWith(t *testing.T, tsconfig string) (typefacts.ExportValueAna
 	}
 	write("pkg/index.js", premiseRuntimeSource)
 	write("pkg/index.d.ts", premiseDeclarationSource)
-	write("harness.ts", `import { clamp, widen, scale, span, viaHelper, viaAxisHelper, spreadDeclared, annotated, arity, documented, mirrorAlias, aliasTuple } from "./pkg/index.js";
-export const subjects = [clamp, widen, scale, span, viaHelper, viaAxisHelper, spreadDeclared, annotated, arity, documented, mirrorAlias, aliasTuple];
+	write("harness.ts", `import { clamp, widen, scale, span, viaHelper, viaAxisHelper, applyBoxDelta, omitsTrailingArgument, omitsWrittenArgument, spreadDeclared, annotated, arity, documented, mirrorAlias, aliasTuple } from "./pkg/index.js";
+export const subjects = [clamp, widen, scale, span, viaHelper, viaAxisHelper, applyBoxDelta, omitsTrailingArgument, omitsWrittenArgument, spreadDeclared, annotated, arity, documented, mirrorAlias, aliasTuple];
 `)
 	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
 	if err != nil {
@@ -487,6 +531,93 @@ export function overLibraryCall(base: number) {
 			t.Fatalf("%s: primitive completion = %v, want %v",
 				testCase.export, transcript.PrimitiveCompletion, testCase.primitive)
 		}
+	}
+}
+
+// ADR 0049: an argument slot the call does not write receives `undefined`.
+//
+// It is a semantic fact — the call has fewer arguments than the callee has
+// parameters — so it is available where no declaration is, and it is a
+// *stronger* premise than the `any` an unannotated parameter carries. The
+// second case pins the one slot this refuses to speak for: a parameter the
+// callee's own body writes holds something else by the time the body reads it.
+func TestOmittedArgumentSlotsArePremisedAsUndefined(t *testing.T) {
+	analyzer, dir := premiseProject(t)
+	caller := premiseTranscript(t, analyzer, dir, "omitsTrailingArgument")
+	if len(caller.CallArgumentPremises) != 1 {
+		t.Fatalf("call argument premises = %#v (refusal %q), want the one call to scaleWithin",
+			caller.CallArgumentPremises, caller.ParameterPremiseRefusal)
+	}
+	recorded := caller.CallArgumentPremises[0].Arguments
+	if len(recorded) != 3 {
+		t.Fatalf("recorded arguments = %#v, want both written slots and the omitted one", recorded)
+	}
+	if recorded[2].Index != 2 || recorded[2].Type != "undefined" {
+		t.Fatalf("omitted slot = %#v, want index 2 typed undefined", recorded[2])
+	}
+
+	// Demanded back, the helper binds it and its coercions clear — which is
+	// also what pins that the identity built from the flag constant is the one
+	// the checker's own `undefined` type carries.
+	helper := premiseLocalTranscript(t, analyzer, dir, "omitsTrailingArgument", "scaleWithin", recorded)
+	if len(helper.ParameterPremises) != 3 {
+		t.Fatalf("scaleWithin premises = %#v (refusal %q), want all three bound",
+			helper.ParameterPremises, helper.ParameterPremiseRefusal)
+	}
+	if kinds := markerKinds(helper.UncensusedInvokingForms); len(kinds) != 0 {
+		t.Fatalf("scaleWithin forms under the premise = %v, want none", kinds)
+	}
+
+	// A parameter the callee writes is skipped: the premise would describe a
+	// value the body has already replaced.
+	written := premiseTranscript(t, analyzer, dir, "omitsWrittenArgument")
+	if len(written.CallArgumentPremises) != 1 {
+		t.Fatalf("omitsWrittenArgument premises = %#v (refusal %q)",
+			written.CallArgumentPremises, written.ParameterPremiseRefusal)
+	}
+	for _, argument := range written.CallArgumentPremises[0].Arguments {
+		if argument.Index == 1 {
+			t.Fatalf("a written parameter was premised as undefined: %#v", argument)
+		}
+	}
+}
+
+// ADR 0049, end to end over the shape it was written for: motion-dom's
+// projection geometry, where a root premised by its declared signature reaches
+// a helper through a call that **omits** the trailing optional argument.
+//
+// Without the omitted slot the chain loses `boxScale` at the first hop and
+// every premise below it degrades to `any`. With it the slot is carried as
+// `undefined` and each hop re-states it, which is what this pins: two hops,
+// and the premise still naming every parameter at the second.
+func TestAnOmittedSlotSurvivesTheHelperPremiseChain(t *testing.T) {
+	analyzer, dir := premiseProject(t)
+	root := premiseTranscript(t, analyzer, dir, "applyBoxDelta")
+	if root.ParameterPremiseRefusal != "" || len(root.ParameterPremises) != 2 {
+		t.Fatalf("applyBoxDelta premises = %#v, refusal %q",
+			root.ParameterPremises, root.ParameterPremiseRefusal)
+	}
+	if len(root.CallArgumentPremises) != 1 {
+		t.Fatalf("applyBoxDelta call premises = %#v", root.CallArgumentPremises)
+	}
+	first := root.CallArgumentPremises[0].Arguments
+	if len(first) != 5 || first[4].Index != 4 || first[4].Type != "undefined" {
+		t.Fatalf("first hop = %#v, want four written slots and the omitted one", first)
+	}
+
+	// The second hop: the helper binds all five and re-states them at its own
+	// call, which is the propagation the chain lives on.
+	axis := premiseLocalTranscript(t, analyzer, dir, "applyBoxDelta", "applyAxisDelta", first)
+	if axis.ParameterPremiseRefusal != "" || len(axis.ParameterPremises) != 5 {
+		t.Fatalf("applyAxisDelta premises = %#v, refusal %q",
+			axis.ParameterPremises, axis.ParameterPremiseRefusal)
+	}
+	if len(axis.CallArgumentPremises) != 1 {
+		t.Fatalf("applyAxisDelta call premises = %#v", axis.CallArgumentPremises)
+	}
+	second := axis.CallArgumentPremises[0].Arguments
+	if len(second) != 5 || second[4].Type != "undefined" {
+		t.Fatalf("second hop = %#v, want all five slots with the omitted one still undefined", second)
 	}
 }
 

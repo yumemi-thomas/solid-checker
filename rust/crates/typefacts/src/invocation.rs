@@ -449,6 +449,12 @@ pub struct ParameterPremise {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CallArgumentPremise {
+    // `arguments` covers the slots the call writes and, since ADR 0049, the
+    // slots it does not: an unwritten parameter receives `undefined` at run
+    // time, a primitive. A slot whose parameter has an initializer, is a rest
+    // parameter, is not a plain identifier, or is written in the callee's own
+    // file is skipped rather than stated, and the list stays strictly
+    // increasing either way.
     pub call: Location,
     pub arguments: Vec<ParameterPremise>,
 }

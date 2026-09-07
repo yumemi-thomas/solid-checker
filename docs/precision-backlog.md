@@ -1,5 +1,31 @@
 # Precision backlog
 
+## An omitted argument slot receives `undefined` (2026-09-07)
+
+ADR 0049. A call with fewer arguments than the callee has parameters leaves the
+rest `undefined` — the specification, not an inference — and `undefined` is a
+**primitive**, so it is a strictly stronger premise than the `any` an
+unannotated JavaScript parameter carries. It is a *semantic* fact rather than a
+type one, which is why it is available exactly where the declarations are not.
+Skipped for a parameter with an initializer (the value is the default), a rest
+parameter, a non-identifier binding, and a parameter the callee's own file
+writes. Handshake protocol 32 → 33.
+
+**Measured: no movement — withheld 528, every class identical.** Kept anyway,
+and the reason is worth recording. The premise is produced and pinned surviving
+two hops of motion-dom's own `applyBoxDelta` → `applyAxisDelta` →
+`applyPointDelta` chain; what still blocks that cluster is one line further in.
+`applyPointDelta` **assigns its own `point` parameter** from a call to an
+unannotated helper, so the second call's slot 0 is `any`, carries no premise,
+and `point - originPoint` records a coercion inside `scalePoint`. Closing that
+needs the caller's twin to know `scalePoint` returns a number — the
+"annotate the callee in the caller's twin" route ADR 0045 rejected as too
+large, and the honest next step for this cluster.
+
+A chain that silently degrades an optional argument to `any` is a defect
+whether or not a row depends on it today, and every deeper hop will rest on
+this.
+
 ## A read of what a caller-supplied callee returned (2026-09-07)
 
 ADR 0048, ADR 0042's `parameter-rooted-element` argument by a shorter route.

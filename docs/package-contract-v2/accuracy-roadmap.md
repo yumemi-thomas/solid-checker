@@ -459,6 +459,16 @@ closed claims per domain so the intermediate progress is visible.
    candidates** — the largest of the session, because the shape is how every
    compiled body threads a caller's callback result.
 
+   **ADR 0049** repairs the premise chain where a caller omits an optional
+   argument: the slot receives `undefined`, a primitive, which is stronger than
+   the `any` it used to degrade to. It moved **nothing** on the corpus, and the
+   shortfall names the blocker one line deeper — `applyPointDelta` assigns its
+   own `point` parameter from a call to an unannotated helper, so the next
+   call's slot 0 is `any`. Closing that needs the caller's twin to know the
+   helper returns a number: the "annotate the callee in the caller's twin"
+   route ADR 0045 rejected as too large, and now the named next step for this
+   cluster.
+
    The second slice is ADR 0041: a spread's operand and an object pattern's
    source are subjects under the same premise. It removed the destructuring
    class (`BindingElement` 42 → 6) but closed only **six** candidates, because

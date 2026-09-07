@@ -4,7 +4,14 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 32: a form's subject may be rooted at the
+// TypeFactsHandshakeProtocol is 33: a CallArgumentPremise covers the argument
+// slots a call does **not** write as well as those it does (ADR 0049). Such a
+// parameter receives `undefined` at run time, a primitive, which is a stronger
+// premise than the `any` an unannotated parameter carries — and it is what
+// lets a premise chain survive a caller that omits an optional argument. A
+// protocol-32 consumer demanded only the written slots, so the echo it
+// required would now differ.
+// Protocol 32: a form's subject may be rooted at the
 // value a call to a **caller-supplied callee** handed back — SubjectRoot
 // `parameter-result`, with SubjectParameter naming the slot the callee was
 // rooted at (ADR 0048). What the caller's own function returned is the
@@ -209,8 +216,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 32
-	TypeFactsSchemaSHA256             = "sha256:ed216ad0a22af31e4f6aa2c4050a99b9d27493dab0cd8f34874a05de63e60fdc"
+	TypeFactsHandshakeProtocol uint64 = 33
+	TypeFactsSchemaSHA256             = "sha256:89ad517eaebfc8e2e348f1780bd3a08baf285058d66c5cb9007f6749b39e3812"
 )
 
 type ServiceHandshake struct {

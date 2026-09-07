@@ -906,10 +906,69 @@ func (p *project) callArgumentPremiseLocked(twin *premiseTwin, call *ast.Node) (
 			Spelling: p.spellableTypeReferenceLocked(argumentType),
 		})
 	}
+	entry.Arguments = append(
+		entry.Arguments, p.omittedSlotPremisesLocked(call, len(arguments))...,
+	)
 	if len(entry.Arguments) == 0 {
 		return typefacts.CallArgumentPremise{}, false
 	}
 	return entry, true
+}
+
+// omittedSlotPremisesLocked answers the premise for every parameter slot the
+// call does not write: at runtime such a parameter receives `undefined`, which
+// is a primitive and therefore a *stronger* premise than the `any` the callee's
+// own unannotated parameter would otherwise carry (ADR 0049).
+//
+// It is a semantic fact rather than a type one — the call has fewer arguments
+// than the callee has parameters, and the specification fills the rest with
+// `undefined` — so it is available where no declaration is. Three slots are
+// skipped rather than stated:
+//
+//   - one whose parameter has an **initializer**, because the value is then
+//     the default rather than `undefined`;
+//   - a **rest** parameter, and anything that is not a plain identifier
+//     binding, because there is no single slot to speak for;
+//   - one the callee's own file **writes**, because the parameter would then
+//     hold something the premise does not describe by the time the body reads
+//     it, and a type of `undefined` would classify that read wrongly.
+//
+// A skipped slot leaves the list strictly increasing, which is what the
+// annotation and the consumer both require.
+func (p *project) omittedSlotPremisesLocked(call *ast.Node, written int) []typefacts.ParameterPremise {
+	callee := p.formRuntimeCalleeDeclarationLocked(call)
+	if callee == nil {
+		return nil
+	}
+	var premises []typefacts.ParameterPremise
+	for index, parameter := range callee.Parameters() {
+		if index < written {
+			continue
+		}
+		declaration := parameter.AsParameterDeclaration()
+		name := parameter.Name()
+		if declaration == nil || declaration.DotDotDotToken != nil ||
+			parameter.Initializer() != nil || name == nil || !ast.IsIdentifier(name) {
+			continue
+		}
+		symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(name))
+		if symbol == nil || p.symbolIsAssignedLocked(symbol, callee) {
+			continue
+		}
+		premises = append(premises, typefacts.ParameterPremise{
+			Index: index, Type: "undefined", Identity: undefinedTypeIdentity(),
+		})
+	}
+	return premises
+}
+
+// undefinedTypeIdentity is typeDeclarationIdentity's answer for the intrinsic
+// `undefined` type, which has no symbol and no alias and so is its flags
+// alone. Built from the constant rather than from a type object because the
+// caller's twin has no expression of that type to ask about;
+// TestOmittedArgumentSlotsArePremisedAsUndefined pins that the two agree.
+func undefinedTypeIdentity() string {
+	return fmt.Sprintf("flags:%d", checker.TypeFlagsUndefined)
 }
 
 // spellableTypeReferenceLocked answers a form of a type that resolves from a

@@ -439,7 +439,14 @@ type ParameterPremise struct {
 // carried under a premised census (handshake protocol 23). See
 // ExportImplementationTranscript.CallArgumentPremises.
 type CallArgumentPremise struct {
-	Call      Location           `cbor:"call" json:"call"`
+	Call Location `cbor:"call" json:"call"`
+	// Arguments covers the slots the call **writes**, and since ADR 0049 the
+	// slots it does not: a parameter the call leaves unwritten receives
+	// `undefined` at run time, which is a primitive and so a stronger premise
+	// than the `any` an unannotated parameter would otherwise carry. A slot
+	// whose parameter has an initializer, is a rest parameter, is not a plain
+	// identifier, or is written in the callee's own file is skipped rather
+	// than stated. The list stays strictly increasing either way.
 	Arguments []ParameterPremise `cbor:"arguments" json:"arguments"`
 }
 

@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:ed216ad0a22af31e4f6aa2c4050a99b9d27493dab0cd8f34874a05de63e60fdc";
+    "sha256:89ad517eaebfc8e2e348f1780bd3a08baf285058d66c5cb9007f6749b39e3812";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -138,6 +138,11 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
+// Protocol 33 lets a `callArgumentPremise` cover the slots a call does **not**
+// write (ADR 0049): such a parameter receives `undefined` at run time, a
+// primitive, which is a stronger premise than an unannotated parameter's `any`
+// and is what lets a premise chain survive a caller that omits an optional
+// argument.
 // Protocol 32 adds the `parameter-result` subject derivation (ADR 0048): the
 // value a call to a caller-supplied callee handed back, carrying the slot the
 // callee was rooted at.
@@ -231,7 +236,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // producer is never "not rooted".
 // Protocol 17 includes exact-null loose equality in the positive
 // uncensused-form classifier. Protocol 16 added unchanged-parameter identity.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 32;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 33;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
