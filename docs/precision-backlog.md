@@ -1,5 +1,29 @@
 # Precision backlog
 
+## A read of what a caller-supplied callee returned (2026-09-07)
+
+ADR 0048, ADR 0042's `parameter-rooted-element` argument by a shorter route.
+A value the caller's *iterable* yielded was already the caller's; a value the
+caller's *function* returned had no derivation, and after ADR 0047 it was the
+largest single refusal left. The subject walk now stops at a **call** as well
+as at an identifier and asks whether that call's callee is rooted at a plain
+unwritten parameter; because ADR 0043 roots a local binding from an
+already-rooted initializer, `const topLeft = transform(p)` followed by
+`topLeft.y` is covered by the same step, which is how compiled code writes it.
+Derivation `parameter-result`, carrying the slot the callee came from.
+Handshake protocol 31 → 32.
+
+Measured: withheld 568 → 528, `censusRefused` 511 → 471, property reads 98 → 74,
+element reads 52 → 34, statuses unchanged at 368 / 30. **Forty candidates** from
+one derivation — the largest of the session — because the shape is how every
+compiled body threads a caller's callback result.
+
+Recorded, not closed: a call to a **module-local** helper (closing it needs what
+the callee's own census can say about the value it returns, which for a
+primitive is ADR 0045's `primitiveCompletion` and for an object is unreviewed);
+a call to a default-library member, for the same reason; a call to a written or
+defaulted callee, which is a second hop.
+
 ## Whose `Symbol.hasInstance` an `instanceof` reaches (2026-09-07)
 
 ADR 0047, the same provenance question asked of the one operator the family had

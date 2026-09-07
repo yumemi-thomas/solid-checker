@@ -760,7 +760,25 @@ func (p *project) subjectRootLocked(
 	for node != nil && (ast.IsPropertyAccessExpression(node) || nodeKindName(node) == "ElementAccessExpression") {
 		node = identityPreservingUnwrap(node.Expression())
 	}
-	if node == nil || !ast.IsIdentifier(node) {
+	if node == nil {
+		return nil
+	}
+	// ADR 0048: the value a call to a **caller-supplied callee** handed back.
+	// What the caller's own function returned is the caller's, by the argument
+	// ADR 0042 already makes about what its iterable yielded, so the walk stops
+	// here rather than at an identifier.
+	if ast.IsCallExpression(node) {
+		callee := p.subjectRootLocked(node.Expression(), roots)
+		if callee == nil || callee.parameter == nil ||
+			callee.derivation != typefacts.SubjectRootParameter {
+			return nil
+		}
+		index := *callee.parameter
+		return &resolvedSubject{
+			parameter: &index, derivation: typefacts.SubjectRootParameterResult,
+		}
+	}
+	if !ast.IsIdentifier(node) {
 		return nil
 	}
 	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(node))

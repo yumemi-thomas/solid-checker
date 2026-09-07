@@ -568,6 +568,13 @@ const (
 	// it — the value is not the caller's, it is this program's — and
 	// SubjectDeclaration names the binding instead.
 	SubjectRootOwnLiteral SubjectRootDerivation = "own-literal"
+	// SubjectRootParameterResult is ADR 0048's: the subject is the value a
+	// call **to a caller-supplied callee** handed back. What the caller's own
+	// function returned is the caller's, exactly as what its iterable yielded
+	// is (ADR 0042's `parameter-rooted-element`), so an accessor on it was
+	// installed by the caller and is analyzed in the caller's own artifact.
+	// The SubjectParameter is the slot the callee was rooted at.
+	SubjectRootParameterResult SubjectRootDerivation = "parameter-result"
 	// SubjectRootDefaultLibrary is ADR 0047's, for an `instanceof` whose
 	// constructor the checker resolves to a declaration of the default
 	// library. `Symbol.hasInstance` on such a constructor is the engine's own,

@@ -11494,7 +11494,7 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 77] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 80] = [
         "accessorTableRead",
         "arrayRestRead",
         "awaitIterateParameter",
@@ -11550,6 +11550,9 @@ export const value = phantom;
         "patternRestParameter",
         "plain",
         "protoTableRead",
+        "readBoundCallerResult",
+        "readCallerResult",
+        "readLocalResult",
         "reassignedHelper",
         "reflectApply",
         "returnedCallbackCoercion",
@@ -12760,6 +12763,9 @@ export const value = phantom;
             "patternRestParameter",
             "plain",
             "protoTableRead",
+            "readBoundCallerResult",
+            "readCallerResult",
+            "readLocalResult",
             "reassignedHelper",
             "reflectApply",
             "returnedCallbackCoercion",
@@ -12977,7 +12983,7 @@ export const value = phantom;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
-    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 75] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 78] = [
         "accessorTableRead",
         "arrayRestRead",
         "awaitIterateParameter",
@@ -13032,6 +13038,9 @@ export const value = phantom;
         "patternRestParameter",
         "plain",
         "protoTableRead",
+        "readBoundCallerResult",
+        "readCallerResult",
+        "readLocalResult",
         "reassignedHelper",
         "reflectApply",
         "returnedCallbackCoercion",
@@ -13082,7 +13091,7 @@ export const value = phantom;
     /// types to the helper as its premise; `untypedCoercion` (declared
     /// `unknown`), `helperSpreadCoercion` (a spread carries no slot) and
     /// `helperUntypedArgument` (an `any` slot) are refused.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 36] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 38] = [
         "chainCallbacks",
         "coerceBoundHelperResult",
         "coerceConditionalHelperResult",
@@ -13108,6 +13117,8 @@ export const value = phantom;
         "patternParameter",
         "patternRestParameter",
         "plain",
+        "readBoundCallerResult",
+        "readCallerResult",
         "returnedCallbackCoercion",
         "setterOnParameter",
         "spreadArgs",
@@ -13120,7 +13131,7 @@ export const value = phantom;
         "viaHelperChain",
         "whileBreak",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 39] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 40] = [
         ("accessorTableRead", "census"),
         ("arrayRestRead", "census"),
         ("awaitIterateParameter", "census"),
@@ -13150,6 +13161,7 @@ export const value = phantom;
         ("patternElementDefault", "census"),
         ("patternParameterDefault", "census"),
         ("protoTableRead", "census"),
+        ("readLocalResult", "census"),
         ("reassignedHelper", "census"),
         ("reflectApply", "census"),
         ("setterOnModuleValue", "census"),
@@ -13537,6 +13549,30 @@ export const value = phantom;
                 "{export}"
             );
         }
+    }
+
+    /// ADR 0048: a read of what a caller-supplied callee handed back. The
+    /// negative is the same read over a **module-local** helper's result,
+    /// which is this module's value and which nothing here speaks for.
+    #[test]
+    fn the_probe_gate_tracer_census_closes_a_read_of_a_caller_supplied_result() {
+        for export in ["readCallerResult", "readBoundCallerResult"] {
+            let Some((_, outcome)) = census_certify(export, Some("root-closure.mjs")) else {
+                return;
+            };
+            let finalized = outcome
+                .unwrap_or_else(|error| panic!("{export} certifies under ADR 0048: {error}"));
+            assert!(
+                finalized.withheld_closures().is_empty(),
+                "{export}: {:?}",
+                finalized.withheld_closures()
+            );
+            assert!(
+                creates_is_closed_in(finalized.canonical_main(), export),
+                "{export}"
+            );
+        }
+        assert_census_withholds("readLocalResult", &["uncensused invoking form"]);
     }
 
     /// ADR 0047: whose `Symbol.hasInstance` an `instanceof` can reach. Three

@@ -868,3 +868,30 @@ export function instanceOfComputedClass(value) {
 export function instanceOfModuleValue(value) {
   return value instanceof untypedRegistry.ctor;
 }
+
+// ---------------------------------------------------------------------------
+// ADR 0048: what the caller's own function handed back is the caller's, by the
+// argument ADR 0042 makes about what its iterable yielded.
+// ---------------------------------------------------------------------------
+
+// A read of the value a caller-supplied callee returned. **Certifies.**
+export function readCallerResult(transform, point) {
+  return transform(point).y;
+}
+
+// The same through a local binding, which is how compiled code writes it.
+// **Certifies.**
+export function readBoundCallerResult(transform, point) {
+  const mapped = transform(point);
+  return mapped.y;
+}
+
+// A call to a **module-local** helper: what it returned is this module's, and
+// nothing here says its members are data properties. **Refuses.**
+export function readLocalResult(point) {
+  return identityOf(point).y;
+}
+
+function identityOf(value) {
+  return untypedRegistry;
+}

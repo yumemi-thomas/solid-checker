@@ -15,6 +15,8 @@
 
 import {
   coerceBoundHelperResult,
+  readBoundCallerResult,
+  readCallerResult,
   instanceOfLibrary,
   instanceOfOwnClass,
   instanceOfParameter,
@@ -54,5 +56,8 @@ export async function runProbeSession(_session, harness) {
   instanceOfParameter(1, Number);
   instanceOfLibrary(new Error("x"));
   instanceOfOwnClass(1);
+  // ADR 0048.
+  readCallerResult((p) => ({ y: p }), 1);
+  readBoundCallerResult((p) => ({ y: p }), 1);
   harness.emit({ marker: "call", kind: "call", phase: "exit" });
 }

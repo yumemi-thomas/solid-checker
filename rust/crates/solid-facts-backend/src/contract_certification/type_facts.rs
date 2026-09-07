@@ -7838,6 +7838,10 @@ const CENSUS_PARAMETER_ROOTED_READ_FORMS_PROTOCOL: u64 = 25;
 /// question has to know the answer means "no" rather than "not asked".
 /// The handshake protocol at which an `instanceof` form could state whose
 /// `Symbol.hasInstance` its operator can reach (ADR 0047).
+/// The handshake protocol at which a form's subject could be the value a call
+/// to a caller-supplied callee handed back (ADR 0048).
+const CENSUS_PARAMETER_RESULT_SUBJECT_PROTOCOL: u64 = 32;
+
 const CENSUS_HAS_INSTANCE_SUBJECT_PROTOCOL: u64 = 31;
 
 const CENSUS_PRIMITIVE_COMPLETION_PROTOCOL: u64 = 29;
@@ -8156,6 +8160,14 @@ fn census_creates_domain(
             "implementation-census premise required: the uncensused-invoking-form census arrived \
              at handshake protocol {CENSUS_UNCENSUSED_FORMS_PROTOCOL} and this build speaks {}, \
              so an empty form list would be an absence read as an enumeration",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_PARAMETER_RESULT_SUBJECT_PROTOCOL {
+        return Err(refuse(format!(
+            "implementation-census premise required: a subject rooted at the result of a \
+             caller-supplied call arrived at handshake protocol \
+             {CENSUS_PARAMETER_RESULT_SUBJECT_PROTOCOL} and this build speaks {}",
             typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
         )));
     }
@@ -9987,7 +9999,10 @@ fn census_form_disposition(
     // what a protocol-26 producer's every rooted form decodes to.
     match form.subject_root.as_str() {
         // The caller's value, under one branch or two.
-        "parameter" | "parameter-default" => {
+        // ADR 0048 joins the caller-provenance derivations: the value a call
+        // to a caller-supplied callee handed back is the caller's, exactly as
+        // what its iterable yielded is.
+        "parameter" | "parameter-default" | "parameter-result" => {
             form.subject_parameter?;
             if !census_form_shape_reads_the_subject(form) {
                 return None;

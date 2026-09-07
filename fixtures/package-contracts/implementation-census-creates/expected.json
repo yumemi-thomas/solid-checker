@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "ddb8b7d2b9ac60ca3c98a3388173ae1e7ea93eeedebadd9f59c1d6c9f8b4df5a",
+            "closureSha256": "44b36863a203b487306816b72c889a49447417f220ad40f9407a3ceee0218234",
             "path": "./index.js",
-            "sha256": "fe4864fe7dfe3355df2e6775cc281c018db351523aaace1783bf9ae69f5929ee"
+            "sha256": "ab0c392b9200582bb36c0f3c0bdf293125b831eafa9fd2623fd409fd72d2ca7f"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "ffc1b01c32208b75bf9860db6fa55d65acf66db7ece854aa58691e18492ab2e4"
+            "sha256": "8a4b4ffce8cdcbb1f38186c646616e143035883478de20df3d80d562ad8e7d67"
           },
           "exports": {
             "accessorTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -68,6 +68,9 @@
             "patternRestParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "plain": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
             "protoTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "readBoundCallerResult": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1",
+            "readCallerResult": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1",
+            "readLocalResult": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "reassignedHelper": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "reflectApply": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "returnedCallbackCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",

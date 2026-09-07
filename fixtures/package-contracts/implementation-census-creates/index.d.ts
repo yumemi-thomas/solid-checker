@@ -114,3 +114,7 @@ export declare function instanceOfOwnClass(value: unknown): boolean;
 export declare function instanceOfDerivedClass(value: unknown): boolean;
 export declare function instanceOfComputedClass(value: unknown): boolean;
 export declare function instanceOfModuleValue(value: unknown): boolean;
+// ADR 0048: a read of what a caller-supplied callee handed back.
+export declare function readCallerResult(transform: (p: any) => any, point: any): unknown;
+export declare function readBoundCallerResult(transform: (p: any) => any, point: any): unknown;
+export declare function readLocalResult(point: any): unknown;

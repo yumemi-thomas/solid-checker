@@ -1403,6 +1403,24 @@ export function destructuredParameter({ inner }: any): unknown {
 	return inner.value;
 }
 
+// ADR 0048: what a caller-supplied callee handed back.
+export function readCallerResult(transform: any, point: any): unknown {
+	return transform(point).y;
+}
+
+export function readBoundCallerResult(transform: any, point: any): unknown {
+	const mapped = transform(point);
+	return mapped.y;
+}
+
+export function readLocalResult(point: any): unknown {
+	return identityOf(point).y;
+}
+
+function identityOf(value: any): any {
+	return registry;
+}
+
 // ADR 0047: whose Symbol.hasInstance an instanceof can reach.
 class OwnMarker {
 	value: any;
@@ -1650,6 +1668,12 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 		{"instanceOfDerivedClass", []*int{nil}},
 		{"instanceOfComputedClass", []*int{nil}},
 		{"instanceOfModuleValue", []*int{nil, nil}},
+		// ADR 0048: the read is rooted at the slot the callee came from, both
+		// written inline and through a local binding; a module-local helper's
+		// result is rooted at nothing.
+		{"readCallerResult", []*int{&zero}},
+		{"readBoundCallerResult", []*int{&zero}},
+		{"readLocalResult", []*int{nil}},
 		// ADR 0040: a write into the caller's object roots exactly as a read
 		// of it does, and says so.
 		{"setterOnParameter", []*int{&zero}},
@@ -1720,6 +1744,8 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 		{"instanceOfParameter", typefacts.SubjectRootParameter},
 		{"instanceOfLibrary", typefacts.SubjectRootDefaultLibrary},
 		{"instanceOfOwnClass", typefacts.SubjectRootOwnClass},
+		{"readCallerResult", typefacts.SubjectRootParameterResult},
+		{"readBoundCallerResult", typefacts.SubjectRootParameterResult},
 	} {
 		transcript := implementationTranscriptFor(t, analyzer, path, subjectSource, testCase.export)
 		var stated int
@@ -1737,7 +1763,8 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 			wantDeclaration := form.SubjectRoot == typefacts.SubjectRootOwnLiteral ||
 				form.SubjectRoot == typefacts.SubjectRootOwnClass
 			wantParameter := form.SubjectRoot == typefacts.SubjectRootParameter ||
-				form.SubjectRoot == typefacts.SubjectRootParameterDefault
+				form.SubjectRoot == typefacts.SubjectRootParameterDefault ||
+				form.SubjectRoot == typefacts.SubjectRootParameterResult
 			if (form.SubjectDeclaration != nil) != wantDeclaration ||
 				(form.SubjectParameter != nil) != wantParameter {
 				t.Fatalf("%s: derivation %q carries the wrong companion fact", testCase.export, form.SubjectRoot)

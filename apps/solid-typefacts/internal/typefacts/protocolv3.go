@@ -4,7 +4,12 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 31: an `instanceof` form may state whose
+// TypeFactsHandshakeProtocol is 32: a form's subject may be rooted at the
+// value a call to a **caller-supplied callee** handed back — SubjectRoot
+// `parameter-result`, with SubjectParameter naming the slot the callee was
+// rooted at (ADR 0048). What the caller's own function returned is the
+// caller's, by the argument ADR 0042 makes about what its iterable yielded.
+// Protocol 31: an `instanceof` form may state whose
 // `Symbol.hasInstance` its operator can reach (ADR 0047), through the same
 // SubjectRoot vocabulary: `parameter`/`parameter-default` for a constructor the
 // caller supplied, `default-library` for the engine's own, and `own-class`,
@@ -204,8 +209,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 31
-	TypeFactsSchemaSHA256             = "sha256:cb6d3d07129cf8c09d410e308d19458e350fff38a522b87d0c2b0ca160a6e293"
+	TypeFactsHandshakeProtocol uint64 = 32
+	TypeFactsSchemaSHA256             = "sha256:ed216ad0a22af31e4f6aa2c4050a99b9d27493dab0cd8f34874a05de63e60fdc"
 )
 
 type ServiceHandshake struct {

@@ -452,6 +452,13 @@ closed claims per domain so the intermediate progress is visible.
    nothing can hang the method on. Measured: withheld 582 → 568, `instanceof`
    29 → 9 at 15 → 6 sites, **fourteen candidates**.
 
+   **ADR 0048** takes the largest single refusal left after ADR 0047 with one
+   derivation: the value a call to a **caller-supplied callee** handed back is
+   the caller's, exactly as what its iterable yielded is. Measured: withheld
+   568 → 528, property reads 98 → 74, element reads 52 → 34, **forty
+   candidates** — the largest of the session, because the shape is how every
+   compiled body threads a caller's callback result.
+
    The second slice is ADR 0041: a spread's operand and an object pattern's
    source are subjects under the same premise. It removed the destructuring
    class (`BindingElement` 42 → 6) but closed only **six** candidates, because
