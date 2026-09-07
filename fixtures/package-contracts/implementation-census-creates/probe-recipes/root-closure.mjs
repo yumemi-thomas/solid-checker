@@ -15,6 +15,9 @@
 
 import {
   coerceBoundHelperResult,
+  joinedArms,
+  writtenFromUninitialized,
+  writtenJoin,
   readBoundCallerResult,
   readCallerResult,
   instanceOfLibrary,
@@ -59,5 +62,9 @@ export async function runProbeSession(_session, harness) {
   // ADR 0048.
   readCallerResult((p) => ({ y: p }), 1);
   readBoundCallerResult((p) => ({ y: p }), 1);
+  // ADR 0050.
+  writtenJoin({ parent: null, value: 1 });
+  writtenFromUninitialized([{ value: 1 }]);
+  joinedArms({ primary: { value: 1 } });
   harness.emit({ marker: "call", kind: "call", phase: "exit" });
 }

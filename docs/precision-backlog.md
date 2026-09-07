@@ -1,5 +1,47 @@
 # Precision backlog
 
+## A written binding whose every value is rooted (2026-09-07)
+
+ADR 0050, taking the case ADRs 0034, 0040 and 0043 each refused with the same
+sentence: making the root premise flow-sensitive needs a definite-assignment
+analysis. True of a flow-*sensitive* reading and false of the question actually
+asked — if **every** value a binding can hold is the caller's, whichever one it
+holds at the read is the caller's, and which branch assigned it never comes up.
+That is a join over the binding's sources, not a walk over its control flow.
+Sources are the declaration's initializer and every plain assignment's
+right-hand side; a reference to the binding itself is admitted co-inductively
+(the chain rule written as a loop), anchored by requiring one source that is
+not the binding; no initializer contributes no source, because the value is
+then `undefined`. The subject walk follows a conditional and the short-circuit
+operators the same way. Handshake protocol 33 → 34.
+
+Measured: withheld 528 → 506, `censusRefused` 471 → 449, property reads
+74 → 46, statuses unchanged at 368 / 30. **Twenty-two candidates**, including
+the whole of `@corvu/utils`'s `contains` loop.
+
+**A soundness hole this found and closed.** Writing the destructuring negative
+exposed a defect older than the ADR: the write scan skipped **declaration
+names** before asking whether an identifier was an assignment target, and the
+target of `({ current } = other)` is a `ShorthandPropertyAssignment`'s name — a
+declaration name by the compiler's reckoning and a write by the language's. So
+such a binding was reported *unwritten*, and every premise resting on "written
+nowhere", ADR 0034's root set included, silently covered it. Two things were
+wrong: the filter ran first (and is redundant, since a declaration name is
+never an assignment target), and `GetSymbolAtLocation` answers the object
+literal's **property** symbol for a shorthand rather than the variable. The
+shim now exposes `GetShorthandAssignmentValueSymbol` and the scan uses it.
+Widening what counts as written can only remove dispositions, which is the safe
+direction.
+
+Recorded, not closed: a compound assignment, an update expression, a
+destructuring target and a `for…of`/`for…in` head each refuse the whole binding
+rather than being skipped, because a source left out would make the join a
+claim about only some values; sources rooted at two different slots refuse
+because the receipt names one, and a derivation naming no slot
+(`sourceBox ?? box`) is a separate premise nobody has reviewed; a written
+**parameter** is the same join and buys nothing today, because the corpus case
+has a local helper's result among its sources.
+
 ## An omitted argument slot receives `undefined` (2026-09-07)
 
 ADR 0049. A call with fewer arguments than the callee has parameters leaves the

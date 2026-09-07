@@ -21,6 +21,15 @@ type Checker = checker.Checker
 //go:linkname Checker_getResolvedSignature github.com/microsoft/typescript-go/internal/checker.(*Checker).getResolvedSignature
 func Checker_getResolvedSignature(recv *checker.Checker, node *ast.Node, candidatesOutArray *[]*checker.Signature, checkMode checker.CheckMode) *checker.Signature
 
+// GetShorthandAssignmentValueSymbol resolves the *variable* a shorthand
+// property assignment names, which is what a destructuring assignment
+// (`({ current } = other)`) writes. GetSymbolAtLocation answers the object
+// literal's property symbol there instead, so a write scan that used it alone
+// called such a binding unwritten.
+//
+//go:linkname Checker_GetShorthandAssignmentValueSymbol github.com/microsoft/typescript-go/internal/checker.(*Checker).GetShorthandAssignmentValueSymbol
+func Checker_GetShorthandAssignmentValueSymbol(recv *checker.Checker, location *ast.Node) *ast.Symbol
+
 //go:linkname Checker_getBaseTypes github.com/microsoft/typescript-go/internal/checker.(*Checker).getBaseTypes
 func Checker_getBaseTypes(recv *checker.Checker, t *checker.Type) []*checker.Type
 

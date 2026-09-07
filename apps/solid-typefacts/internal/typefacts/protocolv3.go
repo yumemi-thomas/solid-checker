@@ -4,7 +4,12 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 33: a CallArgumentPremise covers the argument
+// TypeFactsHandshakeProtocol is 34: a form's subject may be rooted at a
+// binding the file **writes**, when every value that binding can hold is
+// rooted at one parameter (ADR 0050). The `parameter` derivation widens to
+// cover it, which is why the number moves: a consumer that reviewed
+// "an unwritten binding" now receives one written in a way it has not seen.
+// Protocol 33: a CallArgumentPremise covers the argument
 // slots a call does **not** write as well as those it does (ADR 0049). Such a
 // parameter receives `undefined` at run time, a primitive, which is a stronger
 // premise than the `any` an unannotated parameter carries — and it is what
@@ -216,8 +221,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 33
-	TypeFactsSchemaSHA256             = "sha256:89ad517eaebfc8e2e348f1780bd3a08baf285058d66c5cb9007f6749b39e3812"
+	TypeFactsHandshakeProtocol uint64 = 34
+	TypeFactsSchemaSHA256             = "sha256:3d4be30f557e0feac9629a13ed03b8f6d8b3be3d79d4edbadc3871bed66bc062"
 )
 
 type ServiceHandshake struct {

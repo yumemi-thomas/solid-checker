@@ -3159,6 +3159,39 @@ func (p *project) symbolIsAssignedLocked(target *ast.Symbol, declaration *ast.No
 	return written
 }
 
+// isAssignmentTargetIdentifier reports whether an identifier is written by an
+// assignment.
+//
+// It is GetAssignmentTarget alone, and the point is what it is *not* asked
+// beside: the declaration-name filter. `({ current } = other)` writes
+// `current`, and the identifier there is a ShorthandPropertyAssignment's name,
+// which the compiler calls a declaration name — so a scan that skipped
+// declaration names first called such a binding **unwritten**, which is the
+// premise ADR 0034 and everything built on it rest on. The filter is also
+// redundant: an ordinary declaration name is not an assignment target, so
+// dropping it changes exactly the destructuring-assignment shapes and nothing
+// else.
+func isAssignmentTargetIdentifier(node *ast.Node) bool {
+	return ast.GetAssignmentTarget(node) != nil
+}
+
+// assignedBindingSymbol resolves the **variable** an assignment-target
+// identifier writes.
+//
+// For a shorthand property assignment inside a destructuring assignment,
+// GetSymbolAtLocation answers the object literal's *property* symbol, not the
+// variable, so a scan that used it alone matched nothing and called the
+// binding unwritten. The checker has a dedicated resolution for that shape and
+// this is where it belongs.
+func (p *project) assignedBindingSymbol(fileChecker *checker.Checker, node *ast.Node) *ast.Symbol {
+	if node.Parent != nil && ast.IsShorthandPropertyAssignment(node.Parent) {
+		if symbol := checker.Checker_GetShorthandAssignmentValueSymbol(fileChecker, node.Parent); symbol != nil {
+			return p.canonicalSymbol(symbol)
+		}
+	}
+	return p.canonicalSymbol(fileChecker.GetSymbolAtLocation(node))
+}
+
 func (p *project) assignmentTargetSymbolsLocked(
 	sourceFile *ast.SourceFile,
 ) map[*ast.Symbol]struct{} {
@@ -3174,9 +3207,13 @@ func (p *project) assignmentTargetSymbolsLocked(
 		if node == nil {
 			return
 		}
-		if ast.IsIdentifier(node) && !ast.IsDeclarationNameOrImportPropertyName(node) &&
-			!ast.IsPartOfTypeNode(node) && ast.GetAssignmentTarget(node) != nil {
-			if symbol := p.canonicalSymbol(fileChecker.GetSymbolAtLocation(node)); symbol != nil {
+		// The declaration-name filter is asked *after* the assignment test, not
+		// before it: a shorthand destructuring-assignment target
+		// (`({ current } = other)`) is a declaration name by the compiler's
+		// reckoning and a write by the language's.
+		if ast.IsIdentifier(node) && !ast.IsPartOfTypeNode(node) &&
+			isAssignmentTargetIdentifier(node) {
+			if symbol := p.assignedBindingSymbol(fileChecker, node); symbol != nil {
 				assigned[symbol] = struct{}{}
 			}
 		}

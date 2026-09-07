@@ -374,13 +374,22 @@ type subjectRoot struct {
 // assignment.
 type parameterSubjectRoots struct {
 	bySymbol map[*ast.Symbol]subjectRoot
+	// pending is ADR 0050's co-induction: the written bindings whose rooting
+	// is being decided. A reference to one while it is being decided answers
+	// selfRootIndex, which agrees with whatever the other sources settle on —
+	// the same least-fixpoint argument that makes `currentElement =
+	// currentElement.parent` terminate at the parameter it started from.
+	pending map[*ast.Symbol]struct{}
 }
 
 func (p *project) parameterSubjectRootsLocked(implementation *ast.Node) *parameterSubjectRoots {
 	if implementation == nil || mentionsArgumentsOrEval(implementation) {
 		return nil
 	}
-	roots := &parameterSubjectRoots{bySymbol: make(map[*ast.Symbol]subjectRoot)}
+	roots := &parameterSubjectRoots{
+		bySymbol: make(map[*ast.Symbol]subjectRoot),
+		pending:  make(map[*ast.Symbol]struct{}),
+	}
 	parameters := implementation.Parameters()
 	for index, parameter := range parameters {
 		declaration := parameter.AsParameterDeclaration()
@@ -778,6 +787,31 @@ func (p *project) subjectRootLocked(
 			parameter: &index, derivation: typefacts.SubjectRootParameterResult,
 		}
 	}
+	// ADR 0050: a value that is one of several, each rooted. A conditional and
+	// the short-circuit operators hand back one of their arms, so if every arm
+	// is rooted at the same slot the result is too — the same join the written
+	// binding rests on, written as an expression instead of as assignments.
+	if arms := subjectJoinArms(node); arms != nil {
+		var joined *resolvedSubject
+		for _, arm := range arms {
+			root := p.subjectRootLocked(arm, roots)
+			if root == nil || root.parameter == nil ||
+				root.derivation != typefacts.SubjectRootParameter {
+				return nil
+			}
+			if joined == nil {
+				joined = root
+				continue
+			}
+			if *joined.parameter != *root.parameter && *root.parameter != selfRootIndex {
+				if *joined.parameter != selfRootIndex {
+					return nil
+				}
+				joined = root
+			}
+		}
+		return joined
+	}
 	if !ast.IsIdentifier(node) {
 		return nil
 	}
@@ -787,10 +821,169 @@ func (p *project) subjectRootLocked(
 	}
 	root, rooted := roots.bySymbol[symbol]
 	if !rooted {
+		// ADR 0050: a binding the file writes, every value of which is rooted.
+		if written := p.writtenBindingRootLocked(symbol, roots); written != nil {
+			root, rooted = *written, true
+		}
+	}
+	if !rooted {
 		return nil
 	}
 	index := root.index
 	return &resolvedSubject{parameter: &index, derivation: root.derivation}
+}
+
+// subjectJoinArms answers the expressions a value-carrying join hands back —
+// the two branches of a conditional, and the two operands of `??`, `||` and
+// `&&` — or nil for anything else. Each arm is a value the whole expression can
+// evaluate to, so rooting them all roots the result.
+func subjectJoinArms(node *ast.Node) []*ast.Node {
+	if ast.IsConditionalExpression(node) {
+		conditional := node.AsConditionalExpression()
+		if conditional == nil {
+			return nil
+		}
+		return []*ast.Node{conditional.WhenTrue, conditional.WhenFalse}
+	}
+	if !ast.IsBinaryExpression(node) {
+		return nil
+	}
+	binary := node.AsBinaryExpression()
+	if binary == nil || binary.OperatorToken == nil {
+		return nil
+	}
+	switch nodeKindName(binary.OperatorToken) {
+	case "QuestionQuestionToken", "BarBarToken", "AmpersandAmpersandToken":
+		return []*ast.Node{binary.Left, binary.Right}
+	}
+	return nil
+}
+
+// selfRootIndex marks a reference to the binding whose rooting is currently
+// being decided. It never leaves writtenBindingRootLocked's own evaluation:
+// outside it the pending set is empty, so no caller can observe it.
+const selfRootIndex = -1
+
+// writtenBindingRootLocked roots a binding the file **writes** when every value
+// it can hold is rooted at one parameter (ADR 0050).
+//
+// ADRs 0034 and 0043 refuse a written binding, and the reason they give is
+// that the premise is not flow-sensitive. This needs no flow sensitivity: if
+// *every* value the binding can hold is the caller's, then whichever one it
+// holds at the read is the caller's, and which branch assigned it never comes
+// up. The sources are the declaration's own initializer and the right-hand
+// side of every plain assignment to it; a reference to the binding itself is
+// admitted co-inductively, which is the chain rule ADR 0034 already applies to
+// `a.b.c` written as a loop.
+//
+// A declaration with **no** initializer contributes `undefined`, which reaches
+// no user code — reading a member of it throws before any lookup.
+func (p *project) writtenBindingRootLocked(
+	symbol *ast.Symbol, roots *parameterSubjectRoots,
+) *subjectRoot {
+	if symbol == nil || roots == nil {
+		return nil
+	}
+	if _, deciding := roots.pending[symbol]; deciding {
+		return &subjectRoot{index: selfRootIndex, derivation: typefacts.SubjectRootParameter}
+	}
+	if len(symbol.Declarations) != 1 || symbol.Declarations[0] == nil {
+		return nil
+	}
+	declaration := symbol.Declarations[0]
+	if !ast.IsVariableDeclaration(declaration) {
+		return nil
+	}
+	name := declaration.Name()
+	if name == nil || !ast.IsIdentifier(name) {
+		return nil
+	}
+	sourceFile := ast.GetSourceFileOfNode(declaration)
+	if sourceFile == nil || !p.formIsRuntimeSourceFile(sourceFile) {
+		return nil
+	}
+	sources, ok := p.bindingValueSourcesLocked(sourceFile, symbol, declaration)
+	if !ok {
+		return nil
+	}
+	roots.pending[symbol] = struct{}{}
+	defer delete(roots.pending, symbol)
+	index := selfRootIndex
+	for _, source := range sources {
+		root := p.subjectRootLocked(source, roots)
+		if root == nil || root.parameter == nil ||
+			root.derivation != typefacts.SubjectRootParameter {
+			return nil
+		}
+		if *root.parameter == selfRootIndex {
+			continue
+		}
+		if index != selfRootIndex && index != *root.parameter {
+			// Two different slots: the binding holds the caller's value either
+			// way, but the receipt names one slot, and naming the wrong one
+			// would say the caller passed something it did not.
+			return nil
+		}
+		index = *root.parameter
+	}
+	if index == selfRootIndex {
+		// Every source was the binding itself, so nothing anchors it.
+		return nil
+	}
+	root := subjectRoot{index: index, derivation: typefacts.SubjectRootParameter}
+	roots.bySymbol[symbol] = root
+	return &root
+}
+
+// bindingValueSourcesLocked answers every expression a binding can take its
+// value from — its own initializer, and the right-hand side of each plain
+// assignment to it — or false when some write is one this build cannot read a
+// single value out of.
+//
+// A **compound** assignment (`x += y`) yields a coercion result, an **update**
+// (`x++`) a number this walk has no expression for, a **destructuring** target
+// a property of something else, and a `for…of`/`for…in` head an element of an
+// iteration. Each of those refuses the whole binding rather than being skipped:
+// a source left out would make the join a claim about some of the values.
+//
+// A declaration with no initializer contributes no source at all, because the
+// value is then `undefined` and a member read of it throws before any lookup.
+func (p *project) bindingValueSourcesLocked(
+	sourceFile *ast.SourceFile, symbol *ast.Symbol, declaration *ast.Node,
+) ([]*ast.Node, bool) {
+	var sources []*ast.Node
+	if initializer := declaration.Initializer(); initializer != nil {
+		sources = append(sources, initializer)
+	}
+	ok := true
+	var visit func(*ast.Node)
+	visit = func(node *ast.Node) {
+		if node == nil || !ok {
+			return
+		}
+		if ast.IsIdentifier(node) && !ast.IsPartOfTypeNode(node) &&
+			isAssignmentTargetIdentifier(node) &&
+			p.assignedBindingSymbol(p.formChecker(), node) == symbol {
+			parent := node.Parent
+			if parent == nil || !ast.IsBinaryExpression(parent) {
+				ok = false
+				return
+			}
+			binary := parent.AsBinaryExpression()
+			if binary == nil || binary.Left != node || binary.OperatorToken == nil ||
+				nodeKindName(binary.OperatorToken) != "EqualsToken" {
+				ok = false
+				return
+			}
+			sources = append(sources, binary.Right)
+		}
+		node.ForEachChild(func(child *ast.Node) bool { visit(child); return !ok })
+	}
+	visit(sourceFile.AsNode())
+	if !ok {
+		return nil, false
+	}
+	return sources, true
 }
 
 // resolvedSubject is what one form's subject resolved to: the derivation that

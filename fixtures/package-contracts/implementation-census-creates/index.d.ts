@@ -118,3 +118,10 @@ export declare function instanceOfModuleValue(value: unknown): boolean;
 export declare function readCallerResult(transform: (p: any) => any, point: any): unknown;
 export declare function readBoundCallerResult(transform: (p: any) => any, point: any): unknown;
 export declare function readLocalResult(point: any): unknown;
+// ADR 0050: a written binding whose every value is rooted.
+export declare function writtenJoin(source: any): unknown;
+export declare function writtenFromUninitialized(items: any): unknown;
+export declare function joinedArms(source: any): unknown;
+export declare function writtenFromModuleValue(source: any, flag: any): unknown;
+export declare function writtenFromTwoSlots(first: any, second: any, flag: any): unknown;
+export declare function writtenByDestructuring(source: any, other: any): unknown;

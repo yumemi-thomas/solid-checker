@@ -11494,7 +11494,7 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 80] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 86] = [
         "accessorTableRead",
         "arrayRestRead",
         "awaitIterateParameter",
@@ -11528,6 +11528,7 @@ export const value = phantom;
         "instanceOfModuleValue",
         "instanceOfOwnClass",
         "instanceOfParameter",
+        "joinedArms",
         "labelledBreak",
         "localBindingFromCall",
         "localBindingFromParameter",
@@ -11574,6 +11575,11 @@ export const value = phantom;
         "whileBreak",
         "writtenAfterRead",
         "writtenBeforeRead",
+        "writtenByDestructuring",
+        "writtenFromModuleValue",
+        "writtenFromTwoSlots",
+        "writtenFromUninitialized",
+        "writtenJoin",
         "writtenTableRead",
     ];
 
@@ -12741,6 +12747,7 @@ export const value = phantom;
             "instanceOfModuleValue",
             "instanceOfOwnClass",
             "instanceOfParameter",
+            "joinedArms",
             "labelledBreak",
             "localBindingFromCall",
             "localBindingFromParameter",
@@ -12786,6 +12793,11 @@ export const value = phantom;
             "whileBreak",
             "writtenAfterRead",
             "writtenBeforeRead",
+            "writtenByDestructuring",
+            "writtenFromModuleValue",
+            "writtenFromTwoSlots",
+            "writtenFromUninitialized",
+            "writtenJoin",
             "writtenTableRead",
         ];
         let plan = census_generated_fixture_plan();
@@ -12983,7 +12995,7 @@ export const value = phantom;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
-    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 78] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 84] = [
         "accessorTableRead",
         "arrayRestRead",
         "awaitIterateParameter",
@@ -13016,6 +13028,7 @@ export const value = phantom;
         "instanceOfModuleValue",
         "instanceOfOwnClass",
         "instanceOfParameter",
+        "joinedArms",
         "labelledBreak",
         "localBindingFromCall",
         "localBindingFromParameter",
@@ -13061,6 +13074,11 @@ export const value = phantom;
         "whileBreak",
         "writtenAfterRead",
         "writtenBeforeRead",
+        "writtenByDestructuring",
+        "writtenFromModuleValue",
+        "writtenFromTwoSlots",
+        "writtenFromUninitialized",
+        "writtenJoin",
         "writtenTableRead",
     ];
     /// What the census fixture's generated candidates come to under ADR 0036:
@@ -13091,7 +13109,7 @@ export const value = phantom;
     /// types to the helper as its premise; `untypedCoercion` (declared
     /// `unknown`), `helperSpreadCoercion` (a spread carries no slot) and
     /// `helperUntypedArgument` (an `any` slot) are refused.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 38] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 41] = [
         "chainCallbacks",
         "coerceBoundHelperResult",
         "coerceConditionalHelperResult",
@@ -13105,6 +13123,7 @@ export const value = phantom;
         "instanceOfLibrary",
         "instanceOfOwnClass",
         "instanceOfParameter",
+        "joinedArms",
         "localBindingFromParameter",
         "localPatternFromParameter",
         "memberParameterRooted",
@@ -13130,8 +13149,10 @@ export const value = phantom;
         "updateOnParameter",
         "viaHelperChain",
         "whileBreak",
+        "writtenFromUninitialized",
+        "writtenJoin",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 40] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 43] = [
         ("accessorTableRead", "census"),
         ("arrayRestRead", "census"),
         ("awaitIterateParameter", "census"),
@@ -13171,6 +13192,9 @@ export const value = phantom;
         ("untypedCoercion", "census"),
         ("writtenAfterRead", "census"),
         ("writtenBeforeRead", "census"),
+        ("writtenByDestructuring", "census"),
+        ("writtenFromModuleValue", "census"),
+        ("writtenFromTwoSlots", "census"),
         ("writtenTableRead", "census"),
     ];
     const CENSUS_FIXTURE_GENERATED_RETURNS_CLOSED: [&str; 11] = [
@@ -13548,6 +13572,39 @@ export const value = phantom;
                 creates_is_closed_in(finalized.canonical_main(), export),
                 "{export}"
             );
+        }
+    }
+
+    /// ADR 0050: a binding the file writes, every value of which is rooted.
+    /// No flow analysis is involved — the join holds whichever branch assigned
+    /// it — and the boundary is that *every* source must qualify.
+    #[test]
+    fn the_probe_gate_tracer_census_closes_a_written_binding_whose_values_are_rooted() {
+        for export in ["writtenJoin", "writtenFromUninitialized", "joinedArms"] {
+            let Some((_, outcome)) = census_certify(export, Some("root-closure.mjs")) else {
+                return;
+            };
+            let finalized = outcome
+                .unwrap_or_else(|error| panic!("{export} certifies under ADR 0050: {error}"));
+            assert!(
+                finalized.withheld_closures().is_empty(),
+                "{export}: {:?}",
+                finalized.withheld_closures()
+            );
+            assert!(
+                creates_is_closed_in(finalized.canonical_main(), export),
+                "{export}"
+            );
+        }
+        for export in [
+            // One source is a value this module made.
+            "writtenFromModuleValue",
+            // Two slots: the receipt names one, and either would misstate it.
+            "writtenFromTwoSlots",
+            // A destructuring write has no single expression to read.
+            "writtenByDestructuring",
+        ] {
+            assert_census_withholds(export, &["uncensused invoking form"]);
         }
     }
 

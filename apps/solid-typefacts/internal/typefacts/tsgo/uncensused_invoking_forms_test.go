@@ -1403,6 +1403,45 @@ export function destructuredParameter({ inner }: any): unknown {
 	return inner.value;
 }
 
+// ADR 0050: a binding the file writes, every value of which is rooted.
+export function writtenJoin(source: any): unknown {
+	let current = source;
+	while (current.parent) {
+		current = current.parent;
+	}
+	return current.value;
+}
+
+export function writtenFromUninitialized(items: any): unknown {
+	let entry;
+	for (let index = 0; index < 1; index++) {
+		entry = items[index];
+	}
+	return entry.value;
+}
+
+export function writtenFromModuleValue(source: any, flag: any): unknown {
+	let current = source;
+	if (flag) {
+		current = registry;
+	}
+	return current.value;
+}
+
+export function writtenFromTwoSlots(first: any, second: any, flag: any): unknown {
+	let current = first;
+	if (flag) {
+		current = second;
+	}
+	return current.value;
+}
+
+export function writtenByDestructuring(source: any, other: any): unknown {
+	let current = source;
+	({ current } = other);
+	return current.value;
+}
+
 // ADR 0048: what a caller-supplied callee handed back.
 export function readCallerResult(transform: any, point: any): unknown {
 	return transform(point).y;
@@ -1674,6 +1713,18 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 		{"readCallerResult", []*int{&zero}},
 		{"readBoundCallerResult", []*int{&zero}},
 		{"readLocalResult", []*int{nil}},
+		// ADR 0050: every value the binding can hold is rooted, so the read is
+		// rooted whichever one it holds. The loop's own read of the binding is
+		// the co-inductive source.
+		{"writtenJoin", []*int{&zero, &zero, &zero}},
+		// No initializer: before the first assignment the value is `undefined`,
+		// which contributes no source and reaches no user code.
+		{"writtenFromUninitialized", []*int{&zero, &zero}},
+		// One source this module made, two different slots, and a destructuring
+		// write with no single expression to read: each refuses the binding.
+		{"writtenFromModuleValue", []*int{nil}},
+		{"writtenFromTwoSlots", []*int{nil}},
+		{"writtenByDestructuring", []*int{nil, nil}},
 		// ADR 0040: a write into the caller's object roots exactly as a read
 		// of it does, and says so.
 		{"setterOnParameter", []*int{&zero}},

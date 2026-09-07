@@ -469,6 +469,14 @@ closed claims per domain so the intermediate progress is visible.
    route ADR 0045 rejected as too large, and now the named next step for this
    cluster.
 
+   **ADR 0050** takes the restriction every root premise carried — "written
+   nowhere" — and shows the question was never flow-sensitive: if every value a
+   binding can hold is the caller's, whichever one it holds is the caller's.
+   Measured: withheld 528 → 506, property reads 74 → 46, **twenty-two
+   candidates**. It also found and closed a soundness hole older than itself:
+   a destructuring **assignment** target was reported unwritten, so every
+   premise resting on "written nowhere" silently covered it.
+
    The second slice is ADR 0041: a spread's operand and an object pattern's
    source are subjects under the same premise. It removed the destructuring
    class (`BindingElement` 42 → 6) but closed only **six** candidates, because

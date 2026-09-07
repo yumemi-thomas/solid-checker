@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "44b36863a203b487306816b72c889a49447417f220ad40f9407a3ceee0218234",
+            "closureSha256": "f19c7e8e4540fdca44ed44f9612c5f8b3b4a596653b649f98931b2d9ef7413a7",
             "path": "./index.js",
-            "sha256": "ab0c392b9200582bb36c0f3c0bdf293125b831eafa9fd2623fd409fd72d2ca7f"
+            "sha256": "8bc02e87cb81e64bbf5f677978c83af72c420eb65b8560612e451ef09b37eb9b"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "8a4b4ffce8cdcbb1f38186c646616e143035883478de20df3d80d562ad8e7d67"
+            "sha256": "229485a8a20b3cf3a53ae081a5864c53d5a15cc908a364eb4127ddbd1498cd6b"
           },
           "exports": {
             "accessorTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -46,6 +46,7 @@
             "instanceOfModuleValue": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "instanceOfOwnClass": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "instanceOfParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "joinedArms": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "labelledBreak": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "localBindingFromCall": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "localBindingFromParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -92,6 +93,11 @@
             "whileBreak": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "writtenAfterRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "writtenBeforeRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "writtenByDestructuring": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "writtenFromModuleValue": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "writtenFromTwoSlots": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "writtenFromUninitialized": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "writtenJoin": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "writtenTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
           },
           "resolution": {

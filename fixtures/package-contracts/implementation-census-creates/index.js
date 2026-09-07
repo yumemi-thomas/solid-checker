@@ -895,3 +895,77 @@ export function readLocalResult(point) {
 function identityOf(value) {
   return untypedRegistry;
 }
+
+// ---------------------------------------------------------------------------
+// ADR 0050: a binding the file **writes**, every value of which is rooted.
+// ADRs 0034 and 0043 refuse a written binding because the premise is not
+// flow-sensitive. This needs no flow sensitivity: if every value the binding
+// can hold is the caller's, then whichever one it holds at the read is the
+// caller's, and which branch assigned it never comes up.
+// ---------------------------------------------------------------------------
+
+// The loop shape compiled code walks a tree with. Its sources are the
+// parameter and a read of the binding itself, which is the chain rule ADR 0034
+// already applies to `a.b.c` written as a loop. **Certifies.**
+export function writtenJoin(source) {
+  let current = source;
+  while (current.parent) {
+    current = current.parent;
+  }
+  return current.value;
+}
+
+// A binding with **no** initializer: before the first assignment it holds
+// `undefined`, and a member read of that throws before any lookup, so it
+// contributes no source at all. **Certifies.**
+export function writtenFromUninitialized(items) {
+  let entry;
+  for (let index = 0; index < 1; index++) {
+    entry = items[index];
+  }
+  return entry.value;
+}
+
+// A join written as an expression rather than as assignments: each arm of a
+// `??` is rooted at the same parameter, so the value is the caller's whichever
+// arm supplies it. **Certifies.**
+//
+// Both arms must root at *one* slot. `first ?? second.fallback` is the
+// caller's either way and still refuses, because the receipt names a slot and
+// naming either would say the caller passed something it did not — the same
+// boundary `writtenFromTwoSlots` pins for the assignment spelling.
+export function joinedArms(source) {
+  const chosen = source.primary ?? source.fallback;
+  return chosen.value;
+}
+
+// One source is a value this module made. The join holds only when *every*
+// source is the caller's. **Refuses.**
+export function writtenFromModuleValue(source, flag) {
+  let current = source;
+  if (flag) {
+    current = untypedRegistry;
+  }
+  return current.value;
+}
+
+// Two different parameters. The value is the caller's either way, but the
+// receipt names one slot and naming either would say the caller passed
+// something it did not. **Refuses.**
+export function writtenFromTwoSlots(first, second, flag) {
+  let current = first;
+  if (flag) {
+    current = second;
+  }
+  return current.value;
+}
+
+// A **destructuring** write takes a property of something else, which this
+// walk has no single expression for — so the whole binding refuses rather than
+// the source being skipped, because a skipped source would make the join a
+// claim about only some of the values. **Refuses.**
+export function writtenByDestructuring(source, other) {
+  let current = source;
+  ({ current } = other);
+  return current.value;
+}
