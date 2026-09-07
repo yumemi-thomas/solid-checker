@@ -98,3 +98,12 @@ export declare function protoTableRead(key: any): unknown;
 export declare function writtenTableRead(key: any): unknown;
 export declare function ownTableMemberRead(key: any): unknown;
 export declare function arrayRestRead(source: any): unknown;
+// ADR 0045: a coercion over a call into this program's own runtime source.
+// The declared `number`s are what makes the other operand primitive; the
+// helper's own completion is what the census asks the helper about.
+export declare function coerceHelperResult(base: number): number;
+export declare function coerceBoundHelperResult(base: number): number;
+export declare function coerceConditionalHelperResult(base: number, factor: number): number;
+export declare function coerceObjectHelperResult(base: number): unknown;
+export declare function coerceWrittenHelperResult(base: number): unknown;
+export declare function coerceLibraryResult(base: number): unknown;

@@ -3709,6 +3709,7 @@ mod tests {
             parameter_premises: Vec::new(),
             parameter_premise_refusal: "".into(),
             call_argument_premises: Vec::new(),
+            primitive_completion: false,
             complete: false,
             open_reasons: Vec::new(),
         }
@@ -3765,6 +3766,7 @@ mod tests {
             subject_write: false,
             subject_root: String::new(),
             subject_declaration: None,
+            coercion_premise: None,
         }
     }
 

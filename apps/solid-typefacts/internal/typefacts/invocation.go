@@ -378,8 +378,25 @@ type ExportImplementationTranscript struct {
 	// informative; a slot the list omits is `any` to the callee. Each Call is
 	// the location of a row of Calls, in the original file's bytes.
 	CallArgumentPremises []CallArgumentPremise `cbor:"callArgumentPremises,omitempty" json:"callArgumentPremises,omitempty"`
-	Complete             bool                  `cbor:"complete,omitempty" json:"complete,omitempty"`
-	OpenReasons          []string              `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+	// PrimitiveCompletion says the value this implementation hands its caller
+	// is **provably a primitive**: the checker's return type for the
+	// declaration, on the very program this census was classified over — the
+	// premise twin when the census was premised — is a union of primitive
+	// types alone (ADR 0045, handshake protocol 29).
+	//
+	// A coercion of that value therefore reaches no `Symbol.toPrimitive`,
+	// `valueOf` or `toString` of anyone's. The completion form is covered by
+	// the same fact rather than beside it: an async function's return type is
+	// a `Promise` and a generator's is a `Generator`, neither of which is a
+	// primitive, so neither can set this.
+	//
+	// **It is a fact about the census's own premise, not about the
+	// declaration.** The same helper censused under two argument premises may
+	// state it under one and not the other, which is why a consumer may read it
+	// only from the transcript it demanded under the premise it recorded.
+	PrimitiveCompletion bool     `cbor:"primitiveCompletion,omitempty" json:"primitiveCompletion,omitempty"`
+	Complete            bool     `cbor:"complete,omitempty" json:"complete,omitempty"`
+	OpenReasons         []string `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
 }
 
 // ParameterPremise is one parameter's type binding under which an
@@ -536,6 +553,19 @@ const (
 	SubjectRootOwnLiteral SubjectRootDerivation = "own-literal"
 )
 
+// CoercionPremise is what one `coercion` form's clearance would rest on: the
+// calls whose results the coercion applies ToPrimitive to. Every other operand
+// of the form is provably a primitive by its own type, which is why it is not
+// listed — a value that is already a primitive has no `Symbol.toPrimitive`,
+// `valueOf` or `toString` for the coercion to reach.
+type CoercionPremise struct {
+	// Calls are locations of rows of the same transcript's Calls list, in
+	// source order and without duplicates. A consumer matches each to its row,
+	// takes that row's own callee and premise, and requires the callee's
+	// transcript to state a primitive completion.
+	Calls []Location `cbor:"calls" json:"calls"`
+}
+
 type UncensusedInvokingForm struct {
 	Kind UncensusedInvokingFormKind `cbor:"kind" json:"kind"`
 	// NodeKind is the compiler's own name for the node's syntax kind, with the
@@ -621,6 +651,19 @@ type UncensusedInvokingForm struct {
 	// consumer must refuse an own-literal subject whose declaration it cannot
 	// place there.
 	SubjectDeclaration *Location `cbor:"subjectDeclaration,omitempty" json:"subjectDeclaration,omitempty"`
+	// CoercionPremise, present only on a `coercion` form, states that every
+	// operand the coercion applies ToPrimitive to is either **provably a
+	// primitive** by its type or the **result of a call** to a declaration in
+	// this program's own runtime source, and lists those calls (ADR 0045,
+	// handshake protocol 29).
+	//
+	// It is a statement of what the form's clearance would rest on, never a
+	// claim that it clears: a consumer grants it only by asking each named
+	// call's callee whether *its* completion is a primitive
+	// (ExportImplementationTranscript.PrimitiveCompletion), under the very
+	// premise the consumer demanded that callee's census under. Absent when
+	// some operand is neither, which is every case no ADR has reviewed.
+	CoercionPremise *CoercionPremise `cbor:"coercionPremise,omitempty" json:"coercionPremise,omitempty"`
 }
 
 type ParameterValueSource struct {

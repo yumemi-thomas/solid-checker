@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:5ae2668c77f09c6a9e067c51785992bcaa7c3b7cc37449310908a1b05465bcc0";
+    "sha256:db9bd03c0d7570a7556a5ac834bc2060e41150242de8ad40bf81689e3702cae3";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -138,6 +138,13 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
+// Protocol 29 adds `coercionPremise` on a `coercion` form and
+// `primitiveCompletion` on every implementation transcript (ADR 0045). A call
+// to a module-local helper types as `any` in compiled JavaScript however well
+// the package's declarations type that helper, so a sum of one refused
+// wherever the premise had typed everything else. The premise names the calls
+// the form's clearance rests on; the completion is the callee's own answer,
+// belonging to the premise its census was classified under.
 // Protocol 28 adds a third `subjectRoot` value, `own-literal` (ADR 0044): the
 // subject is a binding this program initialized from an object or array
 // literal, or from an object pattern's rest element, whose every own property
@@ -206,7 +213,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // producer is never "not rooted".
 // Protocol 17 includes exact-null loose equality in the positive
 // uncensused-form classifier. Protocol 16 added unchanged-parameter identity.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 28;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 29;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

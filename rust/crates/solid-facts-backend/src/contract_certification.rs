@@ -11494,7 +11494,7 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 65] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 71] = [
         "accessorTableRead",
         "arrayRestRead",
         "awaitIterateParameter",
@@ -11503,6 +11503,12 @@ export const value = phantom;
         "callNonLibraryReceiver",
         "chainCallbacks",
         "chainModuleCallbacks",
+        "coerceBoundHelperResult",
+        "coerceConditionalHelperResult",
+        "coerceHelperResult",
+        "coerceLibraryResult",
+        "coerceObjectHelperResult",
+        "coerceWrittenHelperResult",
         "constBound",
         "cycle",
         "declaredMemberCoercion",
@@ -12702,6 +12708,12 @@ export const value = phantom;
             "callNonLibraryReceiver",
             "chainCallbacks",
             "chainModuleCallbacks",
+            "coerceBoundHelperResult",
+            "coerceConditionalHelperResult",
+            "coerceHelperResult",
+            "coerceLibraryResult",
+            "coerceObjectHelperResult",
+            "coerceWrittenHelperResult",
             "constBound",
             "cycle",
             "declaredMemberCoercion",
@@ -12953,7 +12965,7 @@ export const value = phantom;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
-    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 63] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 69] = [
         "accessorTableRead",
         "arrayRestRead",
         "awaitIterateParameter",
@@ -12962,6 +12974,12 @@ export const value = phantom;
         "callNonLibraryReceiver",
         "chainCallbacks",
         "chainModuleCallbacks",
+        "coerceBoundHelperResult",
+        "coerceConditionalHelperResult",
+        "coerceHelperResult",
+        "coerceLibraryResult",
+        "coerceObjectHelperResult",
+        "coerceWrittenHelperResult",
         "constBound",
         "cycle",
         "declaredMemberCoercion",
@@ -13046,8 +13064,11 @@ export const value = phantom;
     /// types to the helper as its premise; `untypedCoercion` (declared
     /// `unknown`), `helperSpreadCoercion` (a spread carries no slot) and
     /// `helperUntypedArgument` (an `any` slot) are refused.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 30] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 33] = [
         "chainCallbacks",
+        "coerceBoundHelperResult",
+        "coerceConditionalHelperResult",
+        "coerceHelperResult",
         "constBound",
         "cycle",
         "declaredMemberCoercion",
@@ -13078,7 +13099,7 @@ export const value = phantom;
         "viaHelperChain",
         "whileBreak",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 33] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 36] = [
         ("accessorTableRead", "census"),
         ("arrayRestRead", "census"),
         ("awaitIterateParameter", "census"),
@@ -13086,6 +13107,9 @@ export const value = phantom;
         ("callLibraryOutsideTable", "census"),
         ("callNonLibraryReceiver", "census"),
         ("chainModuleCallbacks", "census"),
+        ("coerceLibraryResult", "census"),
+        ("coerceObjectHelperResult", "census"),
+        ("coerceWrittenHelperResult", "census"),
         ("deep", "census"),
         ("defaultedFromDefaulted", "census"),
         ("defaultedFromModuleValue", "census"),
@@ -13488,6 +13512,53 @@ export const value = phantom;
                 creates_is_closed_in(finalized.canonical_main(), export),
                 "{export}"
             );
+        }
+    }
+
+    /// ADR 0045: a coercion over a call into this program's own runtime
+    /// source. The premise the form states is only half the fact; the other
+    /// half is the callee's own answer, under the very argument premise this
+    /// census demanded that callee's transcript under. Running these end to
+    /// end is what proves the two halves meet — a hand-written transcript
+    /// would pin the consumer's side of a fact nothing produces.
+    #[test]
+    fn the_probe_gate_tracer_census_closes_a_coercion_over_a_primitive_completion() {
+        for export in [
+            "coerceHelperResult",
+            "coerceBoundHelperResult",
+            "coerceConditionalHelperResult",
+        ] {
+            let Some((_, outcome)) = census_certify(export, Some("root-closure.mjs")) else {
+                return;
+            };
+            let finalized = outcome
+                .unwrap_or_else(|error| panic!("{export} certifies under ADR 0045: {error}"));
+            assert!(
+                finalized.withheld_closures().is_empty(),
+                "{export}: {:?}",
+                finalized.withheld_closures()
+            );
+            assert!(
+                creates_is_closed_in(finalized.canonical_main(), export),
+                "{export}"
+            );
+        }
+    }
+
+    /// Its boundary: a helper whose completion is an object, a callee this
+    /// census cannot bind at all, and a call into the default library, whose
+    /// standard-library disposition says nothing about the value it returns.
+    #[test]
+    fn the_probe_gate_tracer_census_stops_at_the_primitive_completions_boundary() {
+        // Each refuses at the coercion itself, which is the point: a premise
+        // the producer would not state, and one it states over a completion
+        // the callee will not grant, both leave the form exactly where it was.
+        for export in [
+            "coerceObjectHelperResult",
+            "coerceWrittenHelperResult",
+            "coerceLibraryResult",
+        ] {
+            assert_census_withholds(export, &["uncensused invoking form: coercion"]);
         }
     }
 

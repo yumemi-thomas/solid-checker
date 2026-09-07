@@ -1,5 +1,53 @@
 # Precision backlog
 
+## A coercion over a completion the callee proved primitive (2026-09-07)
+
+ADR 0045. ADR 0038's helper amendment carried the caller's argument types into
+a helper's census; nothing carried back what the helper *returns*. So a call to
+a module-local helper types as `any` in compiled JavaScript however precisely
+the package's declarations type it, and `scalePoint(…) + translate` refused
+where the declared-signature premise had already made every other operand a
+`number`. A `coercion` form now states `coercionPremise`, the calls its
+clearance rests on (every other operand being provably a primitive by its own
+type); every transcript states `primitiveCompletion`, whether the checker's
+return type over the very program its census was classified on is a union of
+primitives. The census grants the first only from the second, read off the
+transcript it demanded under the premise it recorded — no new evidence, no new
+demand. Handshake protocol 28 → 29.
+
+Measured: withheld 631 → 619, `censusRefused` 574 → 562, coercion 107 → 95,
+statuses unchanged at 368 / 30. **Twelve candidates**, and the shortfall names
+the next slice exactly (see below).
+
+**The strength, stated.** The type is the compiler's answer on a program whose
+parameter types the consumer bound to the export's declared signature or
+carried from a call it verified. What this adds is a *binding*, not an oracle:
+caller and callee are made to rest on the same stated condition and the receipt
+names both. Weaker than ADR 0044's specification argument, and the ADR says so.
+
+**The blocker it uncovered, and it is the largest one left.** `applyPointDelta`
+clears as a **root** export, whose premise is its own declared signature, and
+refuses as a **helper**: the argument type at the reaching call is `Axis`, and
+`demandedPremiseAnnotationLocked` spells a helper premise as
+`@param {Axis} axis` inside a JavaScript module that cannot resolve the name,
+so the twin's falsifier refuses and the helper is censused over `any`.
+`calcLength`'s `axis.max - axis.min` is the plainest case and *rose* 6 → 24 as
+bodies that used to refuse earlier reached it. The fix is lever C's own named
+open item: spell such a type as `typeof import("…").Axis` from the identity's
+declaration file, exactly as the root premise already spells its `@type`.
+
+Recorded, not closed: an operand from a default-library call (`JSON.parse` and
+anything else the declarations type `any`) — that needs a reviewed table of
+members by return type, its own ADR; an operand from a callee the census cannot
+bind; a written local between the call and the coercion; a coercion of a
+parameter-rooted value, which ADR 0034 left unreviewed and this does not
+review either.
+
+**One gate moved with it.** A local declaration's premise was applied only when
+it could clear a *form*; a helper like `scaleBy(value) { return value }`
+records none, so no twin was built and it answered `any`. The gate now also
+builds the twin when the completion is not already primitive.
+
 ## A value this program built (2026-09-07)
 
 ADR 0044, the sixth slice of the lever ADR 0034 opened and the first in it that

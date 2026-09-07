@@ -366,6 +366,121 @@ func premiseLocalTranscript(
 // call that reaches a local helper, and the helper's census is classified
 // under exactly those types when they are demanded back — bound by text and
 // declaration identity — and under its parameters' own `any` otherwise.
+// ADR 0045: a coercion states the calls its clearance rests on, and every
+// transcript answers whether the value it hands its caller is provably a
+// primitive. The producer states both halves and neither is a verdict — the
+// granting is the consumer's, and `overObjectHelper` is here to show a premise
+// stated over a call whose completion will not grant it.
+//
+// The helper must stay unannotated: an annotated one returns a number, the
+// call site is then already a primitive, and no coercion form is recorded at
+// all. That vacuity is the trap the census fixtures keep walking into.
+func TestCoercionPremiseNamesItsOperandCallsAndCompletionsFollowThePremise(t *testing.T) {
+	const source = `const factor: number = 2;
+
+export function untyped(value) {
+	return value;
+}
+
+export function typedHelper(value: number): number {
+	return value * factor;
+}
+
+export function boxOf(value: number) {
+	return { value };
+}
+
+export function overHelper(base: number) {
+	return untyped(base) + base;
+}
+
+export function overBoundHelper(base: number) {
+	const scaled = untyped(base);
+	return scaled + base;
+}
+
+export function overConditional(base: number) {
+	const scaled = base === 0 ? base : untyped(base);
+	return scaled + base;
+}
+
+export function overObjectHelper(base: number) {
+	return boxOf(base) + base;
+}
+
+export function overWrittenBinding(base: number) {
+	let scaled = untyped(base);
+	scaled = boxOf(base);
+	return scaled + base;
+}
+
+export function overLibraryCall(base: number) {
+	return JSON.parse("1") + base;
+}
+`
+	analyzer, dir := markerProject(t, map[string]string{"coercions.ts": source})
+	path := filepath.Join(dir, "coercions.ts")
+	for _, testCase := range []struct {
+		export string
+		calls  int
+	}{
+		// One operand is the helper's result, the other a declared number.
+		{"overHelper", 1},
+		// The same named through a local binding, and through both arms of a
+		// conditional whose other arm is already a primitive.
+		{"overBoundHelper", 1},
+		{"overConditional", 1},
+		// A helper whose completion is an object still names its call: the
+		// premise says where the value came from, never that it clears.
+		{"overObjectHelper", 1},
+		// A written binding may hold something else by the time the coercion
+		// runs, and a default-library callee is not this program's source.
+		{"overWrittenBinding", 0},
+		{"overLibraryCall", 0},
+	} {
+		transcript := implementationTranscriptFor(t, analyzer, path, source, testCase.export)
+		var premised, coercions int
+		for _, form := range transcript.UncensusedInvokingForms {
+			if form.Kind != typefacts.UncensusedCoercion {
+				continue
+			}
+			coercions++
+			if form.CoercionPremise == nil {
+				continue
+			}
+			premised++
+			if len(form.CoercionPremise.Calls) != testCase.calls {
+				t.Fatalf("%s: premise names %d call(s), want %d",
+					testCase.export, len(form.CoercionPremise.Calls), testCase.calls)
+			}
+		}
+		if coercions == 0 {
+			t.Fatalf("%s: no coercion form was recorded, so the case pins nothing", testCase.export)
+		}
+		if want := testCase.calls > 0; (premised > 0) != want {
+			t.Fatalf("%s: %d premised coercion(s), want stated=%v", testCase.export, premised, want)
+		}
+	}
+
+	// The completion is read off the same program the forms were classified
+	// on: the annotated helper hands back a number, the unannotated one an
+	// `any` nobody has typed, and the boxing one an object.
+	for _, testCase := range []struct {
+		export    string
+		primitive bool
+	}{
+		{"typedHelper", true},
+		{"untyped", false},
+		{"boxOf", false},
+	} {
+		transcript := implementationTranscriptFor(t, analyzer, path, source, testCase.export)
+		if transcript.PrimitiveCompletion != testCase.primitive {
+			t.Fatalf("%s: primitive completion = %v, want %v",
+				testCase.export, transcript.PrimitiveCompletion, testCase.primitive)
+		}
+	}
+}
+
 func TestCallArgumentPremisesReachALocalHelper(t *testing.T) {
 	analyzer, dir := premiseProject(t)
 	caller := premiseTranscript(t, analyzer, dir, "viaHelper")

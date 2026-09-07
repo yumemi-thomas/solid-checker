@@ -4,7 +4,20 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 28: a form's subject may be rooted at a
+// TypeFactsHandshakeProtocol is 29: a `coercion` form may state
+// CoercionPremise — that every operand it applies ToPrimitive to is either
+// provably a primitive or the result of a named call into this program's own
+// runtime source — and every implementation transcript states
+// PrimitiveCompletion, whether the value it hands its caller is provably a
+// primitive over the very program its census was classified on (ADR 0045). The
+// two are one fact in two halves: a consumer grants the premise only by asking
+// each named call's callee, under the premise it demanded that callee under.
+// A protocol-28 producer states neither, and reading an absent
+// PrimitiveCompletion as false is right while reading an absent
+// CoercionPremise as "nothing to grant" is right too — but an absent
+// PrimitiveCompletion on a *premised* transcript would silently refuse every
+// caller that could have cleared, so the number moves with the pair.
+// Protocol 28: a form's subject may be rooted at a
 // binding this program initialized from an **object or array literal**, or
 // from an object pattern's rest element — SubjectRoot `own-literal`, with
 // SubjectDeclaration naming the binding and no SubjectParameter at all
@@ -176,8 +189,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 28
-	TypeFactsSchemaSHA256             = "sha256:5ae2668c77f09c6a9e067c51785992bcaa7c3b7cc37449310908a1b05465bcc0"
+	TypeFactsHandshakeProtocol uint64 = 29
+	TypeFactsSchemaSHA256             = "sha256:db9bd03c0d7570a7556a5ac834bc2060e41150242de8ad40bf81689e3702cae3"
 )
 
 type ServiceHandshake struct {

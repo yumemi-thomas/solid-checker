@@ -343,7 +343,12 @@ type premiseCensusResult struct {
 	forms     []typefacts.UncensusedInvokingForm
 	premises  []typefacts.ParameterPremise
 	arguments []typefacts.CallArgumentPremise
-	refusal   string
+	// primitiveCompletion is ADR 0045's fact, and it belongs to the *premised*
+	// classification: the same helper censused under two argument premises may
+	// return a primitive under one and not the other, so it is computed on the
+	// twin beside the forms and never carried over from the accepted program.
+	primitiveCompletion bool
+	refusal             string
 }
 
 // premisedFormCensusLocked classifies the implementation's form census under
@@ -375,7 +380,8 @@ func (p *project) premisedFormCensusLocked(
 		twin, refusal = p.declaredSignatureTwinLocked(ctx, implementation, premise, imported, false)
 	}
 	if twin != nil {
-		result.forms, result.arguments = p.uncensusedInvokingFormCensusUnderPremiseLocked(twin)
+		result.forms, result.arguments, result.primitiveCompletion =
+			p.uncensusedInvokingFormCensusUnderPremiseLocked(twin)
 		result.premises = twin.premises
 	} else {
 		result.refusal = refusal
@@ -420,7 +426,8 @@ func (p *project) demandedPremiseCensusLocked(
 	var result premiseCensusResult
 	twin, refusal := p.premiseTwinLocked(ctx, implementation, expected, annotation, nil)
 	if twin != nil {
-		result.forms, result.arguments = p.uncensusedInvokingFormCensusUnderPremiseLocked(twin)
+		result.forms, result.arguments, result.primitiveCompletion =
+			p.uncensusedInvokingFormCensusUnderPremiseLocked(twin)
 		result.premises = twin.premises
 	} else {
 		result.refusal = refusal
@@ -779,10 +786,11 @@ func (p *project) premiseTwinLocked(
 // is dropped with it so no twin node outlives the census.
 func (p *project) uncensusedInvokingFormCensusUnderPremiseLocked(
 	twin *premiseTwin,
-) ([]typefacts.UncensusedInvokingForm, []typefacts.CallArgumentPremise) {
+) ([]typefacts.UncensusedInvokingForm, []typefacts.CallArgumentPremise, bool) {
 	p.formTwin = twin
 	forms := p.uncensusedInvokingFormCensusLocked(twin.implementation)
 	arguments := p.callArgumentPremisesLocked(twin)
+	primitive := p.primitiveCompletionLocked(twin.implementation)
 	p.formTwin = nil
 	delete(p.assignedSymbols, twin.file)
 	twin.release()
@@ -792,8 +800,17 @@ func (p *project) uncensusedInvokingFormCensusUnderPremiseLocked(
 			mapped := twin.originalLocation(*enclosing)
 			forms[index].EnclosingCallable = &mapped
 		}
+		// A coercion premise names call locations, and a consumer matches them
+		// against the call census's rows — which are reported in the original
+		// file's bytes. Left in the twin's coordinates they would match
+		// nothing, and the premise would be stated and never granted.
+		if premise := forms[index].CoercionPremise; premise != nil {
+			for call := range premise.Calls {
+				premise.Calls[call] = twin.originalLocation(premise.Calls[call])
+			}
+		}
 	}
-	return forms, arguments
+	return forms, arguments, primitive
 }
 
 // callArgumentPremisesLocked records, for every call or construction inside

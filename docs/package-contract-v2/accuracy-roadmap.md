@@ -415,6 +415,28 @@ closed claims per domain so the intermediate progress is visible.
    its dominant shape is arithmetic on a **local helper's return** typed `any`
    (`scalePoint(…) + translate`), which is lever C's territory, not this one's.
 
+   The coercion half is ADR 0045, and it closes the loop ADR 0038 left open:
+   the premise reached a helper's parameters and never came back out. A call to
+   a module-local helper types as `any` in compiled JavaScript however
+   precisely the package's declarations type that helper, so `scalePoint(…) +
+   translate` refused where everything else was already `number`. A coercion
+   now names the calls its clearance rests on, every transcript answers whether
+   the value it hands its caller is provably a primitive, and the census grants
+   the first only from the second — read off the transcript it demanded under
+   the premise it recorded. Measured: withheld 631 → 619, coercion 107 → 95,
+   **twelve candidates**.
+
+   The shortfall is the measurement's real product. `applyPointDelta` clears as
+   a **root**, whose premise is its own declared signature, and refuses as a
+   **helper**, because the argument type at the reaching call is `Axis` and a
+   helper premise is spelled `@param {Axis} axis` inside a JavaScript module
+   that cannot resolve the name. **That is lever C's own open item and it is
+   now the largest single blocker in the corpus**: spell such a type as
+   `typeof import("…").Axis` from the identity's declaration file, exactly as
+   the root premise already spells its `@type`. `calcLength`'s
+   `axis.max - axis.min` is the plainest case and rose 6 → 24 as bodies that
+   used to refuse earlier reached it.
+
    The second slice is ADR 0041: a spread's operand and an object pattern's
    source are subjects under the same premise. It removed the destructuring
    class (`BindingElement` 42 → 6) but closed only **six** candidates, because

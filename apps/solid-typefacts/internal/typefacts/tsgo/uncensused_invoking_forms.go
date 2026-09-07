@@ -316,6 +316,9 @@ func (p *project) uncensusedInvokingFormCensusLocked(
 				enclosingLocation := nodeLocation(enclosing)
 				form.EnclosingCallable = &enclosingLocation
 			}
+			if kind == typefacts.UncensusedCoercion {
+				form.CoercionPremise = p.coercionPremiseLocked(node)
+			}
 			if _, _, subject := p.accessorFormSubjectParameterLocked(node, kind, roots); subject != nil {
 				form.SubjectParameter = subject.parameter
 				form.SubjectWrite = subject.write
@@ -1614,6 +1617,247 @@ func (p *project) unaryFormLocked(
 		return "", false
 	}
 	return p.coercionFormLocked(operand)
+}
+
+// coercionPremiseLocked states what a `coercion` form's clearance would rest
+// on, or nil when no reviewed shape covers every operand (ADR 0045).
+//
+// The classifier above records the form as soon as one operand *may* be an
+// object, because a coercion of an object reaches its `Symbol.toPrimitive`,
+// `valueOf` or `toString`. This answers the question the classifier does not:
+// where does that operand's value come from? The one shape reviewed here is a
+// **call to this program's own runtime source** — the census already walks
+// such a callee and demands its transcript, so asking that transcript whether
+// its completion is a primitive costs no new evidence and no new trust.
+//
+// Every operand must be covered or nothing is stated: a premise that named
+// some operands and left others unexplained would read as a claim about the
+// whole form.
+func (p *project) coercionPremiseLocked(node *ast.Node) *typefacts.CoercionPremise {
+	operands := coercionOperands(node)
+	if len(operands) == 0 {
+		return nil
+	}
+	premise := &typefacts.CoercionPremise{}
+	seen := make(map[typefacts.Location]bool)
+	for _, operand := range operands {
+		visited := make(map[*ast.Node]bool)
+		if !p.operandIsPrimitiveOrRuntimeCallLocked(operand, premise, seen, visited, 0) {
+			return nil
+		}
+	}
+	if len(premise.Calls) == 0 {
+		// Every operand was provably a primitive, so the classifier would not
+		// have recorded the form at all. Reaching here means the walk and the
+		// classifier disagree; state nothing rather than a premise that rests
+		// on nothing.
+		return nil
+	}
+	return premise
+}
+
+// coercionOperands answers the expressions a coercing node applies ToPrimitive
+// to, or nil for a node kind this build has not reviewed. It mirrors the
+// classifier's own switch exactly: the two operands of a coercing binary
+// operator, each substitution of a template, and a coercing unary's operand.
+func coercionOperands(node *ast.Node) []*ast.Node {
+	switch {
+	case ast.IsBinaryExpression(node):
+		binary := node.AsBinaryExpression()
+		if binary == nil || binary.OperatorToken == nil {
+			return nil
+		}
+		if _, coercing := coercingBinaryOperators[nodeKindName(binary.OperatorToken)]; !coercing {
+			return nil
+		}
+		return []*ast.Node{binary.Left, binary.Right}
+	case nodeKindName(node) == "TemplateExpression":
+		template := node.AsTemplateExpression()
+		if template == nil || template.TemplateSpans == nil {
+			return nil
+		}
+		operands := make([]*ast.Node, 0, len(template.TemplateSpans.Nodes))
+		for _, span := range template.TemplateSpans.Nodes {
+			operands = append(operands, span.Expression())
+		}
+		return operands
+	case ast.IsPrefixUnaryExpression(node):
+		prefix := node.AsPrefixUnaryExpression()
+		if prefix == nil {
+			return nil
+		}
+		if _, coercing := coercingUnaryOperators[strings.TrimPrefix(prefix.Operator.String(), "Kind")]; !coercing {
+			return nil
+		}
+		return []*ast.Node{prefix.Operand}
+	case ast.IsPostfixUnaryExpression(node):
+		postfix := node.AsPostfixUnaryExpression()
+		if postfix == nil {
+			return nil
+		}
+		if _, coercing := coercingUnaryOperators[strings.TrimPrefix(postfix.Operator.String(), "Kind")]; !coercing {
+			return nil
+		}
+		return []*ast.Node{postfix.Operand}
+	}
+	return nil
+}
+
+const maxCoercionOperandDepth = 8
+
+// operandIsPrimitiveOrRuntimeCallLocked answers whether one operand's value is
+// provably a primitive or comes from a call into this program's own runtime
+// source, recording each such call.
+//
+// Four shapes carry a value without changing where it came from, and each is
+// followed: a conditional and the short-circuit operators, whose result is one
+// of their arms; and a reference to a local binding this file declares once,
+// writes nowhere, and initializes — naming an intermediate does not change
+// whose value it is, exactly as in ADR 0043. Everything else answers false.
+func (p *project) operandIsPrimitiveOrRuntimeCallLocked(
+	operand *ast.Node,
+	premise *typefacts.CoercionPremise,
+	seen map[typefacts.Location]bool,
+	visited map[*ast.Node]bool,
+	depth int,
+) bool {
+	if operand == nil || depth > maxCoercionOperandDepth {
+		return false
+	}
+	node := identityPreservingUnwrap(operand)
+	if node == nil {
+		return false
+	}
+	// The classifier's own test, asked of this operand alone: a value that is
+	// already a primitive has nothing for a coercion to reach.
+	if !p.mayBeObjectTypedLocked(p.formChecker().GetTypeAtLocation(node)) {
+		return true
+	}
+	switch {
+	case ast.IsCallExpression(node):
+		if p.formRuntimeCalleeDeclarationLocked(node) == nil {
+			return false
+		}
+		location := nodeLocation(node)
+		if !seen[location] {
+			seen[location] = true
+			premise.Calls = append(premise.Calls, location)
+		}
+		return true
+	case ast.IsConditionalExpression(node):
+		conditional := node.AsConditionalExpression()
+		if conditional == nil {
+			return false
+		}
+		return p.operandIsPrimitiveOrRuntimeCallLocked(conditional.WhenTrue, premise, seen, visited, depth+1) &&
+			p.operandIsPrimitiveOrRuntimeCallLocked(conditional.WhenFalse, premise, seen, visited, depth+1)
+	case ast.IsBinaryExpression(node):
+		binary := node.AsBinaryExpression()
+		if binary == nil || binary.OperatorToken == nil {
+			return false
+		}
+		switch nodeKindName(binary.OperatorToken) {
+		case "QuestionQuestionToken", "BarBarToken", "AmpersandAmpersandToken":
+			return p.operandIsPrimitiveOrRuntimeCallLocked(binary.Left, premise, seen, visited, depth+1) &&
+				p.operandIsPrimitiveOrRuntimeCallLocked(binary.Right, premise, seen, visited, depth+1)
+		}
+		return false
+	case ast.IsIdentifier(node):
+		declaration := p.singleUnwrittenLocalInitializerLocked(node)
+		if declaration == nil || visited[declaration] {
+			return false
+		}
+		visited[declaration] = true
+		return p.operandIsPrimitiveOrRuntimeCallLocked(
+			declaration.Initializer(), premise, seen, visited, depth+1,
+		)
+	}
+	return false
+}
+
+// formRuntimeCalleeDeclarationLocked is runtimeCalleeDeclarationLocked asked
+// through the *form* checker and the *form* source-file set.
+//
+// The distinction is the whole reason it exists. Its sibling answers about the
+// accepted program, which is what `calleesWorthPremisingLocked` needs before
+// any twin is built; this one runs inside the form census, where the node may
+// belong to a premise twin's file. Asking the accepted checker about a twin
+// node resolves nothing, and asking `isCurrentSourceFile` about the twin's own
+// file answers false — so a same-file helper, which is exactly the shape this
+// premise is for, would never be found.
+func (p *project) formRuntimeCalleeDeclarationLocked(call *ast.Node) *ast.Node {
+	callee := identityPreservingUnwrap(call.Expression())
+	if callee == nil || !ast.IsIdentifier(callee) {
+		return nil
+	}
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(callee))
+	if symbol == nil || len(symbol.Declarations) == 0 || symbol.Declarations[0] == nil {
+		return nil
+	}
+	declaration := symbol.Declarations[0]
+	sourceFile := ast.GetSourceFileOfNode(declaration)
+	if sourceFile == nil || sourceFile.IsDeclarationFile || !p.formIsRuntimeSourceFile(sourceFile) {
+		return nil
+	}
+	switch {
+	case ast.IsFunctionDeclaration(declaration):
+		return declaration
+	case ast.IsVariableDeclaration(declaration):
+		initializer := identityPreservingUnwrap(declaration.Initializer())
+		if initializer != nil && (ast.IsArrowFunction(initializer) || ast.IsFunctionExpression(initializer)) {
+			return initializer
+		}
+	}
+	return nil
+}
+
+// singleUnwrittenLocalInitializerLocked answers the variable declaration an
+// identifier is bound to when the binding is a plain identifier this program
+// declares exactly once, writes nowhere in its file, and initializes. Nil
+// otherwise — a written binding may hold something else by the time the
+// coercion runs, and a binding with two declarations has a running one this
+// walk cannot choose.
+func (p *project) singleUnwrittenLocalInitializerLocked(name *ast.Node) *ast.Node {
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(name))
+	if symbol == nil || len(symbol.Declarations) != 1 || symbol.Declarations[0] == nil {
+		return nil
+	}
+	declaration := symbol.Declarations[0]
+	if !ast.IsVariableDeclaration(declaration) || declaration.Initializer() == nil {
+		return nil
+	}
+	bound := declaration.Name()
+	if bound == nil || !ast.IsIdentifier(bound) {
+		return nil
+	}
+	sourceFile := ast.GetSourceFileOfNode(declaration)
+	if sourceFile == nil || !p.formIsRuntimeSourceFile(sourceFile) {
+		return nil
+	}
+	if p.symbolIsAssignedLocked(symbol, declaration) {
+		return nil
+	}
+	return declaration
+}
+
+// primitiveCompletionLocked answers whether the value this implementation
+// hands its caller is provably a primitive, on the very program the census is
+// being classified over (ADR 0045). An async function's return type is a
+// `Promise` and a generator's a `Generator`, so the completion form needs no
+// separate test: neither is a primitive.
+func (p *project) primitiveCompletionLocked(implementation *ast.Node) bool {
+	if implementation == nil {
+		return false
+	}
+	signature := p.formChecker().GetSignatureFromDeclaration(implementation)
+	if signature == nil {
+		return false
+	}
+	returned := checker.Checker_getReturnTypeOfSignature(p.formChecker(), signature)
+	if returned == nil {
+		return false
+	}
+	return !p.mayBeObjectTypedLocked(returned)
 }
 
 // coercionFormLocked records a coercion unless the operand is provably not an

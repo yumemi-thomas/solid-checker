@@ -280,3 +280,17 @@ ran. None hands `session` or `harness` to the package.
   disqualifies an otherwise data-only literal. `ownTableMemberRead` must read
   one level further than `ownTableRead` over the *same* table, so the pair
   pins that the premise roots a direct reference and never a chain.
+- **The ADR 0045 helper must hand back its own argument, and the library
+  negative must call an `any`-returning member.** Written
+  `scaleBy(value, factor) { return value * factor }` the completion is a
+  `number` whatever the parameters are — `*` always yields one — so the call
+  site is already a primitive and no coercion form is recorded at all. Written
+  `Math.min(base, 1) + base` the same thing happens through the declarations.
+  Both drafts certified without the census reaching the premise.
+
+  **This trap has now caught three ADRs in a row**, in three dresses: a literal
+  default whose members the compiler binds (ADR 0043), a literal key that binds
+  a data property (ADR 0044), and an operand the checker already types as a
+  primitive (ADR 0045). Before believing any negative in this fixture, check
+  that the form it is supposed to refuse on is actually recorded — a fixture
+  that pins a refusal over no form pins nothing at all.

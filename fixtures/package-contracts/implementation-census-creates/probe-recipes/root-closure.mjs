@@ -1,7 +1,8 @@
 // Hand-authored probe recipe for the `creates: []` claim domain of the exports
 // ADR 0043 and ADR 0044 certify: `defaultedFromParameter`, `patternParameter`,
 // `localBindingFromParameter`, `localPatternFromParameter`, `ownTableRead`,
-// `ownArrayRead`, `ownTableWrite`, `ownRestSpread` and `patternRestParameter`.
+// `ownArrayRead`, `ownTableWrite`, `ownRestSpread`, `patternRestParameter` and
+// the three ADR 0045 coercion exports.
 //
 // The claim is *proved* by the implementation census: each body's only
 // invoking forms are reads of a value the caller passed, rooted through a
@@ -13,6 +14,9 @@
 // each export's own gate selects this file and calls exactly its own export.
 
 import {
+  coerceBoundHelperResult,
+  coerceConditionalHelperResult,
+  coerceHelperResult,
   defaultedFromParameter,
   localBindingFromParameter,
   localPatternFromParameter,
@@ -38,5 +42,10 @@ export async function runProbeSession(_session, harness) {
   ownTableWrite("third");
   ownRestSpread({ first: undefined, other: 1 });
   patternRestParameter({ first: undefined, value: 1 });
+  // ADR 0045, the same way: the claim is the census's; these prove the exports
+  // ran over a helper whose completion is a number.
+  coerceHelperResult(2);
+  coerceBoundHelperResult(2);
+  coerceConditionalHelperResult(2, 3);
   harness.emit({ marker: "call", kind: "call", phase: "exit" });
 }

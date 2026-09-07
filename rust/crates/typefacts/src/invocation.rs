@@ -549,6 +549,23 @@ pub struct ExportImplementationTranscript {
     /// that names no row and any entry on an unpremised transcript.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub call_argument_premises: Vec<CallArgumentPremise>,
+    /// Whether the value this implementation hands its caller is **provably a
+    /// primitive**: the checker's return type for the declaration, on the very
+    /// program this census was classified over — the premise twin when the
+    /// census was premised — is a union of primitive types alone (ADR 0045,
+    /// handshake protocol 29).
+    ///
+    /// The completion form needs no separate test: an async function's return
+    /// type is a `Promise` and a generator's is a `Generator`, neither of which
+    /// is a primitive.
+    ///
+    /// **It is a fact about the census's premise, not about the declaration.**
+    /// The same helper censused under two argument premises may state it under
+    /// one and not the other, so it may be read only from the transcript that
+    /// was demanded under the premise the reader recorded. Absent means
+    /// "not stated", which is the refusing value on every protocol.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub primitive_completion: bool,
     /// The conjunction of seven independent gates, every one of which the
     /// producer clears before setting this — and nothing else.
     ///
@@ -700,6 +717,30 @@ pub struct UncensusedInvokingForm {
     /// rather than in a declaration file or a dependency.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subject_declaration: Option<Location>,
+    /// What a `coercion` form's clearance would rest on: every operand the
+    /// coercion applies ToPrimitive to is either provably a primitive by its
+    /// own type — not listed, because a primitive has nothing to reach — or the
+    /// result of one of these calls into the program's own runtime source
+    /// (ADR 0045, handshake protocol 29).
+    ///
+    /// **Stating it is not a claim that the form clears.** A consumer grants
+    /// it only by matching each call to a row of the same transcript's
+    /// [`ExportImplementationTranscript::calls`], taking that row's own callee
+    /// and premise, and requiring the callee's transcript to state
+    /// [`ExportImplementationTranscript::primitive_completion`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coercion_premise: Option<CoercionPremise>,
+}
+
+/// The calls one `coercion` form's clearance would rest on. See
+/// [`UncensusedInvokingForm::coercion_premise`].
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoercionPremise {
+    /// Locations of rows of the same transcript's `calls`, in source order and
+    /// without duplicates. An entry naming no row refuses the form.
+    #[serde(default)]
+    pub calls: Vec<Location>,
 }
 
 /// The closed vocabulary of invoking forms the call census does not record.

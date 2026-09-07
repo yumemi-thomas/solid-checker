@@ -728,3 +728,81 @@ export function arrayRestRead(source) {
   const [, ...tail] = source;
   return tail[0];
 }
+
+// ---------------------------------------------------------------------------
+// ADR 0045: a coercion over a call into this program's own runtime source. A
+// call to a module-local helper types as `any` in compiled JavaScript however
+// well the package's declarations type that helper, so a sum of one refused
+// wherever the declared-signature premise had typed everything else. The form
+// now names the calls its clearance rests on, and each callee's own census
+// answers whether the value it hands back is provably a primitive.
+// ---------------------------------------------------------------------------
+
+// The helper must hand back its own argument, not an arithmetic result. Written
+// `return value * factor` the completion is a `number` whatever the parameters
+// are — `*` always yields one — so the call site is already a primitive, no
+// coercion form is recorded, and every export below certifies without the
+// census reaching the premise. That is the same vacuity ADRs 0043 and 0044
+// each walked into, in its third dress.
+function scaleBy(value) {
+  return value;
+}
+
+function boxOf(value) {
+  return { value };
+}
+
+let mutableScale = scaleBy;
+mutableScale = boxOf;
+
+// The shape the corpus is full of: a sum of a local helper's result and a
+// declared `number`. The helper is censused under the argument types recorded
+// at this very call, and under those its completion is `number`.
+// **Certifies.**
+export function coerceHelperResult(base) {
+  return scaleBy(base) + base;
+}
+
+// The same through a local binding the file declares once, writes nowhere and
+// initializes — naming an intermediate does not change where the value came
+// from, exactly as in ADR 0043. **Certifies.**
+export function coerceBoundHelperResult(base) {
+  const scaled = scaleBy(base);
+  return scaled + base;
+}
+
+// The same through both arms of a conditional. **Certifies.**
+export function coerceConditionalHelperResult(base, factor) {
+  const scaled = factor === 0 ? base : scaleBy(base);
+  return scaled + base;
+}
+
+// A helper whose completion is an **object**. Coercing it reaches whatever
+// `valueOf` or `toString` that object carries, which is this module's own code
+// and exactly what the premise rules out. **Refuses.**
+export function coerceObjectHelperResult(base) {
+  return boxOf(base) + base;
+}
+
+// A call through a binding initialized by an **identifier** rather than a
+// function literal: what runs is whatever `mutableScale` holds when the call
+// executes, and this census does not trace values, so the *call* refuses
+// before any coercion premise is reached. The premise cannot be granted for a
+// callee the census could not bind, which is the point. **Refuses.**
+export function coerceWrittenHelperResult(base) {
+  return mutableScale(base) + base;
+}
+
+// A coercion over a call into the **default library**. `JSON.parse` is not a
+// declaration in this program's runtime source, so no premise covers it and
+// the form refuses — the boundary is provenance, and the standard-library
+// disposition of the *call* says nothing about the value it returns.
+//
+// It must be a library member the declarations type as `any`. Written
+// `Math.min(base, 1) + base` the operand is a declared `number`, so the
+// classifier records **no form at all** and the export certifies without the
+// census reaching the premise — the same vacuity ADRs 0043 and 0044 each
+// walked into once. **Refuses.**
+export function coerceLibraryResult(base) {
+  return JSON.parse("1") + base;
+}

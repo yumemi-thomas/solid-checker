@@ -320,6 +320,11 @@ func (p *project) exportImplementationTranscriptLocked(
 	transcript.CallableReturns = p.callableReturnCensusesLocked(implementation)
 	transcript.Calls = p.implementationCallCensusLocked(implementation)
 	transcript.UncensusedInvokingForms = p.uncensusedInvokingFormCensusLocked(implementation)
+	// ADR 0045: whether the value this body hands its caller is provably a
+	// primitive, over the same program the forms above were classified on. A
+	// premised classification replaces it below, because the fact belongs to
+	// the premise.
+	transcript.PrimitiveCompletion = p.primitiveCompletionLocked(implementation)
 	// ADR 0038: when a form the classifier decides from a type was recorded
 	// over the parameters' own (`any`) types, classify the body once more
 	// under the export's declared signature, on a checked twin of the file.
@@ -340,6 +345,7 @@ func (p *project) exportImplementationTranscriptLocked(
 			transcript.UncensusedInvokingForms = premised.forms
 			transcript.ParameterPremises = premised.premises
 			transcript.CallArgumentPremises = premised.arguments
+			transcript.PrimitiveCompletion = premised.primitiveCompletion
 		}
 	}
 	if len(transcript.ControlFlow.Unsupported) != 0 {
@@ -492,7 +498,19 @@ func (p *project) localDeclarationImplementationTranscriptLocked(
 	transcript.CallableReturns = p.callableReturnCensusesLocked(implementation)
 	transcript.Calls = p.implementationCallCensusLocked(implementation)
 	transcript.UncensusedInvokingForms = p.uncensusedInvokingFormCensusLocked(implementation)
+	// ADR 0045: whether the value this body hands its caller is provably a
+	// primitive, over the same program the forms above were classified on. A
+	// premised classification replaces it below, because the fact belongs to
+	// the premise.
+	transcript.PrimitiveCompletion = p.primitiveCompletionLocked(implementation)
+	// The premise is applied when it could change an answer the consumer will
+	// read. Two of those now: a form a type can clear, here or in a helper
+	// this body reaches — and, since ADR 0045, the **completion**, which a
+	// caller's coercion asks about. A declaration whose completion is already
+	// a primitive over its own types can answer without a twin; one whose is
+	// not is exactly the case the demanded premise exists to settle.
 	if len(demanded) != 0 && (formsMayClearUnderTypes(transcript.UncensusedInvokingForms) ||
+		!transcript.PrimitiveCompletion ||
 		p.calleesWorthPremisingLocked(implementation)) {
 		premised := p.demandedPremiseCensusLocked(ctx, implementation, demanded)
 		if premised.refusal != "" {
@@ -501,6 +519,7 @@ func (p *project) localDeclarationImplementationTranscriptLocked(
 			transcript.UncensusedInvokingForms = premised.forms
 			transcript.ParameterPremises = premised.premises
 			transcript.CallArgumentPremises = premised.arguments
+			transcript.PrimitiveCompletion = premised.primitiveCompletion
 		}
 	}
 	if len(transcript.ControlFlow.Unsupported) != 0 {

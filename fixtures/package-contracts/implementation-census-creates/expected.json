@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "f37dfffcb4148468d82c18448c831f08330922121718ffc9c74e9e2e243a6667",
+            "closureSha256": "7716df6d5d571df96955458948edffca5c0a0d3f8005de14cd371006f010dc08",
             "path": "./index.js",
-            "sha256": "ecc7c9141ac586d68e4230d008afe075db6817604f3c34661d7e7c44db90ad4c"
+            "sha256": "c90f46367033dfe27c5973c8bef455190fd5037bbaebad88972212f432bdd4f3"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "366f46d4b503cd2aae31411287d18b8e7c3ac6de05545c142f7b8bfe2c555c7e"
+            "sha256": "dd96eda4f611b45356af20247cf80a730fce10ae5a344b99da06ef424726d964"
           },
           "exports": {
             "accessorTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -21,6 +21,12 @@
             "callNonLibraryReceiver": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "chainCallbacks": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "chainModuleCallbacks": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
+            "coerceBoundHelperResult": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "coerceConditionalHelperResult": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "coerceHelperResult": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "coerceLibraryResult": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "coerceObjectHelperResult": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "coerceWrittenHelperResult": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "constBound": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1",
             "cycle": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "declaredMemberCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",

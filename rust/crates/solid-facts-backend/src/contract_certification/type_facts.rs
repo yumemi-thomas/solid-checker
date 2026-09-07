@@ -7718,6 +7718,7 @@ enum CensusDisposition {
     OwnLiteralAccessor,
     OwnLiteralAccessorWrite,
     OwnLiteralIterable,
+    PrimitiveCoercion,
     StandardLibrary,
     DialectAxiom,
     LocalRecursion,
@@ -7736,6 +7737,7 @@ impl CensusDisposition {
             Self::OwnLiteralAccessor => "own-literal-accessor",
             Self::OwnLiteralAccessorWrite => "own-literal-accessor-write",
             Self::OwnLiteralIterable => "own-literal-iterable",
+            Self::PrimitiveCoercion => "primitive-coercion",
             Self::StandardLibrary => "standard-library",
             Self::DialectAxiom => "dialect-axiom",
             Self::LocalRecursion => "local-recursion",
@@ -7819,6 +7821,17 @@ const CENSUS_PARAMETER_ROOTED_READ_FORMS_PROTOCOL: u64 = 25;
 /// so `own-literal` cannot arrive from one; the constant is what lets the
 /// disposition below read the absence of a parameter as part of a stated
 /// premise rather than as a missing field.
+/// The handshake protocol at which a `coercion` form could name the calls its
+/// clearance rests on, and every transcript could answer whether the value it
+/// hands its caller is provably a primitive (ADR 0045).
+///
+/// The number is the discriminator for the *second* half. `primitiveCompletion`
+/// defaults to false, which is the refusing value, so an old producer's absence
+/// is read correctly — but on a premised transcript that absence would refuse
+/// every caller the premise could have cleared, and a build that asks the
+/// question has to know the answer means "no" rather than "not asked".
+const CENSUS_PRIMITIVE_COMPLETION_PROTOCOL: u64 = 29;
+
 const CENSUS_OWN_LITERAL_SUBJECT_PROTOCOL: u64 = 28;
 
 const CENSUS_SUBJECT_ROOT_DERIVATION_PROTOCOL: u64 = 27;
@@ -8133,6 +8146,14 @@ fn census_creates_domain(
             "implementation-census premise required: the uncensused-invoking-form census arrived \
              at handshake protocol {CENSUS_UNCENSUSED_FORMS_PROTOCOL} and this build speaks {}, \
              so an empty form list would be an absence read as an enumeration",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_PRIMITIVE_COMPLETION_PROTOCOL {
+        return Err(refuse(format!(
+            "implementation-census premise required: a coercion's operand calls and a transcript's \
+             primitive completion arrived at handshake protocol \
+             {CENSUS_PRIMITIVE_COMPLETION_PROTOCOL} and this build speaks {}",
             typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
         )));
     }
@@ -8610,6 +8631,23 @@ fn census_transcript_calls(
     // otherwise the enumeration guarantee: the calls census records
     // `CallExpression` and `NewExpression` only, and a form it does not record
     // reaches a callable the walk below can say nothing about.
+    let refuse_form = |form: &typefacts::UncensusedInvokingForm| {
+        format!(
+            "creates census refuses an uncensused invoking form: {} ({}) at {}:{}..{}, reach {}",
+            uncensused_invoking_form_kind_name(form.kind),
+            form.node_kind,
+            form.location.path,
+            form.location.start_byte,
+            form.location.end_byte,
+            reachability_name(form.reach)
+        )
+    };
+    // ADR 0045: a coercion that names the calls its clearance rests on is the
+    // one form whose disposition needs the *callees'* transcripts, so it is
+    // held back until the call walk below has demanded them. Every other form
+    // is decided here exactly as before, so no refusal this census already
+    // made moves behind a call walk it used to precede.
+    let mut deferred = Vec::new();
     for form in &implementation.uncensused_invoking_forms {
         if form.reach == Reachability::Unreachable {
             continue;
@@ -8618,15 +8656,13 @@ fn census_transcript_calls(
             run.sites.push(census_form_site(form, disposition));
             continue;
         }
-        return Err(format!(
-            "creates census refuses an uncensused invoking form: {} ({}) at {}:{}..{}, reach {}",
-            uncensused_invoking_form_kind_name(form.kind),
-            form.node_kind,
-            form.location.path,
-            form.location.start_byte,
-            form.location.end_byte,
-            reachability_name(form.reach)
-        ));
+        if form.kind == typefacts::UncensusedInvokingFormKind::Coercion
+            && form.coercion_premise.is_some()
+        {
+            deferred.push(form);
+            continue;
+        }
+        return Err(refuse_form(form));
     }
     let mut step = CensusStep::Decided;
     for call in &implementation.calls {
@@ -8650,7 +8686,81 @@ fn census_transcript_calls(
             None => step = CensusStep::NeedsTranscripts,
         }
     }
+    if step == CensusStep::NeedsTranscripts {
+        // The callees the deferred coercions ask about are exactly the callees
+        // this walk just demanded. Decide nothing until the next pass has them.
+        return Ok(step);
+    }
+    for form in deferred {
+        if !census_coercion_rests_on_primitive_calls(run, implementation, form)? {
+            return Err(refuse_form(form));
+        }
+        run.sites
+            .push(census_form_site(form, CensusDisposition::PrimitiveCoercion));
+    }
     Ok(step)
+}
+
+/// Whether every call a `coercion` form's premise names hands back a value the
+/// callee's own census proved is a primitive (ADR 0045).
+///
+/// The premise the producer states is only half the fact, and this is the other
+/// half — asked of the callee, under the very premise this census demanded that
+/// callee's transcript under. Nothing here re-derives a type: it matches each
+/// named call to a row of this transcript, binds that row's callee to a
+/// declaration in the artifact's own runtime source exactly as the
+/// local-recursion disposition does, and reads one boolean from the transcript
+/// that row already produced.
+///
+/// A named call that is not a row, a callee this census cannot bind, or a
+/// transcript that does not state the completion, all answer `false` — the
+/// form then refuses by its own name, which is what it did before this ADR.
+fn census_coercion_rests_on_primitive_calls(
+    run: &mut CensusRun<'_>,
+    implementation: &typefacts::ExportImplementationTranscript,
+    form: &typefacts::UncensusedInvokingForm,
+) -> Result<bool, String> {
+    let Some(premise) = form.coercion_premise.as_ref() else {
+        return Ok(false);
+    };
+    if premise.calls.is_empty() {
+        // A premise resting on nothing would mean every operand was already a
+        // primitive, in which case the producer would not have recorded the
+        // form. Never read it as "nothing to check".
+        return Ok(false);
+    }
+    for location in &premise.calls {
+        let mut rows = implementation
+            .calls
+            .iter()
+            .filter(|call| &call.location == location);
+        let Some(call) = rows.next() else {
+            return Ok(false);
+        };
+        if rows.next().is_some() {
+            return Ok(false);
+        }
+        let premises = census_call_premises(implementation, call);
+        let Some(declaration) = call.declaration.as_ref() else {
+            return Ok(false);
+        };
+        let Some((_, relative)) = census_local_declaration_identity(run, declaration) else {
+            return Ok(false);
+        };
+        let Ok(node) = census_local_declaration_node(run, &relative, declaration) else {
+            return Ok(false);
+        };
+        if census_local_binding_is_stable(run, &relative, &node, declaration).is_err() {
+            return Ok(false);
+        }
+        let Some(transcript) = run.evidence.local(&node, premises) else {
+            return Ok(false);
+        };
+        if !transcript.primitive_completion {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 /// The argument premise this transcript recorded for `call`, or none.
@@ -18435,6 +18545,208 @@ mod tests {
         let mut run = census_run(&certified, &roots);
         let bare_setter = census_transcript_with(vec![], json!([form("set-accessor", json!({}))]));
         assert!(census_transcript(&mut run, &bare_setter, 0, &[]).is_err());
+    }
+
+    /// ADR 0045: a coercion whose operands come from calls into this
+    /// program's own runtime source. The premise the form states is half the
+    /// fact; the callee's own `primitiveCompletion`, read from the transcript
+    /// this census demanded under the premise it recorded, is the other half.
+    /// Neither half alone clears the form, and the caller's word alone never
+    /// does.
+    #[test]
+    fn creates_census_grants_a_coercion_only_from_the_callees_own_completion() {
+        assert_eq!(CENSUS_PRIMITIVE_COMPLETION_PROTOCOL, 29);
+        const {
+            assert!(
+                typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+                    >= CENSUS_PRIMITIVE_COMPLETION_PROTOCOL
+            );
+        }
+        let source_path = "/project/node_modules/consumer/dist/index.js";
+        let source = "export function useThing(value) {\n  return helper(value) + value;\n}\n\
+                      function helper(value) {\n  return value;\n}";
+        let offset = |needle: &str| u64::try_from(source.find(needle).unwrap()).unwrap();
+        let export_name = (offset("useThing"), offset("useThing") + 8);
+        let helper_node = (
+            offset("function helper"),
+            u64::try_from(source.len()).unwrap(),
+        );
+        let helper_name = (
+            offset("function helper") + 9,
+            offset("function helper") + 15,
+        );
+        let call_at = (offset("helper(value)"), offset("helper(value)") + 13);
+        let coercion_at = (
+            offset("helper(value) + value"),
+            offset("helper(value) + value") + 21,
+        );
+        let certified = super::super::ArtifactSnapshot {
+            package_name: "consumer".into(),
+            package_version: "1.0.0".into(),
+            package_integrity: "sha512-consumer".into(),
+            files: std::sync::Arc::new(
+                [
+                    (
+                        "package.json".to_owned(),
+                        std::sync::Arc::<[u8]>::from(&b"{\"name\":\"consumer\"}"[..]),
+                    ),
+                    (
+                        "dist/index.js".to_owned(),
+                        std::sync::Arc::<[u8]>::from(source.as_bytes()),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+            directories: std::sync::Arc::new(std::collections::BTreeSet::new()),
+            root: "/snapshot/consumer".into(),
+            provenance_root: "/snapshot/consumer".into(),
+        };
+        let roots = vec![SnapshotSourceRoot {
+            path: "/project/node_modules/consumer/".to_owned(),
+            evidence_prefix: "/node_modules/consumer/".to_owned(),
+            snapshot: &certified,
+            dependency: false,
+        }];
+        let helper_location = typefacts::Location {
+            path: source_path.into(),
+            start_byte: helper_node.0,
+            end_byte: helper_node.1,
+        };
+        let call = signals_call(
+            "helper",
+            json!({
+                "location": {"path": source_path, "startByte": call_at.0, "endByte": call_at.1},
+                "targetModule": "",
+                "declaration": {
+                    "symbol": "symbol:helper",
+                    "name": "helper",
+                    "kind": "FunctionDeclaration",
+                    "sourceFile": source_path,
+                    "location": {"path": source_path, "startByte": helper_name.0, "endByte": helper_name.1},
+                },
+            }),
+        );
+        let coercion = |premise: serde_json::Value| {
+            let mut form = json!({
+                "kind": "coercion",
+                "nodeKind": "BinaryExpression",
+                "location": {"path": source_path, "startByte": coercion_at.0, "endByte": coercion_at.1},
+                "reach": "reachable",
+            });
+            if !premise.is_null() {
+                form.as_object_mut()
+                    .expect("an object")
+                    .insert("coercionPremise".into(), premise);
+            }
+            json!([form])
+        };
+        let export = |premise: serde_json::Value| {
+            let mut transcript = census_transcript_with(vec![call.clone()], coercion(premise));
+            transcript.declaration = Some(
+                serde_json::from_value(json!({
+                    "symbol": "symbol:useThing",
+                    "name": "useThing",
+                    "kind": "FunctionDeclaration",
+                    "sourceFile": source_path,
+                    "location": {"path": source_path, "startByte": export_name.0, "endByte": export_name.1},
+                }))
+                .expect("a valid declaration"),
+            );
+            transcript
+        };
+        let helper_transcript = |primitive: bool| {
+            let mut helper = census_transcript_with(vec![], json!([]));
+            helper.location = helper_location.clone();
+            helper.query_name = "helper".into();
+            helper.primitive_completion = primitive;
+            helper.declaration = Some(
+                serde_json::from_value(json!({
+                    "symbol": "symbol:helper",
+                    "name": "helper",
+                    "kind": "FunctionDeclaration",
+                    "sourceFile": source_path,
+                    "location": {"path": source_path, "startByte": helper_name.0, "endByte": helper_name.1},
+                }))
+                .expect("a valid declaration"),
+            );
+            vec![LocalDeclarationTranscript {
+                location: helper_location.clone(),
+                premises: vec![],
+                transcript: helper,
+            }]
+        };
+        let call_location = json!({
+            "path": source_path, "startByte": call_at.0, "endByte": call_at.1
+        });
+
+        // Without a premise the form refuses exactly as it always did, even
+        // though the callee's completion is a primitive: the producer said
+        // nothing about where the operands came from.
+        let locals = helper_transcript(true);
+        let mut run = census_run(&certified, &roots);
+        run.evidence = CensusEvidence {
+            roots: &roots,
+            locals: &locals,
+        };
+        let refusal = census_transcript(&mut run, &export(serde_json::Value::Null), 0, &[])
+            .expect_err("an unstated premise grants nothing");
+        assert!(
+            refusal.contains("uncensused invoking form: coercion"),
+            "{refusal}"
+        );
+
+        // A premise resting on nothing, and one naming a call this transcript
+        // does not carry: both refuse.
+        for premise in [
+            json!({"calls": []}),
+            json!({"calls": [{"path": source_path, "startByte": 0, "endByte": 1}]}),
+        ] {
+            let mut run = census_run(&certified, &roots);
+            run.evidence = CensusEvidence {
+                roots: &roots,
+                locals: &locals,
+            };
+            assert!(
+                census_transcript(&mut run, &export(premise.clone()), 0, &[]).is_err(),
+                "{premise} names no usable call"
+            );
+        }
+
+        // The callee's own answer decides it, and only its own answer.
+        for primitive in [false, true] {
+            let locals = helper_transcript(primitive);
+            let mut run = census_run(&certified, &roots);
+            run.evidence = CensusEvidence {
+                roots: &roots,
+                locals: &locals,
+            };
+            let outcome = census_transcript(
+                &mut run,
+                &export(json!({"calls": [call_location.clone()]})),
+                0,
+                &[],
+            );
+            if primitive {
+                assert_eq!(outcome, Ok(CensusStep::Decided));
+                assert!(
+                    run.sites.iter().any(|site| site.ends_with(&format!(
+                        // The derivation slot is empty: a coercion roots no
+                        // subject, and the site keeps the field so every form
+                        // line has the same shape.
+                        "census-form:{source_path}:{}:{}:coercion:reachable:primitive-coercion:",
+                        coercion_at.0, coercion_at.1
+                    ))),
+                    "{:?}",
+                    run.sites
+                );
+            } else {
+                assert!(
+                    outcome.is_err(),
+                    "a completion that is not a primitive grants nothing"
+                );
+            }
+        }
     }
 
     /// ADR 0044: a subject rooted at a value this program built. The premise
