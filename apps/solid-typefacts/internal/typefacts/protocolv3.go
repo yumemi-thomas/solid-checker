@@ -4,7 +4,15 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 29: a `coercion` form may state
+// TypeFactsHandshakeProtocol is 30: a ParameterPremise may state Spelling, a
+// form of its type that resolves from a module which cannot name it directly
+// (ADR 0046). A helper premise is written into a JavaScript module as a JSDoc
+// `@param`, where a bare `Axis` resolves to nothing however precisely the
+// package's declarations define it; the caller's twin is where the spelling
+// can be computed. Type and Identity remain the whole falsifier. The number
+// moves because the established premise echoes the spelling back, and a
+// protocol-29 consumer would demand a premise without it and refuse the echo.
+// Protocol 29: a `coercion` form may state
 // CoercionPremise — that every operand it applies ToPrimitive to is either
 // provably a primitive or the result of a named call into this program's own
 // runtime source — and every implementation transcript states
@@ -189,8 +197,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 29
-	TypeFactsSchemaSHA256             = "sha256:db9bd03c0d7570a7556a5ac834bc2060e41150242de8ad40bf81689e3702cae3"
+	TypeFactsHandshakeProtocol uint64 = 30
+	TypeFactsSchemaSHA256             = "sha256:2ead5760c462bd0e6a86e7dd294b5bf623c7538f774f9d026c1f3dcc540dee78"
 )
 
 type ServiceHandshake struct {

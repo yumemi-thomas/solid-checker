@@ -425,6 +425,22 @@ pub struct ParameterPremise {
     pub r#type: Arc<str>,
     #[serde(default, skip_serializing_if = "str::is_empty")]
     pub identity: Arc<str>,
+    /// A form of [`Self::r#type`] that resolves from a module which cannot
+    /// name it directly — `import("<specifier>").<Name>` — stated when the
+    /// printed text names a type declared in a declaration file (ADR 0046,
+    /// handshake protocol 30).
+    ///
+    /// A helper premise is written into a **JavaScript** module as a JSDoc
+    /// `@param`, where `@param {Axis}` resolves to nothing however precisely
+    /// the package's declarations define `Axis`; the caller's twin, which does
+    /// resolve it, is where the spelling can be computed.
+    ///
+    /// **A hint, never the premise.** The type text and the identity remain
+    /// the whole falsifier, so a spelling that resolved to something else
+    /// refuses the twin exactly as a wrong printed text does. This side echoes
+    /// it byte for byte and interprets none of it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub spelling: String,
 }
 
 /// The type each informative written argument slot of one call carried on the

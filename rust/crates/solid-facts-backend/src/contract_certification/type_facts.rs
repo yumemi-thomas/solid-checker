@@ -19155,6 +19155,7 @@ mod tests {
                 index: *index,
                 r#type: (*text).into(),
                 identity: "".into(),
+                spelling: String::new(),
             })
             .collect();
         transcript
@@ -19261,6 +19262,7 @@ mod tests {
             index,
             r#type: text.into(),
             identity: identity.into(),
+            spelling: String::new(),
         }
     }
 

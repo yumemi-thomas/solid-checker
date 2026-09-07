@@ -60,6 +60,14 @@ export const documented = (seconds) => seconds * 1000;
 export const mirrorAlias = (easing) => (p) => p <= 0.5 ? easing(2 * p) / 2 : (2 - easing(2 * (1 - p))) / 2;
 
 export const aliasTuple = ([a, b, c, d]) => "cubic-bezier(" + a + ", " + b + ", " + c + ", " + d + ")";
+
+function lengthOf(axis) {
+  return axis.max - axis.min;
+}
+
+export function viaAxisHelper(axis) {
+  return lengthOf(axis);
+}
 `
 
 const premiseDeclarationSource = `export declare function clamp(min: number, max: number, v: number): number;
@@ -76,6 +84,7 @@ export type EasingFunction = (v: number) => number;
 export declare const mirrorAlias: (easing: EasingFunction) => EasingFunction;
 export type BezierDefinition = [number, number, number, number];
 export declare const aliasTuple: (definition: BezierDefinition) => string;
+export declare function viaAxisHelper(axis: Axis): number;
 export type ClampFn = typeof clamp;
 export declare const clampConst: (min: number, max: number, v: number) => number;
 `
@@ -99,8 +108,8 @@ func premiseProjectWith(t *testing.T, tsconfig string) (typefacts.ExportValueAna
 	}
 	write("pkg/index.js", premiseRuntimeSource)
 	write("pkg/index.d.ts", premiseDeclarationSource)
-	write("harness.ts", `import { clamp, widen, scale, span, viaHelper, spreadDeclared, annotated, arity, documented, mirrorAlias, aliasTuple } from "./pkg/index.js";
-export const subjects = [clamp, widen, scale, span, viaHelper, spreadDeclared, annotated, arity, documented, mirrorAlias, aliasTuple];
+	write("harness.ts", `import { clamp, widen, scale, span, viaHelper, viaAxisHelper, spreadDeclared, annotated, arity, documented, mirrorAlias, aliasTuple } from "./pkg/index.js";
+export const subjects = [clamp, widen, scale, span, viaHelper, viaAxisHelper, spreadDeclared, annotated, arity, documented, mirrorAlias, aliasTuple];
 `)
 	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
 	if err != nil {
@@ -478,6 +487,70 @@ export function overLibraryCall(base: number) {
 			t.Fatalf("%s: primitive completion = %v, want %v",
 				testCase.export, transcript.PrimitiveCompletion, testCase.primitive)
 		}
+	}
+}
+
+// ADR 0046: a helper premise whose type the *helper's* module cannot name.
+//
+// `viaAxisHelper(axis: Axis)` hands its own parameter to a module-local
+// `lengthOf`, so the recorded argument type is `Axis` — a name that resolves
+// in the caller's twin and in nothing else. Spelled `@param {Axis} axis` into
+// a JavaScript module the twin refuses it, the helper is censused over `any`,
+// and `axis.max - axis.min` refuses for a reason that is about spelling rather
+// than about the code.
+func TestAHelperPremiseIsSpelledAsAnImportTypeWhenItsNameIsForeign(t *testing.T) {
+	analyzer, dir := premiseProject(t)
+	caller := premiseTranscript(t, analyzer, dir, "viaAxisHelper")
+	if len(caller.CallArgumentPremises) != 1 {
+		t.Fatalf("viaAxisHelper call argument premises = %#v (refusal %q), want the one call to lengthOf",
+			caller.CallArgumentPremises, caller.ParameterPremiseRefusal)
+	}
+	recorded := caller.CallArgumentPremises[0].Arguments
+	if len(recorded) != 1 || recorded[0].Type != "Axis" {
+		t.Fatalf("recorded arguments = %#v, want the declared Axis", recorded)
+	}
+	if !strings.HasPrefix(recorded[0].Spelling, "import(") ||
+		!strings.HasSuffix(recorded[0].Spelling, ").Axis") {
+		t.Fatalf("recorded spelling = %q, want an import type naming Axis", recorded[0].Spelling)
+	}
+
+	// Demanded back, the helper binds the premise through that spelling and
+	// its coercion clears.
+	helper := premiseLocalTranscript(t, analyzer, dir, "viaAxisHelper", "lengthOf", recorded)
+	for _, form := range helper.UncensusedInvokingForms {
+		if form.Kind == typefacts.UncensusedCoercion {
+			t.Fatalf("lengthOf still coerces under the caller's argument type (refusal %q): %#v",
+				helper.ParameterPremiseRefusal, form)
+		}
+	}
+	// The two reads of `axis` remain, and remain rooted at the parameter: the
+	// premise types them, it does not turn a declaration file into runtime
+	// bytes, and ADR 0034 is what dispositions them.
+	if kinds := markerKinds(helper.UncensusedInvokingForms); len(kinds) != 2 {
+		t.Fatalf("lengthOf forms = %v, want the two parameter-rooted reads", kinds)
+	}
+	for _, form := range helper.UncensusedInvokingForms {
+		if form.SubjectParameter == nil || *form.SubjectParameter != 0 {
+			t.Fatalf("lengthOf form %#v is not rooted at the premised parameter", form)
+		}
+	}
+	if len(helper.ParameterPremises) != 1 || helper.ParameterPremises[0] != recorded[0] {
+		t.Fatalf("lengthOf premises = %#v, want the demanded %#v echoed", helper.ParameterPremises, recorded)
+	}
+	if !helper.PrimitiveCompletion {
+		t.Fatal("lengthOf hands back a number under the premise; its completion must say so")
+	}
+
+	// The spelling is a hint, never the premise: one that resolves to another
+	// type is refused by the same falsifier a wrong printed text is.
+	forged := []typefacts.ParameterPremise{{
+		Index: 0, Type: recorded[0].Type, Identity: recorded[0].Identity,
+		Spelling: strings.Replace(recorded[0].Spelling, ").Axis", ").EasingFunction", 1),
+	}}
+	refused := premiseLocalTranscript(t, analyzer, dir, "viaAxisHelper", "lengthOf", forged)
+	if len(refused.ParameterPremises) != 0 || refused.ParameterPremiseRefusal == "" {
+		t.Fatalf("lengthOf bound a spelling naming another type: premises %#v, refusal %q",
+			refused.ParameterPremises, refused.ParameterPremiseRefusal)
 	}
 }
 

@@ -109,6 +109,11 @@ type slotPremise struct {
 	index    int
 	text     string
 	identity string
+	// spelling is the form the annotation was written with when the printed
+	// text names nothing in the twin's own module (ADR 0046). It is echoed
+	// back on the established premise so a consumer's byte-for-byte comparison
+	// holds; it is never part of the falsifier, which is text and identity.
+	spelling string
 }
 
 // originalLocation maps a location reported over the twin's bytes back to the
@@ -483,11 +488,29 @@ func (p *project) demandedPremiseAnnotationLocked(
 			return "", nil, fmt.Sprintf("premise names parameter %d of %d, out of order or out of range", premise.Index, len(parameters))
 		}
 		previous = premise.Index
-		if premise.Type == "" || strings.ContainsAny(premise.Type, "*/\n\r") {
+		if premise.Type == "" {
+			return "", nil, fmt.Sprintf("premise for parameter %d has no type text", premise.Index)
+		}
+		// The spelling when the caller's twin could compute one, because the
+		// printed text alone names nothing in a JavaScript module; the
+		// falsifier below still holds the twin to Type and Identity, so a
+		// spelling that resolved to something else refuses.
+		written := premise.Type
+		if premise.Spelling != "" {
+			written = premise.Spelling
+		}
+		// The comment terminator and a line break, and only those: a spelling
+		// is an `import("./pkg/index")` path and is full of slashes.
+		if strings.Contains(written, "*/") || strings.ContainsAny(written, "\n\r") {
 			return "", nil, fmt.Sprintf("premise for parameter %d cannot be spelled in a comment", premise.Index)
 		}
-		fmt.Fprintf(&tags, " @param {%s} %s", premise.Type, names[premise.Index])
-		expected = append(expected, slotPremise{index: premise.Index, text: premise.Type, identity: premise.Identity})
+		fmt.Fprintf(&tags, " @param {%s} %s", written, names[premise.Index])
+		expected = append(expected, slotPremise{
+			index:    premise.Index,
+			text:     premise.Type,
+			identity: premise.Identity,
+			spelling: premise.Spelling,
+		})
 	}
 	tags.WriteString(" */ ")
 	return tags.String(), expected, ""
@@ -633,10 +656,11 @@ func (p *project) declaredSignatureTwinLocked(
 	twin, refusal := p.premiseTwinLocked(ctx, implementation, expected, annotation, returnCheck)
 	if twin != nil {
 		// A root premise is bound to the declared signature by its text alone
-		// (census_root_premises); the identity is the producer's own falsifier
-		// and travels only where a consumer must echo it back.
+		// (census_root_premises); the identity and the spelling are the
+		// producer's own and travel only where a consumer must echo them back.
 		for index := range twin.premises {
 			twin.premises[index].Identity = ""
+			twin.premises[index].Spelling = ""
 		}
 	}
 	return twin, refusal
@@ -758,7 +782,7 @@ func (p *project) premiseTwinLocked(
 			return nil, fmt.Sprintf("parameter %d types name different declarations", slot.index)
 		}
 		twin.premises = append(twin.premises, typefacts.ParameterPremise{
-			Index: slot.index, Type: slot.text, Identity: slot.identity,
+			Index: slot.index, Type: slot.text, Identity: slot.identity, Spelling: slot.spelling,
 		})
 	}
 	if returnCheck != nil {
@@ -876,13 +900,76 @@ func (p *project) callArgumentPremiseLocked(twin *premiseTwin, call *ast.Node) (
 			continue
 		}
 		entry.Arguments = append(entry.Arguments, typefacts.ParameterPremise{
-			Index: index, Type: text, Identity: typeDeclarationIdentity(argumentType, twin),
+			Index:    index,
+			Type:     text,
+			Identity: typeDeclarationIdentity(argumentType, twin),
+			Spelling: p.spellableTypeReferenceLocked(argumentType),
 		})
 	}
 	if len(entry.Arguments) == 0 {
 		return typefacts.CallArgumentPremise{}, false
 	}
 	return entry, true
+}
+
+// spellableTypeReferenceLocked answers a form of a type that resolves from a
+// module which cannot name it directly — `import("<specifier>").<Name>` — or
+// "" when the type has no such form (ADR 0046).
+//
+// The caller's twin resolves `Axis` because the caller's own premise brought
+// the declaration module into scope; the *helper's* twin is a plain JavaScript
+// module where the bare name resolves to nothing, so the printed text alone
+// cannot carry the premise across. This is the same device the root premise
+// already uses for a type its spelling cannot name, applied one hop further.
+//
+// The alias is preferred over the symbol because that is what the printer
+// prefers: a `type EasingFunction = …` prints as its alias, and spelling the
+// anonymous signature behind it would name a different thing. Only a type
+// declared in a **declaration file** and exported from it under an identifier
+// name qualifies; everything else answers "".
+func (p *project) spellableTypeReferenceLocked(value *checker.Type) string {
+	if value == nil {
+		return ""
+	}
+	symbol := value.Symbol()
+	if alias := value.Alias(); alias != nil && alias.Symbol() != nil {
+		symbol = alias.Symbol()
+	}
+	symbol = p.canonicalSymbol(symbol)
+	if symbol == nil || len(symbol.Declarations) == 0 || symbol.Declarations[0] == nil {
+		return ""
+	}
+	declarationFile := ast.GetSourceFileOfNode(symbol.Declarations[0])
+	if declarationFile == nil || !declarationFile.IsDeclarationFile {
+		return ""
+	}
+	name, ok := p.formDeclaredExportName(declarationFile, symbol)
+	if !ok {
+		return ""
+	}
+	specifier, ok := declarationModuleSpecifier(declarationFile.FileName())
+	if !ok || strings.Contains(specifier, "*/") || strings.ContainsAny(specifier, "\"\\\n\r") {
+		return ""
+	}
+	return "import(" + strconv.Quote(specifier) + ")." + name
+}
+
+// formDeclaredExportName is declaredExportName asked through the form checker,
+// so it answers about the twin's program when one is being classified.
+func (p *project) formDeclaredExportName(module *ast.SourceFile, target *ast.Symbol) (string, bool) {
+	if module == nil || module.Symbol == nil || target == nil {
+		return "", false
+	}
+	for _, exported := range p.formChecker().GetExportsOfModule(module.Symbol) {
+		if exported == nil || p.canonicalSymbol(exported) != target {
+			continue
+		}
+		if !isIdentifierName(exported.Name) {
+			return "", false
+		}
+		return exported.Name, true
+	}
+	return "", false
 }
 
 // calleesWorthPremisingLocked answers whether a premised twin of the

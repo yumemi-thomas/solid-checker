@@ -3914,6 +3914,7 @@ mod tests {
             index,
             r#type: text.into(),
             identity: identity.into(),
+            spelling: String::new(),
         };
         let mut demand = export_value_demand(span("/p/a.ts", 0, 5));
         demand.local_declaration_location = Some(demanded.clone());

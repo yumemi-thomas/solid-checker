@@ -346,9 +346,9 @@ closed claims per domain so the intermediate progress is visible.
    `new` on an own-source class remain (18 refusals, 3 sites in `motion-dom`).
 4. ~~Lever C step 1~~ — taken as ADR 0038; ~~step 2~~ — taken as its
    amendment (protocol 23): helper premises from call-site argument types.
-   Open under C: a helper argument type spelled by a `.d.ts` name the
-   JavaScript module cannot resolve (spell it as `import(…).name` from the
-   identity's declaration file).
+   ~~Open under C~~: a helper argument type spelled by a `.d.ts` name the
+   JavaScript module cannot resolve — taken 2026-09-07 as ADR 0046, worth
+   thirty-seven candidates.
 5. **Lever B** ADR once A runs, Solid 2 first, 1.x with Babel reproduction.
 6. **Lever F** — investigated 2026-09-06 and *not* taken: the census
    terminator generalizes by parameter, but every one of the three domains
@@ -436,6 +436,14 @@ closed claims per domain so the intermediate progress is visible.
    the root premise already spells its `@type`. `calcLength`'s
    `axis.max - axis.min` is the plainest case and rose 6 → 24 as bodies that
    used to refuse earlier reached it.
+
+   **Lever C's open item is taken, as ADR 0046, and it was the biggest thing
+   left.** A helper premise is spelled into a JavaScript module as a JSDoc
+   `@param`, where a bare `Axis` resolves to nothing; a `parameterPremise` may
+   now carry `import("…").Axis`, computed on the caller's twin where the name
+   does resolve. Measured: withheld 619 → 582, coercion 95 → 59, **thirty-seven
+   candidates** — the largest gain since ADR 0042, and all of it helper bodies
+   that were already correct and unreachable for a reason about spelling.
 
    The second slice is ADR 0041: a spread's operand and an object pattern's
    source are subjects under the same premise. It removed the destructuring

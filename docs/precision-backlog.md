@@ -1,5 +1,41 @@
 # Precision backlog
 
+## A helper premise spelled as an import type (2026-09-07)
+
+ADR 0046, closing the item ADR 0038's helper amendment recorded and ADR 0045's
+measurement re-found as the largest single blocker. A helper premise is written
+into a **JavaScript** module as a JSDoc `@param`, and `@param {Axis} axis`
+resolves to nothing there however precisely the package's declarations define
+`Axis` — the compiler prints an unresolved reference by the name it was written
+under, the twin's falsifier catches it on the flags and the missing declaration
+identity, and the helper is censused over `any`. So `calcLength`'s
+`axis.max - axis.min` refused for a reason about spelling rather than about the
+code. A `parameterPremise` may now carry a `spelling`,
+`import("<specifier>").<Name>`, computed on the caller's twin where the name
+does resolve — the same device the root premise already falls back to, one hop
+further. Handshake protocol 29 → 30.
+
+**A hint, never the premise.** The printed text and the identity remain the
+whole falsifier, so a spelling naming another type refuses the twin exactly as
+a wrong printed text does; the established premise echoes the spelling back so
+the verifier's entry-for-entry comparison holds. A root premise carries neither
+identity nor spelling.
+
+Measured: withheld 619 → 582, `censusRefused` 562 → 525, coercion 95 → 59,
+statuses unchanged at 368 / 30. **Thirty-seven candidates**, the largest gain
+since ADR 0042, and all of it helper bodies that were already correct and
+unreachable.
+
+One latent bug fixed with it: the comment-safety check rejected any `/`, which
+was harmless for a printed type text and fatal for a specifier full of them. It
+now rejects `*/` and a line break, which is what it always meant.
+
+Recorded, not closed: the remaining coercions are a different question each and
+none is spelling — an operand bound to a call result the premise walk does not
+follow, a helper reached past the depth the premise chain carried, an element
+access whose declared element type is not primitive (`keyframes[i] + "px"`), a
+template substitution, and a compound assignment to a defaulted parameter.
+
 ## A coercion over a completion the callee proved primitive (2026-09-07)
 
 ADR 0045. ADR 0038's helper amendment carried the caller's argument types into

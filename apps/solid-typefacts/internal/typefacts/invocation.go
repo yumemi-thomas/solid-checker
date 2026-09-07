@@ -416,6 +416,23 @@ type ParameterPremise struct {
 	Index    int    `cbor:"index" json:"index"`
 	Type     string `cbor:"type" json:"type"`
 	Identity string `cbor:"identity,omitempty" json:"identity,omitempty"`
+	// Spelling is a form of Type that resolves from a module which cannot name
+	// it directly — `import("<specifier>").<Name>` — stated when the printed
+	// text names a type declared in a declaration file (ADR 0046, handshake
+	// protocol 30).
+	//
+	// It exists because a helper premise is written into a **JavaScript**
+	// module as a JSDoc `@param`, and `@param {Axis}` resolves to nothing
+	// there however precisely the package's declarations define `Axis`. The
+	// caller's twin, which does resolve it, is where the spelling can be
+	// computed.
+	//
+	// **It is a hint, never the premise.** Type and Identity remain the whole
+	// falsifier: the twin's own printed type must still equal Type and its
+	// declaration identity must still equal Identity, so a spelling that
+	// resolved to anything else refuses the twin exactly as a bad printed text
+	// does. A consumer echoes it byte for byte and interprets none of it.
+	Spelling string `cbor:"spelling,omitempty" json:"spelling,omitempty"`
 }
 
 // CallArgumentPremise is the type each written argument slot of one call

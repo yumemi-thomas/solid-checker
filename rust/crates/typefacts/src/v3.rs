@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:db9bd03c0d7570a7556a5ac834bc2060e41150242de8ad40bf81689e3702cae3";
+    "sha256:2ead5760c462bd0e6a86e7dd294b5bf623c7538f774f9d026c1f3dcc540dee78";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -138,6 +138,15 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
+// Protocol 30 adds `spelling` on a `parameterPremise` (ADR 0046): a form of
+// the premise's type that resolves from a module which cannot name it
+// directly, `import("<specifier>").<Name>`. A helper premise is written into a
+// JavaScript module as a JSDoc `@param`, where a bare `Axis` resolves to
+// nothing; the caller's twin is where the spelling can be computed. The type
+// text and the identity remain the whole falsifier, and this side echoes the
+// spelling byte for byte — which is why the number moves: a protocol-29
+// consumer would demand a premise without it and refuse the transcript that
+// echoed one.
 // Protocol 29 adds `coercionPremise` on a `coercion` form and
 // `primitiveCompletion` on every implementation transcript (ADR 0045). A call
 // to a module-local helper types as `any` in compiled JavaScript however well
@@ -213,7 +222,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // producer is never "not rooted".
 // Protocol 17 includes exact-null loose equality in the positive
 // uncensused-form classifier. Protocol 16 added unchanged-parameter identity.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 29;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 30;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
