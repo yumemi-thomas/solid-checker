@@ -1403,6 +1403,43 @@ export function destructuredParameter({ inner }: any): unknown {
 	return inner.value;
 }
 
+// ADR 0047: whose Symbol.hasInstance an instanceof can reach.
+class OwnMarker {
+	value: any;
+}
+
+class DerivedMarker extends OwnMarker {}
+
+class ComputedMarker {
+	static [Symbol.hasInstance](value: any) {
+		return typeof value === "string";
+	}
+}
+
+export function instanceOfParameter(value: any, constructor: any): boolean {
+	return value instanceof constructor;
+}
+
+export function instanceOfLibrary(value: any): boolean {
+	return value instanceof Error;
+}
+
+export function instanceOfOwnClass(value: any): boolean {
+	return value instanceof OwnMarker;
+}
+
+export function instanceOfDerivedClass(value: any): boolean {
+	return value instanceof DerivedMarker;
+}
+
+export function instanceOfComputedClass(value: any): boolean {
+	return value instanceof ComputedMarker;
+}
+
+export function instanceOfModuleValue(value: any): boolean {
+	return value instanceof registry.ctor;
+}
+
 // ADR 0044: values this program built.
 const ownTable: any = { first: { value: 1 } };
 // The shape that matters most: a lookup table declared in one module and read
@@ -1604,6 +1641,15 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 		// declaration this premise is about is behind the alias.
 		{"importedTableRead", []*int{nil}},
 		{"importedWrittenTableRead", []*int{nil}},
+		// ADR 0047: only the caller-supplied constructor names a parameter;
+		// the engine's own and this program's class name a derivation with no
+		// index at all, and the three negatives name nothing.
+		{"instanceOfParameter", []*int{&one}},
+		{"instanceOfLibrary", []*int{nil}},
+		{"instanceOfOwnClass", []*int{nil}},
+		{"instanceOfDerivedClass", []*int{nil}},
+		{"instanceOfComputedClass", []*int{nil}},
+		{"instanceOfModuleValue", []*int{nil, nil}},
 		// ADR 0040: a write into the caller's object roots exactly as a read
 		// of it does, and says so.
 		{"setterOnParameter", []*int{&zero}},
@@ -1671,6 +1717,9 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 		{"ownArrayRead", typefacts.SubjectRootOwnLiteral},
 		{"ownRestSpread", typefacts.SubjectRootOwnLiteral},
 		{"importedTableRead", typefacts.SubjectRootOwnLiteral},
+		{"instanceOfParameter", typefacts.SubjectRootParameter},
+		{"instanceOfLibrary", typefacts.SubjectRootDefaultLibrary},
+		{"instanceOfOwnClass", typefacts.SubjectRootOwnClass},
 	} {
 		transcript := implementationTranscriptFor(t, analyzer, path, subjectSource, testCase.export)
 		var stated int
@@ -1681,12 +1730,16 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 				}
 				continue
 			}
-			// An own-literal subject carries a declaration and never an index;
-			// every other derivation is the exact opposite.
-			if (form.SubjectRoot == typefacts.SubjectRootOwnLiteral) !=
-				(form.SubjectDeclaration != nil) ||
-				(form.SubjectRoot == typefacts.SubjectRootOwnLiteral) ==
-					(form.SubjectParameter != nil) {
+			// Each derivation carries exactly its own companion fact: an
+			// own-literal and an own-class name a declaration, a
+			// default-library names neither, and the two parameter derivations
+			// name an index.
+			wantDeclaration := form.SubjectRoot == typefacts.SubjectRootOwnLiteral ||
+				form.SubjectRoot == typefacts.SubjectRootOwnClass
+			wantParameter := form.SubjectRoot == typefacts.SubjectRootParameter ||
+				form.SubjectRoot == typefacts.SubjectRootParameterDefault
+			if (form.SubjectDeclaration != nil) != wantDeclaration ||
+				(form.SubjectParameter != nil) != wantParameter {
 				t.Fatalf("%s: derivation %q carries the wrong companion fact", testCase.export, form.SubjectRoot)
 			}
 			if form.SubjectRoot != testCase.derivation {

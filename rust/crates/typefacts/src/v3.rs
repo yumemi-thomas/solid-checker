@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:2ead5760c462bd0e6a86e7dd294b5bf623c7538f774f9d026c1f3dcc540dee78";
+    "sha256:cb6d3d07129cf8c09d410e308d19458e350fff38a522b87d0c2b0ca160a6e293";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -138,6 +138,12 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
+// Protocol 31 lets an `instanceof` form state whose `Symbol.hasInstance` its
+// operator can reach (ADR 0047), through the same `subjectRoot` vocabulary:
+// `parameter`/`parameter-default` for a caller-supplied constructor,
+// `default-library` for the engine's own, and `own-class` with
+// `subjectDeclaration` naming a class this program declares with no heritage
+// clause and no computed member.
 // Protocol 30 adds `spelling` on a `parameterPremise` (ADR 0046): a form of
 // the premise's type that resolves from a module which cannot name it
 // directly, `import("<specifier>").<Name>`. A helper premise is written into a
@@ -222,7 +228,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // producer is never "not rooted".
 // Protocol 17 includes exact-null loose equality in the positive
 // uncensused-form classifier. Protocol 16 added unchanged-parameter identity.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 30;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 31;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

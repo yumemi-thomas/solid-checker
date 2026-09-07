@@ -1889,6 +1889,16 @@ func (p *project) formChecker() *checker.Checker {
 	return p.checker
 }
 
+// formProgram is formChecker's sibling: the program the form census is being
+// classified over, so a question about a file's role — whether it is the
+// default library — is asked of the same program that resolved the symbol.
+func (p *project) formProgram() *compiler.Program {
+	if p.formTwin != nil {
+		return p.formTwin.program
+	}
+	return p.program
+}
+
 // formIsRuntimeSourceFile is isCurrentSourceFile's reading for the form
 // census: the twin's own source file object is the accepted program's file at
 // that path re-parsed with one comment added, so a declaration inside it is

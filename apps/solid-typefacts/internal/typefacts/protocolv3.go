@@ -4,7 +4,14 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 30: a ParameterPremise may state Spelling, a
+// TypeFactsHandshakeProtocol is 31: an `instanceof` form may state whose
+// `Symbol.hasInstance` its operator can reach (ADR 0047), through the same
+// SubjectRoot vocabulary: `parameter`/`parameter-default` for a constructor the
+// caller supplied, `default-library` for the engine's own, and `own-class`,
+// with SubjectDeclaration naming a class this program declares with no
+// heritage clause and no computed member. A protocol-30 producer states none,
+// and an unreviewed spelling refuses on arrival.
+// Protocol 30: a ParameterPremise may state Spelling, a
 // form of its type that resolves from a module which cannot name it directly
 // (ADR 0046). A helper premise is written into a JavaScript module as a JSDoc
 // `@param`, where a bare `Axis` resolves to nothing however precisely the
@@ -197,8 +204,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 30
-	TypeFactsSchemaSHA256             = "sha256:2ead5760c462bd0e6a86e7dd294b5bf623c7538f774f9d026c1f3dcc540dee78"
+	TypeFactsHandshakeProtocol uint64 = 31
+	TypeFactsSchemaSHA256             = "sha256:cb6d3d07129cf8c09d410e308d19458e350fff38a522b87d0c2b0ca160a6e293"
 )
 
 type ServiceHandshake struct {

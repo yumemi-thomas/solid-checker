@@ -7719,6 +7719,9 @@ enum CensusDisposition {
     OwnLiteralAccessorWrite,
     OwnLiteralIterable,
     PrimitiveCoercion,
+    ParameterRootedHasInstance,
+    DefaultLibraryHasInstance,
+    OwnClassHasInstance,
     StandardLibrary,
     DialectAxiom,
     LocalRecursion,
@@ -7738,6 +7741,9 @@ impl CensusDisposition {
             Self::OwnLiteralAccessorWrite => "own-literal-accessor-write",
             Self::OwnLiteralIterable => "own-literal-iterable",
             Self::PrimitiveCoercion => "primitive-coercion",
+            Self::ParameterRootedHasInstance => "parameter-rooted-has-instance",
+            Self::DefaultLibraryHasInstance => "default-library-has-instance",
+            Self::OwnClassHasInstance => "own-class-has-instance",
             Self::StandardLibrary => "standard-library",
             Self::DialectAxiom => "dialect-axiom",
             Self::LocalRecursion => "local-recursion",
@@ -7830,6 +7836,10 @@ const CENSUS_PARAMETER_ROOTED_READ_FORMS_PROTOCOL: u64 = 25;
 /// is read correctly — but on a premised transcript that absence would refuse
 /// every caller the premise could have cleared, and a build that asks the
 /// question has to know the answer means "no" rather than "not asked".
+/// The handshake protocol at which an `instanceof` form could state whose
+/// `Symbol.hasInstance` its operator can reach (ADR 0047).
+const CENSUS_HAS_INSTANCE_SUBJECT_PROTOCOL: u64 = 31;
+
 const CENSUS_PRIMITIVE_COMPLETION_PROTOCOL: u64 = 29;
 
 const CENSUS_OWN_LITERAL_SUBJECT_PROTOCOL: u64 = 28;
@@ -8146,6 +8156,14 @@ fn census_creates_domain(
             "implementation-census premise required: the uncensused-invoking-form census arrived \
              at handshake protocol {CENSUS_UNCENSUSED_FORMS_PROTOCOL} and this build speaks {}, \
              so an empty form list would be an absence read as an enumeration",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_HAS_INSTANCE_SUBJECT_PROTOCOL {
+        return Err(refuse(format!(
+            "implementation-census premise required: an `instanceof` form's constructor subject \
+             arrived at handshake protocol {CENSUS_HAS_INSTANCE_SUBJECT_PROTOCOL} and this build \
+             speaks {}",
             typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
         )));
     }
@@ -9978,9 +9996,47 @@ fn census_form_disposition(
                 (typefacts::UncensusedInvokingFormKind::IterationProtocol, _) => {
                     CensusDisposition::ParameterRootedIterable
                 }
+                // ADR 0047: whatever `Symbol.hasInstance` a caller-supplied
+                // constructor carries, the caller installed it — the same
+                // argument that excuses a getter on an object it passed.
+                (typefacts::UncensusedInvokingFormKind::InstanceOf, _) => {
+                    CensusDisposition::ParameterRootedHasInstance
+                }
                 (_, true) => CensusDisposition::ParameterRootedAccessorWrite,
                 (_, false) => CensusDisposition::ParameterRootedAccessor,
             })
+        }
+        // ADR 0047: an `instanceof` whose constructor is the engine's own. The
+        // operator's whole reach is `Symbol.hasInstance` on that constructor,
+        // and a default-library one inherits `Function.prototype`'s. This side
+        // takes the producer's resolution, exactly as the standard-library
+        // disposition of a *call* does; the form kind is what it checks.
+        "default-library" => {
+            if form.subject_parameter.is_some() || form.subject_declaration.is_some() {
+                return None;
+            }
+            (form.kind == typefacts::UncensusedInvokingFormKind::InstanceOf
+                && form.node_kind.as_ref() == "BinaryExpression")
+                .then_some(CensusDisposition::DefaultLibraryHasInstance)
+        }
+        // The same operator over a class this program declares. The producer
+        // admits only a class with no heritage clause and no computed member,
+        // so nothing on its prototype chain can carry a `Symbol.hasInstance`;
+        // this side places the class in the artifact's own runtime source.
+        "own-class" => {
+            if form.subject_parameter.is_some() {
+                return None;
+            }
+            if form.kind != typefacts::UncensusedInvokingFormKind::InstanceOf
+                || form.node_kind.as_ref() != "BinaryExpression"
+            {
+                return None;
+            }
+            let declaration = form.subject_declaration.as_ref()?;
+            let (_, relative) = census_certified_relative_path(run, &declaration.path)?;
+            run.runtime_sources
+                .contains(&relative)
+                .then_some(CensusDisposition::OwnClassHasInstance)
         }
         // ADR 0044: a value *this program* built, whose every own property the
         // specification created with CreateDataPropertyOrThrow. Not a claim
@@ -10017,6 +10073,11 @@ fn census_form_disposition(
 /// subject's members and nothing else.
 fn census_form_shape_reads_the_subject(form: &typefacts::UncensusedInvokingForm) -> bool {
     use typefacts::UncensusedInvokingFormKind as Kind;
+    // ADR 0047: an `instanceof`'s subject is its right operand, and the whole
+    // reach of the operator is that constructor's `Symbol.hasInstance`.
+    if form.kind == Kind::InstanceOf {
+        return form.node_kind.as_ref() == "BinaryExpression";
+    }
     // ADR 0042: the iteration protocol on a caller-supplied value. Its
     // `Symbol.iterator`, the `next` calls that follow it and any `return` on
     // early exit all sit on the object the caller passed, so the code that runs
@@ -18547,6 +18608,87 @@ mod tests {
         assert!(census_transcript(&mut run, &bare_setter, 0, &[]).is_err());
     }
 
+    /// ADR 0047: an `instanceof` is dispositioned by whose
+    /// `Symbol.hasInstance` its **right** operand could carry — the caller's,
+    /// the engine's, or a class this artifact declares. Each derivation carries
+    /// exactly one companion fact, and a fact beside the wrong derivation
+    /// refuses.
+    #[test]
+    fn creates_census_dispositions_an_instance_of_by_its_constructor() {
+        assert_eq!(CENSUS_HAS_INSTANCE_SUBJECT_PROTOCOL, 31);
+        const {
+            assert!(
+                typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+                    >= CENSUS_HAS_INSTANCE_SUBJECT_PROTOCOL
+            );
+        }
+        let certified = consumer_snapshot();
+        let roots = vec![consumer_root(&certified)];
+        let source = "/project/node_modules/consumer/dist/index.js";
+        let form = |extra: serde_json::Value| {
+            let mut value = json!({
+                "kind": "instanceof",
+                "nodeKind": "BinaryExpression",
+                "location": {"path": source, "startByte": 360, "endByte": 380},
+                "reach": "reachable",
+            });
+            let object = value.as_object_mut().expect("an object");
+            for (key, replacement) in extra.as_object().expect("an object") {
+                object.insert(key.clone(), replacement.clone());
+            }
+            json!([value])
+        };
+        let declared = json!({"path": source, "startByte": 10, "endByte": 40});
+        for (extra, disposition) in [
+            (
+                json!({"subjectParameter": 0, "subjectRoot": "parameter"}),
+                "parameter-rooted-has-instance",
+            ),
+            (
+                json!({"subjectRoot": "default-library"}),
+                "default-library-has-instance",
+            ),
+            (
+                json!({"subjectRoot": "own-class", "subjectDeclaration": declared.clone()}),
+                "own-class-has-instance",
+            ),
+        ] {
+            let mut run = census_run(&certified, &roots);
+            let transcript = census_transcript_with(vec![], form(extra.clone()));
+            assert_eq!(
+                census_transcript(&mut run, &transcript, 0, &[]),
+                Ok(CensusStep::Decided),
+                "{extra}"
+            );
+            assert!(
+                run.sites[0].contains(disposition),
+                "{extra}: {}",
+                run.sites[0]
+            );
+        }
+
+        // The boundary: no derivation at all; a companion fact beside a
+        // derivation forbidden to carry it, in both directions; and an
+        // own-class whose declaration is not this artifact's runtime source.
+        for extra in [
+            json!({}),
+            json!({"subjectRoot": "default-library", "subjectDeclaration": declared.clone()}),
+            json!({"subjectRoot": "default-library", "subjectParameter": 0}),
+            json!({"subjectRoot": "own-class"}),
+            json!({"subjectRoot": "own-class", "subjectParameter": 0,
+                   "subjectDeclaration": declared.clone()}),
+            json!({"subjectRoot": "own-class", "subjectDeclaration":
+                   {"path": "/toolchain/lib/lib.es5.d.ts", "startByte": 0, "endByte": 4}}),
+        ] {
+            let mut run = census_run(&certified, &roots);
+            let transcript = census_transcript_with(vec![], form(extra.clone()));
+            assert!(
+                census_transcript(&mut run, &transcript, 0, &[]).is_err(),
+                "{extra} is not a stated has-instance premise"
+            );
+        }
+    }
+
     /// ADR 0045: a coercion whose operands come from calls into this
     /// program's own runtime source. The premise the form states is half the
     /// fact; the callee's own `primitiveCompletion`, read from the transcript
@@ -19429,8 +19571,13 @@ mod tests {
             // `iteration-protocol` with a rooted subject left this list with
             // ADR 0042; see
             // `creates_census_dispositions_a_parameter_rooted_iteration`.
+            // `instanceof` left it with ADR 0047, which reads its right operand
+            // as the subject and dispositions a caller-supplied constructor;
+            // see `creates_census_dispositions_an_instance_of_by_its_constructor`.
+            // A **coercion** stays: a rooted operand's `valueOf` is the
+            // caller's by the same argument, but no ADR has reviewed it, and
+            // ADR 0045 grants a coercion only from a callee's completion.
             ("coercion", "BinaryExpression", json!(0)),
-            ("instanceof", "BinaryExpression", json!(0)),
             (
                 "property-access-unknown-accessor",
                 "PropertyAccessExpression",

@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "7716df6d5d571df96955458948edffca5c0a0d3f8005de14cd371006f010dc08",
+            "closureSha256": "ddb8b7d2b9ac60ca3c98a3388173ae1e7ea93eeedebadd9f59c1d6c9f8b4df5a",
             "path": "./index.js",
-            "sha256": "c90f46367033dfe27c5973c8bef455190fd5037bbaebad88972212f432bdd4f3"
+            "sha256": "fe4864fe7dfe3355df2e6775cc281c018db351523aaace1783bf9ae69f5929ee"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "dd96eda4f611b45356af20247cf80a730fce10ae5a344b99da06ef424726d964"
+            "sha256": "ffc1b01c32208b75bf9860db6fa55d65acf66db7ece854aa58691e18492ab2e4"
           },
           "exports": {
             "accessorTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -40,6 +40,12 @@
             "helperSpreadCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "helperUntypedArgument": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "iife": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "instanceOfComputedClass": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "instanceOfDerivedClass": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "instanceOfLibrary": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "instanceOfModuleValue": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "instanceOfOwnClass": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "instanceOfParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "labelledBreak": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "localBindingFromCall": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "localBindingFromParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",

@@ -1,5 +1,42 @@
 # Precision backlog
 
+## Whose `Symbol.hasInstance` an `instanceof` reaches (2026-09-07)
+
+ADR 0047, the same provenance question asked of the one operator the family had
+not covered. `x instanceof C` performs GetMethod(C, @@hasInstance) and calls it
+when there is one; otherwise OrdinaryHasInstance reads `C.prototype` and walks
+x's chain, running nothing. So the operator's whole reach into user code is one
+method on the **right** operand. Three answers are reviewed, in the same
+`subjectRoot` vocabulary the accessor forms use: `parameter`/`parameter-default`
+(the caller installed whatever it carries), `default-library` (the engine's own
+constructor, whose method is `Function.prototype`'s), and `own-class` — a class
+this artifact declares with **no heritage clause and no computed member name**,
+so nothing on its prototype chain can carry the method. Handshake protocol
+30 → 31.
+
+A multi-declaration global is admitted for the library arm alone: `Error` is an
+`interface` beside a `var`, so the arm asks that *every* declaration be the
+library's, which is also the stronger reading — a global the program augments
+is not purely the engine's.
+
+Measured: withheld 582 → 568, `censusRefused` 525 → 511, `instanceof` 29 → 9 at
+15 → 6 sites, statuses unchanged at 368 / 30. **Fourteen candidates.** The
+element-access class rose 46 → 52 as unblocked bodies reached their next form.
+
+**The trust, named rather than implied.** `own-class` is checked on both sides
+— the producer inspects the class, the consumer places its declaration in the
+artifact's own runtime source. `default-library` rests on the producer's
+*resolution*, which is the same word the census already takes for a
+standard-library call disposition. What the consumer checks there is the form's
+shape and that no companion fact accompanies a derivation forbidden to carry
+one.
+
+Recorded, not closed: an imported constructor, a class with a superclass
+(walking the chain is sound and unmeasured), a class with a computed member, a
+constructor read off a member access or a call result, and
+`Symbol.hasInstance` patched onto a library constructor at runtime — the same
+global-environment assumption ADR 0042 already makes.
+
 ## A helper premise spelled as an import type (2026-09-07)
 
 ADR 0046, closing the item ADR 0038's helper amendment recorded and ADR 0045's

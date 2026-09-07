@@ -2,7 +2,7 @@
 // ADR 0043 and ADR 0044 certify: `defaultedFromParameter`, `patternParameter`,
 // `localBindingFromParameter`, `localPatternFromParameter`, `ownTableRead`,
 // `ownArrayRead`, `ownTableWrite`, `ownRestSpread`, `patternRestParameter` and
-// the three ADR 0045 coercion exports.
+// the three ADR 0045 coercion exports and the three ADR 0047 instanceof ones.
 //
 // The claim is *proved* by the implementation census: each body's only
 // invoking forms are reads of a value the caller passed, rooted through a
@@ -15,6 +15,9 @@
 
 import {
   coerceBoundHelperResult,
+  instanceOfLibrary,
+  instanceOfOwnClass,
+  instanceOfParameter,
   coerceConditionalHelperResult,
   coerceHelperResult,
   defaultedFromParameter,
@@ -47,5 +50,9 @@ export async function runProbeSession(_session, harness) {
   coerceHelperResult(2);
   coerceBoundHelperResult(2);
   coerceConditionalHelperResult(2, 3);
+  // ADR 0047.
+  instanceOfParameter(1, Number);
+  instanceOfLibrary(new Error("x"));
+  instanceOfOwnClass(1);
   harness.emit({ marker: "call", kind: "call", phase: "exit" });
 }

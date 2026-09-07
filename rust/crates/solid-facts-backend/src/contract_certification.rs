@@ -11494,7 +11494,7 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 71] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 77] = [
         "accessorTableRead",
         "arrayRestRead",
         "awaitIterateParameter",
@@ -11522,6 +11522,12 @@ export const value = phantom;
         "helperSpreadCoercion",
         "helperUntypedArgument",
         "iife",
+        "instanceOfComputedClass",
+        "instanceOfDerivedClass",
+        "instanceOfLibrary",
+        "instanceOfModuleValue",
+        "instanceOfOwnClass",
+        "instanceOfParameter",
         "labelledBreak",
         "localBindingFromCall",
         "localBindingFromParameter",
@@ -12726,6 +12732,12 @@ export const value = phantom;
             "helperCoercion",
             "helperSpreadCoercion",
             "helperUntypedArgument",
+            "instanceOfComputedClass",
+            "instanceOfDerivedClass",
+            "instanceOfLibrary",
+            "instanceOfModuleValue",
+            "instanceOfOwnClass",
+            "instanceOfParameter",
             "labelledBreak",
             "localBindingFromCall",
             "localBindingFromParameter",
@@ -12965,7 +12977,7 @@ export const value = phantom;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
-    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 69] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 75] = [
         "accessorTableRead",
         "arrayRestRead",
         "awaitIterateParameter",
@@ -12992,6 +13004,12 @@ export const value = phantom;
         "helperCoercion",
         "helperSpreadCoercion",
         "helperUntypedArgument",
+        "instanceOfComputedClass",
+        "instanceOfDerivedClass",
+        "instanceOfLibrary",
+        "instanceOfModuleValue",
+        "instanceOfOwnClass",
+        "instanceOfParameter",
         "labelledBreak",
         "localBindingFromCall",
         "localBindingFromParameter",
@@ -13064,7 +13082,7 @@ export const value = phantom;
     /// types to the helper as its premise; `untypedCoercion` (declared
     /// `unknown`), `helperSpreadCoercion` (a spread carries no slot) and
     /// `helperUntypedArgument` (an `any` slot) are refused.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 33] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 36] = [
         "chainCallbacks",
         "coerceBoundHelperResult",
         "coerceConditionalHelperResult",
@@ -13075,6 +13093,9 @@ export const value = phantom;
         "defaultedFromParameter",
         "destructureParameter",
         "helperCoercion",
+        "instanceOfLibrary",
+        "instanceOfOwnClass",
+        "instanceOfParameter",
         "localBindingFromParameter",
         "localPatternFromParameter",
         "memberParameterRooted",
@@ -13099,7 +13120,7 @@ export const value = phantom;
         "viaHelperChain",
         "whileBreak",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 36] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 39] = [
         ("accessorTableRead", "census"),
         ("arrayRestRead", "census"),
         ("awaitIterateParameter", "census"),
@@ -13116,6 +13137,9 @@ export const value = phantom;
         ("destructureModuleValue", "census"),
         ("helperSpreadCoercion", "census"),
         ("helperUntypedArgument", "census"),
+        ("instanceOfComputedClass", "census"),
+        ("instanceOfDerivedClass", "census"),
+        ("instanceOfModuleValue", "census"),
         ("labelledBreak", "census"),
         ("localBindingFromCall", "census"),
         ("localBindingWritten", "census"),
@@ -13512,6 +13536,48 @@ export const value = phantom;
                 creates_is_closed_in(finalized.canonical_main(), export),
                 "{export}"
             );
+        }
+    }
+
+    /// ADR 0047: whose `Symbol.hasInstance` an `instanceof` can reach. Three
+    /// answers, three provenances — the caller's constructor, the engine's own,
+    /// and a class this program declares that nothing can hang the method on.
+    #[test]
+    fn the_probe_gate_tracer_census_closes_an_instance_of_by_its_constructor() {
+        for export in [
+            "instanceOfParameter",
+            "instanceOfLibrary",
+            "instanceOfOwnClass",
+        ] {
+            let Some((_, outcome)) = census_certify(export, Some("root-closure.mjs")) else {
+                return;
+            };
+            let finalized = outcome
+                .unwrap_or_else(|error| panic!("{export} certifies under ADR 0047: {error}"));
+            assert!(
+                finalized.withheld_closures().is_empty(),
+                "{export}: {:?}",
+                finalized.withheld_closures()
+            );
+            assert!(
+                creates_is_closed_in(finalized.canonical_main(), export),
+                "{export}"
+            );
+        }
+    }
+
+    /// Its boundary: a superclass puts a constructor this walk does not have on
+    /// the prototype chain the method is looked up along, a computed member is
+    /// exactly how the method is written, and a constructor read off a module
+    /// value is rooted at nothing.
+    #[test]
+    fn the_probe_gate_tracer_census_stops_at_the_has_instance_boundary() {
+        for export in [
+            "instanceOfDerivedClass",
+            "instanceOfComputedClass",
+            "instanceOfModuleValue",
+        ] {
+            assert_census_withholds(export, &["uncensused invoking form: instanceof"]);
         }
     }
 

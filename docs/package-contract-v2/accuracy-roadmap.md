@@ -445,6 +445,13 @@ closed claims per domain so the intermediate progress is visible.
    candidates** — the largest gain since ADR 0042, and all of it helper bodies
    that were already correct and unreachable for a reason about spelling.
 
+   **The `instanceof` class is taken as ADR 0047**, and it is the same question
+   one operator further: the whole reach of `x instanceof C` is
+   `Symbol.hasInstance` on the right operand, so the answer is whose that could
+   be — the caller's, the engine's, or a class this artifact declares that
+   nothing can hang the method on. Measured: withheld 582 → 568, `instanceof`
+   29 → 9 at 15 → 6 sites, **fourteen candidates**.
+
    The second slice is ADR 0041: a spread's operand and an object pattern's
    source are subjects under the same premise. It removed the destructuring
    class (`BindingElement` 42 → 6) but closed only **six** candidates, because

@@ -568,6 +568,18 @@ const (
 	// it — the value is not the caller's, it is this program's — and
 	// SubjectDeclaration names the binding instead.
 	SubjectRootOwnLiteral SubjectRootDerivation = "own-literal"
+	// SubjectRootDefaultLibrary is ADR 0047's, for an `instanceof` whose
+	// constructor the checker resolves to a declaration of the default
+	// library. `Symbol.hasInstance` on such a constructor is the engine's own,
+	// inherited from `Function.prototype`, so the operator reaches no user
+	// code. No SubjectParameter accompanies it.
+	SubjectRootDefaultLibrary SubjectRootDerivation = "default-library"
+	// SubjectRootOwnClass is ADR 0047's other half: a class **this program**
+	// declares, with no heritage clause and no static computed member, so
+	// nothing on its prototype chain can carry a `Symbol.hasInstance` and the
+	// operator runs OrdinaryHasInstance alone. SubjectDeclaration names the
+	// class, and no SubjectParameter accompanies it.
+	SubjectRootOwnClass SubjectRootDerivation = "own-class"
 )
 
 // CoercionPremise is what one `coercion` form's clearance would rest on: the
@@ -656,9 +668,10 @@ type UncensusedInvokingForm struct {
 	// form, exactly as the control-flow incompleteness classes are read: a
 	// value a later revision adds arrives as a refusal rather than as silence.
 	SubjectRoot SubjectRootDerivation `cbor:"subjectRoot,omitempty" json:"subjectRoot,omitempty"`
-	// SubjectDeclaration is the exact source range of the variable declaration
-	// the subject is rooted at, stated for SubjectRootOwnLiteral and for that
-	// derivation alone (ADR 0044, handshake protocol 28).
+	// SubjectDeclaration is the exact source range of the declaration the
+	// subject is rooted at, stated for SubjectRootOwnLiteral (the variable, ADR
+	// 0044) and SubjectRootOwnClass (the class, ADR 0047), and for those
+	// derivations alone.
 	//
 	// It is what a consumer can check for itself. Every other derivation names
 	// a *parameter* of the transcript's own declaration, which the consumer

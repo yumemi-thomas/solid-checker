@@ -828,6 +828,12 @@ func (p *project) accessorFormSubjectParameterLocked(
 	case typefacts.UncensusedGetAccessor, typefacts.UncensusedSetAccessor,
 		typefacts.UncensusedPropertyAccessUnknownAccessor,
 		typefacts.UncensusedIterationProtocol:
+	case typefacts.UncensusedInstanceOf:
+		// ADR 0047: the operator's whole reach is `Symbol.hasInstance` on its
+		// **right** operand, so that operand is the subject and it is resolved
+		// its own way — as a constructor rather than as a value whose members
+		// are read.
+		return p.instanceOfSubjectLocked(node, roots)
 	default:
 		return nil, false, nil
 	}
@@ -841,6 +847,115 @@ func (p *project) accessorFormSubjectParameterLocked(
 	}
 	root.write = write
 	return root.parameter, write, root
+}
+
+// instanceOfSubjectLocked resolves the constructor of an `instanceof` to the
+// premise under which the operator reaches no code this export registers
+// (ADR 0047).
+//
+// `x instanceof C` performs GetMethod(C, @@hasInstance) and calls it when there
+// is one; otherwise OrdinaryHasInstance reads `C.prototype` and walks `x`'s
+// prototype chain, which runs nothing. So the question is only ever *whose*
+// `Symbol.hasInstance` C could carry, and there are three answers this build
+// has reviewed:
+//
+//   - a parameter of the censused declaration, under the root premises
+//     ADR 0034 established: whatever C carries, the caller installed it;
+//   - a declaration of the **default library**: the engine's own constructor,
+//     whose `Symbol.hasInstance` is `Function.prototype`'s;
+//   - a class **this program** declares with no heritage clause and no static
+//     computed member: nothing on its prototype chain can carry one.
+//
+// Everything else — an imported constructor, a class with a superclass, a call
+// result, a member read — answers nothing and refuses.
+func (p *project) instanceOfSubjectLocked(
+	node *ast.Node, roots *parameterSubjectRoots,
+) (*int, bool, *resolvedSubject) {
+	binary := node.AsBinaryExpression()
+	if binary == nil {
+		return nil, false, nil
+	}
+	constructor := identityPreservingUnwrap(binary.Right)
+	if constructor == nil {
+		return nil, false, nil
+	}
+	if root := p.subjectRootLocked(constructor, roots); root != nil && root.parameter != nil {
+		return root.parameter, false, root
+	}
+	if !ast.IsIdentifier(constructor) {
+		return nil, false, nil
+	}
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(constructor))
+	if symbol == nil || len(symbol.Declarations) == 0 {
+		return nil, false, nil
+	}
+	// The default library declares a global constructor twice — an `interface
+	// Error` beside a `var Error: ErrorConstructor` — so this arm asks that
+	// *every* declaration be the library's rather than that there be one. That
+	// is the stronger reading anyway: a global the program also augments is
+	// not purely the engine's.
+	library := true
+	for _, declaration := range symbol.Declarations {
+		file := ast.GetSourceFileOfNode(declaration)
+		if declaration == nil || file == nil || !p.formProgram().IsSourceFileDefaultLibrary(file.Path()) {
+			library = false
+			break
+		}
+	}
+	if library {
+		return nil, false, &resolvedSubject{derivation: typefacts.SubjectRootDefaultLibrary}
+	}
+	if len(symbol.Declarations) != 1 || symbol.Declarations[0] == nil {
+		return nil, false, nil
+	}
+	declaration := symbol.Declarations[0]
+	sourceFile := ast.GetSourceFileOfNode(declaration)
+	if sourceFile == nil {
+		return nil, false, nil
+	}
+	if !ownHasInstanceFreeClass(declaration) || !p.formIsRuntimeSourceFile(sourceFile) {
+		return nil, false, nil
+	}
+	if p.symbolIsAssignedLocked(symbol, declaration) {
+		return nil, false, nil
+	}
+	location := nodeLocation(declaration)
+	return nil, false, &resolvedSubject{
+		derivation:  typefacts.SubjectRootOwnClass,
+		declaration: &location,
+	}
+}
+
+// ownHasInstanceFreeClass reports whether a declaration is a class no
+// `Symbol.hasInstance` can reach through.
+//
+// A **heritage clause** disqualifies it outright: `C[Symbol.hasInstance]` is
+// looked up along C's own prototype chain, which for `class C extends B` runs
+// through B, and B is a value this walk does not have. Any **computed member
+// name** disqualifies it because `[Symbol.hasInstance]` is exactly how one is
+// written and a computed key is not statically a name — asked of every member
+// rather than of the static ones alone, which costs a handful of classes and
+// spares this premise a modifier test it would have to get exactly right.
+func ownHasInstanceFreeClass(declaration *ast.Node) bool {
+	if declaration == nil || !ast.IsClassDeclaration(declaration) {
+		return false
+	}
+	class := declaration.AsClassDeclaration()
+	if class == nil {
+		return false
+	}
+	if class.HeritageClauses != nil && len(class.HeritageClauses.Nodes) != 0 {
+		return false
+	}
+	if class.Members == nil {
+		return true
+	}
+	for _, member := range class.Members.Nodes {
+		if name := member.Name(); name != nil && nodeKindName(name) == "ComputedPropertyName" {
+			return false
+		}
+	}
+	return true
 }
 
 // accessorFormSubjectExpression answers the expression whose value the form

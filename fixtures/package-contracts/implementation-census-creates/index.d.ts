@@ -107,3 +107,10 @@ export declare function coerceConditionalHelperResult(base: number, factor: numb
 export declare function coerceObjectHelperResult(base: number): unknown;
 export declare function coerceWrittenHelperResult(base: number): unknown;
 export declare function coerceLibraryResult(base: number): unknown;
+// ADR 0047: whose `Symbol.hasInstance` an `instanceof` can reach.
+export declare function instanceOfParameter(value: unknown, constructor: any): boolean;
+export declare function instanceOfLibrary(value: unknown): boolean;
+export declare function instanceOfOwnClass(value: unknown): boolean;
+export declare function instanceOfDerivedClass(value: unknown): boolean;
+export declare function instanceOfComputedClass(value: unknown): boolean;
+export declare function instanceOfModuleValue(value: unknown): boolean;

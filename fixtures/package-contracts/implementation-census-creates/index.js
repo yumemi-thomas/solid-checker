@@ -806,3 +806,65 @@ export function coerceWrittenHelperResult(base) {
 export function coerceLibraryResult(base) {
   return JSON.parse("1") + base;
 }
+
+// ---------------------------------------------------------------------------
+// ADR 0047: `x instanceof C` performs GetMethod(C, @@hasInstance) and calls it
+// when there is one; otherwise OrdinaryHasInstance reads `C.prototype` and
+// walks x's prototype chain, which runs nothing. So the only question the
+// operator ever asks is whose `Symbol.hasInstance` the **constructor** could
+// carry, and the answer is a matter of provenance like every other in this
+// family.
+// ---------------------------------------------------------------------------
+
+class OwnMarker {
+  constructor(value) {
+    this.value = value;
+  }
+}
+
+class DerivedMarker extends OwnMarker {}
+
+class ComputedMarker {
+  static [Symbol.hasInstance](value) {
+    return typeof value === "string";
+  }
+}
+
+// A constructor the caller supplied. Whatever `Symbol.hasInstance` it carries,
+// the caller installed it — the same argument that excuses a getter on an
+// object the caller passed. **Certifies.**
+export function instanceOfParameter(value, constructor) {
+  return value instanceof constructor;
+}
+
+// The engine's own constructor: its `Symbol.hasInstance` is
+// `Function.prototype`'s. **Certifies.**
+export function instanceOfLibrary(value) {
+  return value instanceof Error;
+}
+
+// A class this module declares, with no heritage clause and no computed
+// member, so nothing on its prototype chain can carry the method.
+// **Certifies.**
+export function instanceOfOwnClass(value) {
+  return value instanceof OwnMarker;
+}
+
+// A class with a **superclass**: `C[Symbol.hasInstance]` is looked up along
+// C's own prototype chain, which runs through the superclass constructor, and
+// that is a value this walk does not have. **Refuses.**
+export function instanceOfDerivedClass(value) {
+  return value instanceof DerivedMarker;
+}
+
+// A class carrying a **computed** member name, which is exactly how
+// `[Symbol.hasInstance]` is written. **Refuses.**
+export function instanceOfComputedClass(value) {
+  return value instanceof ComputedMarker;
+}
+
+// A constructor read off a value this module made: nothing roots it, so no
+// premise covers the operator. **Refuses.**
+export function instanceOfModuleValue(value) {
+  return value instanceof untypedRegistry.ctor;
+}
