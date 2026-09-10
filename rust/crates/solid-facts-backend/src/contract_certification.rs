@@ -12496,6 +12496,106 @@ export const value = phantom;
         )
     }
 
+    /// The case-set batch must account for every closure candidate it was
+    /// given: each one is either bound in the receipt or named in a withheld
+    /// record. A candidate that is neither has been lost outside the one
+    /// mechanism that exists to explain it.
+    ///
+    /// Measured on `@corvu/utils@0.4.2` `./dom`: certified one artifact case
+    /// at a time it balances (9 candidates, 6 withheld, 3 bound, for either
+    /// case), and certified as a two-case set it does not (18 candidates, 0
+    /// withheld, 0 bound). See `docs/precision-backlog.md` § "A certified
+    /// contract can be weaker than the proposal it came from".
+    ///
+    /// **This case does not reproduce that.** Two synthetic cases over a
+    /// trivial export account correctly, which is why the entry says the
+    /// mechanism is unlocated: whatever corvu does differently, it is not
+    /// having two cases. Kept anyway — the invariant is the one that matters
+    /// and nothing else asserts it, so this holds the line while the real
+    /// reproduction is still being looked for.
+    #[test]
+    fn a_case_set_accounts_for_every_closure_candidate_it_was_given() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let manifest = br#"{"name":"case-set-closure","version":"1.0.0","type":"module","exports":{".":{"types":"./index.d.ts","solid":"./index.jsx","default":"./index.js"}}}"#;
+        let declarations = b"export declare function plain(a: number, b: number): number;\n";
+        let runtime = b"export function plain(a, b) {\n  return a + b;\n}\n";
+        let archive = published_archive_for(
+            "case-set-closure",
+            "1.0.0",
+            &[
+                ("package/package.json", manifest),
+                ("package/index.js", runtime),
+                ("package/index.d.ts", declarations),
+                ("package/index.jsx", runtime),
+            ],
+        );
+        let root = "/project/node_modules/case-set-closure";
+        let plan_for = |condition: &str, entry: &str| {
+            plan_for_test_package_closing(
+                &archive,
+                "case-set-closure",
+                "1.0.0",
+                root,
+                manifest,
+                &[condition],
+                &[(
+                    "plain",
+                    (entry, runtime.as_slice()),
+                    ("index.d.ts", declarations.as_slice()),
+                    root,
+                )],
+                &[("plain", ClaimDomain::Creates)],
+                &|_| ValueShape::Callable,
+            )
+        };
+        let solid = plan_for("solid", "index.jsx");
+        let default = plan_for("default", "index.js");
+        let candidates = solid.candidates().closure_candidates().len()
+            + default.candidates().closure_candidates().len();
+        assert_eq!(candidates, 2, "one creates candidate per artifact case");
+
+        let issuer = ConfiguredReceiptIssuer::persistent_local("case-set-closure", [31; 32])
+            .expect("a local issuer");
+        let proposal = crate::contract_document::encode(
+            &solid.selected_candidate,
+            &crate::contract_document::SidecarDigests::default(),
+            false,
+        )
+        .expect("encode the candidate");
+        let Ok(finalized) = super::certify_value_only_case_set(
+            &[&solid, &default],
+            &proposal,
+            &pin,
+            &issuer,
+            1,
+            None,
+        ) else {
+            // A refusal is an accounted outcome: nothing is published, so no
+            // closure is silently lost. Only a *certified* set can lose one.
+            return;
+        };
+        let bound = finalized
+            .iter()
+            .filter_map(|contract| {
+                crate::document_closed_call_domains(contract.canonical_main()).ok()
+            })
+            .flatten()
+            .map(|row| row.closed.len())
+            .sum::<usize>();
+        let withheld = finalized
+            .iter()
+            .map(|contract| contract.withheld_closures().len())
+            .sum::<usize>();
+        assert_eq!(
+            bound + withheld,
+            candidates,
+            "every candidate is bound or named: {candidates} given, {bound} bound, \
+             {withheld} withheld"
+        );
+    }
+
     fn reads_census_fixture() -> std::path::PathBuf {
         repository_root().join("fixtures/package-contracts/implementation-census-reads")
     }

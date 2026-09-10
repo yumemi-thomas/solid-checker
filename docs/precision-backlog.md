@@ -19647,16 +19647,24 @@ made unsound by it. It costs precision, not correctness.
   empty for this package;
 - candidate derivation — the audit's new `closureCandidates` shows eighteen.
 
-**Located (2026-09-10).** It is the **case-set batch**. The same entrypoint
-certified with conditions that select one artifact case behaves correctly —
-9 candidates derived, 6 withheld, 3 bound, balanced — for *either* case, so it
-is the count and not the artifact. With both cases it is 18 derived, 0
+**Correlated with the case-set batch, mechanism unlocated (2026-09-10).**
+The same entrypoint certified with conditions that select one artifact case
+behaves correctly — 9 candidates derived, 6 withheld, 3 bound, balanced — for
+*either* case, so it is not the artifact. With both cases it is 18 derived, 0
 withheld, 0 bound. `seroval@1.5.6`, which kept its closures throughout,
 certifies a single case.
 
-Reproduction: `contract certify … --entrypoint ./dom` with and without
-`--conditions solid`, reading `closureCandidates`, `withheldClosures` and
-`certifiedClosures` from the audit.
+**But two cases alone do not cause it.**
+`a_case_set_accounts_for_every_closure_candidate_it_was_given` certifies a
+synthetic two-case set and the accounting balances, so the correlation is not
+the mechanism. Whatever `@corvu/utils` does differently, it is not simply
+having two artifact cases.
+
+Reproduction of the *symptom*: `contract certify … --entrypoint ./dom` with
+and without `--conditions solid`, reading `closureCandidates`,
+`withheldClosures` and `certifiedClosures` from the audit. The invariant those
+three fields express — every candidate is bound or named — is pinned by the
+test above, which will catch this class of loss wherever it is introduced.
 
 Full investigation, including two wrong hypotheses and three misread
 measurements:

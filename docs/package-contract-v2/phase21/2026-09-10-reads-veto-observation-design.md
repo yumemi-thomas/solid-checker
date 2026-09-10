@@ -1091,3 +1091,28 @@ That reframes § 13's ordering again. The blocker for a clean verdict on a real
 package is no longer `returns` alone — it is that `reads` cannot close in bulk
 without a synthesized observation for the domain, which is the very thing this
 document was written to design.
+
+## 20. § 19 does not survive its control
+
+§ 19 concluded the case-set batch loses closures because two cases lose them
+and one does not. Written as a test —
+`a_case_set_accounts_for_every_closure_candidate_it_was_given`, certifying a
+synthetic two-case package and asserting `bound + withheld == candidates` —
+**it passes**. The set certifies and the accounting balances.
+
+So two cases alone do not cause the loss. The correlation across three
+`@corvu/utils` runs was real and reproducible, and it is still not the
+mechanism.
+
+The test stays. It asserts the invariant that actually matters — every
+candidate a certification is given is either bound in the receipt or named in
+a withheld record — and nothing else in the suite asserts it. It will catch
+this class of loss wherever it comes from, including the corvu case once
+something reproduces it.
+
+That is five corrections in this investigation. The pattern in all of them is
+the same and it is worth naming: a difference that *correlates* across a
+handful of runs is not a mechanism, and I have repeatedly written it up as
+one. The instruments were the right response and they are what caught this;
+the discipline still missing is writing the control **before** the conclusion,
+not after.
