@@ -382,3 +382,57 @@ unchanged, clippy `--all-targets` clean, fmt clean. 77 insertions in
 No existing finding moved, which is expected and is *not* evidence the slice
 does nothing: every SC9005 in the corpus is the policy-1 rejection (§ 10), so
 the only place the gate can be observed is the minted-receipt control.
+
+## 12. Scoping the `reads` conjunct: not at this layer, and here is the reason
+
+Asked to scope SC9005's `reads` conjunct the way § 11 scoped `returns`. Not
+done, and the blocker is structural rather than effort — § 9 guessed this
+outcome but for the wrong reason.
+
+### The principled predicate is not computable where the obligation is raised
+
+`reads` completeness is the proof that an export reads *nothing beyond* what
+it enumerates. An unenumerated read is only observable where it would be
+tracked: inside a tracking scope, calling an export whose reads are unknown
+means the tracking set is unknown. Outside one it changes nothing any rule
+proves. So the scoping predicate is "is this call site inside a tracked
+scope".
+
+`resolve_contract_imports_inner`, which raises SC9005, takes `facts`,
+`exact`, `accepted`, `entities` and `dialect`. There is no IR, no execution
+role, no tracking context — those are computed **downstream**, by the code
+that consumes these bindings. The predicate is not available here, and making
+it available means raising the obligation after execution roles exist. That
+is a restructuring of where SC9005 lives, not a slice like
+`returns_shed_symbols`.
+
+### The narrowing that *is* available sheds nothing
+
+The only demand question answerable from AST facts at this point is whether
+the binding is invoked at all — an export never called performs no reads in
+this project. Measured across the catalog-bearing fixtures: **every bound
+import is called** in all thirteen mintable projects. The single fixture with
+never-called imports (`package-structured-unresolved`:
+`ambiguousTracked`, `bareHelper`, `mappedTracked`) is one of the two that
+cannot mint, because its catalog publishes more than one contract.
+
+So the predicate would shed zero on the corpus that exists — a code path no
+test could exercise, which is worse than not having it.
+
+### What § 9 got right and wrong
+
+§ 9 declined this and said `reads`' demand is "barely narrower" than
+`creates`' — "the binding is called". That conclusion holds. The reason given
+was wrong: it is not that the useful predicate is nearly universal, it is
+that the useful predicate needs information this layer does not have, and the
+one it does have is nearly universal.
+
+### The route, if it is wanted
+
+Raise the `reads` conjunct where tracked-scope knowledge exists rather than
+at binding resolution. The measurement that motivates it is
+[§ 6 of the demand-population document](2026-09-10-reads-demand-population.md):
+rules consume `reads` *items*, which arrive regardless of closure, and only
+SC9005 consumes the completeness. A contract stating items without closing
+the domain already serves every rule in the corpus; the conjunct is the only
+thing that penalizes it.
