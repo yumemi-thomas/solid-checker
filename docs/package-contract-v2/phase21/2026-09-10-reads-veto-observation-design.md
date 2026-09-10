@@ -1744,3 +1744,68 @@ So the agreement is asserted from the side that owns the list:
 `module_closure::tests::the_core_runtime_package_list_agrees_with_the_typescript_census`
 reads the constant out of the mirror and compares it. Confirmed falsifiable —
 deleting one entry from the mirror fails it with the intended message.
+
+## 28. Certifying `@solid-primitives/utils`: it refuses, and that unmasks a gap in § 27
+
+§ 27 ended with the chain to try: certify `utils`, supply it to `memo` as an
+accepted edge, and `memo`'s last frontier clears. **The chain stops at the
+first step.**
+
+### 28.1 The refusal
+
+~~~
+witness-acquisition refused for demand sha256:c15404fe…:
+  Type Facts certification failed during live export-value verification:
+  demand sha256:c15404fe… is locally open: recursive-value-shape
+  (artifact-case:1bea9ecd…:createHydratableSignal):
+  operation value root shape has no verifiable premise: the demand asserts
+  no callability and the producer's root observation is open
+~~~
+
+`--recover-entrypoints` does not help: it isolates refused *artifact cases*,
+and here the single case is fine — one export's demand refuses the whole
+transaction.
+
+It is `createHydratableSignal` again, the export § 27.2 named as the class to
+watch, though not for the reason predicted. The refusal is a **returns**
+value-shape demand, not a reads one: the contract declares an operation whose
+returned root shape the producer could not observe. The checker is being
+honest — it says exactly what it cannot prove, and it refuses rather than
+certifying.
+
+`memo` is therefore unchanged: its hazard records fall from 21 per domain to
+**7** (seven exports × the one remaining specifier, `@solid-primitives/utils`)
+and its closure candidates are still **0**.
+
+### 28.2 The regression class § 27 shipped unmeasured
+
+Before the exemption, `utils` **certified** — vacuously, with a contract
+stating nothing about any export. After it, `utils` **refuses**.
+
+That is the correct direction on the precision contract: a receipt binding a
+document that says nothing is worth nothing, and a named refusal is worth
+something. But it is a behaviour change of a kind § 27 did not measure, and
+the honest statement is:
+
+- `make verify` is green and covers every gate it runs, but it deliberately
+  excludes the ecosystem benchmark.
+- `benchmarks/ecosystem/report.json` holds **381 rows with contract content**,
+  and essentially all of them import `solid-js`. Every one now proposes
+  domains the frontier used to blanket-open, so the report is stale and would
+  move substantially.
+- How many rows go from *certifies vacuously* to *refuses* is **not
+  measured**. `utils` is one data point and it went the wrong way.
+
+The refusal it unmasks looks pre-existing rather than new: a generator that
+declares a value root shape the producer's observation leaves open is a
+producer/generator mismatch that the frontier was hiding for every
+Solid-importing package. Unmasking it is progress; paying for it across the
+ecosystem in one step was not measured before landing.
+
+### 28.3 What would settle it
+
+`make ecosystem-benchmark` with `--attempt-certification` (release build,
+roughly twenty minutes) against the pre- and post-exemption binaries, counting
+rows by outcome. That is the measurement § 27 owed and did not take. Until
+it is taken, `cf905a58` should be read as *sound but unmeasured at ecosystem
+scale* — the direction is right, the magnitude is unknown.
