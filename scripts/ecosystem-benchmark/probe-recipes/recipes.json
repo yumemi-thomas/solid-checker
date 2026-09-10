@@ -10,6 +10,45 @@
   },
   "recipes": [
     {
+      "claimId": "claim:v1:sha256:1bdce1ed3650938fc2d663f38e37a674a9f8522da96f9df7cdfc5ff3b85e242a",
+      "module": "seroval-create-plugin-identity-production.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": { "marker": "return-outside-identity", "class": "call" },
+      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "coverageLimitations": [
+        "Seroval 1.5.6 production createPlugin; two valid plugin objects, one frozen",
+        "Finite samples can contradict identity but cannot establish exhaustive returns; the authenticated census must prove closure"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:2433844df91865646ec61ee8ff25327fdc492bf23149d98ca23474df4367a620",
+      "module": "seroval-create-plugin-identity-development.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": { "marker": "return-outside-identity", "class": "call" },
+      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "coverageLimitations": [
+        "Seroval 1.5.6 development createPlugin; two valid plugin objects, one frozen",
+        "Finite samples can contradict identity but cannot establish exhaustive returns; the authenticated census must prove closure"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:9e82b17c7e39cb8ee4394875fc28ea98328ea085d19812c1b9f9ca5edd7bcf14",
+      "module": "seroval-create-reference-identity-development.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": { "marker": "return-outside-identity", "class": "call" },
+      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "coverageLimitations": [
+        "Seroval 1.5.6 development createReference; eleven samples crossing the primitive/object boundary, including a frozen object, a function, a symbol, -0, NaN, null, undefined, and one value re-registered under a second id",
+        "Finite samples can contradict identity but cannot establish exhaustive returns; the authenticated census must prove closure"
+      ]
+    },
+    {
       "claimId": "claim:v1:sha256:3097ae0eb777db146a45ece5f141563231f220da4781b0b7c92f642eb653ea04",
       "module": "kobalte-utils-092-browser-clamp.mjs",
       "importKind": "esm",

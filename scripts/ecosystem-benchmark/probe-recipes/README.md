@@ -48,7 +48,27 @@ does. Re-read the ids from a run's `…certification-audit.json`
 The transcript API is the one legitimate path by which package code could reach
 the transcript. None of these modules does; nothing detects it if one starts.
 
-## What each recipe is for, and what it measured (2026-09-04)
+## What each recipe is for, and what it measured (2026-09-04 … 2026-09-10)
+
+The `seroval-create-reference-identity-development.mjs` recipe (2026-09-10)
+addresses Seroval 1.5.6 `createReference`'s `returns` closure in the published
+development ESM case, the one candidate the retained real certification left
+withheld as `no recipe in corpus`. The census proves the export returns
+parameter 1 by identity; ADR 0036's synthesis cannot drive a bare `<T>`, so a
+hand recipe is the only way that gate runs. Eleven samples cross the
+primitive/object boundary — both registries are plain `Map`s, not `WeakMap`s.
+Adding it closes `returns`, and the consumer's SC9005 goes from
+`reactiveReads,returns` to `reactiveReads`; a falsifying variant refuses
+certification naming the exact claim. Measured in
+`docs/package-contract-v2/phase21/2026-09-10-real-package-returns-recipe.md`.
+
+The `seroval-create-plugin-identity-*` recipes (2026-09-08, ADR 0075) address
+the production and development Seroval 1.5.6 `createPlugin` returns closures.
+Each passes valid plugin objects, including a frozen object, and emits only
+when the result differs by identity. The complete return census proves the
+closure; these finite samples only falsify it. Neither recipe passes session
+or harness interfaces to Seroval. Separate module names are required because
+the private workspace creates one file for each recipe entry.
 
 The five `kobalte-utils-092-browser-*` recipes address `clamp`, `isArray`,
 `isFunction`, `isNumber` and `noop` in the independent published root JS case.
@@ -76,6 +96,7 @@ these domains are open, and adding recipes alone cannot certify them.
 
 | recipe | claim | measured outcome |
 | --- | --- | --- |
+| `seroval-create-reference-identity-development.mjs` | `seroval@1.5.6` `createReference` `returns`, published `dist/esm/development/index.mjs` | the withholding clears and `returns` closes; the consumer's SC9005 drops `returns` and keeps `reactiveReads` |
 | `kobalte-utils-alpha-clamp-import.mjs`, `kobalte-utils-alpha-clamp-solid.mjs` | `@kobalte/utils@2.0.0-alpha.0` `clamp`, published `dist/index.js`, two exact cases | census and mandatory veto complete; two creates closures certify; other domains remain open |
 | `kobalte-utils-noop.mjs` | `@kobalte/utils@0.9.2` `noop`, `./src/noop.ts` | the implementation census **proves** `creates: []`; the probe gate then refuses because the artifact case is a `.ts` file under the private workspace's `node_modules` and the pinned interpreter will not strip types there |
 | `solid-primitives-i18n-scoped-translator.mjs`, `solid-primitives-i18n-flatten.mjs`, `solid-primitives-i18n-chained-translator.mjs` | the three i18n creates candidates | the current row refuses first on `chainedTranslator`'s `property-access-unknown-accessor (SpreadAssignment)`; no gate executes |
