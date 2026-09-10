@@ -180,3 +180,23 @@ packages/wasm/solid-checker-wasm.wasi.cjs
 packages/wasm/solid-checker-wasm.wasm32-wasi*.wasm
 packages/wasm/wasi-worker*.mjs
 /.typefacts/
+
+# Bulk phase-21 measurement dumps. These are 20-70 MB machine-readable
+# transcripts of a full ecosystem run, retained on disk as evidence for the
+# ADRs that cite them and never small enough to belong in git. On 2026-09-10 a
+# `git add -A` swept ~950 MB of them into history in one commit; the history
+# was left as it stands, and these rules stop the next run repeating it.
+#
+# Name-based and therefore partial: `-measurement.json` alone cannot be
+# ignored because dozens of small, deliberately committed files share the
+# suffix. Everything above 20 MB today either matches the glob or is listed
+# by name. A size check at commit time is the mechanism that would cover this
+# properly; a .gitignore cannot express "not if it is huge".
+docs/package-contract-v2/phase21/*-full-measurement.json
+docs/package-contract-v2/phase21/2026-09-07-namespace-measurement.json
+docs/package-contract-v2/phase21/2026-09-07-namespace-kobalte-scoped-measurement.json
+docs/package-contract-v2/phase21/2026-09-07-retry-sources-measurement.json
+docs/package-contract-v2/phase21/2026-09-07-retry-sources-kobalte-scoped-measurement.json
+docs/package-contract-v2/phase21/2026-09-07-batched-kobalte-scoped-measurement.json
+docs/package-contract-v2/phase21/2026-09-08-retained-graphs-kobalte-measurement.json
+docs/package-contract-v2/phase21/*-partial-row-audit.json
