@@ -436,3 +436,41 @@ rules consume `reads` *items*, which arrive regardless of closure, and only
 SC9005 consumes the completeness. A contract stating items without closing
 the domain already serves every rule in the corpus; the conjunct is the only
 thing that penalizes it.
+
+### What the layer move actually requires (investigated 2026-09-10)
+
+Mapped before starting, and it is larger than "move the check downstream".
+
+**The join point exists.** `ProgramDraft::push_defect` accepts defects until
+`into_program`, and `obligation_reach` deliberately runs over the *final*
+defect list, so appending a deferred SC9005 after source discovery is
+architecturally supported. That half is free.
+
+**The predicate does not exist.** There is no query answering "is this call
+site inside a tracked scope". `SourceDiscovery` carries reactive-source maps
+keyed by symbol — accessors, setters, source kinds, phases — and no
+per-call-site execution role. `execution_role.rs` exposes exactly three
+`pub(crate)` functions (`missing_jsx_census`, `missing_jsx_census_region`,
+`discarded_region_contains`); the tracked determination lives in private code
+reached with rule-specific context.
+
+So the move means **designing a shared notion of "tracked at this call
+site"** and exposing it. The hazard in that is specific and this repository
+has already paid it once: a second notion of tracking, subtly different from
+the one each rule derives for itself, would make SC9005 disagree with the
+rules it exists to serve. The dual hazard census (§ 10 of the reads design)
+is the same failure — one concept, two implementations, agreement enforced
+only by a downstream mismatch.
+
+The work, in order:
+
+1. Decide what "tracked call site" means as a *shared* concept, and whether
+   the rules' own derivations become consumers of it or stay independent.
+2. Expose it from `execution_role` with the context it needs at the join
+   point (`semantic_lookup` and the discovered sources are both in scope).
+3. Split the conjunct's emission: `creates`, `returns` and `asyncBehavior`
+   stay at binding resolution, `reads` defers.
+4. Regenerate: SC9005 spans 94 coverage projects and the contract corpus.
+
+Step 1 is the one that matters and it is a semantic decision, not a
+refactor.
