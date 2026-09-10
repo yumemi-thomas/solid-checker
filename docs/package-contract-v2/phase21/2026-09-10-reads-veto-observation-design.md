@@ -823,3 +823,64 @@ The clean-verdict experiment. `contains` has no callback and SC9005's
 predicate is exactly `reads ∧ (returns ∧ demanded) ∧ creates`, so a consumer
 that discards its result should certify clean. It cannot be tried until a
 certified document actually carries the closures its proposal offered.
+
+## 15. Correcting § 14: the suspect is falsified and one of its runs was void
+
+Two things in § 14 were wrong. The observable it reports is not.
+
+### The suspect is dead
+
+§ 14 guessed that a **complete positive** closure (`Complete([read-0])`, as
+opposed to an absence) is never a candidate, so nothing plans it and the
+marker is dropped at normalization. Tested directly, with the real document's
+operation copied verbatim into a round-trip case in
+`a_proposed_closure_labels_a_stated_closure_and_is_otherwise_refused`:
+
+~~~
+{"closed":["reads"],"reads":["read-0"],"proposedClosures":["reads"],"operations":[…]}
+~~~
+
+It survives decode, normalize **and** re-encode with the domain closed and
+still labelled proposed. `KnowledgeSet::open_proposed_closure` returns true
+for any `is_closed()` claim, positive or not, and
+`derive_demand_graph` turns *every* closure candidate into a
+`DomainExhaustiveness` demand with no filtering. So the document layer and the
+candidate layer both handle this shape correctly. The guess was wrong.
+
+### And one of § 14's two runs proved nothing
+
+§ 14 says "the same run reusing the closure-carrying proposal via `--proposal`
+… is identical". That run **silently regenerated**:
+`certificationImporterPathFor` hashes the package root *and the catalog path*,
+and the proposal had been generated for the first run's catalog while the
+second wrote to a different one. Certify rejected the mismatch and made its
+own, exactly as documented — I did not check.
+
+Redone with the importer computed for the catalog actually being written, and
+verified afterwards by comparing the binding to the path generated for:
+
+| | |
+| --- | --- |
+| proposal `closed` arrays | 5 |
+| `domain-exhaustiveness` demands planned | 0 |
+| withheld closures | 0 |
+| refusals | 0 |
+| accepted document `closed` arrays | **0** |
+
+### What is actually established
+
+A proposal carrying five closures certifies into a document carrying none,
+with nothing withheld and nothing refused. That is unchanged and it is the
+thing that matters: a closure disappears without being named.
+
+What is *not* established is where. Ruled out: the document round trip, the
+candidate derivation from a closed claim, and demand-graph filtering. Still
+open, and the next thing to test: whether the proposal certify plans from is
+the one on disk at all. Certify regenerates in its own acquired workspace, and
+if that regeneration produces a closure-free proposal where generation against
+an extracted copy produces five, then the census is environment-dependent and
+*that* is the defect rather than a dropped marker.
+
+The way to settle it is to make certify emit the proposal it planned from.
+Nothing does that today, which is why two rounds of this investigation have
+been inference.

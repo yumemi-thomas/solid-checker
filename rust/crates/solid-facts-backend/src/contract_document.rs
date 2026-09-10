@@ -3574,6 +3574,37 @@ mod tests {
             .into_bytes()
         };
 
+        // A closure over a *positive* operation, which is the shape a real
+        // package produces and the corpus fixtures never do. `@corvu/utils`'
+        // `contains` reads `.contains` off parameter 0, so its `reads` is
+        // `Complete([read-0])` rather than an absence — and certifying that
+        // package produced an accepted document with no closures at all, no
+        // withheld records and no refusals (§ 14 of
+        // `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`).
+        //
+        // This is the first half of that: does a complete positive survive the
+        // decode/normalize round trip the certifier's candidate universe is
+        // rebuilt from? The operation is copied from the real document.
+        const POSITIVE_READ: &str = r#"{"closed":["reads"],"reads":["read-0"],"proposedClosures":["reads"],"operations":[{"at":{"event":"call","schedule":"same-stack"},"count":{"max":"many","min":0,"scope":"call"},"id":"read-0","inputs":[{"index":0,"kind":"parameter","path":["contains"]}],"kind":"read","tracking":"untracked","trigger":{"event":"call"}}]}"#;
+        let positive = normalized(&document(POSITIVE_READ));
+        let read_export = &positive.artifact_cases()[0].exports["run"];
+        assert!(
+            !read_export.claim_state(ClaimDomain::Reads).is_open(),
+            "a closure over one positive read is a closure: {:?}",
+            read_export.claim_state(ClaimDomain::Reads)
+        );
+        assert_eq!(
+            read_export.call.proposed_closures(),
+            &BTreeSet::from([ClaimDomain::Reads]),
+            "and it is still labelled as proposed"
+        );
+        let reencoded = encode(&positive, &SidecarDigests::default(), false).unwrap();
+        assert!(
+            String::from_utf8_lossy(&reencoded).contains(r#""closed":["reads"]"#),
+            "and it survives re-encoding: {}",
+            String::from_utf8_lossy(&reencoded)
+        );
+
         let contract = normalized(&document(
             r#"{"closed":["creates"],"creates":[],"proposedClosures":["creates"]}"#,
         ));
