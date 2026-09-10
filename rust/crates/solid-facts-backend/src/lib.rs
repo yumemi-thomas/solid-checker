@@ -201,6 +201,58 @@ pub fn validate_contract_document(bytes: &[u8]) -> Result<(), ContractFailure> {
     Ok(())
 }
 
+/// Which call domains each export of a stable-v1 document states as closed,
+/// as `(artifact case id, export, domain names)`.
+///
+/// **Diagnostic, and deliberately so.** Nothing decides anything from this;
+/// it exists so a certification run can report what its receipt actually
+/// binds beside what its planner derived. A closure present as a candidate
+/// and absent here, with no withheld record, is one lost outside every
+/// mechanism meant to account for it — see
+/// `docs/precision-backlog.md` § "A certified contract can be weaker than the
+/// proposal it came from".
+pub struct DocumentClosedDomains {
+    pub artifact_case: String,
+    pub export: String,
+    pub closed: Vec<&'static str>,
+}
+
+pub fn document_closed_call_domains(
+    bytes: &[u8],
+) -> Result<Vec<DocumentClosedDomains>, ContractFailure> {
+    let normalized = contract_document::decode(bytes)?.normalize()?;
+    let mut rows = Vec::new();
+    for case in normalized.artifact_cases() {
+        for (name, export) in &case.exports {
+            let closed = solid_reactive_ir::contract_semantics::ClaimDomain::ALL
+                .into_iter()
+                .filter(|domain| !export.claim_state(*domain).is_open())
+                .map(|domain| match domain {
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Callbacks => "callbacks",
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Reads => "reads",
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Writes => "writes",
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Creates => "creates",
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Invalidates => {
+                        "invalidates"
+                    }
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Throws => "throws",
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Returns => "returns",
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Cleanups => "cleanups",
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Disposals => "disposals",
+                })
+                .collect::<Vec<_>>();
+            if !closed.is_empty() {
+                rows.push(DocumentClosedDomains {
+                    artifact_case: case.id.clone(),
+                    export: name.clone(),
+                    closed,
+                });
+            }
+        }
+    }
+    Ok(rows)
+}
+
 /// Plans policy-2 certification from one stable-v1 open proposal without
 /// exposing its wire model. Artifact bytes and the independently acquired
 /// resolution are replayed by [`plan_certification`] before any demand IDs are

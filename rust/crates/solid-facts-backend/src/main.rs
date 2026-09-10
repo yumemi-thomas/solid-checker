@@ -1126,6 +1126,7 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
         )
         .map_err(|error| format!("policy-2 proof finalization failed: {error}"))?;
     report_closure_candidates(&plan);
+    report_certified_closures(&finalized);
     report_withheld_closures(None, &finalized)?;
     let trust_bytes =
         solid_facts_backend::encode_policy2_trust_configuration(finalized.trust_configuration())
@@ -1184,6 +1185,34 @@ const WITHHELD_CLOSURE_MARKER: &str = "solid-checker:withheld-closure=";
 /// side and the third by `withheldClosures`; this answers the second, which
 /// was the one boundary nothing could see through. Diagnostic only.
 const CLOSURE_CANDIDATE_MARKER: &str = "solid-checker:closure-candidates=";
+
+/// One stdout line naming what the canonical main a receipt binds actually
+/// closes, per export.
+///
+/// The last of four: the proposal offered N, the planner derived M
+/// candidates, gating withheld K, and this says what survived to the
+/// document. A closure present in the candidates and absent here, with no
+/// withheld record, is lost outside every mechanism meant to account for it.
+const CERTIFIED_CLOSURE_MARKER: &str = "solid-checker:certified-closures=";
+
+fn report_certified_closures(finalized: &solid_facts_backend::FinalizedPolicy2Contract) {
+    let record = match solid_facts_backend::document_closed_call_domains(finalized.canonical_main())
+    {
+        Ok(rows) => serde_json::json!({
+            "count": rows.len(),
+            "closed": rows
+                .into_iter()
+                .map(|row| serde_json::json!({
+                    "artifactCase": row.artifact_case,
+                    "export": row.export,
+                    "closed": row.closed,
+                }))
+                .collect::<Vec<_>>(),
+        }),
+        Err(error) => serde_json::json!({ "unreadable": error.to_string() }),
+    };
+    println!("{CERTIFIED_CLOSURE_MARKER}{record}");
+}
 
 fn report_closure_candidates(plan: &solid_facts_backend::CertificationPlan) {
     let candidates = plan
@@ -1374,6 +1403,7 @@ fn execute_contract_case_set_certification(
         plans.into_iter().zip(finalized)
     {
         report_closure_candidates(&plan);
+        report_certified_closures(&finalized);
         report_withheld_closures(None, &finalized)?;
         let current_trust = solid_facts_backend::encode_policy2_trust_configuration(
             finalized.trust_configuration(),

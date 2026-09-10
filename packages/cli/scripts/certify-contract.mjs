@@ -671,6 +671,34 @@ function certificationPlannings(generated, artifactSnapshot, options = null) {
 export const WITHHELD_CLOSURE_MARKER = "solid-checker:withheld-closure=";
 
 const CLOSURE_CANDIDATE_MARKER = "solid-checker:closure-candidates=";
+const CERTIFIED_CLOSURE_MARKER = "solid-checker:certified-closures=";
+
+/// What the canonical main a receipt binds actually closes.
+///
+/// The fourth and last of the accounting: proposal offered, planner derived,
+/// gating withheld, receipt binds. Diagnostic only.
+export function certifiedClosuresFromNativeOutput(stdout) {
+  const perCase = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(CERTIFIED_CLOSURE_MARKER)) continue;
+    try {
+      const record = JSON.parse(trimmed.slice(CERTIFIED_CLOSURE_MARKER.length));
+      if (record && typeof record === "object") perCase.push(record);
+    } catch {
+      // Malformed is not a record.
+    }
+  }
+  if (!perCase.length) return null;
+  return {
+    cases: perCase.length,
+    count: perCase.reduce((total, record) => total + (record.count ?? 0), 0),
+    closed: perCase.flatMap(record => record.closed ?? []).slice(0, 64),
+    ...(perCase.some(record => record.unreadable)
+      ? { unreadable: perCase.find(record => record.unreadable).unreadable }
+      : {})
+  };
+}
 
 /// What the planner derived from the proposal, before gating.
 ///
@@ -1659,7 +1687,8 @@ async function executePreparedPublishedGraphs({
     authority: "native-certification-complete",
     catalogRoot,
     withheldClosures: withheldClosuresFromNativeOutput(child.stdout),
-    closureCandidates: closureCandidatesFromNativeOutput(child.stdout)
+    closureCandidates: closureCandidatesFromNativeOutput(child.stdout),
+    certifiedClosures: certifiedClosuresFromNativeOutput(child.stdout)
   };
 }
 
@@ -2834,7 +2863,8 @@ async function executeNativeCertification({
     authority: "native-certification-complete",
     catalogRoot,
     withheldClosures: withheldClosuresFromNativeOutput(child.stdout),
-    closureCandidates: closureCandidatesFromNativeOutput(child.stdout)
+    closureCandidates: closureCandidatesFromNativeOutput(child.stdout),
+    certifiedClosures: certifiedClosuresFromNativeOutput(child.stdout)
   };
 }
 
@@ -3284,7 +3314,8 @@ function writeSuccessAudit(
   graphPreparation = null,
   withheldClosures = [],
   plannedProposal = null,
-  closureCandidates = null
+  closureCandidates = null,
+  certifiedClosures = null
 ) {
   if (!path) return;
   const output = resolve(path);
@@ -3313,6 +3344,10 @@ function writeSuccessAudit(
     // `plannedProposal` above and `withheldClosures`, the three together say
     // where a closure went.
     closureCandidates,
+    // And what the receipt actually binds. A domain in `closureCandidates`,
+    // absent here, with nothing in `withheldClosures`, is a closure lost
+    // outside every mechanism meant to account for it.
+    certifiedClosures,
     demandPlans: demandPlans.map(plan => ({
       policyDigest: plan.policyDigest,
       candidateSemanticDigest: plan.candidateSemanticDigest,
@@ -3428,6 +3463,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
   let plannedProposalPath = null;
   let withheldClosures = [];
   let closureCandidates = null;
+  let certifiedClosures = null;
   const stageDurationsMs = {};
   let certified = false;
   const measure = async (stage, operation) => {
@@ -3590,6 +3626,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
             ? witnesses.withheldClosures
             : [];
           closureCandidates = witnesses?.closureCandidates ?? null;
+          certifiedClosures = witnesses?.certifiedClosures ?? null;
           return { authority: "rust", witnesses };
         })
       },
@@ -3653,7 +3690,8 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       { ...(graphPreparation ?? {}), reusedProposal },
       withheldClosures,
       plannedProposalPath ? plannedClosureSummary(plannedProposalPath) : null,
-      closureCandidates
+      closureCandidates,
+      certifiedClosures
     );
     certified = true;
   } catch (error) {

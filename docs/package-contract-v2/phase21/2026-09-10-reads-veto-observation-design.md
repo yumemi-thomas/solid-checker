@@ -992,3 +992,56 @@ So: what re-closes a proven candidate, and why does it not fire here? That is
 one more instrument — record the canonical main's closed set beside the
 candidate set — and deliberately **not** another guess. Two guesses in this
 document were wrong and a third would cost more than the measurement.
+
+## 18. The full accounting, and a regression today's own change caused
+
+A fourth marker, `solid-checker:certified-closures=`, reports what the
+canonical main a receipt binds actually closes, via a new diagnostic
+`document_closed_call_domains` in the backend lib. With the three before it
+the accounting is complete: **offered → derived → withheld → bound.**
+
+### The instrument is validated, on a package that keeps its closures
+
+| | `seroval@1.5.6` | `@corvu/utils@0.4.2` |
+| --- | --- | --- |
+| proposal offered | 4 | 10 |
+| planner derived | 6 | 18 |
+| gating withheld | 3 | **0** |
+| receipt binds | **3** | **0** |
+
+seroval balances: 6 derived − 3 withheld = 3 bound. corvu does not: 18
+derived, nothing withheld, nothing bound. Eighteen closures unaccounted for by
+any mechanism.
+
+That control matters more than the corvu number. A "0 bound" from an
+uncalibrated instrument says nothing; a "0 bound" from one that reports 3 for
+a package known to keep 3 is a measurement.
+
+### And a regression this document's own change caused
+
+The seroval control run first came back with **both** `returns` recipes
+withheld as `no recipe in corpus`. Admitting `reads` to `PROPOSABLE` moved
+every claim id in every emitted contract, and a `claimId` is a content digest
+— so the recipe committed this afternoon addressed nothing, and this
+afternoon's measured result (a consumer's SC9005 going from
+`reactiveReads,returns` to `reactiveReads`) had silently reverted.
+
+The corpus README names this as the corpus's weakness and says to re-read the
+ids after any generator change. I made the generator change and did not.
+
+Repaired by reading the live ids out of `withheldClosures` and repointing the
+two development recipes. seroval now binds `createPlugin: creates,returns` and
+`createReference: creates,returns` — better than this afternoon, because
+`createPlugin`'s returns closes too.
+
+**`seroval-create-plugin-identity-production.mjs` is still stale.** Its claim
+belongs to the production condition and this run certified development; it
+needs its own run to reprint. Left as is rather than guessed.
+
+### What is now established about the defect
+
+Offered, derived, withheld and bound are all measured, on two packages, with
+one balancing and one not. The loss is after candidate derivation, outside
+withholding, and before the canonical main — a span with exactly one thing in
+it: whatever re-closes a proven candidate. seroval proves that step exists and
+works.
