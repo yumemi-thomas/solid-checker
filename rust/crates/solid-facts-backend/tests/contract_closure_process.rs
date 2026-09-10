@@ -198,6 +198,20 @@ fn mint_and_analyze(
         for summary in contract["summaries"].as_object_mut().unwrap().values_mut() {
             let closed = summary["call"]["closed"].as_array_mut().unwrap();
             closed.retain(|value| value != domain);
+            // An open domain may not carry an empty item collection — that
+            // shape is a *closed* claim proving absence, and leaving it
+            // behind makes the document undecodable. Reopening means dropping
+            // the enumeration too; a non-empty one is positive knowledge the
+            // open domain still legitimately states.
+            if summary["call"][domain]
+                .as_array()
+                .is_some_and(Vec::is_empty)
+            {
+                summary["call"]
+                    .as_object_mut()
+                    .expect("a call object")
+                    .remove(domain);
+            }
         }
         fs::write(&document, serde_json::to_vec(&contract).unwrap()).unwrap();
     }
@@ -298,6 +312,89 @@ fn mint_and_analyze(
     }
 
     Ok(decode_findings(&output.stdout))
+}
+
+/// How many of the corpus's projects actually consult a `reads` projection.
+///
+/// The question behind it: `reads` cannot close in bulk — no synthesized veto
+/// can observe a read of a source the export owns, so every closure needs a
+/// hand recipe. If few consumers ever demand the domain, scoping the
+/// obligation is cheaper than serving it; if most do, the recipes have to be
+/// made mechanical instead.
+///
+/// Measured by difference. Each project is analyzed twice against its own
+/// minted catalog, once as the contract stands and once with `reads` reopened
+/// in the document. `package-contract-incomplete` is excluded from the
+/// comparison because it demands the domain by definition — it exists to
+/// report that a claim is open, so reopening one always moves it and it says
+/// nothing about whether a *rule's proof* depended on the claim.
+#[test]
+fn how_many_corpus_projects_consult_a_reads_projection() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let incomplete = |rule: &str| rule.contains("package-contract-incomplete");
+    let proven = |findings: &[serde_json::Value]| {
+        let mut rules = findings
+            .iter()
+            .filter_map(|finding| finding["rule"].as_str())
+            .filter(|rule| !incomplete(rule))
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        rules.sort();
+        rules
+    };
+    let mut consulted = Vec::new();
+    let mut indifferent = Vec::new();
+    let mut inert = Vec::new();
+    for (index, fixture) in catalog_bearing_fixtures().iter().enumerate() {
+        let closed = mint_and_analyze(fixture, &format!("reads-closed-{index}"), None);
+        let reopened = mint_and_analyze(fixture, &format!("reads-open-{index}"), Some("reads"));
+        let (Ok(closed), Ok(reopened)) = (closed, reopened) else {
+            continue;
+        };
+        // The control for the whole measurement. Reopening `reads` must move
+        // *something*, or the mutation did not take and the project would
+        // read as indifferent for the wrong reason. SC9005 is what must move:
+        // it reports open claims by name, so an open `reads` has to reach it.
+        // A project where it does not is excluded rather than counted —
+        // `package-unknown-export` imports an export the contract does not
+        // describe, so it is already uncertifiable for a reason reopening a
+        // claim cannot change.
+        let incomplete_count = |findings: &[serde_json::Value]| {
+            findings
+                .iter()
+                .filter_map(|finding| finding["rule"].as_str())
+                .filter(|rule| incomplete(rule))
+                .count()
+        };
+        if incomplete_count(&reopened) <= incomplete_count(&closed) {
+            inert.push(fixture.clone());
+            continue;
+        }
+
+        let (before, after) = (proven(&closed), proven(&reopened));
+        if before == after {
+            indifferent.push(fixture.clone());
+        } else {
+            consulted.push((fixture.clone(), before.len(), after.len()));
+        }
+    }
+    println!(
+        "reads demand: {} of {} projects consult the projection ({} excluded, reopen inert)",
+        consulted.len(),
+        consulted.len() + indifferent.len(),
+        inert.len()
+    );
+    for fixture in &inert {
+        println!("  excluded    {fixture}");
+    }
+    for (fixture, before, after) in &consulted {
+        println!("  consults    {fixture}  {before} -> {after} rule findings");
+    }
+    for fixture in &indifferent {
+        println!("  indifferent {fixture}");
+    }
 }
 
 /// The policy-2 fixture corpus: every catalog-bearing fixture that can be
