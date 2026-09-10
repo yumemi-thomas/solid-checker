@@ -116,7 +116,14 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // `returns` census's tracer, whose valueless exports propose
       // `returns: []` beside `creates: []` and whose value-yielding exports
       // refuse by name.
-      stableMainDocuments: 186,
+      // 188 adds two main documents this branch tracked without moving the
+      // pin with them: implementation-census-reads, the `reads` census's
+      // tracer (docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md),
+      // whose two entrypoints split on whether the read's receiver is a value
+      // the export owns; and namespace-reexport-identity. Both are ordinary
+      // registered generator fixtures, so this is the pin catching up rather
+      // than a change of what the cut contains.
+      stableMainDocuments: 188,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
