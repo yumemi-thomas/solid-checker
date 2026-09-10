@@ -83,7 +83,35 @@ double the rule findings on this corpus.** The morning's headline — that
 contracts make consumer verdicts strictly worse — was an artifact of
 authorization, not of the contract pipeline.
 
-## 5. What it still does not settle
+## 5. Why frequency was not the fix
+
+The obvious response to eleven days of staleness is to regenerate the corpus
+more often. It would not have helped. The snapshots recorded
+`obsolete-policy1` as the **expected** state, so re-running the gate more
+frequently would have re-confirmed a wrong expectation faster. A snapshot
+says what the checker reported; it cannot say whether that was the point of
+the fixture.
+
+Two assertions were added instead, both in the minting test:
+
+- **The composition is pinned** — 14 minted, 2 unminted, 32 rule findings, 10
+  SC9005. A regression that quietly returned the corpus to the rejection path
+  now fails rather than being recorded as the new expectation.
+- **Every catalog-bearing fixture must exercise its contract.** Authorizing a
+  fixture's catalog has to change what the checker reports; if it does not,
+  the fixture is not testing a contract. Two are excused *by name and with a
+  reason*: `package-unknown-export` imports an export the contract does not
+  describe, and `package-contract-paths-shadow` has a `paths` entry shadowing
+  the installed package, so both are correctly outside their contract with or
+  without a receipt.
+
+Both directions of that invariant were checked against a deliberate
+violation: an excuse applied to a fixture whose findings *do* change fails as
+a stale excuse, and removing an excuse from one whose findings do not fails
+as an inert fixture. This is the assertion that would have caught commit
+`662dd7ba` the day it landed.
+
+## 6. What it still does not settle
 
 - **`reads` demand is still unmeasured.** The corpus is demand-evaluating now,
   which is the prerequisite

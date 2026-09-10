@@ -365,16 +365,85 @@ fn the_catalog_bearing_fixtures_mint_a_policy_2_corpus() {
         minted.len(),
         unminted.len()
     );
+
+    // Pinned, because the composition is the measurement. Before these
+    // catalogs were authorized the same fourteen projects produced 16 rule
+    // findings and 28 SC9005, all of the latter the obsolete-policy rejection
+    // path; a regression that quietly returned them to that state would
+    // otherwise pass. Update these deliberately, with the reason, exactly as
+    // a snapshot update is made.
+    assert_eq!(
+        (minted.len(), unminted.len(), proven, uncertifiable),
+        (14, 2, 32, 10),
+        "policy-2 corpus composition moved; review before repinning"
+    );
+
+    // A catalog-bearing fixture exists to exercise a contract. If authorizing
+    // its catalog changes nothing about what the checker reports, the fixture
+    // is testing the *absence* of contract effect — which is legitimate for
+    // some, and for the rest is the signature of the staleness this corpus
+    // was built to end: the receipts were cut on 2026-08-30 and for eleven
+    // days every one of these fixtures kept passing while its contract did
+    // nothing.
+    //
+    // A snapshot cannot express this. It records what the checker said, so a
+    // fixture whose contract went inert simply had its inertness recorded as
+    // expected. This asserts what the fixture is *for*.
+    let contract_makes_no_difference = |fixture: &str| match fixture {
+        // The import names an export the contract does not describe, so it is
+        // outside the contract with or without a valid receipt.
+        "fixtures/reactive-ir/package-unknown-export" => {
+            Some("imports an export the contract does not describe")
+        }
+        // A tsconfig `paths` entry shadows the installed package, so the
+        // contract legitimately does not apply to the resolved module.
+        "fixtures/reactive-ir/package-contract-paths-shadow" => {
+            Some("a paths entry shadows the installed package")
+        }
+        _ => None,
+    };
+    for (fixture, rules) in &minted {
+        let name = fixture.rsplit('/').next().unwrap_or_default();
+        let group = fixture
+            .strip_prefix("fixtures/")
+            .and_then(|rest| rest.split('/').next())
+            .unwrap_or_default();
+        let snapshot = repository_root()
+            .join("fixtures/findings-snapshots")
+            .join(format!("{group}__{name}.json"));
+        let Ok(bytes) = fs::read(&snapshot) else {
+            continue;
+        };
+        let recorded: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let mut unauthorized = recorded["findings"]
+            .as_array()
+            .map(|findings| {
+                findings
+                    .iter()
+                    .map(|finding| finding["rule"].as_str().unwrap_or("?").to_owned())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        unauthorized.sort();
+        match contract_makes_no_difference(fixture) {
+            Some(reason) => assert_eq!(
+                &unauthorized, rules,
+                "{fixture}: excused as \"{reason}\", but authorizing its catalog did change \
+                 the findings — the excuse is stale"
+            ),
+            None => assert_ne!(
+                &unauthorized, rules,
+                "{fixture}: authorizing the catalog changed nothing, so this fixture is not \
+                 exercising its contract"
+            ),
+        }
+    }
     for (fixture, rules) in &minted {
         println!("  minted   {fixture}  [{}]", rules.join(", "));
     }
     for (fixture, reason) in &unminted {
         println!("  unminted {fixture}  {reason}");
     }
-    assert!(
-        minted.len() >= 12,
-        "most of the population should mint; unminted={unminted:?}"
-    );
 }
 
 fn rules(findings: &[serde_json::Value]) -> Vec<&str> {
