@@ -723,3 +723,80 @@ fn an_open_returns_is_reported_only_where_a_consumer_can_read_it() {
          reporting it is noise, not a fail-closed answer: {findings:#?}"
     );
 }
+
+/// Where a `reads` item actually produces its finding.
+///
+/// This is the fact step 1 of the layer move turns on. The route sketched in
+/// [the demand-scoping design § 12] proposed deferring SC9005's `reads`
+/// conjunct to a layer that knows whether the call site is inside a
+/// *tracking scope*, reasoning that an unenumerated read is only observable
+/// where it would be tracked and "outside one it changes nothing any rule
+/// proves".
+///
+/// `package-consumer` calls the same contracted accessor from two positions:
+/// `Good` reads it inside JSX, and `Bad` binds it in the component body,
+/// which is `ExecutionRole::UntrackedRendering`. The finding the contract's
+/// read item produces is at `Bad` — the checker's own evidence line for it
+/// reads "the call is outside every compiler-tracked JSX region and deferred
+/// callback". So the demand is not confined to tracking scopes, and § 13
+/// records the decision that follows.
+///
+/// Measured by difference against the same catalog with the read operations
+/// stripped, so the finding is attributed to the item rather than to the
+/// fixture merely being analyzable.
+///
+/// [the demand-scoping design § 12]: ../../../../docs/package-contract-v2/phase21/2026-09-10-sc9005-demand-scoping-design.md
+#[test]
+fn a_contract_read_is_consumed_outside_a_tracking_scope() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    const CONSUMER: &str = "fixtures/reactive-ir/package-consumer";
+    let closed = mint_and_analyze(CONSUMER, "reads-site-closed", None)
+        .expect("the read-stating fixture mints");
+    let stripped = mint_and_analyze(CONSUMER, "reads-site-stripped", Some("reads-items"))
+        .expect("the read-stating fixture mints with its items stripped");
+
+    let source = fs::read_to_string(repository_root().join(CONSUMER).join("App.tsx")).unwrap();
+    // The two call sites, located in the fixture text rather than pinned as
+    // byte offsets, so editing the fixture cannot silently move the claim.
+    let body = |name: &str| {
+        let start = source.find(name).expect("the fixture declares it");
+        let end = source[start..]
+            .find("\n}\n")
+            .map_or(source.len(), |offset| start + offset);
+        start..end
+    };
+    let untracked_reads_in = |findings: &[serde_json::Value], range: &std::ops::Range<usize>| {
+        findings
+            .iter()
+            .filter(|finding| finding["rule"] == "strict-read-untracked")
+            .filter(|finding| {
+                finding["primaryLocation"]["startByte"]
+                    .as_u64()
+                    .and_then(|start| usize::try_from(start).ok())
+                    .is_some_and(|start| range.contains(&start))
+            })
+            .count()
+    };
+
+    let (good, bad) = (body("function Good"), body("function Bad"));
+    assert_eq!(
+        untracked_reads_in(&closed, &bad),
+        1,
+        "the contracted read bound in a component body is reported, and that \
+         position is not a tracking scope: {closed:#?}"
+    );
+    assert_eq!(
+        untracked_reads_in(&closed, &good),
+        0,
+        "the same accessor read inside JSX is tracked and reports nothing, \
+         so the finding above is attributable to the position: {closed:#?}"
+    );
+    assert_eq!(
+        untracked_reads_in(&stripped, &bad),
+        0,
+        "with the read operations stripped the contract states no read, so \
+         the finding is the item's and not the fixture's: {stripped:#?}"
+    );
+}

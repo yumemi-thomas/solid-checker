@@ -474,3 +474,144 @@ The work, in order:
 
 Step 1 is the one that matters and it is a semantic decision, not a
 refactor.
+
+## 13. Step 1 of the layer move: the concept, and why it retires steps 2–4
+
+§ 12 ended with four steps and said step 1 — *decide what "tracked call site"
+means as a shared concept* — was the one that mattered. It is, and the answer
+is that **"tracked" is the wrong concept**, for a reason that removes the
+motivation for the other three.
+
+### 13.1 What § 12 assumed
+
+> An unenumerated read is only observable where it would be tracked: inside a
+> tracking scope, calling an export whose reads are unknown means the tracking
+> set is unknown. Outside one it changes nothing any rule proves.
+
+The first clause is true. The second is false, and it is false in this
+repository's own rule set, not in principle only.
+
+### 13.2 A read is consumed in six roles, one of which is tracked
+
+`ExecutionRole` already carries the answer, in two `const fn`s that predate
+this question ([lib.rs:294](../../../rust/crates/solid-reactive-ir/src/lib.rs)):
+
+- `reports_untracked_read()` — `ModuleInitialization | UntrackedRendering |
+  UntrackedCallback | EffectApply`. These are the *stale* reads: the read
+  happens, sees one value, and never updates. `project_findings`
+  ([projection.rs:512](../../../rust/crates/solid-reactive-ir/src/projection.rs))
+  filters the strict-read table on exactly this.
+- The async-read table
+  ([projection.rs:589](../../../rust/crates/solid-reactive-ir/src/projection.rs))
+  consumes `TrackedJsx` (SC5003/SC5005, the boundary and SSR-hole rules),
+  `ModuleInitialization` and `UntrackedRendering` (SC5001/SC5002, pending
+  reads), and any role at all when the read sits under a leaf owner —
+  `createTrackedEffect` or `onSettled`, the two `CallbackOwner::Leaf`
+  positions ([solid_2.rs:1350](../../../rust/crates/solid-dialect/src/solid_2.rs)).
+
+So a contract read is consumed in `TrackedJsx`, `ModuleInitialization`,
+`UntrackedRendering`, `UntrackedCallback`, `EffectApply`, and — through the
+leaf-owner clause — `DeferredCallback`. Six of the ten roles. Scoping the
+conjunct to the one that is literally tracked would shed the other five, every
+one of which currently feeds a rule.
+
+### 13.3 The demonstration is a committed fixture, not a hypothetical
+
+`fixtures/reactive-ir/package-consumer` calls the same contracted accessor
+from two positions on purpose:
+
+~~~tsx
+export function Good() { return <div>{readCount()}</div>; }   // TrackedJsx
+export function Bad()  { const value = readCount();           // UntrackedRendering
+                         return <div>{value}</div>; }
+~~~
+
+Minted onto a policy-2 receipt, the project reports two findings and **both
+rest on the single read item**, neither at a tracked site:
+
+- **SC1001 `strict-read-untracked`** at `Bad`, worded by the checker as
+  *"reactive accessor `reactive-package.readCount` is read through `readCount`
+  in `Bad`, which does not track"*, with the evidence line *"the call is
+  outside every compiler-tracked JSX region and deferred callback"*. That is
+  § 12's premise contradicted in the analyzer's own words.
+- **SC8014 `prefer-for`** at `GoodList`, which
+  [fires only when the mapped input "has a proven reactive dependency at the
+  rendered JSX position"](../../../rust/crates/solid-reactive-ir/src/upstream_compat/solid1x_structure.rs) —
+  a dependency this contract's read item is what supplies.
+
+Strip the read operations from the minted document and both disappear;
+nothing else about the project changes. `Good`, which reads the same accessor
+inside JSX, reports nothing, so the finding is attributable to the position
+rather than to the accessor.
+`contract_closure_process::a_contract_read_is_consumed_outside_a_tracking_scope`
+pins all three counts.
+
+### 13.4 The remaining shed set is "code that does not run"
+
+Working the other way — which roles consume a read *nowhere* — leaves four:
+`Unknown`, `EventCallback`, `DirectiveApply` and `DiscardedRendering`.
+
+`Unknown` is not a shed candidate at all. It is the role for a span nothing
+classified, which is the fail-closed answer, and it is also where the
+transitive case lands: a contracted call inside a plain helper has no
+component, no callback position and no compiler region, so it classifies
+`Unknown` and keeps the obligation. That is worth noting on its own, because
+it removes the call-graph closure this section otherwise needed — a read
+recorded against a helper node by `discover_interprocedural_graph`
+([interproc.rs:1093](../../../rust/crates/solid-reactive-ir/src/interproc.rs),
+which applies no role gate) is demanded through the helper's own site rather
+than through an upward walk over its callers.
+
+Of the three that remain, two are a property of the current rule set rather
+than of the read. A pending async read throws wherever it executes, event handlers
+included; that no filter reports it there today is a gap in the rules, not
+evidence that the read is inert. **Defining the contract layer's demand from
+the filter list would freeze a rules gap into the trust boundary**, and close
+SC9005 silently the day the gap is closed — the same silent-under-report
+failure mode § 11 wrote its predicate to avoid.
+
+Defining it from what a read *means* leaves exactly one role:
+`DiscardedRendering`, which the compiler deleted. A call site that does not
+execute performs no reads, enumerated or not. That is the entire shed set, and
+it sheds nothing observable, because a discarded region produces no finding to
+begin with.
+
+### 13.5 The decision
+
+**The shared concept is `ExecutionRole` itself**, and no new one is needed. Had
+a predicate been worth having it would have been a third `const fn` beside
+`reports_untracked_read` and `reports_disallowed_write` — a *total function of
+the existing classification*, with no derivation of its own. That is the
+answer to § 12's second half: the rules stay independent and that is safe,
+because the dual-census hazard needs two derivations of one concept, and a
+function of `semantic_execution_role` adds a second *reading*, not a second
+derivation.
+
+**The rest of the layer move is retired.** Steps 2–4 — exposing the predicate
+from `execution_role`, splitting the conjunct's emission, regenerating across
+94 coverage projects and the corpus — all exist to carry a scoping whose shed
+set is `{DiscardedRendering}`.
+
+Two incidental corrections to § 12 while the code was open:
+
+- *"the tracked determination lives in private code reached with rule-specific
+  context"* is wrong. `semantic_execution_role` is `pub(super)` on a top-level
+  module, which is crate-wide, and seven modules already call it —
+  `local_access`, `interproc`, `static_rules`, `static_api`, `server_rules`,
+  `owners`, `directives`.
+- The ordering blocker § 12 looked for is real but sits elsewhere:
+  `SemanticLookup::new` takes `&resolved_contracts`
+  ([pipeline.rs:374](../../../rust/crates/solid-reactive-ir/src/pipeline.rs)),
+  so contract resolution genuinely cannot consult the classifier. Any future
+  narrowing does have to defer past that point.
+
+### 13.6 What is left, and it is not this
+
+`reads_completeness_demanded()` in `contracts.rs` (§ 11's sibling seam, landed
+as `2f4d4496`) stays `true`, and now carries this section as its reason. The
+open work on `reads` is unchanged and unrelated to demand: the domain cannot
+close in bulk because no synthesized veto observes a read of a source the
+export owns
+([veto design § 6](2026-09-10-reads-veto-observation-design.md)), so closure
+needs a hand recipe per export. Making those recipes mechanical is the lever;
+scoping who demands them is not.

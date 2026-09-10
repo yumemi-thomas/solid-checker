@@ -911,26 +911,30 @@ fn returns_shed_symbols(facts: &ProjectFacts, entities: &EntitySymbols) -> HashS
 
 /// Whether this binding's `reads` **completeness** is demanded here.
 ///
-/// Always true today, and the seam exists because the honest answer is not.
-/// `reads` completeness proves an export reads nothing beyond what it
-/// enumerates, and an unenumerated read is only observable inside a tracking
-/// scope — outside one it changes nothing any rule proves. Measured on the
-/// policy-2 corpus: rules consume `reads` *items*, which arrive whether or
-/// not the domain is closed, and **only SC9005 consumes the completeness**
+/// Always true, and now believed to be the right answer rather than a
+/// placeholder for one.
+///
+/// The seam was cut expecting a narrowing. `reads` completeness proves an
+/// export reads nothing beyond what it enumerates; rules consume `reads`
+/// *items*, which arrive whether or not the domain is closed, and **only
+/// SC9005 consumes the completeness**
 /// (`docs/package-contract-v2/phase21/2026-09-10-reads-demand-population.md`
-/// § 6).
+/// § 6). The narrowing that suggested itself was "demand it only where the
+/// call site is tracked".
 ///
-/// So the predicate that belongs here is "is this call site tracked", and it
-/// cannot be answered here: this pass has `facts`, `entities` and the
-/// contracts, while tracking is derived downstream by the code that consumes
-/// these bindings. Moving the conjunct there needs a *shared* notion of a
-/// tracked call site, which does not exist yet and which must not become a
-/// second one subtly unlike what each rule derives for itself
-/// (`2026-09-10-sc9005-demand-scoping-design.md` § 12).
+/// That predicate is wrong, and not merely unavailable here. A contract read
+/// is consumed in six of the ten [`crate::ExecutionRole`]s — every stale-read
+/// role in `reports_untracked_read`, `TrackedJsx` through the async boundary
+/// rules, and `DeferredCallback` through the leaf-owner clause. Of the three
+/// left, two are consumed nowhere only because no rule reports a pending read
+/// in an event handler *yet*, so shedding them would freeze a rules gap into
+/// the trust boundary. What remains is `DiscardedRendering`: a call site the
+/// compiler deleted, which performs no reads at all and produces no finding
+/// to shed. See `2026-09-10-sc9005-demand-scoping-design.md` § 13.
 ///
-/// Naming it now keeps the decision in one place instead of inlined in a
-/// conjunction, and makes the eventual move an edit to this function rather
-/// than surgery on three call sites.
+/// Kept as a named function rather than folded back into the conjunction: it
+/// is where a future narrowing goes, and where the reason it has not happened
+/// is written down.
 const fn reads_completeness_demanded() -> bool {
     true
 }
