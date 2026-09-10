@@ -19602,3 +19602,58 @@ pin moved.
   Not a regression (the pin never attempted the row); open.
 - `@solid-primitives/visibility-observer@2.0.1`: recorded above (artifact-case
   declaration selection); open.
+
+### A certified contract can be weaker than the proposal it came from, silently (2026-09-10)
+
+**Open defect, product-visible.** Certification can drop a proposed closure
+without recording it anywhere. The accepted document simply leaves the domain
+open, and nothing distinguishes that from a domain the proposal never closed.
+
+Measured on `@corvu/utils@0.4.2`, entrypoint `./dom`, certified with the
+test-scoped policy-2 issuer and an empty recipe corpus:
+
+| | |
+| --- | --- |
+| proposal states closed (rows) | 10 |
+| closure candidates the planner derived | **18** (9 per artifact case × 2) |
+| withheld by recipe gating | 0 |
+| refusals | 0 |
+| `closed` arrays in the accepted document | **0** |
+
+The candidates are call-domain and exactly the expected ones —
+`Domain(Call(Creates))` and `Domain(Call(Reads))` on `afterPaint`,
+`combineStyle`, `contains` and `sortByDocumentPosition`, plus
+`Domain(Call(Reads))` on `callEventHandler`.
+
+**Why it matters beyond one package.** `WithheldClosure` exists so a consumer
+can tell "the census refused this" from "nobody asked". A closure that
+disappears outside that mechanism defeats it: a catalog reader sees an open
+domain with no reason attached. Every contract certified to date may be
+weaker than its proposal, and there is currently no way to detect it from the
+artifacts — `seroval@1.5.6`, certified by the same command the same day, kept
+its three closures.
+
+**Direction of the error.** Under-claiming, not mis-claiming. A dropped
+closure leaves the domain open, so consumers fail closed and no verdict is
+made unsound by it. It costs precision, not correctness.
+
+**What is ruled out**, each by measurement rather than argument:
+
+- the document round trip — a complete-positive closure survives decode,
+  normalize and re-encode (`a_proposed_closure_labels_a_stated_closure_and_is_otherwise_refused`);
+- certify's own proposal regeneration — the audit's new `plannedProposal`
+  shows ten closures in the document it planned from;
+- a closure hazard opening every domain — the resolution's hazard list is
+  empty for this package;
+- candidate derivation — the audit's new `closureCandidates` shows eighteen.
+
+**What is left.** `inspect_candidates` derives a candidate by calling
+`open_proposed_closure()`, which weakens the claim; something must close it
+again for a candidate that is then proven. What that is, and why it does not
+fire here, is unmeasured. The next step is to record the canonical main's
+closed set beside the candidate set.
+
+Full investigation, including two wrong hypotheses and three misread
+measurements:
+`docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
+§ 14 – § 17.
