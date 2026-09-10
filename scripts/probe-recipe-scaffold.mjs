@@ -10,6 +10,11 @@
 //   --domain reads --specifier seroval
 // ~~~
 //
+// Add `--proposal-plan <file>.proposal.json` (the sidecar `contract generate`
+// writes) when a domain yields no scaffold: it separates "the generator never
+// proposed a closure" from "one was proposed and later withdrawn", which are
+// different problems and only one of them is ever a recipe's.
+//
 // ## What is mechanical, and what is not
 //
 // A recipe is three things: a claim id, a manifest entry, and an observation.
@@ -283,6 +288,53 @@ export function recipeGaps(material, { domains } = {}) {
     .filter(entry => typeof entry.semanticClaimId === "string" && typeof entry.export === "string");
 }
 
+export const PROPOSAL_PLAN_FORMAT = "solid-checker-contract-proposal-plan";
+
+/// Which side of the proposal/certification line a domain was lost on.
+///
+/// A candidate reaches a gate only if the *generator* proposed a closure for
+/// it. `contract generate`'s `.proposal.json` sidecar separates the two
+/// outcomes by name: `closureCandidates` is what it proposed, and
+/// `unresolvedClaims` is every (export, domain) it could not decide. Reading
+/// it turns "no candidate" from a dead end into a stage.
+///
+/// Measured on `@solid-primitives/memo@2.0.0-next.2`, where the sidecar is
+/// the whole answer: 70 unresolved claims, seven exports by ten domains, no
+/// closure candidate at all, because the package's three imports are
+/// `unaccepted-external-dependency`
+/// (`2026-09-10-reads-veto-observation-design.md` § 24).
+export function proposalStageReport(domain, plan) {
+  if (plan?.format !== PROPOSAL_PLAN_FORMAT) {
+    return [
+      "    Pass --proposal-plan <file>.proposal.json to learn whether the generator",
+      "    proposed a closure for it at all."
+    ];
+  }
+  const candidates = (plan.closureCandidates ?? []).filter(
+    candidate => candidate?.subject?.path?.domain === domain
+  );
+  if (candidates.length) {
+    return [
+      `    The generator proposed ${candidates.length} ${domain} closure candidate(s), so the`,
+      "    domain was lost after proposal -- a closure hazard or a withdrawal, not the",
+      "    generator."
+    ];
+  }
+  const unresolved = (plan.unresolvedClaims ?? []).filter(
+    claim => claim?.subject?.path?.domain === domain
+  );
+  if (!unresolved.length) {
+    return [`    The generator's plan names no ${domain} claim at all.`];
+  }
+  const exports = [...new Set(unresolved.map(claim => claim.subject.export))].sort();
+  return [
+    `    The generator proposed no ${domain} closure: it is unresolved for ${exports.length}`,
+    `    export(s) (${exports.slice(0, 6).join(", ")}${exports.length > 6 ? ", …" : ""}).`,
+    "    No recipe applies before the generator can decide the domain; read the",
+    "    .refusals.json sidecar's declinedClosures and certificationInputs for why."
+  ];
+}
+
 /// Why an asked-for domain got nothing, when the answer is in the material.
 ///
 /// "Nothing to do" has two very different causes and an author cannot tell
@@ -297,7 +349,7 @@ export function recipeGaps(material, { domains } = {}) {
 /// package's certified contract closes `creates` and `returns` and never
 /// states `reads`, because the bundle names `Object.defineProperty` (see
 /// `2026-09-10-reads-veto-observation-design.md` § 23).
-export function unservedDomainReport(material, domains) {
+export function unservedDomainReport(material, domains, plan) {
   if (!domains?.length) return [];
   const withheld = material.withheldClosures.filter(entry => entry && typeof entry === "object");
   return domains.flatMap(domain => {
@@ -306,7 +358,8 @@ export function unservedDomainReport(material, domains) {
       return [
         `  ${domain}: no candidate at all in this material. Either the domain is already`,
         `    closed, or none was planned -- a closure hazard withdraws a domain before`,
-        `    planning, and no recipe can create a candidate. Read the contract document.`
+        `    planning, and no recipe can create a candidate.`,
+        ...proposalStageReport(domain, plan)
       ];
     }
     const reasons = [...new Set(mentions.map(entry => entry.reason))];
@@ -408,6 +461,9 @@ function parseArguments(argv) {
       case "--corpus":
         options.corpus = next();
         break;
+      case "--proposal-plan":
+        options.proposalPlan = next();
+        break;
       case "--domain":
         options.domains.push(next());
         break;
@@ -438,7 +494,10 @@ export function main(argv = process.argv.slice(2), log = console.log) {
   const gaps = recipeGaps(material, { domains: options.domains });
   if (!gaps.length) {
     log(`no candidate in ${basename(options.input)} is withheld for want of a recipe`);
-    for (const line of unservedDomainReport(material, options.domains)) log(line);
+    const plan = options.proposalPlan
+      ? JSON.parse(readFileSync(options.proposalPlan, "utf8"))
+      : undefined;
+    for (const line of unservedDomainReport(material, options.domains, plan)) log(line);
     return 0;
   }
   // The bare specifier every emitted module imports. Graph lanes name the

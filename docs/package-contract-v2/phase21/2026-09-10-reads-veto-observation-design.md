@@ -1357,3 +1357,107 @@ digest in this package. The scaffold copied its `returns` claim id verbatim —
 `…9e82b17c` — while the checked-in hand recipe now addresses `…f1b996ab`. The
 tool is exactly as fresh as the material it is given, and a scaffold generated
 from a stale plan addresses nothing. Regenerate the plan first.
+
+## 24. `@solid-primitives/memo`: a third reason, and it is upstream of everything
+
+§ 23 named the four hazard-clean packages in the retained tree as where a
+first real `reads` recipe could exist. Tried the smallest of them.
+
+- **Asked:** run the scaffold on `@solid-primitives/memo@2.0.0-next.2`.
+- **Answer:** again no candidate — and for a reason that is neither seroval's
+  nor a recipe's. The generator resolves nothing about this package at all.
+
+### 24.1 It certifies, and the contract says nothing
+
+First end-to-end certification of the package (published archive acquired at
+its lockfile integrity, test-scoped local issuer, entrypoint `.`):
+
+~~~
+status                certified
+refusals              0
+withheldClosures      0
+closureCandidates     0   (1 artifact case)
+certifiedClosures     0
+~~~
+
+A clean run by every summary field. The contract it published:
+
+~~~json
+"summaries": { "summary-ee9d83c3…": { "call": {}, "shape": "callable" } }
+~~~
+
+**One summary, empty `call`, shared by all seven exports.** Nothing closed,
+nothing open-with-items, no domain stated. The generator's own plan sidecar
+says why in one number: **70 unresolved claims** — seven exports × ten
+domains — and zero closure candidates.
+
+That is worth stating plainly because the audit does not: a certification can
+be `certified` with no refusal and no withholding and still carry a contract
+that describes nothing. "Certified" is a statement about the *proof of what
+the document says*, not about the document saying anything.
+
+### 24.2 The cause is three lines in the inputs sidecar
+
+~~~json
+{ "kind": "unaccepted-external-dependency", "source": "./dist/index.js:solid-js" }
+{ "kind": "unaccepted-external-dependency", "source": "./dist/index.js:@solidjs/web" }
+{ "kind": "unaccepted-external-dependency", "source": "./dist/index.js:@solid-primitives/utils" }
+~~~
+
+Every export of this package runs through `createSignal`, `createMemo`,
+`getOwner`, `onCleanup`, `runWithOwner` or `isServer`. With no accepted
+contract for the packages those come from, the generator correctly declines
+to describe any domain of any export. `dependencies: []` in the plan.
+
+**And the chain does not terminate for `reads`.** The deepest dependency is
+`solid-js@2.0.0-rc.0`, which § 23's scan found carries **144
+accessor-installation sites, 140 of them provably accessors** — a reactive
+runtime really does install accessors. Its `reads` is correctly withdrawn,
+so nothing composed above it can close `reads` through it. Certifying
+`@solid-primitives/utils` and `@solidjs/web` through the dependency-graph
+lane could unblock memo's *other* domains; it cannot unblock this one.
+
+### 24.3 Three reasons, none of them a recipe
+
+Across the three packages tried, "there is no `reads` candidate" has three
+distinct causes, and they sit at three different stages:
+
+| package | stage lost | cause |
+| --- | --- | --- |
+| `@solid-primitives/memo` | **proposal** | every domain unresolved; three unaccepted external dependencies |
+| `seroval` | **planning** | the closure hazard withdraws `reads`; the deserializer installs the descriptors its input describes (§ 23) |
+| `implementation-census-reads` (fixture) | — | proposes, censuses, gates, closes |
+
+So the honest position: **no real package in the retained tree can produce a
+`reads` recipe gap today.** The scaffold is not the bottleneck and neither is
+recipe authorship. The bottleneck for a leaf package is its dependency
+closure, and for a bundled one the accessor hazard — and for the reactive
+runtime at the bottom of every chain, the hazard is *right*.
+
+### 24.4 What the tool learned from it
+
+Two silences made this take a certification run and four artifacts to answer,
+and one of them is now closed.
+
+`probe-recipe-scaffold.mjs` takes `--proposal-plan <file>.proposal.json` and
+distinguishes the stages, because "no candidate" meant two different things
+that need different work:
+
+~~~
+  reads: no candidate at all in this material. …
+    The generator proposed no reads closure: it is unresolved for 7
+    export(s) (createLatest, createLatestMany, createLazyMemo, …).
+    No recipe applies before the generator can decide the domain; read the
+    .refusals.json sidecar's declinedClosures and certificationInputs for why.
+~~~
+
+The other silence is not closed and is recorded here as a gap. **The
+generator emits decline records for `creates` only.** memo's refusals carry
+eleven `declinedClosures`, every one of them `creates`, with a `kind`
+(`unresolved-callee`, `dialect-silent`, `refusing-callee-fixpoint`), a
+location and a spelling. For the other nine domains — `reads` among them —
+an undecided claim is recorded as a bare `unresolvedClaims` entry with **no
+reason at all**. ADR 0008 built the decline records for `creates` and nothing
+extended them. Until they are extended, "why did `reads` not propose here"
+cannot be answered from the material; it has to be re-derived by reading the
+package.

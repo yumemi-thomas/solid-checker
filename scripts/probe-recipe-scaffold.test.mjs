@@ -27,7 +27,8 @@ import {
   moduleName,
   moduleSource,
   recipeGaps,
-  unservedDomainReport
+  unservedDomainReport,
+  PROPOSAL_PLAN_FORMAT
 } from "./probe-recipe-scaffold.mjs";
 
 const CLAIM = `claim:v1:sha256:${"9e82b17c".repeat(8)}`;
@@ -303,6 +304,38 @@ describe("probe-recipe-scaffold cannot certify by omission", () => {
     // Nothing is claimed when no domain was asked for: the report answers a
     // question about a named domain and inventing one would be noise.
     assert.deepEqual(unservedDomainReport(material, []), []);
+  });
+
+  test("separates a domain the generator never proposed from one withdrawn later", () => {
+    // The distinction `@solid-primitives/memo@2.0.0-next.2` forced. Its
+    // certification is clean -- certified, no refusal, nothing withheld --
+    // and its contract states nothing at all, because all three of its
+    // imports are unaccepted external dependencies. Nothing downstream of
+    // the generator can be the problem there, and a recipe least of all.
+    const claim = (exported, domain) => ({ subject: { export: exported, path: { kind: "call", domain } } });
+    const material = { withheldClosures: [] };
+    const generatorNever = {
+      format: PROPOSAL_PLAN_FORMAT,
+      closureCandidates: [],
+      unresolvedClaims: [claim("createLatest", "reads"), claim("createReducer", "reads")]
+    };
+    const proposedThenLost = {
+      format: PROPOSAL_PLAN_FORMAT,
+      closureCandidates: [claim("createLatest", "reads")],
+      unresolvedClaims: []
+    };
+
+    const never = unservedDomainReport(material, ["reads"], generatorNever).join(" ");
+    assert.match(never, /generator proposed no reads closure/);
+    assert.match(never, /unresolved for 2/);
+
+    const lost = unservedDomainReport(material, ["reads"], proposedThenLost).join(" ");
+    assert.match(lost, /proposed 1 reads closure candidate/);
+    assert.match(lost, /lost after proposal/);
+
+    // Without the sidecar the tool says what would answer the question rather
+    // than guessing between the two.
+    assert.match(unservedDomainReport(material, ["reads"]).join(" "), /--proposal-plan/);
   });
 
   test("--dry-run writes nothing", () => {
