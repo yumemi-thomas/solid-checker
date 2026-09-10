@@ -5518,13 +5518,13 @@ fn emit_package_contract(
             output.display(),
             declined.export,
             declined.domain,
-            declined.decline.kind.name(),
-            declined.decline.kind.package(),
-            declined.decline.kind.callee_export(),
+            declined.decline.name(),
+            declined.decline.package(),
+            declined.decline.callee_export(),
             declined.decline.location(),
-            declined.decline.kind.declaration(),
-            declined.decline.kind.shape(),
-            declined.decline.kind.shape_spelling()
+            declined.decline.declaration(),
+            declined.decline.shape(),
+            declined.decline.shape_spelling()
         );
     }
     Ok(())

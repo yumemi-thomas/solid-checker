@@ -112,6 +112,29 @@ pub enum ClosureHazardKind {
     RuntimeAccessorInstallation,
 }
 
+impl ClosureHazardKind {
+    /// The kind's stable wire name — the same kebab-case spelling `serde`
+    /// gives it, so a hazard named in a decline record and the same hazard
+    /// serialized into a closure manifest read alike.
+    ///
+    /// `the_hazard_kind_names_match_their_serialization` pins the two
+    /// together; a variant added with a name only here would otherwise
+    /// silently disagree with every manifest.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::NonliteralDynamicLoading => "nonliteral-dynamic-loading",
+            Self::Eval => "eval",
+            Self::NativeCode => "native-code",
+            Self::OpaqueWasm => "opaque-wasm",
+            Self::MutableUnboundGlobal => "mutable-unbound-global",
+            Self::UnmaterializedTransform => "unmaterialized-transform",
+            Self::UnacceptedExternalDependency => "unaccepted-external-dependency",
+            Self::RuntimeAccessorInstallation => "runtime-accessor-installation",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum AffectedClaimDomain {
@@ -437,6 +460,34 @@ impl ClosureManifest {
         self.hazards
             .iter()
             .any(|hazard| hazard.kind == ClosureHazardKind::RuntimeAccessorInstallation)
+    }
+
+    /// Every (domain, hazard) pair this closure opens for `export`, in
+    /// manifest order.
+    ///
+    /// The same selection [`Self::open_domains`] makes, before it collapses to
+    /// a domain set. It exists because the collapse is what made an opened
+    /// domain unexplainable: the export ends up with the domain open and
+    /// nothing anywhere says which hazard did it, so "why did this export's
+    /// `reads` not propose" could only be answered by reading the package.
+    /// See `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
+    /// § 25.
+    pub(crate) fn domain_openings(
+        &self,
+        export: &str,
+    ) -> impl Iterator<Item = (ClaimDomain, &ClosureHazard)> {
+        self.hazards
+            .iter()
+            .filter(move |hazard| {
+                hazard.affected_exports.is_empty()
+                    || hazard.affected_exports.iter().any(|name| name == export)
+            })
+            .flat_map(|hazard| {
+                hazard
+                    .affected_domains
+                    .iter()
+                    .map(move |domain| ((*domain).into(), hazard))
+            })
     }
 
     fn open_domains(&self, export: &str) -> BTreeSet<ClaimDomain> {
@@ -1332,6 +1383,90 @@ mod tests {
 
     fn repeated_digest(byte: char) -> String {
         format!("sha256:{}", byte.to_string().repeat(64))
+    }
+
+    /// Every hazard kind's `name` is the spelling `serde` gives it.
+    ///
+    /// The two are read side by side: a decline record names the hazard that
+    /// opened a domain, and a closure manifest serializes the same hazard. A
+    /// variant whose hand-written name drifted from its kebab-case
+    /// serialization would make the two disagree about the same fact, which
+    /// is the failure mode this repository already paid for once with the
+    /// dual hazard census.
+    #[test]
+    fn the_hazard_kind_names_match_their_serialization() {
+        for kind in [
+            ClosureHazardKind::NonliteralDynamicLoading,
+            ClosureHazardKind::Eval,
+            ClosureHazardKind::NativeCode,
+            ClosureHazardKind::OpaqueWasm,
+            ClosureHazardKind::MutableUnboundGlobal,
+            ClosureHazardKind::UnmaterializedTransform,
+            ClosureHazardKind::UnacceptedExternalDependency,
+            ClosureHazardKind::RuntimeAccessorInstallation,
+        ] {
+            let serialized = serde_json::to_string(&kind).unwrap();
+            assert_eq!(
+                serialized.trim_matches('"'),
+                kind.name(),
+                "{kind:?} serializes as {serialized} but names itself {}",
+                kind.name()
+            );
+        }
+    }
+
+    /// `domain_openings` reports the same selection `open_domains` collapses,
+    /// hazard by hazard, including the export filter.
+    #[test]
+    fn a_hazard_opening_names_the_domain_and_the_hazard_that_opened_it() {
+        let manifest = ClosureManifest {
+            entries: vec![],
+            dependencies: vec![],
+            hazards: vec![
+                ClosureHazard {
+                    kind: ClosureHazardKind::RuntimeAccessorInstallation,
+                    source: "./owned.js:1119-1124".into(),
+                    affected_exports: vec![],
+                    affected_domains: vec![AffectedClaimDomain::Reads],
+                },
+                ClosureHazard {
+                    kind: ClosureHazardKind::UnacceptedExternalDependency,
+                    source: "./index.js:solid-js".into(),
+                    affected_exports: vec!["named".into()],
+                    affected_domains: vec![
+                        AffectedClaimDomain::Reads,
+                        AffectedClaimDomain::Creates,
+                    ],
+                },
+            ],
+            packages: vec![],
+            digest: repeated_digest('0'),
+        };
+
+        // An empty `affected_exports` is every export of the case; a named one
+        // reaches only that export.
+        let other = manifest.domain_openings("other").collect::<Vec<_>>();
+        assert_eq!(other.len(), 1);
+        assert_eq!(other[0].0, ClaimDomain::Reads);
+        assert_eq!(
+            other[0].1.kind,
+            ClosureHazardKind::RuntimeAccessorInstallation
+        );
+
+        let named = manifest.domain_openings("named").collect::<Vec<_>>();
+        assert_eq!(
+            named.len(),
+            3,
+            "one accessor hazard, two dependency domains"
+        );
+        // And it never disagrees with the set the binding actually opens.
+        assert_eq!(
+            named
+                .iter()
+                .map(|(domain, _)| *domain)
+                .collect::<BTreeSet<_>>(),
+            manifest.open_domains("named")
+        );
     }
 
     #[test]

@@ -2,102 +2,105 @@
   "format": "solid-checker-contract-proposal-refusals",
   "refusalVersion": 1,
   "package": {
-    "name": "class-expression-kind",
+    "name": "conditional-returns-divergence-package",
     "version": "1.0.0"
   },
-  "refusals": [
-    {
-      "entrypoint": ".",
-      "conditions": [],
-      "stage": "artifact-case",
-      "class": "dependency-composition",
-      "applicability": "runtime-module",
-      "reason": "solid-checker:unresolved-dependency-module=bundled-dependency\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"bundled-dependency\" from <package-root>/index.ts; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
-    }
-  ],
+  "refusals": [],
   "inapplicable": [],
   "withheldClaims": [],
   "declinedClosures": [
     {
-      "entrypoint": "./destructured",
-      "conditions": [],
+      "entrypoint": ".",
+      "conditions": [
+        "browser"
+      ],
       "stage": "closure-proposal",
-      "export": "dependencyCacheName",
+      "export": "Show",
       "domain": "reads",
       "kind": "unaccepted-external-dependency",
       "package": "",
       "callee": "",
-      "location": "./destructured.ts:bundled-dependency",
+      "location": "./browser.js:solid-js",
       "declaration": "",
       "shape": "",
       "spelling": ""
     },
     {
-      "entrypoint": "./destructured",
-      "conditions": [],
+      "entrypoint": ".",
+      "conditions": [
+        "browser"
+      ],
       "stage": "closure-proposal",
-      "export": "dependencyCacheName",
+      "export": "Show",
       "domain": "creates",
       "kind": "unaccepted-external-dependency",
       "package": "",
       "callee": "",
-      "location": "./destructured.ts:bundled-dependency",
+      "location": "./browser.js:solid-js",
       "declaration": "",
       "shape": "",
       "spelling": ""
     },
     {
-      "entrypoint": "./destructured",
-      "conditions": [],
+      "entrypoint": ".",
+      "conditions": [
+        "browser"
+      ],
       "stage": "closure-proposal",
-      "export": "dependencyCacheName",
+      "export": "Show",
       "domain": "returns",
       "kind": "unaccepted-external-dependency",
       "package": "",
       "callee": "",
-      "location": "./destructured.ts:bundled-dependency",
+      "location": "./browser.js:solid-js",
       "declaration": "",
       "shape": "",
       "spelling": ""
     },
     {
-      "entrypoint": "./destructured",
-      "conditions": [],
+      "entrypoint": ".",
+      "conditions": [
+        "browser"
+      ],
       "stage": "closure-proposal",
-      "export": "inlineCacheName",
+      "export": "Steady",
       "domain": "reads",
       "kind": "unaccepted-external-dependency",
       "package": "",
       "callee": "",
-      "location": "./destructured.ts:bundled-dependency",
+      "location": "./browser.js:solid-js",
       "declaration": "",
       "shape": "",
       "spelling": ""
     },
     {
-      "entrypoint": "./destructured",
-      "conditions": [],
+      "entrypoint": ".",
+      "conditions": [
+        "browser"
+      ],
       "stage": "closure-proposal",
-      "export": "inlineCacheName",
+      "export": "Steady",
       "domain": "creates",
       "kind": "unaccepted-external-dependency",
       "package": "",
       "callee": "",
-      "location": "./destructured.ts:bundled-dependency",
+      "location": "./browser.js:solid-js",
       "declaration": "",
       "shape": "",
       "spelling": ""
     },
     {
-      "entrypoint": "./destructured",
-      "conditions": [],
+      "entrypoint": ".",
+      "conditions": [
+        "browser"
+      ],
       "stage": "closure-proposal",
-      "export": "inlineCacheName",
+      "export": "Steady",
       "domain": "returns",
       "kind": "unaccepted-external-dependency",
       "package": "",
       "callee": "",
-      "location": "./destructured.ts:bundled-dependency",
+      "location": "./browser.js:solid-js",
       "declaration": "",
       "shape": "",
       "spelling": ""

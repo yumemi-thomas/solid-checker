@@ -13,7 +13,7 @@ use solid_reactive_ir::{
     ContractReturn, OwnerRequirementOperation, PackageContract,
     contract_semantics::{
         ArrayLength, ArtifactCase, CallClaims, CallSemantics, CallbackInvocation,
-        CapabilityKnowledge, Cardinality, CardinalityScope, ClaimPath, ComposedFrom,
+        CapabilityKnowledge, Cardinality, CardinalityScope, ClaimDomain, ClaimPath, ComposedFrom,
         ContractProposal, Event, ExportIdentity, ExportSemantics, ExportTargetIdentity,
         GuardPartition, KnowledgeSet, Lifetime, NormalizedContract, ObjectProperty, Operation,
         OperationId, OperationKind, OwnerCapabilities, OwnerProduction, OwnerRelation,
@@ -105,14 +105,14 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                 // `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
                 // § 6-§ 9.
                 .filter(|domain| {
-                    *domain != solid_reactive_ir::contract_semantics::ClaimDomain::Reads
+                    *domain != ClaimDomain::Reads
                         || !resolved.closure.installs_runtime_accessor()
                 })
                 .filter(|domain| {
-                    *domain != solid_reactive_ir::contract_semantics::ClaimDomain::Returns
+                    *domain != ClaimDomain::Returns
                         || export
                             .operation_claim(
-                                solid_reactive_ir::contract_semantics::ClaimDomain::Returns,
+                                ClaimDomain::Returns,
                             )
                             .is_some_and(|claim| {
                                 claim.items().is_empty()
@@ -191,7 +191,55 @@ fn normalize_inferred_contract_identity(
     } else {
         select_and_bind_with_external_targets(&normalized, resolved, external_targets)?
     };
+    declined.extend(hazard_declines(&selected, resolved));
     Ok((selected, withheld, declined))
+}
+
+/// Why a closure hazard left a proposable domain open, per export.
+///
+/// `bind_exports` opens every domain the closure's hazards name
+/// (`artifact_resolution`'s `open_domains`), and until this existed that was
+/// the end of it: the export carried an open domain and no record anywhere
+/// said which hazard opened it. A domain lost this way is indistinguishable
+/// in the emitted material from one the walk declined, from one no census can
+/// decide, and from one there was simply nothing to say about — and the three
+/// need completely different work.
+///
+/// **Proposable domains only.** A hazard opening `writes` explains nothing:
+/// `writes` has no census, so it would be open whatever the closure looked
+/// like, and recording the hazard as its blocker would name a cause that is
+/// not one. `creates`, `returns` and `reads` are the domains where a closure
+/// *could* have been proposed, so they are the only ones where "why was it
+/// not" has an answer.
+///
+/// One record per (export, domain, hazard): a hazard whose `affected_exports`
+/// is empty is a fact about every export of the case, and the record is
+/// per-export because that is the question a reader asks. Three unaccepted
+/// dependencies across seven exports is therefore sixty-three rows for three
+/// facts — the cost of each row standing alone.
+fn hazard_declines(
+    selected: &NormalizedContract,
+    resolved: &ResolvedImport,
+) -> Vec<DeclinedClosureRecord> {
+    let mut records = Vec::new();
+    for artifact_case in selected.artifact_cases() {
+        for name in artifact_case.exports.keys() {
+            for (domain, hazard) in resolved.closure.domain_openings(name) {
+                if !domain.is_proposable() {
+                    continue;
+                }
+                records.push(DeclinedClosureRecord {
+                    export: name.clone(),
+                    domain: domain.wire_name(),
+                    decline: ClosureDecline::Hazard {
+                        kind: hazard.kind,
+                        source: hazard.source.clone(),
+                    },
+                });
+            }
+        }
+    }
+    records
 }
 
 /// What this generation may claim about the archive it is describing.
@@ -452,8 +500,8 @@ fn normalize_export(
             declined.extend(summary.creates_walk_declines.iter().map(|decline| {
                 DeclinedClosureRecord {
                     export: name.to_owned(),
-                    domain: "creates",
-                    decline: decline.clone(),
+                    domain: ClaimDomain::Creates.wire_name(),
+                    decline: ClosureDecline::Call(decline.clone()),
                 }
             }));
         }
@@ -712,14 +760,110 @@ pub struct WithheldOwnerRequirementRecord {
 /// own ignorance; neither says the callee performs a `create`.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct DeclinedClosureRecord {
-    /// The export whose `creates` stayed open.
+    /// The export whose domain stayed open.
     pub export: String,
-    /// The domain the decline is about. Always `creates` today — it is the only
-    /// behavioral call domain with a census — and carried explicitly so a
-    /// second domain does not have to change the record's shape.
+    /// The domain the decline is about, by its
+    /// [`solid_reactive_ir::contract_semantics::ClaimDomain::wire_name`].
+    ///
+    /// It was `creates` for as long as the walk was the only source. It is now
+    /// any *proposable* domain, because the second source — a closure hazard —
+    /// is domain-generic: the hazard names the domains it affects, and `reads`
+    /// is one of them.
     pub domain: &'static str,
-    /// The blocking call site and its reason.
-    pub decline: solid_reactive_ir::CreatesDecline,
+    /// Why the domain stayed open.
+    pub decline: ClosureDecline,
+}
+
+/// The two reasons a proposable domain does not reach a closure candidate.
+///
+/// They are genuinely different facts and a record that flattened them would
+/// lie about one of them. A [`Self::Call`] is a *call site inside the export*
+/// the walk would not propose across — this build's own ignorance of one
+/// callee. A [`Self::Hazard`] is a fact about the whole artifact closure that
+/// opens the domain for every export it names, before any walk is consulted:
+/// nothing about the export is unknown, the closure is.
+///
+/// Both answer the same question, so both reach the same channel with the same
+/// columns; the `kind` column is what tells them apart.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ClosureDecline {
+    /// A call site the `creates` walk refused inside
+    /// ([`solid_reactive_ir::CreatesProposalWalk`]).
+    Call(solid_reactive_ir::CreatesDecline),
+    /// A closure hazard that opened the domain at binding
+    /// ([`crate::artifact_resolution::ClosureManifest::domain_openings`]).
+    Hazard {
+        kind: crate::artifact_resolution::ClosureHazardKind,
+        /// The hazard's own `source`: a `path:start-end` for a syntactic
+        /// hazard, a `module:specifier` for an unaccepted dependency.
+        source: String,
+    },
+}
+
+impl ClosureDecline {
+    /// The stable wire name of the reason.
+    #[must_use]
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Call(decline) => decline.kind.name(),
+            Self::Hazard { kind, .. } => kind.name(),
+        }
+    }
+
+    /// Where the decline is anchored: the refusing call for a walk decline,
+    /// the hazard's source for a hazard.
+    #[must_use]
+    pub fn location(&self) -> String {
+        match self {
+            Self::Call(decline) => decline.location(),
+            Self::Hazard { source, .. } => source.clone(),
+        }
+    }
+
+    /// The callee's resolved package, or `""`. A hazard names no callee.
+    #[must_use]
+    pub fn package(&self) -> &str {
+        match self {
+            Self::Call(decline) => decline.kind.package(),
+            Self::Hazard { .. } => "",
+        }
+    }
+
+    /// The callee's resolved export name, or `""`.
+    #[must_use]
+    pub fn callee_export(&self) -> &str {
+        match self {
+            Self::Call(decline) => decline.kind.callee_export(),
+            Self::Hazard { .. } => "",
+        }
+    }
+
+    /// The refusing callee's declaration site, or `""`.
+    #[must_use]
+    pub fn declaration(&self) -> &str {
+        match self {
+            Self::Call(decline) => decline.kind.declaration(),
+            Self::Hazard { .. } => "",
+        }
+    }
+
+    /// The unresolved callee's observed shape name, or `""`.
+    #[must_use]
+    pub const fn shape(&self) -> &'static str {
+        match self {
+            Self::Call(decline) => decline.kind.shape(),
+            Self::Hazard { .. } => "",
+        }
+    }
+
+    /// The one concrete string that shape observed, or `""`.
+    #[must_use]
+    pub fn shape_spelling(&self) -> &str {
+        match self {
+            Self::Call(decline) => decline.kind.shape_spelling(),
+            Self::Hazard { .. } => "",
+        }
+    }
 }
 
 /// The owner-requirement role this generation withheld, named so the

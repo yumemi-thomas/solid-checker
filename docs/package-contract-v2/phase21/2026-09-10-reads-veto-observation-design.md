@@ -1461,3 +1461,124 @@ reason at all**. ADR 0008 built the decline records for `creates` and nothing
 extended them. Until they are extended, "why did `reads` not propose here"
 cannot be answered from the material; it has to be re-derived by reading the
 package.
+
+## 25. Extending the decline records past `creates`
+
+§ 24 left one silence open: the generator explained why it declined a
+`creates` closure and said nothing at all about the other eight domains. An
+undecided `reads` claim reached the material as a bare `unresolvedClaims`
+entry — export, domain, claim id, and no reason — so "why did `reads` not
+propose here" could only be answered by reading the package. It cost a
+certification run and four artifacts to answer for one package in § 24.
+
+### 25.1 The two reasons are different facts
+
+`DeclinedClosureRecord` already carried `domain` explicitly, "so a second
+domain does not have to change the record's shape". The shape was ready; the
+*reason* type was not, because it was `CreatesDecline` — a call site inside
+the export that the `creates` walk would not propose across.
+
+A `reads` decline is usually not that. It is a **closure hazard**:
+`bind_exports` opens every domain the closure's hazards name
+([artifact_resolution.rs](../../../rust/crates/solid-facts-backend/src/artifact_resolution.rs),
+`open_domains`), before any walk is consulted. Nothing about the export is
+unknown — the closure is.
+
+So `decline` became `ClosureDecline`, with two variants that reach the same
+ten-column channel and are told apart by the `kind` column:
+
+| variant | fact |
+| --- | --- |
+| `Call(CreatesDecline)` | a call site inside the export the walk refused across — this build's ignorance of one callee |
+| `Hazard { kind, source }` | a hazard that opened the domain for every export it names — a fact about the artifact closure |
+
+No wire change: a hazard fills `kind` with the hazard's own kebab-case name
+and `location` with its `source`, and leaves `package`, `callee`,
+`declaration`, `shape` and `spelling` empty, which the parser already
+preserves rather than guesses at.
+
+### 25.2 Proposable domains only, and that is not a shortcut
+
+`hazard_declines` records a hazard against `creates`, `returns` and `reads`
+and no other domain. A hazard opening `writes` explains nothing: `writes`
+has no census, so it would be open whatever the closure looked like, and
+naming the hazard as its blocker would state a cause that is not one. The
+three proposable domains are exactly the ones where a closure *could* have
+been proposed, so they are the only ones where "why was it not" has an
+answer.
+
+One record per (export, domain, hazard). A hazard whose `affected_exports`
+is empty is a fact about every export of the case, so three unaccepted
+dependencies across seven exports is sixty-three rows for three facts. That
+is the cost of each row standing alone, which is what a reader filtering for
+one export needs.
+
+### 25.3 What it says now
+
+`@solid-primitives/memo`, the § 24 case, regenerated:
+
+| domain | kind | rows |
+| --- | --- | --- |
+| `creates` | `dialect-silent`, `refusing-callee-fixpoint`, `unresolved-callee` | 11 |
+| `creates`, `returns`, `reads` | `unaccepted-external-dependency` | 21 each |
+
+~~~json
+{ "export": "createReducer", "domain": "reads",
+  "kind": "unaccepted-external-dependency",
+  "location": "./dist/index.js:solid-js" }
+~~~
+
+The question § 24 could not answer from the material is now one row.
+
+And `implementation-census-reads`, the fixture the whole domain design turns
+on, records its own hazard for the first time: `./owned`'s three exports
+each decline `reads` on `runtime-accessor-installation` at
+`./owned.js:1119-1124` — the `new Proxy` site — while the `.` entrypoint's
+five exports record nothing, because nothing blocks them.
+
+`seroval@1.5.6` closes the loop back to § 23. Its `createReference` now
+declines `reads` on six `runtime-accessor-installation` sites per artifact
+case:
+
+~~~
+runtime-accessor-installation  ./dist/esm/development/index.mjs:7505-7526
+runtime-accessor-installation  ./dist/esm/development/index.mjs:7702-7723
+runtime-accessor-installation  ./dist/esm/development/index.mjs:7893-7914
+runtime-accessor-installation  ./dist/esm/development/index.mjs:8084-8105
+runtime-accessor-installation  ./dist/esm/development/index.mjs:47141-47162
+runtime-accessor-installation  ./dist/esm/development/index.mjs:51013-51036
+~~~
+
+Those are exactly the six § 23 found by running the hazard rules over the
+bundle by hand — the four environment branches writing `{value: …}` to the
+global, `assignStringProperty`, and `deserializeDictionary`. The
+investigation § 23 recorded is now a field in the generator's own output.
+
+### 25.4 Corpus effect
+
+Declined closure proposals across the 97 generator fixtures go from **43 to
+821**, and every added row is a fact that was previously invisible:
+
+| domain | kind | rows |
+| --- | --- | --- |
+| `reads` | `unaccepted-external-dependency` | 212 |
+| `reads` | `runtime-accessor-installation` | 127 |
+| `reads` | `nonliteral-dynamic-loading` | 5 |
+| `creates` | `unaccepted-external-dependency` | 212 |
+| `creates` | walk kinds (unchanged) | 43 |
+| `creates` | `nonliteral-dynamic-loading` | 5 |
+| `returns` | `unaccepted-external-dependency` | 212 |
+| `returns` | `nonliteral-dynamic-loading` | 5 |
+
+Thirty `expected-refusals.json` snapshots move and **nothing else does** — no
+contract document, no proposal plan, no closure candidate. The channel is
+measurement, exactly as ADR 0008 built it: a `runtime-accessor-installation`
+record is the closure's syntax, not a claim that any read occurs.
+
+### 25.5 One duplicate removed on the way
+
+The domain wire names existed twice — `call_claim_domain_name` in the
+certifier and, implicitly, the `"creates"` literal in the generator's record.
+A third copy was about to be written. `ClaimDomain::wire_name` is now the one
+mapping and the certifier delegates to it, because a name that drifts between
+producer and consumer is the dual-census failure in miniature (§ 10).

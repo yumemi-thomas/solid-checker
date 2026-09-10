@@ -22,6 +22,13 @@ for an export was one bit and the reason was unrecoverable, which is why
 | `.` | `viaSilentHelper` | declines | `refusing-callee-fixpoint`, naming `silentHelper`'s exact declaration span, **and** that helper's own `dialect-silent` record at its own location |
 | `.` | `unresolvedCallee` | declines | `unresolved-callee`, no callee identity, shape `undeclared-identifier` spelled `externalGlobal` |
 
+The table is the **walk's** records. Since 2026-09-11 the same array also
+carries hazard records (ADR 0008's addendum): `index.js`'s top-level
+`import "solid-js"` is an `UnacceptedExternalDependency` closure hazard, so
+every export of `.` additionally declines `creates`, `returns` and `reads`
+against it. `./clean` carries none of either, which is what makes it the
+control for both channels at once.
+
 ## The unresolved-callee shapes, and which are pinned here
 
 `unresolved-callee` is about half of every decline the ecosystem corpus

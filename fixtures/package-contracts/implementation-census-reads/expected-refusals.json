@@ -1,0 +1,55 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "implementation-census-reads-package",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": "./owned",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "observedReads",
+      "domain": "reads",
+      "kind": "runtime-accessor-installation",
+      "package": "",
+      "callee": "",
+      "location": "./owned.js:1119-1124",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": "./owned",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "readsOwnProxy",
+      "domain": "reads",
+      "kind": "runtime-accessor-installation",
+      "package": "",
+      "callee": "",
+      "location": "./owned.js:1119-1124",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": "./owned",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "readsOwnProxyElement",
+      "domain": "reads",
+      "kind": "runtime-accessor-installation",
+      "package": "",
+      "callee": "",
+      "location": "./owned.js:1119-1124",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    }
+  ]
+}

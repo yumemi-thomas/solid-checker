@@ -1,0 +1,97 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "non-literal-dynamic-import",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "load",
+      "domain": "reads",
+      "kind": "nonliteral-dynamic-loading",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:63-89",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "load",
+      "domain": "creates",
+      "kind": "nonliteral-dynamic-loading",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:63-89",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "load",
+      "domain": "returns",
+      "kind": "nonliteral-dynamic-loading",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:63-89",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "thing",
+      "domain": "reads",
+      "kind": "nonliteral-dynamic-loading",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:63-89",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "thing",
+      "domain": "creates",
+      "kind": "nonliteral-dynamic-loading",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:63-89",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "thing",
+      "domain": "returns",
+      "kind": "nonliteral-dynamic-loading",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:63-89",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    }
+  ]
+}

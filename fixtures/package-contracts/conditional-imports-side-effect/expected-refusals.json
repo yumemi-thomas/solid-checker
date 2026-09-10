@@ -1,0 +1,55 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "conditional-imports-side-effect",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "thing",
+      "domain": "reads",
+      "kind": "unaccepted-external-dependency",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:#platform",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "thing",
+      "domain": "creates",
+      "kind": "unaccepted-external-dependency",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:#platform",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "thing",
+      "domain": "returns",
+      "kind": "unaccepted-external-dependency",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:#platform",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "torture-runtime-namespace-package",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "runtimeNamespace",
+      "domain": "reads",
+      "kind": "runtime-accessor-installation",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:42-63",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "stable",
+      "domain": "reads",
+      "kind": "runtime-accessor-installation",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:42-63",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    }
+  ]
+}

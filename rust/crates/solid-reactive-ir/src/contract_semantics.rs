@@ -798,6 +798,28 @@ impl ClaimDomain {
     pub fn is_proposable(self) -> bool {
         Self::PROPOSABLE.contains(&self)
     }
+
+    /// The domain's stable wire name, as every document, audit and refusal
+    /// sidecar spells it.
+    ///
+    /// One mapping, because there were two: the certifier had its own copy in
+    /// `contract_certification::type_facts`, and a generator-side record
+    /// needing the same names would have made a third. A name that drifts
+    /// between producer and consumer is the dual-census failure in miniature.
+    #[must_use]
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::Callbacks => "callbacks",
+            Self::Reads => "reads",
+            Self::Writes => "writes",
+            Self::Creates => "creates",
+            Self::Invalidates => "invalidates",
+            Self::Throws => "throws",
+            Self::Returns => "returns",
+            Self::Cleanups => "cleanups",
+            Self::Disposals => "disposals",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]

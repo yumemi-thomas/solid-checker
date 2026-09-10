@@ -860,3 +860,43 @@ generator rather than out of a test helper.
   refused when truncated); `scripts/dialect-audit-yield.test.mjs` pins the
   ranking against a synthesized report, including that a row carrying no
   records is *named* rather than counted as zero.
+
+## Addendum (2026-09-11): the channel carries the other proposable domains
+
+`DeclinedClosureRecord` carried `domain` explicitly from the start "so a
+second domain does not have to change the record's shape". Two arrived at
+once, and not from a walk.
+
+The Pinned section above already names the mechanism: an
+`UnacceptedExternalDependency` closure hazard "opens every domain of that
+artifact case whatever the walk found". So does
+`RuntimeAccessorInstallation`, which opens `reads` alone. Neither left a
+record, and until now that made an opened domain unexplainable — the export
+carried the domain open, and nothing anywhere said which hazard did it. For
+`creates` the walk's own records usually covered the gap; for `reads`, which
+has no walk, there was nothing at all.
+
+`decline` is therefore `ClosureDecline`, with two variants:
+
+- `Call(CreatesDecline)` — unchanged: a call site inside the export that the
+  walk would not propose across.
+- `Hazard { kind, source }` — a hazard that opened the domain at binding,
+  recorded for `creates`, `returns` and `reads` and no other domain. A hazard
+  opening `writes` explains nothing, because `writes` has no census and would
+  be open regardless; naming the hazard as its blocker would state a cause
+  that is not one.
+
+No wire change: a hazard fills `kind` with its own kebab-case name and
+`location` with its `source`, leaving the callee columns empty as the parser
+already permits. `declinedClosures` across the corpus goes 43 → 821, thirty
+`expected-refusals.json` snapshots move, and no contract document, proposal
+plan or closure candidate does — the channel stays measurement, and a
+`runtime-accessor-installation` record is the closure's syntax, never a
+claim that a read occurs.
+
+Measured in
+`docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
+§ 25, with the two real packages that motivated it: `@solid-primitives/memo`,
+whose `reads` was undecidable for want of three accepted dependency
+contracts, and `seroval@1.5.6`, whose `createReference` now names the six
+accessor-installation sites that withdraw the domain.

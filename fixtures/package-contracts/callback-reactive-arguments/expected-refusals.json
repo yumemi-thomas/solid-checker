@@ -1,0 +1,55 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "callback-reactive-arguments",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "mapValue",
+      "domain": "reads",
+      "kind": "unaccepted-external-dependency",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:solid-js",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "mapValue",
+      "domain": "creates",
+      "kind": "unaccepted-external-dependency",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:solid-js",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "mapValue",
+      "domain": "returns",
+      "kind": "unaccepted-external-dependency",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:solid-js",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    }
+  ]
+}

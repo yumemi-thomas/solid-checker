@@ -11674,17 +11674,7 @@ const fn value_claim_domain_name(domain: ValueClaimDomain) -> &'static str {
 }
 
 pub(super) const fn call_claim_domain_name(domain: ClaimDomain) -> &'static str {
-    match domain {
-        ClaimDomain::Reads => "reads",
-        ClaimDomain::Writes => "writes",
-        ClaimDomain::Creates => "creates",
-        ClaimDomain::Invalidates => "invalidates",
-        ClaimDomain::Throws => "throws",
-        ClaimDomain::Returns => "returns",
-        ClaimDomain::Cleanups => "cleanups",
-        ClaimDomain::Disposals => "disposals",
-        ClaimDomain::Callbacks => "callbacks",
-    }
+    domain.wire_name()
 }
 
 fn require_domain_closure(
