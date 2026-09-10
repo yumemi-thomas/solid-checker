@@ -1,7 +1,13 @@
 {
   "format": "solid-checker-probe-recipe-corpus",
   "schemaVersion": 1,
-  "policy": 2,
+  "policy": {
+    "repeatRuns": 2,
+    "timeoutMillis": 60000,
+    "maxMicrotaskTurns": 4,
+    "maxMacrotaskTurns": 1,
+    "maxEvents": 64
+  },
   "recipes": [
     {
       "claimId": "claim:v1:sha256:f9081d068794ace9d8d2b2f5074f771b40ac8c45d80ab351e00f86f451b061b8",
@@ -9,8 +15,16 @@
       "importKind": "esm",
       "dependencySpecifiers": [],
       "scenario": "operation",
-      "expectedEvent": { "marker": "read-operation", "class": "call" },
-      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
       "coverageLimitations": [
         "Finite samples over a pure arithmetic export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
         "Exact for this package only: the observation counts `ownProxy`'s trap, which is every reactive-shaped source this module owns"
@@ -22,8 +36,16 @@
       "importKind": "esm",
       "dependencySpecifiers": [],
       "scenario": "operation",
-      "expectedEvent": { "marker": "read-operation", "class": "call" },
-      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
       "coverageLimitations": [
         "Positive contradiction: one call is enough to falsify `reads: []`, so no exhaustiveness is claimed or needed",
         "The recipe asserts its own observation fired, so a fixture edit that removes the trap fails the recipe instead of silently passing the gate"

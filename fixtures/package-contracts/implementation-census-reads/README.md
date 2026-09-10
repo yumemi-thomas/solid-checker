@@ -90,6 +90,13 @@ the candidates; it does not yet prove the refusal.
 `recipes.json` pins both to the claim ids in `expected-proposal.json`; the two
 files move together, and a regenerated plan means regenerated claim ids.
 
+`recipes.json` here is documentary and was never loaded: the tracer tests
+assemble their own corpus from these modules and the *live* claim ids. It
+carried `"policy": 2` where `RecipeCorpus::load` requires the policy object,
+so it would have been refused outright; fixed, and
+`scripts/ecosystem-probe-recipes.test.mjs` now checks every fixture
+manifest's envelope.
+
 **Why hand-authored.** The observation is exact for this package precisely
 because its author knows that `ownProxy` is every reactive-shaped source the
 module owns. A synthesized veto cannot know that — it can only instrument
@@ -97,3 +104,9 @@ values the *caller* supplied, which is the half § reads assigns to the caller.
 That is the argument in `phase21/2026-09-10-reads-veto-observation-design.md`
 for registering no synthesized observation for the domain, and this fixture is
 its worked example.
+
+Everything *around* the observation is mechanical, and
+`scripts/probe-recipe-scaffold.mjs` emits it — the claim id, the manifest
+entry, and the marker the two have to agree on. What it cannot emit is the
+three lines above, so the modules it writes throw until an author supplies
+them (§ 22 of the design).

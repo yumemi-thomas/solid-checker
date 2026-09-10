@@ -42,6 +42,30 @@ an error or a timeout). None of them fails the row; a *contradiction* still
 does. Re-read the ids from a run's `…certification-audit.json`
 `withheldClosures` array after any generator change.
 
+## Adding one
+
+`scripts/probe-recipe-scaffold.mjs` writes the transcription. Point it at a
+certification plan or audit and it emits, for every candidate withheld as
+`no recipe in corpus`, a module and its manifest entry addressed by the claim
+id verbatim — including the `expectedEvent.marker` the module and the entry
+have to agree on, which is the mistake nothing here catches (a mismatch makes
+the gate unmatchable, and an unmatchable gate *passes*).
+
+~~~sh
+bun scripts/probe-recipe-scaffold.mjs \
+  --plan /tmp/run/certification-plan-0.json \
+  --corpus "$PWD/scripts/ecosystem-benchmark/probe-recipes" \
+  --domain reads --specifier seroval
+~~~
+
+What it cannot write is the observation, so each emitted module **throws**
+until its `UNFINISHED` guard is deleted. That is deliberate: a recipe that
+completes without emitting its marker is a clean non-observation, and the
+closure certifies on the census alone — a generated module that observed
+nothing would certify by omission. A throw withholds the candidate instead,
+exactly as no recipe does. `ecosystem-probe-recipes.test.mjs` fails on a
+scaffold that reaches a commit.
+
 ## The rule nothing here can check
 
 **A recipe must never hand `session` or `harness` to the package under test.**

@@ -1156,3 +1156,103 @@ signature in seconds instead of a two-minute certification.
 The one discipline that would have saved most of it: the control before the
 conclusion. § 20 already said so and § 20's own control was still vacuous
 until its `probes` argument was checked.
+
+## 22. Making the recipes mechanical, and the part that cannot be
+
+§ 6 is why `reads` has no synthesized veto: an unenumerated read is a read of
+a source the export **owns**, and a veto derived from the export's call
+signature can only instrument values the *caller* supplied.
+`reviewed_observation`
+([synthesized_vetoes.rs](../../../rust/crates/solid-facts-backend/src/contract_certification/synthesized_vetoes.rs))
+registers nothing for the domain and has no fallback arm, so every `reads`
+candidate stays withheld until somebody writes a recipe by hand.
+
+That leaves the domain gated on hand authorship. This section is about
+removing everything from that job except the part § 6 proves is irreducible.
+
+### 22.1 A recipe is three things, and two of them are transcription
+
+| part | who can supply it |
+| --- | --- |
+| the **claim id** | mechanical — a content digest an author copies out of a run's material, and re-copies whenever the contract moves |
+| the **manifest entry** | mechanical — `importKind`, `scenario`, `drain`, `expectedEvent`, and a `coverageLimitations` line the corpus test requires to be non-empty |
+| the **observation** | not mechanical, and for `reads` provably not (§ 6) |
+
+The second row hides the error this repository has no test for. A manifest's
+`expectedEvent.marker` and the module's `harness.emit` have to name the same
+string, and nothing checks that they do: a mismatch does not fail, it makes
+the gate **unmatchable**, and an unmatchable gate is a clean non-observation —
+the veto passes and the closure certifies. Emitting both from one place is
+worth more than the typing it saves.
+
+### 22.2 The trap that decides the design: a vacuous scaffold certifies
+
+A recipe that runs to completion without emitting its marker is a
+`CleanNonObservation`
+([runtime_probes.rs:984](../../../rust/crates/solid-facts-backend/src/runtime_probes.rs)):
+the mandatory veto **passes** and the closure certifies on the implementation
+census alone. That is correct for a finished recipe — `plain-arithmetic.mjs`
+is exactly this, and it is how a true `reads: []` closes. It is catastrophic
+for a generated one. A scaffold that merely called the export would convert
+"nobody has written the observation yet" into "nothing contradicted the
+closure", silently, across every candidate a run emits at once.
+
+So the generated module **throws** until an author deletes its `UNFINISHED`
+guard. A throw makes the gate incomplete, and an incomplete gate withholds the
+candidate (`WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX`) exactly as having no
+recipe at all does, with the throw's own text carried into the withheld
+record. The failure mode of an unfinished scaffold is the state it was
+generated from, never a weaker one.
+
+`contract_certification::tests::a_recipe_that_throws_withholds_its_candidate_rather_than_certifying_it`
+pins that against the real harness rather than against a reading of the code,
+and it has a control: its sibling
+`a_reads_closure_reaches_a_receipt_through_its_mandatory_veto` runs the same
+plan with a finished recipe and closes the domain. Same fixture, same claim,
+same gate — the recipe body is the only difference.
+
+### 22.3 What landed
+
+`scripts/probe-recipe-scaffold.mjs`. It reads a certification plan or audit —
+both carry the same `withheldClosures` array — and for every candidate
+withheld as `no recipe in corpus` emits a module and its manifest entry,
+addressed by the claim id verbatim.
+
+~~~sh
+bun scripts/probe-recipe-scaffold.mjs \
+  --plan /tmp/run/certification-plan-0.json \
+  --corpus scripts/ecosystem-benchmark/probe-recipes \
+  --domain reads --specifier seroval
+~~~
+
+Four properties, each with a test in `scripts/probe-recipe-scaffold.test.mjs`:
+
+- **It never overwrites.** A module already on disk, or a claim the manifest
+  already addresses, is skipped. The only recipe worth having is one somebody
+  finished, so the tool cannot destroy one.
+- **It serves only the recipe gap.** `census refused: …` has no proposed
+  closure to veto and `veto did not complete: …` already has a recipe whose
+  author a scaffold must not overwrite; neither is touched.
+- **It has no fallback domain.** `DOMAIN_SCAFFOLD` covers `reads`, `returns`
+  and `creates` and refuses anything else, mirroring `reviewed_observation`
+  for the same reason: a domain that inherited a neighbour's marker would be
+  gated by a veto watching for a contradiction nobody defined, and would pass.
+- **A scaffold cannot reach a commit.** `ecosystem-probe-recipes.test.mjs`
+  fails on a checked-in module carrying the guard. A scaffold is a safe
+  working state and a pointless shipped one — every run would launch a worker
+  per gate to arrive back at the withholding it started from.
+
+The `reads` scaffold's header carries the three obligations § 6 says the
+author owns: enumerate every reactive-shaped source the *closure* owns,
+make each observable, and assert your own observation fired so a package edit
+that removes the source fails the recipe instead of passing the gate.
+
+### 22.4 Found while doing it
+
+`fixtures/package-contracts/implementation-census-reads/probe-recipes/recipes.json`
+carried `"policy": 2` where `WireRecipeCorpus` requires the policy object, so
+`RecipeCorpus::load` would have refused it outright. It had never been read —
+the fixture's tracer tests assemble their own corpus from the modules and the
+live claim ids — and nothing checked it. Fixed, and
+`ecosystem-probe-recipes.test.mjs` now checks the envelope of every
+checked-in fixture manifest, which is where the class was invisible.

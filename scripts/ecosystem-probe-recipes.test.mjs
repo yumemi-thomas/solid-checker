@@ -15,10 +15,12 @@
 // corpus README says so.
 
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, test } from "vitest";
+
+import { UNFINISHED_MARKER } from "./probe-recipe-scaffold.mjs";
 
 const corpusDirectory = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -142,6 +144,22 @@ describe("the ecosystem probe-recipe corpus", () => {
     }
   });
 
+  test("holds no unfinished scaffold", () => {
+    // `scripts/probe-recipe-scaffold.mjs` emits modules that throw until an
+    // author writes their observation, so an unfinished one withholds its
+    // candidate exactly as no recipe at all does. That makes a scaffold a
+    // safe *working* state and a pointless shipped one: every run would
+    // launch a worker per gate to arrive back at the withholding it started
+    // from. Committing one is therefore a mistake, not a decision.
+    for (const name of readdirSync(corpusDirectory).filter(file => file.endsWith(".mjs"))) {
+      assert.equal(
+        readFileSync(join(corpusDirectory, name), "utf8").includes(UNFINISHED_MARKER),
+        false,
+        `${name} is still a scaffold: write its observation or remove it`
+      );
+    }
+  });
+
   test("every module exports runProbeSession and never hands the transcript away", () => {
     for (const recipe of manifest.recipes) {
       const source = readFileSync(join(corpusDirectory, recipe.module), "utf8");
@@ -171,6 +189,76 @@ describe("the ecosystem probe-recipe corpus", () => {
         false,
         `${recipe.module} names session outside the ignored parameter`
       );
+    }
+  });
+});
+
+// Every *other* checked-in recipe corpus manifest.
+//
+// Here rather than beside the fixtures for the same reason as the block
+// above: `scripts/verify.sh` runs `scripts/*.test.mjs`, and nothing under
+// `fixtures/package-contracts/*/probe-recipes/` is otherwise loaded by a
+// gate. The fixture corpora are assembled in-process by the Rust tracer
+// tests, which build their own manifest from the modules and the live claim
+// ids, so a checked-in `recipes.json` there is documentary — and one of them
+// carried `"policy": 2` where Rust requires the policy object, which is a
+// manifest `RecipeCorpus::load` refuses outright and no gate ever read.
+//
+// Claim ids are deliberately not checked. They are content digests of the
+// normalized claim, so only a live run can say whether one still addresses
+// anything; each corpus README says so.
+describe("the checked-in fixture recipe corpora", () => {
+  const fixtureRoot = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "fixtures",
+    "package-contracts"
+  );
+  const manifests = readdirSync(fixtureRoot, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => join(fixtureRoot, entry.name, "probe-recipes", "recipes.json"))
+    .filter(path => existsSync(path));
+
+  test("each declares the envelope Rust requires", () => {
+    for (const path of manifests) {
+      const manifest = JSON.parse(readFileSync(path, "utf8"));
+      assert.equal(manifest.format, FORMAT, path);
+      assert.equal(manifest.schemaVersion, SCHEMA_VERSION, path);
+      assert.deepEqual(Object.keys(manifest.policy ?? {}).sort(), [
+        "maxEvents",
+        "maxMacrotaskTurns",
+        "maxMicrotaskTurns",
+        "repeatRuns",
+        "timeoutMillis"
+      ], path);
+      for (const recipe of manifest.recipes) {
+        assert.deepEqual(
+          Object.keys(recipe).filter(key => !RECIPE_KEYS.has(key)),
+          [],
+          `${path} ${recipe.module} carries a field Rust would refuse`
+        );
+        assert.match(recipe.claimId, /^claim:v1:sha256:[0-9a-f]{64}$/);
+        assert.equal(IMPORT_KINDS.has(recipe.importKind), true, recipe.module);
+        assert.equal(SCENARIOS.has(recipe.scenario), true, recipe.module);
+        assert.equal(EVENT_CLASSES.has(recipe.expectedEvent.class), true, recipe.module);
+        assert.equal(
+          existsSync(join(dirname(path), recipe.module)),
+          true,
+          `${path} names a module that is not there: ${recipe.module}`
+        );
+      }
+    }
+  });
+
+  test("holds no unfinished scaffold either", () => {
+    for (const path of manifests) {
+      for (const name of readdirSync(dirname(path)).filter(file => file.endsWith(".mjs"))) {
+        assert.equal(
+          readFileSync(join(dirname(path), name), "utf8").includes(UNFINISHED_MARKER),
+          false,
+          `${join(dirname(path), name)} is still a scaffold`
+        );
+      }
     }
   });
 });

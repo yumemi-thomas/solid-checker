@@ -12722,6 +12722,69 @@ export const value = phantom;
         );
     }
 
+    /// The safety property `scripts/probe-recipe-scaffold.mjs` rests on: a
+    /// recipe that throws **withholds** its candidate; it never certifies it.
+    ///
+    /// This is the whole reason a generator may emit recipe modules at all.
+    /// `evaluate_runtime_probes` treats a complete run that emits no marker as
+    /// a `CleanNonObservation` — the mandatory veto passes and the closure
+    /// certifies on the census alone — so a scaffold that merely called the
+    /// export would turn "nobody wrote the observation yet" into "nothing
+    /// contradicted the closure", on every candidate at once. Emitted
+    /// scaffolds therefore refuse to run until an author deletes their
+    /// `UNFINISHED` guard, and this pins what that refusal buys: the same
+    /// withholding the candidate had before any recipe existed.
+    ///
+    /// The module is written here rather than checked in beside the fixture,
+    /// because `scripts/ecosystem-probe-recipes.test.mjs` refuses a committed
+    /// scaffold and should keep doing so.
+    #[test]
+    fn a_recipe_that_throws_withholds_its_candidate_rather_than_certifying_it() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("reads-scaffold");
+        let plan = reads_census_fixture_plan("plainArithmetic");
+        let schedule = plan.probe_gate_schedule().unwrap();
+        assert_eq!(schedule.gates().len(), 1, "one reads candidate, one veto");
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+
+        // The shape `probe-recipe-scaffold.mjs` emits: the guard throws before
+        // anything is imported from the package or emitted to the harness.
+        let emitted = scratch.path().join("scaffold");
+        std::fs::create_dir_all(emitted.join("probe-recipes")).expect("scaffold corpus");
+        std::fs::write(
+            emitted.join("probe-recipes").join("scaffold.mjs"),
+            b"const UNFINISHED = true;\n\nexport async function runProbeSession(_session, harness) {\n  if (UNFINISHED) {\n    throw new Error(\"probe recipe scaffold is unfinished\");\n  }\n  harness.emit({ marker: \"read-operation\", kind: \"call\", phase: \"enter\" });\n}\n",
+        )
+        .expect("write the scaffold");
+
+        let Some(configuration) = tracer_configuration_from(
+            &emitted,
+            scratch.path(),
+            "reads-scaffold",
+            &[(claim_id.as_str(), "scaffold.mjs")],
+        ) else {
+            return;
+        };
+        let finalized = tracer_certify(&plan, &pin, &configuration)
+            .expect("an incomplete veto withdraws the candidate; it does not refuse the row");
+
+        let withheld = finalized.withheld_closures();
+        assert!(
+            withheld.iter().any(|closure| closure.domain == "reads"
+                && closure.export == "plainArithmetic"
+                && closure
+                    .reason
+                    .starts_with(super::WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX)),
+            "the throwing recipe leaves an incomplete gate: {withheld:?}"
+        );
+        assert!(
+            !reads_is_closed_in(finalized.canonical_main(), "plainArithmetic"),
+            "and the domain the scaffold was generated for stays open"
+        );
+    }
+
     /// The other half, and the reason the fixture has two entrypoints: a
     /// closure that installs an accessor at run time never reaches the census
     /// at all. No candidate, no gate, nothing to bind.
