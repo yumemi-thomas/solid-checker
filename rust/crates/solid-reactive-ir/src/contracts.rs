@@ -909,6 +909,32 @@ fn returns_shed_symbols(facts: &ProjectFacts, entities: &EntitySymbols) -> HashS
         .collect()
 }
 
+/// Whether this binding's `reads` **completeness** is demanded here.
+///
+/// Always true today, and the seam exists because the honest answer is not.
+/// `reads` completeness proves an export reads nothing beyond what it
+/// enumerates, and an unenumerated read is only observable inside a tracking
+/// scope — outside one it changes nothing any rule proves. Measured on the
+/// policy-2 corpus: rules consume `reads` *items*, which arrive whether or
+/// not the domain is closed, and **only SC9005 consumes the completeness**
+/// (`docs/package-contract-v2/phase21/2026-09-10-reads-demand-population.md`
+/// § 6).
+///
+/// So the predicate that belongs here is "is this call site tracked", and it
+/// cannot be answered here: this pass has `facts`, `entities` and the
+/// contracts, while tracking is derived downstream by the code that consumes
+/// these bindings. Moving the conjunct there needs a *shared* notion of a
+/// tracked call site, which does not exist yet and which must not become a
+/// second one subtly unlike what each rule derives for itself
+/// (`2026-09-10-sc9005-demand-scoping-design.md` § 12).
+///
+/// Naming it now keeps the decision in one place instead of inlined in a
+/// conjunction, and makes the eventual move an edit to this function rather
+/// than surgery on three call sites.
+const fn reads_completeness_demanded() -> bool {
+    true
+}
+
 fn push_unknown_contract_claims(
     missing_exports: &mut Vec<StaticDefect>,
     summary: &ContractExport,
@@ -919,18 +945,22 @@ fn push_unknown_contract_claims(
     returns_demanded: bool,
 ) {
     let mut claims = Vec::new();
-    if summary.reactive_reads.is_open()
-        || summary
-            .open_claims
-            .contains(&crate::contract_semantics::ClaimDomain::Reads)
+    if reads_completeness_demanded()
+        && (summary.reactive_reads.is_open()
+            || summary
+                .open_claims
+                .contains(&crate::contract_semantics::ClaimDomain::Reads))
     {
         claims.push("reactiveReads");
     }
     // Scoped by demand (`returns_shed_symbols`): an open domain no consumer
     // can reach discharges no obligation, so reporting it is noise rather than
-    // a fail-closed answer. Every other conjunct is still unconditional —
-    // `creates`' demand is "the binding is called" and `reads`' is barely
-    // narrower, so scoping them buys almost nothing (design § 9).
+    // a fail-closed answer.
+    //
+    // `creates` is still unconditional because its demand really is "the
+    // binding is called". `reads` is unconditional for a different reason —
+    // see `reads_completeness_demanded` — and design § 9's claim that the two
+    // are alike is corrected in § 12.
     if returns_demanded
         && (summary.returns.is_open()
             || summary
