@@ -1045,3 +1045,49 @@ one balancing and one not. The loss is after candidate derivation, outside
 withholding, and before the canonical main — a span with exactly one thing in
 it: whatever re-closes a proven candidate. seroval proves that step exists and
 works.
+
+## 19. Located: the case-set batch loses every closure
+
+The instruments narrowed it to one span; a controlled pair of runs names it.
+
+`@corvu/utils@0.4.2` `./dom`, identical but for the conditions, which decide
+how many artifact cases are certified:
+
+| conditions | cases | derived | withheld | bound | balances |
+| --- | --- | --- | --- | --- | --- |
+| `solid` | 1 | 9 | 6 | 3 | yes |
+| `default` | 1 | 9 | 6 | 3 | yes |
+| *(none)* | 2 | 18 | **0** | **0** | **no** |
+
+Both single-case runs are correct and identical, so the difference is not the
+artifact — `index.jsx` and `index.js` behave the same. It is the **count**.
+`seroval@1.5.6`, the package that kept its closures throughout, certifies one
+case.
+
+**A multi-case entrypoint takes the case-set batch (ADR 0036, "the shared
+batch is the fast path") and comes out with every closure gone and nothing
+withheld.** The single-case path withholds what it cannot serve and binds what
+it can.
+
+This is the defect recorded in `docs/precision-backlog.md`, now with a
+reproduction that is two commands apart.
+
+### A second thing the single-case run shows
+
+Its six withheld records are *every* `reads` candidate, all
+`no recipe in corpus`, while all three bound closures are `creates`.
+ADR 0036's synthesized veto keeps one reviewed observation per domain and the
+table has `returns` and `creates` — `reviewed_observation("reads")` is still
+`None`, which is what § 1 of this document opened with and § 2–§ 5 designed a
+fix for that § 6 then declined to ship.
+
+So the admission works and `reads` closures are real, but every one of them
+needs a **hand recipe**: exactly the "one reviewed export at a time, never in
+bulk" outcome § 6 predicted for option 3. The 31% survival measured in § 8 is
+the ceiling for what a census may decide; the recipe requirement is a second,
+tighter gate on top of it.
+
+That reframes § 13's ordering again. The blocker for a clean verdict on a real
+package is no longer `returns` alone — it is that `reads` cannot close in bulk
+without a synthesized observation for the domain, which is the very thing this
+document was written to design.
