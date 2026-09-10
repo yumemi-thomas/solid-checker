@@ -3213,13 +3213,43 @@ function writeAudit(
   );
 }
 
+/// Which domains the proposal certification actually planned from states as
+/// closed, per artifact case and export.
+///
+/// Diagnostic only, and it exists because two rounds of investigating a lost
+/// closure were inference across this exact boundary. A certified document
+/// that closes nothing can mean the certifier dropped the closure or that the
+/// proposal never carried one, and until this was recorded there was no way
+/// to tell them apart from the outside — `--proposal` silently regenerates
+/// when any of its parameters mismatch, so even the file on disk is not
+/// evidence of what was planned.
+function plannedClosureSummary(proposalPath) {
+  try {
+    const document = JSON.parse(readFileSync(proposalPath, "utf8"));
+    const summaries = document.summaries ?? {};
+    const rows = [];
+    for (const [entrypoint, value] of Object.entries(document.entrypoints ?? {})) {
+      for (const [index, artifactCase] of (value.cases ?? [value]).entries()) {
+        for (const [export_, key] of Object.entries(artifactCase.exports ?? {})) {
+          const closed = summaries[key]?.call?.closed ?? [];
+          if (closed.length) rows.push({ entrypoint, case: index, export: export_, closed });
+        }
+      }
+    }
+    return { proposal: proposalPath, closures: rows.length, rows: rows.slice(0, 64) };
+  } catch (error) {
+    return { proposal: proposalPath, unreadable: String(error?.message ?? error) };
+  }
+}
+
 function writeSuccessAudit(
   path,
   manifest,
   demandPlans,
   stageDurationsMs,
   graphPreparation = null,
-  withheldClosures = []
+  withheldClosures = [],
+  plannedProposal = null
 ) {
   if (!path) return;
   const output = resolve(path);
@@ -3241,6 +3271,9 @@ function writeSuccessAudit(
     // had to carry, and the reason. The certified contract leaves those
     // domains open; this is the record of why.
     withheldClosures,
+    // What the planned proposal offered, so a document that closes nothing
+    // can be told apart from a proposal that offered nothing.
+    plannedProposal,
     demandPlans: demandPlans.map(plan => ({
       policyDigest: plan.policyDigest,
       candidateSemanticDigest: plan.candidateSemanticDigest,
@@ -3351,6 +3384,9 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
   const demandPlans = [];
   let graphPreparation = null;
   let reusedProposal = false;
+  // The proposal path certification planned from, whichever branch produced
+  // it — reused from disk or regenerated here. Read for the audit only.
+  let plannedProposalPath = null;
   let withheldClosures = [];
   const stageDurationsMs = {};
   let certified = false;
@@ -3435,6 +3471,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
           try {
             const generated = reused ?? await generatePackageContract(generationArguments, { quiet: true });
             reusedProposal = Boolean(reused);
+            plannedProposalPath = generated?.output ?? null;
             // Generation succeeded, so `generated` is a real answer for the
             // cases that produced one. When it is only a *partial* answer and
             // the missing cases refused on dependency composition, the caller
@@ -3572,8 +3609,9 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       manifest,
       demandPlans,
       stageDurationsMs,
-      reusedProposal ? { ...(graphPreparation ?? {}), reusedProposal: true } : graphPreparation,
-      withheldClosures
+      { ...(graphPreparation ?? {}), reusedProposal },
+      withheldClosures,
+      plannedProposalPath ? plannedClosureSummary(plannedProposalPath) : null
     );
     certified = true;
   } catch (error) {

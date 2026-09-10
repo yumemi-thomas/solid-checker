@@ -884,3 +884,57 @@ an extracted copy produces five, then the census is environment-dependent and
 The way to settle it is to make certify emit the proposal it planned from.
 Nothing does that today, which is why two rounds of this investigation have
 been inference.
+
+## 16. The instrument, and what it eliminated
+
+`certification-audit.json` now records **`plannedProposal`**: the proposal
+certification actually planned from, and which domains it states as closed,
+per artifact case and export. It also records `reusedProposal` unconditionally
+rather than only when true, because its absence used to be ambiguous between
+"regenerated" and "this build does not say".
+
+Diagnostic only — the audit is already `authoritative: false`. It exists
+because § 14 and § 15 were both inference across this exact boundary, and both
+were wrong.
+
+### What it says about `@corvu/utils`
+
+~~~
+plannedProposal.closures        10
+domain-exhaustiveness demands    0
+withheldClosures                 0
+accepted document closures       0
+~~~
+
+**The proposal certification planned from carries ten closures.** So § 15's
+remaining hypothesis — that certify's regeneration in its own acquired
+workspace produces a closure-free proposal where generation against an
+extracted copy produces closures — is false. Both produce them.
+
+### Three hypotheses now dead
+
+| hypothesis | how it died |
+| --- | --- |
+| a complete-positive closure never survives normalization | round-trip case: it survives decode, normalize and re-encode (§ 15) |
+| certify's regeneration is environment-dependent | `plannedProposal` shows ten closures in the planned document |
+| a closure hazard opened every domain | `certificationInputs[].resolution.closure.hazards` is empty for this package |
+
+The document also carries `proposedClosures` alongside `closed`, so it is
+exactly the shape the round-trip case proved good.
+
+### Where it now has to be
+
+Between Rust reading that proposal and `inspect_candidates` producing closure
+candidates. Everything on the CLI side is accounted for: the right document,
+with the right markers, no hazards, reaching the planner.
+
+Operation-derived demands *are* planned from the same document
+(`operation-cardinality` 8, `operation-reachability` 8), so Rust is reading
+its operations. Only the closures are missing.
+
+The next instrument is the mirror of this one on the Rust side: record what
+`inspect_candidates` returned for the selected candidate. **Not** another
+round of reading the code and guessing — that is what produced the two
+corrections above, and the rule this document keeps relearning is that a
+boundary you cannot see through is a boundary to instrument, not to reason
+across.
