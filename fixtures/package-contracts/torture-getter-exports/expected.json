@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "f3f5858130d13d68fbc695219fcfcba5b0fd0d9181c23af173e62776829b529b",
+            "closureSha256": "38035704547875f7cfe57dee2a017ee4e5ebeb417091f68eadbf04d567bfd407",
             "path": "./index.js",
             "sha256": "2ecd56eb18b7ff147a132b59344eb90270bc94b9c76666ec3e76a399d38229f2"
           },
@@ -15,7 +15,7 @@
           "exports": {
             "getterFunction": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "getterObject": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
-            "getterResult": "summary-2fc45d622851089b087ed456f74d816348b1190522c2a63ed74b61b03d2e563f"
+            "getterResult": "summary-02c89aa39eb8d517222ddea2b4f76c0c07fd4b10d632814ca4a321557251f76e"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -39,8 +39,12 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-2fc45d622851089b087ed456f74d816348b1190522c2a63ed74b61b03d2e563f": {
+    "summary-02c89aa39eb8d517222ddea2b4f76c0c07fd4b10d632814ca4a321557251f76e": {
       "call": {
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -71,6 +75,9 @@
               "event": "call"
             }
           }
+        ],
+        "proposedClosures": [
+          "creates"
         ],
         "returns": [
           "return"

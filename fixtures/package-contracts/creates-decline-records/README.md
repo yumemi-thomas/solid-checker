@@ -22,12 +22,18 @@ for an export was one bit and the reason was unrecoverable, which is why
 | `.` | `viaSilentHelper` | declines | `refusing-callee-fixpoint`, naming `silentHelper`'s exact declaration span, **and** that helper's own `dialect-silent` record at its own location |
 | `.` | `unresolvedCallee` | declines | `unresolved-callee`, no callee identity, shape `undeclared-identifier` spelled `externalGlobal` |
 
-The table is the **walk's** records. Since 2026-09-11 the same array also
-carries hazard records (ADR 0008's addendum): `index.js`'s top-level
-`import "solid-js"` is an `UnacceptedExternalDependency` closure hazard, so
-every export of `.` additionally declines `creates`, `returns` and `reads`
-against it. `./clean` carries none of either, which is what makes it the
-control for both channels at once.
+The table is the **walk's** records, and since 2026-09-11 the same array can
+also carry hazard records (ADR 0008's addendum) — a closure hazard that opens
+a proposable domain is recorded against every export it names.
+
+`index.js`'s top-level `import "solid-js"` used to be one such hazard and is
+not any more: the built-in runtime foundation is exempt from the opaque
+frontier (`2026-09-10-reads-veto-observation-design.md` § 27). The visible
+consequence is that the walk's verdict now reaches the document —
+`dialectSilent` publishes `closed: ["reads", "returns"]` while `creates`
+stays open, because the walk declined `creates` on the dialect's silence
+about `createEffect` and declined nothing else. `./clean` remains the control
+that carries no record at all.
 
 ## The unresolved-callee shapes, and which are pinned here
 

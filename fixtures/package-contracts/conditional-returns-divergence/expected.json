@@ -4,6 +4,25 @@
       "cases": [
         {
           "artifact": {
+            "closureSha256": "8d203d3cd795e88fe0ade5cfda67598b5efaeeeadd85ed97c5a13b5b7d41858a",
+            "path": "./browser.js",
+            "sha256": "c761a6fa07acb2dd2c3046c1591a4c72316a059d42795d260bcefaceebf8666a"
+          },
+          "declarations": {
+            "path": "./browser.js",
+            "sha256": "c761a6fa07acb2dd2c3046c1591a4c72316a059d42795d260bcefaceebf8666a"
+          },
+          "exports": {
+            "Show": "summary-4b5194adec1b6c3e2a51a20a4a0d816b833ffcc02cc1089f1f78e9c44ebc32ed",
+            "Steady": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./browser",
+            "typesBranch": "/exports/./browser"
+          }
+        },
+        {
+          "artifact": {
             "closureSha256": "c1e358e47e5e016e555d536b3d54613d31932a296084d03190b7030ca92a9caa",
             "path": "./node.js",
             "sha256": "fcefb04a3038e2295d73b31ec50c3274fc25608fd5c31a05ca5e9c14f24dc444"
@@ -39,25 +58,6 @@
             "runtimeBranch": "/exports/./node",
             "typesBranch": "/exports/./node"
           }
-        },
-        {
-          "artifact": {
-            "closureSha256": "d3f8f6c409d33d287b3befb372724348d080ecdcee938de26116b196402445cc",
-            "path": "./browser.js",
-            "sha256": "c761a6fa07acb2dd2c3046c1591a4c72316a059d42795d260bcefaceebf8666a"
-          },
-          "declarations": {
-            "path": "./browser.js",
-            "sha256": "c761a6fa07acb2dd2c3046c1591a4c72316a059d42795d260bcefaceebf8666a"
-          },
-          "exports": {
-            "Show": "summary-b1f6ccac9babff33cf223de3d0a7f152567b6ceb57ca4a0bbc8c341490a85933",
-            "Steady": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
-          },
-          "resolution": {
-            "runtimeBranch": "/exports/./browser",
-            "typesBranch": "/exports/./browser"
-          }
         }
       ]
     }
@@ -76,8 +76,13 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-b1f6ccac9babff33cf223de3d0a7f152567b6ceb57ca4a0bbc8c341490a85933": {
+    "summary-4b5194adec1b6c3e2a51a20a4a0d816b833ffcc02cc1089f1f78e9c44ebc32ed": {
       "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -109,6 +114,11 @@
             }
           }
         ],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": [],
         "returns": [
           "return"
         ]
@@ -128,10 +138,6 @@
         ],
         "reads": []
       },
-      "shape": "callable"
-    },
-    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
-      "call": {},
       "shape": "callable"
     }
   }

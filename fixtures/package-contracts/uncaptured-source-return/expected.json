@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "33bd448960b5c3e52b8a7aa9e1878718ee301de9491b9780803081ba247d46ea",
+            "closureSha256": "4ff92781a9b935cbf1ddfe5fbc10eae0b2ebcce5f70e26ab89d2b1fdbc34ebf0",
             "path": "./index.js",
             "sha256": "69e1d972a9c34c60be4910dd8a9687a1409cfb5d47e9c82485174cf041d79843"
           },

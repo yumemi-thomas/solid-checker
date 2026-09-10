@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "c7c6229f1f3cbae181eedcd58079b292a6b000462ac52fdea4dcdea198a3cebe",
+            "closureSha256": "bd8ce61b0d4724b027a2d7bf9de77c1cc6bb309a2db50d6c4dab5f764817b5b3",
             "path": "./index.js",
             "sha256": "67b70606618af55b65a51fdf2d3b1626cc5007327b4eee577a0a1efb0eb8ff3f"
           },
@@ -13,14 +13,14 @@
             "sha256": "67b70606618af55b65a51fdf2d3b1626cc5007327b4eee577a0a1efb0eb8ff3f"
           },
           "exports": {
-            "alsoReadsUnderTwoNames": "summary-0e8adedc84b7268726e015eab83fe31400cdbd9486a88292b21b4af1b00c9081",
-            "composesAnAmbiguouslyNamedTarget": "summary-0e8adedc84b7268726e015eab83fe31400cdbd9486a88292b21b4af1b00c9081",
-            "readsItsOwnSignal": "summary-0e8adedc84b7268726e015eab83fe31400cdbd9486a88292b21b4af1b00c9081",
-            "readsItsOwnSignalAndComposesTheSameShape": "summary-11a1524f94fae94a4ab831485d7b2ffd4bba1d9e52ecd32ae46603869c12f267",
-            "readsThroughADirectCall": "summary-1c2ea8e6e646be21f3ceeb8d7920e73cab28b216d673618a9264ade2dcbd4ff0",
-            "readsThroughAPrivateHelper": "summary-0e8adedc84b7268726e015eab83fe31400cdbd9486a88292b21b4af1b00c9081",
-            "readsThroughAReturnedClosure": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
-            "readsUnderTwoNames": "summary-0e8adedc84b7268726e015eab83fe31400cdbd9486a88292b21b4af1b00c9081"
+            "alsoReadsUnderTwoNames": "summary-dfb82c8d147d6594df535bc10951b999ab5d7551bcb1f866f743982b98f4a63c",
+            "composesAnAmbiguouslyNamedTarget": "summary-d19f5a1f55d9af75c02f24e19e666071c5655429456a962a33e1cc29e94484f9",
+            "readsItsOwnSignal": "summary-d19f5a1f55d9af75c02f24e19e666071c5655429456a962a33e1cc29e94484f9",
+            "readsItsOwnSignalAndComposesTheSameShape": "summary-3d21b26122f74da14bb57cf72d7b517397f5d01609c7459c14c559f84e8bc095",
+            "readsThroughADirectCall": "summary-314010831b3ea9a6a8f6f06da78d0d144d5d5ad4e088c613aa8e83418bc7e14e",
+            "readsThroughAPrivateHelper": "summary-d19f5a1f55d9af75c02f24e19e666071c5655429456a962a33e1cc29e94484f9",
+            "readsThroughAReturnedClosure": "summary-981d8b51da305c18943723acc5cbdf5965ee0d81fedc78d35f773b74e153dd7a",
+            "readsUnderTwoNames": "summary-dfb82c8d147d6594df535bc10951b999ab5d7551bcb1f866f743982b98f4a63c"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -44,13 +44,22 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-0e8adedc84b7268726e015eab83fe31400cdbd9486a88292b21b4af1b00c9081": {
+    "summary-314010831b3ea9a6a8f6f06da78d0d144d5d5ad4e088c613aa8e83418bc7e14e": {
       "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
               "event": "call",
               "schedule": "same-stack"
+            },
+            "composedFrom": {
+              "export": "readsItsOwnSignal",
+              "operation": "read-0"
             },
             "count": {
               "max": "many",
@@ -71,14 +80,23 @@
             }
           }
         ],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
         "reads": [
           "read-0"
         ]
       },
       "shape": "callable"
     },
-    "summary-11a1524f94fae94a4ab831485d7b2ffd4bba1d9e52ecd32ae46603869c12f267": {
+    "summary-3d21b26122f74da14bb57cf72d7b517397f5d01609c7459c14c559f84e8bc095": {
       "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -131,6 +149,10 @@
             }
           }
         ],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
         "reads": [
           "read-0",
           "read-1"
@@ -138,45 +160,13 @@
       },
       "shape": "callable"
     },
-    "summary-1c2ea8e6e646be21f3ceeb8d7920e73cab28b216d673618a9264ade2dcbd4ff0": {
+    "summary-981d8b51da305c18943723acc5cbdf5965ee0d81fedc78d35f773b74e153dd7a": {
       "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "composedFrom": {
-              "export": "readsItsOwnSignal",
-              "operation": "read-0"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "read-0",
-            "inputs": [
-              {
-                "kind": "reactive",
-                "role": "accessor"
-              }
-            ],
-            "kind": "read",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
+        "closed": [
+          "reads",
+          "creates"
         ],
-        "reads": [
-          "read-0"
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b": {
-      "call": {
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -200,8 +190,94 @@
             }
           }
         ],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": [],
         "returns": [
           "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-d19f5a1f55d9af75c02f24e19e666071c5655429456a962a33e1cc29e94484f9": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-dfb82c8d147d6594df535bc10951b999ab5d7551bcb1f866f743982b98f4a63c": {
+      "call": {
+        "closed": [
+          "reads"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads"
+        ],
+        "reads": [
+          "read-0"
         ]
       },
       "shape": "callable"

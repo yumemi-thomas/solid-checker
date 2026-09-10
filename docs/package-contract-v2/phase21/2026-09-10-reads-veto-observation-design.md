@@ -1654,3 +1654,93 @@ at all.
 trust boundary sits, not a cleanup: the dialect's primitive recognition and
 a contract's authority over an archive's bytes are different questions, and
 they could legitimately both hold.
+
+## 27. Exempting the built-in runtime from the opaque frontier
+
+§ 26 left this as a trust-boundary question rather than a cleanup. Decided:
+**a core-runtime specifier no longer records an opaque frontier.**
+
+### 27.1 What was wrong with the frontier
+
+`record_external` recorded an `UnacceptedExternalDependency` hazard for any
+external specifier with no supplied dependency edge, and that hazard opens
+**every domain of every export** of the case. `solid-js`, `@solidjs/signals`
+and `@solidjs/web` have no package contract *by design*:
+`core_runtime_contract_reference` withholds one, and generating one selects
+`GenerationScope::DialectDefiningPackage`, which withholds the reactive
+domains wholesale. So the frontier was a demand that can never be met, levied
+on every package that imports Solid at all — which is every Solid package.
+
+### 27.2 The objection, and why the exemption is still admissible
+
+`primitive_defining_package`'s own doc says its basis "may only ever
+*withhold* a claim (open a domain), never establish one — see ADR 0005",
+because it compares a name with no version and no integrity behind it. The
+exemption is a name-only predicate that **stops** withholding, which is the
+direction that doc forbids.
+
+It is admissible here for a different reason, and the difference is exact:
+**clearing the frontier establishes no claim.** Every claim still comes from
+the generator's derivation over *this* package's bytes, and every proposed
+closure is re-proved by the certifier's implementation census, which walks
+the archive's own implementation and refuses any form it cannot census. What
+the name gates is whether a blanket withdrawal applies, not whether anything
+is true. A proposal is the generator's inference (ADR 0008); a wrong one is
+withheld, not certified.
+
+**The limit, stated rather than papered over.** The dialect is the authority
+for these packages' *primitives*, and it answers domain questions about them
+— that is why `creates` still declines on `dialect-silent` where the dialect
+has nothing to say. It is **not** an authority for arbitrary *values* these
+packages export. `@solid-primitives/utils`' `createHydratableSignal` reads
+`sharedConfig.hydrating`, a property access on an imported object whose bytes
+are outside the closure; the generator now proposes `reads: []` for it,
+where before the frontier said "unknown". That proposal rests on the census
+refusing an unknown accessor at certification, not on the generator knowing
+anything. It is the class of case to watch.
+
+### 27.3 Measured
+
+Corpus, 97 generator fixtures:
+
+| | before | after |
+| --- | --- | --- |
+| declined closure proposals | 821 | **221** |
+| proof candidates | 940 | **1342** |
+| local open claims | 5454 | **5048** |
+
+Nineteen contracts move, and they move by *closing* domains the frontier had
+blanket-opened. `creates-decline-records` is the clearest read: its
+`dialectSilent` export now publishes `closed: ["reads", "returns"]` while
+`creates` stays open, because the `creates` walk still declines on the
+dialect's silence about `createEffect`. The guard that has an opinion keeps
+it; the blanket one is gone.
+
+`torture-getter-exports` is the other control worth naming: its `getterResult`
+now closes `creates`, and its `reads` stays withdrawn — the file installs an
+accessor with `Object.defineProperty`, so the
+`runtime-accessor-installation` hazard still fires. Removing one hazard did
+not remove the other.
+
+On real packages, `@solid-primitives/utils@7.0.0-next.4` — whose only import
+is `solid-js` — goes from **0 closure candidates to 118, of which 45 are
+`reads`.** That is the first time a real published package has produced a
+`reads` closure candidate at all. `@solid-primitives/memo` is unchanged: two
+of its three frontiers clear, and `@solid-primitives/utils` is the third, so
+its contract stays empty until that dependency is certified and supplied as
+an accepted edge.
+
+### 27.4 The dual census, again
+
+The closure is computed twice, and the two must agree byte for byte or a
+supplied closure never matches the recomputed one. Rust derives the list from
+`Dialect::primitive_defining_packages`; the TypeScript census hard-codes it,
+because nothing checked in carries the list for it to read — the dialect
+manifests' `contracts[]` is the *bundled contract* list, which is broader
+(`@solid-primitives/scheduled` is in it, and is not core runtime; that
+mistake was made and caught while writing the test).
+
+So the agreement is asserted from the side that owns the list:
+`module_closure::tests::the_core_runtime_package_list_agrees_with_the_typescript_census`
+reads the constant out of the mirror and compares it. Confirmed falsifiable —
+deleting one entry from the mirror fails it with the intended message.

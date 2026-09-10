@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "739e353d5d88acbe7c9514c600ddfc750fb41b0aa80fc5195e06fdcf7225481a",
+            "closureSha256": "98b81892091d8fbe64978f5a13a1129daaff4ede0c22e47bf3ed5b7ae4bf81a2",
             "path": "./index.ts",
             "sha256": "557fc3dcce2572c7f517c5c24963193d4470ef45d50542bb188d9acd72aab646"
           },
@@ -14,28 +14,28 @@
           },
           "exports": {
             "assignedResource": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
-            "conditionalIdentity": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "conditionalInlineCallback": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018",
-            "constructionCandidates": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "conditionalIdentity": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "conditionalInlineCallback": "summary-fbcd8f18ba87904fa27b3c5ae64f504b82a13a345a4818e62b464db160845388",
+            "constructionCandidates": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "contextLocation": "summary-edec704f8e259266e00ac00731f83b98771059690b6214cf89f0ed83e3383ee7",
             "contextParams": "summary-537157b5d7a4701b9dd08baa083b8a1e9c7ec2a21464203815850693b87d72e6",
-            "effectThroughMaybeAccessor": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "guardedIdentity": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "identityResult": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61",
-            "indirect": "summary-6052da31d7ca3d9482bb7c1929f354b1ab0a27a4ffbc812298afbaac89dd5d5a",
-            "indirectResource": "summary-bb1d0257e7b825b95a458c55a0922a73a7295e963d4f08a429b148b29e2e5c90",
-            "isObject": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "memoThroughConditionalAdapter": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
-            "mountRouter": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "objectResult": "summary-e9fd61fe02bce93c3881b6afbd022c9fb1d7aa64a9dd4df2d1928c744a6d0d70",
+            "effectThroughMaybeAccessor": "summary-d0a54a938bc3e7e97bc318e88b4a9b6b41b0eb9799603201219379eefd7c20ee",
+            "guardedIdentity": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "identityResult": "summary-f8be38977baa75506170de52138e969210a7a81a6381c6638daeee0563322c5f",
+            "indirect": "summary-bbfc97b676b1f37f3dd5ccb6db9b859eb61833e059c4b73c93529ff251d20cb5",
+            "indirectResource": "summary-d74c5ce1492e5aff523c0c8ddeced5358f04c098006d995e76faa4d913f11d68",
+            "isObject": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "memoThroughConditionalAdapter": "summary-b7c3051084ab107a20ae6e7ba4f39a2a25932ea2bae0f6d6f19a56964199f73b",
+            "mountRouter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "objectResult": "summary-dce035faa08adff3f2ca55b554bc24dd631722955c6696a14c54313bdc647df0",
             "observe": "summary-30aab4b856518450ed6b0baee9dcdb5679db8fa5008354a3fc6db95cc52ad9e5",
-            "projectedAliasResult": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
-            "projectedObjectResult": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
-            "projectedTupleResult": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
-            "returnedAccessor": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+            "projectedAliasResult": "summary-b7c3051084ab107a20ae6e7ba4f39a2a25932ea2bae0f6d6f19a56964199f73b",
+            "projectedObjectResult": "summary-b7c3051084ab107a20ae6e7ba4f39a2a25932ea2bae0f6d6f19a56964199f73b",
+            "projectedTupleResult": "summary-b7c3051084ab107a20ae6e7ba4f39a2a25932ea2bae0f6d6f19a56964199f73b",
+            "returnedAccessor": "summary-b7c3051084ab107a20ae6e7ba4f39a2a25932ea2bae0f6d6f19a56964199f73b",
             "returnedResource": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
             "t": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
-            "tupleResult": "summary-793076c2e8ff281ce1240d113e7abbb7f4cd7881b4a2b32ea3cc3ce67412b71d"
+            "tupleResult": "summary-31b10e81afdce0569bb79ef507291d1a96496c738ce9bf973efb032ed280baea"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -123,17 +123,12 @@
       },
       "shape": "callable"
     },
-    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+    "summary-31b10e81afdce0569bb79ef507291d1a96496c738ce9bf973efb032ed280baea": {
       "call": {
-        "callbacks": [
-          {
-            "from": {
-              "arg": 0,
-              "path": []
-            },
-            "operation": "callback-0"
-          }
+        "closed": [
+          "creates"
         ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -145,13 +140,31 @@
               "min": 0,
               "scope": "call"
             },
-            "id": "callback-0",
-            "kind": "invoke",
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "items": [
+                {
+                  "kind": "store"
+                },
+                {
+                  "kind": "reactive",
+                  "role": "accessor"
+                }
+              ],
+              "kind": "tuple"
+            },
             "tracking": "untracked",
             "trigger": {
               "event": "call"
             }
           }
+        ],
+        "proposedClosures": [
+          "creates"
+        ],
+        "returns": [
+          "return"
         ]
       },
       "shape": "callable"
@@ -186,7 +199,64 @@
       },
       "shape": "callable"
     },
-    "summary-6052da31d7ca3d9482bb7c1929f354b1ab0a27a4ffbc812298afbaac89dd5d5a": {
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
+    },
+    "summary-b7c3051084ab107a20ae6e7ba4f39a2a25932ea2bae0f6d6f19a56964199f73b": {
+      "call": {
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "creates"
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94": {
+      "call": {
+        "closed": [
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "creates",
+          "returns"
+        ],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-bbfc97b676b1f37f3dd5ccb6db9b859eb61833e059c4b73c93529ff251d20cb5": {
       "call": {
         "callbacks": [
           {
@@ -197,6 +267,10 @@
             "operation": "callback-0"
           }
         ],
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -237,44 +311,8 @@
             }
           }
         ],
-        "returns": [
-          "return"
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-793076c2e8ff281ce1240d113e7abbb7f4cd7881b4a2b32ea3cc3ce67412b71d": {
-      "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "items": [
-                {
-                  "kind": "store"
-                },
-                {
-                  "kind": "reactive",
-                  "role": "accessor"
-                }
-              ],
-              "kind": "tuple"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
+        "proposedClosures": [
+          "creates"
         ],
         "returns": [
           "return"
@@ -282,11 +320,19 @@
       },
       "shape": "callable"
     },
-    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
-      "call": {},
-      "shape": "plain"
+    "summary-d0a54a938bc3e7e97bc318e88b4a9b6b41b0eb9799603201219379eefd7c20ee": {
+      "call": {
+        "closed": [
+          "returns"
+        ],
+        "proposedClosures": [
+          "returns"
+        ],
+        "returns": []
+      },
+      "shape": "callable"
     },
-    "summary-bb1d0257e7b825b95a458c55a0922a73a7295e963d4f08a429b148b29e2e5c90": {
+    "summary-d74c5ce1492e5aff523c0c8ddeced5358f04c098006d995e76faa4d913f11d68": {
       "call": {
         "callbacks": [
           {
@@ -296,6 +342,9 @@
             },
             "operation": "callback-0"
           }
+        ],
+        "closed": [
+          "returns"
         ],
         "operations": [
           {
@@ -315,44 +364,20 @@
               "event": "call"
             }
           }
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61": {
-      "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "index": 0,
-              "kind": "parameter",
-              "path": []
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
         ],
-        "returns": [
-          "return"
-        ]
+        "proposedClosures": [
+          "returns"
+        ],
+        "returns": []
       },
       "shape": "callable"
     },
-    "summary-e9fd61fe02bce93c3881b6afbd022c9fb1d7aa64a9dd4df2d1928c744a6d0d70": {
+    "summary-dce035faa08adff3f2ca55b554bc24dd631722955c6696a14c54313bdc647df0": {
       "call": {
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -390,6 +415,9 @@
               "event": "call"
             }
           }
+        ],
+        "proposedClosures": [
+          "creates"
         ],
         "returns": [
           "return"
@@ -436,8 +464,97 @@
       },
       "shape": "callable"
     },
-    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
-      "call": {},
+    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
+      "call": {
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "creates"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-f8be38977baa75506170de52138e969210a7a81a6381c6638daeee0563322c5f": {
+      "call": {
+        "closed": [
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "index": 0,
+              "kind": "parameter",
+              "path": []
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "creates",
+          "returns"
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-fbcd8f18ba87904fa27b3c5ae64f504b82a13a345a4818e62b464db160845388": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "returns"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "returns"
+        ],
+        "returns": []
+      },
       "shape": "callable"
     }
   }

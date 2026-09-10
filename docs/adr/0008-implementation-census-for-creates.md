@@ -847,10 +847,16 @@ generator rather than out of a test helper.
   neither an alias nor a nested callable's own parameter, and the nested case
   is pinned from the census side by `implementation-census-creates`'s
   `nestedCallableParameterRead`. The control lives in its own
-  entrypoint deliberately: `index.js`'s top-level `import "solid-js"` is an
-  `UnacceptedExternalDependency` closure hazard that opens every domain of
-  that artifact case whatever the walk found, so a control beside the declines
-  would prove nothing. Its stub cannot satisfy the audited-archive identity, so
+  entrypoint deliberately: `index.js`'s top-level `import "solid-js"` used to
+  be an `UnacceptedExternalDependency` closure hazard that opened every domain
+  of that artifact case whatever the walk found, so a control beside the
+  declines would have proved nothing. **Since 2026-09-11 that frontier is
+  exempt** (`2026-09-10-reads-veto-observation-design.md` § 27), so the `.`
+  entrypoint's exports now publish the domains the walk did not decline —
+  `dialectSilent` closes `reads` and `returns` while `creates` stays open on
+  the dialect's silence, which is the walk's verdict finally visible in the
+  document. The separate `./clean` entrypoint is kept: it is still the only
+  export with no decline record of either kind. Its stub cannot satisfy the audited-archive identity, so
   what `dialect-silent` pins there is the *dialect's canonical-primitive
   recognition*, not the tier — see the fixture README.
 - `creates_walk::tests` pins the transitive report through a local call edge,

@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "79d08180aa617684c364476ecf16308796e0a71eedf4495769ca9e8ab3acf6e5",
+            "closureSha256": "23c1e66a1feb1c56c3fcf7feda712f05504d70d722af595d19a7fb1706b84cfe",
             "path": "./index.js",
             "sha256": "835e684c790bdf640b5e914f39dcab4ff6c54f1d9d89da867e18b5a11187eb96"
           },
@@ -13,16 +13,16 @@
             "sha256": "5d7871f52a626c94b82500b29804e37c9381cf396ad5a78b2c84321de1566c37"
           },
           "exports": {
-            "computedMember": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "dialectSilent": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "expressionCallee": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "memberPropertyUnresolved": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "memberReceiverUnresolved": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "otherSyntax": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "parameterAliasRooted": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "parameterRooted": "summary-dbf6fb3f94a549294e571240112f7733f56a4897c440709c324a03a678c472c6",
-            "unresolvedCallee": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "viaSilentHelper": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            "computedMember": "summary-eddbbcccc94909bc88dd11ddfe910f989617c926702d413aa499f4d3a6e5e4d4",
+            "dialectSilent": "summary-eddbbcccc94909bc88dd11ddfe910f989617c926702d413aa499f4d3a6e5e4d4",
+            "expressionCallee": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "memberPropertyUnresolved": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "memberReceiverUnresolved": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "otherSyntax": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "parameterAliasRooted": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "parameterRooted": "summary-eaa759b3b9f30322488d017de5c20acc02bcee926018fe49b0e703ff56138280",
+            "unresolvedCallee": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "viaSilentHelper": "summary-eddbbcccc94909bc88dd11ddfe910f989617c926702d413aa499f4d3a6e5e4d4"
           },
           "resolution": {
             "runtimeBranch": "/exports/./import",
@@ -114,8 +114,13 @@
       },
       "shape": "callable"
     },
-    "summary-dbf6fb3f94a549294e571240112f7733f56a4897c440709c324a03a678c472c6": {
+    "summary-eaa759b3b9f30322488d017de5c20acc02bcee926018fe49b0e703ff56138280": {
       "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -144,14 +149,41 @@
             }
           }
         ],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
         "reads": [
           "read-0"
         ]
       },
       "shape": "callable"
     },
-    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
-      "call": {},
+    "summary-eddbbcccc94909bc88dd11ddfe910f989617c926702d413aa499f4d3a6e5e4d4": {
+      "call": {
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290": {
+      "call": {
+        "closed": [
+          "reads"
+        ],
+        "proposedClosures": [
+          "reads"
+        ],
+        "reads": []
+      },
       "shape": "callable"
     }
   }

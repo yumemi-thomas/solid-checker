@@ -404,21 +404,33 @@ pub fn primitive_defining_package(package: &str) -> bool {
     })
 }
 
+/// Whether a *specifier* names the built-in runtime foundation — the package
+/// itself or a subpath of it.
+///
+/// Built from [`Dialect::primitive_defining_packages`] rather than from a
+/// list of its own: the three names were written out twice, and a fourth
+/// core package added to a dialect would have reached one copy and not the
+/// other.
+#[must_use]
+pub fn core_runtime_specifier(specifier: &str) -> bool {
+    [Version::V1, Version::V2]
+        .into_iter()
+        .flat_map(|version| version.dialect().primitive_defining_packages())
+        .any(|name| {
+            specifier == *name
+                || specifier
+                    .strip_prefix(name)
+                    .is_some_and(|suffix| suffix.starts_with('/'))
+        })
+}
+
 /// Whether a contract reference must be withheld from ordinary analysis
 /// because it names the built-in runtime foundation. This is not a resolver
 /// or proof of runtime identity: even an untrusted spelling can only remove
 /// contract authority here, never grant built-in semantics.
 #[must_use]
 pub fn core_runtime_contract_reference(package: &str, specifier: &str) -> bool {
-    primitive_defining_package(package)
-        || ["solid-js", "@solidjs/signals", "@solidjs/web"]
-            .iter()
-            .any(|name| {
-                specifier == *name
-                    || specifier
-                        .strip_prefix(name)
-                        .is_some_and(|suffix| suffix.starts_with('/'))
-            })
+    primitive_defining_package(package) || core_runtime_specifier(specifier)
 }
 
 /// One of the eight **kinded** call claim domains a normalized package
@@ -3162,6 +3174,46 @@ mod tests {
         assert!(!primitive_defining_package("@solidjs/element"));
         assert!(!primitive_defining_package("solid-js-signals"));
         assert!(!primitive_defining_package("my-solid-js"));
+    }
+
+    /// The specifier form reaches subpaths, which the archive-name form must
+    /// not, and it is derived from the same list rather than repeating it.
+    ///
+    /// This predicate has a use that the archive-name one is documented never
+    /// to have: `module_closure::record_external` uses it to *not* record an
+    /// opaque frontier. Its admissibility is argued at that call site — the
+    /// exemption establishes no claim, it only declines to withdraw every
+    /// domain — and pinned here so the two forms cannot drift into answering
+    /// differently about the same package.
+    #[test]
+    fn the_core_runtime_specifier_form_reaches_subpaths_of_the_same_archives() {
+        for name in ["solid-js", "@solidjs/signals", "@solidjs/web"] {
+            assert!(primitive_defining_package(name), "{name}");
+            assert!(core_runtime_specifier(name), "{name}");
+            assert!(
+                core_runtime_specifier(&format!("{name}/store")),
+                "{name}/store"
+            );
+        }
+        // The archive-name form refuses a subpath; the specifier form is the
+        // one that must accept it.
+        assert!(!primitive_defining_package("solid-js/store"));
+        assert!(core_runtime_specifier("solid-js/store"));
+
+        // Everything the archive-name form refuses outright, this refuses too:
+        // a neighbouring scope member, a prefix that is not a path boundary,
+        // and the empty specifier.
+        for other in [
+            "",
+            "@solidjs",
+            "@solidjs/router",
+            "@solidjs/meta",
+            "solid-js-signals",
+            "my-solid-js",
+            "solid-jsx",
+        ] {
+            assert!(!core_runtime_specifier(other), "{other:?}");
+        }
     }
 
     /// The negative authority is a *negative* authority: it can refuse and it

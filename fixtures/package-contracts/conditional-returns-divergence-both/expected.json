@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "a277e1b0244a38424cee4c0348cf64505f8075580706018d929f7d8154fb2b7e",
+            "closureSha256": "1e4ab95bb1a45c76a202c2b49fc8c327abf3301b1d556597bf3b9dee6ac04510",
             "path": "./node.js",
             "sha256": "d929b2d5c7e32f89aa36523dc13e0feb1fbb58236a64b3f1ec01aaf0e90f4ec0"
           },
@@ -13,8 +13,8 @@
             "sha256": "d929b2d5c7e32f89aa36523dc13e0feb1fbb58236a64b3f1ec01aaf0e90f4ec0"
           },
           "exports": {
-            "Show": "summary-746e4490245bde8e30d3c9ab495553b39f388e3c5a6be62c3479e69692368a87",
-            "Steady": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            "Show": "summary-7a2097e84a0318a395f919c1bce7e6037f84f861ee244e661f8c1b8471f1e15f",
+            "Steady": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -23,7 +23,7 @@
         },
         {
           "artifact": {
-            "closureSha256": "a277e1b0244a38424cee4c0348cf64505f8075580706018d929f7d8154fb2b7e",
+            "closureSha256": "1e4ab95bb1a45c76a202c2b49fc8c327abf3301b1d556597bf3b9dee6ac04510",
             "path": "./node.js",
             "sha256": "d929b2d5c7e32f89aa36523dc13e0feb1fbb58236a64b3f1ec01aaf0e90f4ec0"
           },
@@ -32,8 +32,8 @@
             "sha256": "d929b2d5c7e32f89aa36523dc13e0feb1fbb58236a64b3f1ec01aaf0e90f4ec0"
           },
           "exports": {
-            "Show": "summary-746e4490245bde8e30d3c9ab495553b39f388e3c5a6be62c3479e69692368a87",
-            "Steady": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            "Show": "summary-7a2097e84a0318a395f919c1bce7e6037f84f861ee244e661f8c1b8471f1e15f",
+            "Steady": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/./node",
@@ -42,7 +42,7 @@
         },
         {
           "artifact": {
-            "closureSha256": "d81fc65c5a22c69570c481290fbfae34839813646ebf03ee75986b8b07d759e9",
+            "closureSha256": "315729f51011853ca47299677b4d33114f48c7b9edaed0a889c0b76619d3b800",
             "path": "./browser.js",
             "sha256": "415c2986a3d355234653761c114ea0d250aad072d462d5c3a52067b1ccf63042"
           },
@@ -51,8 +51,8 @@
             "sha256": "415c2986a3d355234653761c114ea0d250aad072d462d5c3a52067b1ccf63042"
           },
           "exports": {
-            "Show": "summary-b1f6ccac9babff33cf223de3d0a7f152567b6ceb57ca4a0bbc8c341490a85933",
-            "Steady": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            "Show": "summary-4b5194adec1b6c3e2a51a20a4a0d816b833ffcc02cc1089f1f78e9c44ebc32ed",
+            "Steady": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/./browser",
@@ -76,47 +76,13 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-746e4490245bde8e30d3c9ab495553b39f388e3c5a6be62c3479e69692368a87": {
+    "summary-4b5194adec1b6c3e2a51a20a4a0d816b833ffcc02cc1089f1f78e9c44ebc32ed": {
       "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "object",
-              "properties": [
-                {
-                  "name": "other",
-                  "value": {
-                    "kind": "reactive",
-                    "role": "accessor"
-                  }
-                }
-              ]
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
+        "closed": [
+          "reads",
+          "creates"
         ],
-        "returns": [
-          "return"
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-b1f6ccac9babff33cf223de3d0a7f152567b6ceb57ca4a0bbc8c341490a85933": {
-      "call": {
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -148,14 +114,79 @@
             }
           }
         ],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": [],
         "returns": [
           "return"
         ]
       },
       "shape": "callable"
     },
-    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
-      "call": {},
+    "summary-7a2097e84a0318a395f919c1bce7e6037f84f861ee244e661f8c1b8471f1e15f": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "object",
+              "properties": [
+                {
+                  "name": "other",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": []
+      },
       "shape": "callable"
     }
   }

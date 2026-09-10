@@ -396,6 +396,28 @@ impl ClosureReplay<'_> {
                 && !specifier.starts_with('#')
                 && !specifier.ends_with(".node")
                 && !specifier.ends_with(".wasm") => {}
+            // The built-in runtime foundation is not an unknown dependency.
+            // `solid-js`, `@solidjs/signals` and `@solidjs/web` have no
+            // package contract *by design* -- `core_runtime_contract_reference`
+            // withholds one, and generating one selects
+            // `GenerationScope::DialectDefiningPackage`, which withholds the
+            // reactive domains wholesale -- so an opaque frontier for them is
+            // a demand that can never be met, and it opened every domain of
+            // every export of any package that imports Solid at all.
+            //
+            // **This is a name-only predicate that stops withholding**, which
+            // `primitive_defining_package` says its own basis may not do. The
+            // narrower thing it does here is admissible for a different
+            // reason: clearing the frontier establishes no claim. Every claim
+            // still comes from the generator's derivation over *this*
+            // package's bytes, and every proposed closure is re-proved by the
+            // certifier's implementation census, which walks the archive's own
+            // implementation and refuses any form it cannot census. What the
+            // name gates is whether a blanket withdrawal applies, not whether
+            // anything is true. See
+            // `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
+            // § 27.
+            [] if solid_dialect::core_runtime_specifier(specifier) => {}
             [] => self.record_opaque_frontier(importer, specifier),
             _ => {
                 return closure_mismatch(format!(
@@ -649,4 +671,57 @@ fn all_domains() -> Vec<AffectedClaimDomain> {
 
 fn closure_mismatch<T>(reason: impl Into<String>) -> Result<T, ArtifactSnapshotError> {
     Err(ArtifactSnapshotError::ModuleClosure(reason.into()))
+}
+
+#[cfg(test)]
+mod tests {
+    /// The closure is computed twice — here and by the generator's
+    /// TypeScript census in `packages/cli/scripts/artifact-resolution.mjs` —
+    /// and the two must agree byte for byte, or a supplied closure never
+    /// matches the recomputed one.
+    ///
+    /// `record_external` now exempts the built-in runtime foundation from the
+    /// opaque frontier. Rust derives that list from
+    /// `Dialect::primitive_defining_packages`; the TypeScript side hard-codes
+    /// it, because nothing checked in carries the list for it to read — the
+    /// dialect manifests' `contracts[]` is the *bundled contract* list, which
+    /// is broader (it holds `@solid-primitives/scheduled` and friends). So
+    /// the agreement is asserted from the side that owns the authoritative
+    /// list, by reading the constant out of the mirror.
+    ///
+    /// This is the failure the dual hazard census already cost this
+    /// repository once: one concept, two implementations, agreement enforced
+    /// only by a downstream mismatch.
+    #[test]
+    fn the_core_runtime_package_list_agrees_with_the_typescript_census() {
+        let mirror = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../packages/cli/scripts/artifact-resolution.mjs");
+        let source = std::fs::read_to_string(&mirror).expect("the TypeScript census is readable");
+        let declaration = source
+            .split_once("const CORE_RUNTIME_PACKAGES = [")
+            .expect("the mirror declares CORE_RUNTIME_PACKAGES")
+            .1
+            .split_once(']')
+            .expect("the declaration is a closed array literal")
+            .0;
+        let mirrored = declaration
+            .split(',')
+            .map(|entry| entry.trim().trim_matches('"').to_owned())
+            .filter(|entry| !entry.is_empty())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        let owned = [solid_dialect::Version::V1, solid_dialect::Version::V2]
+            .into_iter()
+            .flat_map(|version| version.dialect().primitive_defining_packages())
+            .map(|name| (*name).to_owned())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        assert_eq!(
+            mirrored, owned,
+            "packages/cli/scripts/artifact-resolution.mjs and \
+             Dialect::primitive_defining_packages disagree about the built-in \
+             runtime foundation, so the two closure censuses disagree about \
+             which imports are an opaque frontier"
+        );
+    }
 }

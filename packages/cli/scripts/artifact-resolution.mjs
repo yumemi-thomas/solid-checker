@@ -807,6 +807,22 @@ const ROLE_DEBUG = new Map([
   ["generated", "Generated"]
 ]);
 const ROLE_ORDER = new Map([...ROLE_DEBUG.keys()].map((value, index) => [value, index]));
+// The built-in runtime foundation, mirrored from the checked-in dialect
+// manifests (`rust/dialects/solid-v*/dialect.json`, whose `contracts[].package`
+// is the same list `Dialect::primitive_defining_packages` returns in Rust).
+// `artifact-resolution.test.mjs` pins the two against each other; a fourth
+// core package added to a dialect must reach both censuses or they disagree
+// about which imports are an opaque frontier.
+const CORE_RUNTIME_PACKAGES = ["solid-js", "@solidjs/signals", "@solidjs/web"];
+
+/// Whether a specifier names the built-in runtime foundation, or a subpath of
+/// it. Mirrors `solid_dialect::core_runtime_specifier`.
+export function coreRuntimeSpecifier(specifier) {
+  return CORE_RUNTIME_PACKAGES.some(
+    name => specifier === name || specifier.startsWith(`${name}/`)
+  );
+}
+
 const HAZARD_DEBUG = new Map([
   ["nonliteral-dynamic-loading", "NonliteralDynamicLoading"],
   ["eval", "Eval"],
@@ -2495,6 +2511,14 @@ function closureForRoots(
           artifactCase: accepted.artifactCase,
           acceptedContractDigest: accepted.acceptedContractDigest
         });
+      } else if (coreRuntimeSpecifier(specifier.text)) {
+        // The built-in runtime foundation is not an unknown dependency, and
+        // an opaque frontier for it is a demand that can never be met: these
+        // packages have no contract by design. The specifier stays in the
+        // external dependency census above, so the exemption is recorded as
+        // a classified edge rather than as an absence. Mirror of the same
+        // arm in Rust's `record_external`; the two censuses must agree byte
+        // for byte.
       } else if (!(axis === "declarations" && isDeclarationFileName(path))) {
         // ADR 0010: a declaration file does not execute this import. Its
         // acquisition edge above remains, and Type Facts can use its typings

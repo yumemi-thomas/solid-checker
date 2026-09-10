@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "d273a3d05ba0febd16d190b4055a08baabb8f318c557799864656b342a72db8e",
+            "closureSha256": "885b61c0a92196b7cc8ba43a0755a7fc20185cde7143f1a329f89e7993b142e5",
             "path": "./index.js",
             "sha256": "5a53427f064bae1f4fd98de896d0b8f84c22c7b45a3d0e917671d9e80be4f182"
           },
@@ -13,8 +13,8 @@
             "sha256": "87a566d89b8834846ea929f314e585aecb286fd1c2fed7207d14cfc3cc99115d"
           },
           "exports": {
-            "Direct": "summary-31edfd83199d80e5090b421bbf909bb77ef24428b2966c8585ba090875a3fa9e",
-            "inert": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+            "Direct": "summary-ad24593398962ff8583996588986fa783ff6f0a42975952a19bb5959c652b436",
+            "inert": "summary-dff339376caaf3d23d0f9ef219335d4639ecdd3d3b6fd330406747059bfdbd31"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -38,7 +38,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-31edfd83199d80e5090b421bbf909bb77ef24428b2966c8585ba090875a3fa9e": {
+    "summary-ad24593398962ff8583996588986fa783ff6f0a42975952a19bb5959c652b436": {
       "call": {
         "callbacks": [
           {
@@ -49,6 +49,11 @@
             "operation": "callback-0"
           }
         ],
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -97,13 +102,18 @@
             }
           }
         ],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": [],
         "returns": [
           "return"
         ]
       },
       "shape": "callable"
     },
-    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+    "summary-dff339376caaf3d23d0f9ef219335d4639ecdd3d3b6fd330406747059bfdbd31": {
       "call": {
         "callbacks": [
           {
@@ -114,6 +124,11 @@
             "operation": "callback-0"
           }
         ],
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -132,7 +147,12 @@
               "event": "call"
             }
           }
-        ]
+        ],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": []
       },
       "shape": "callable"
     }

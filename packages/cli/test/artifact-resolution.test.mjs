@@ -31,10 +31,38 @@ import {
   nonModuleTargetExtension,
   resolvePackageExport,
   selectPackageExportTarget,
-  selectTypeScriptApi
+  selectTypeScriptApi,
+  coreRuntimeSpecifier
 } from "../scripts/artifact-resolution.mjs";
 
 const roots = [];
+
+describe("the core-runtime specifier predicate", () => {
+  // Behaviour only. Whether this list *is* the core runtime is checked from
+  // the side that owns the list: `module_closure::tests::
+  // the_core_runtime_package_list_agrees_with_the_typescript_census` reads
+  // this file and compares it to `Dialect::primitive_defining_packages`. The
+  // closure is computed twice and the two censuses must agree byte for byte
+  // about which imports are an opaque frontier.
+  test("reaches an archive and its subpaths, and nothing that merely resembles one", () => {
+    for (const name of ["solid-js", "@solidjs/signals", "@solidjs/web"]) {
+      expect(coreRuntimeSpecifier(name), name).toBe(true);
+      expect(coreRuntimeSpecifier(`${name}/store`), `${name}/store`).toBe(true);
+    }
+    for (const other of [
+      "@solidjs",
+      "@solidjs/router",
+      "@solidjs/meta",
+      "@solid-primitives/scheduled",
+      "solid-jsx",
+      "solid-js-signals",
+      "my-solid-js",
+      ""
+    ]) {
+      expect(coreRuntimeSpecifier(other), JSON.stringify(other)).toBe(false);
+    }
+  });
+});
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });

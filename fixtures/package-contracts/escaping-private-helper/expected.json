@@ -27,7 +27,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "66dd2f75dfa9ced2aae38b323b1e72eff4c680f61d927ef85182f969fba71241",
+            "closureSha256": "2183abcc54809553af093e571dce51600f3d59eeae3990468b0b237239c80de4",
             "path": "./builtin.jsx",
             "sha256": "b2cc90716feab77281b87039ce9514cf5baf894fbf01901c458e9805e77b65b1"
           },
@@ -36,8 +36,8 @@
             "sha256": "cb0bef8ea179f758040d4b9419b295c300a27c38f9001e9790020787314b6bcf"
           },
           "exports": {
-            "App": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "Isolated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            "App": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "Isolated": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1builtin/default",
@@ -304,10 +304,6 @@
         ],
         "reads": []
       },
-      "shape": "callable"
-    },
-    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
-      "call": {},
       "shape": "callable"
     },
     "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {

@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "84086c28badc37be8938e8c88fdb1b3158db36628f1377281edc28054eabcd54",
+            "closureSha256": "7acacc5a0c8446b8ed6765ff8d2d98a14ac1c072f07be0bbfe521859951ce420",
             "path": "./index.js",
             "sha256": "9cac85e64e6a7649af44ab1afe3d06867c22dd22a3f671b34f852deb75b401d6"
           },
@@ -13,7 +13,7 @@
             "sha256": "9cac85e64e6a7649af44ab1afe3d06867c22dd22a3f671b34f852deb75b401d6"
           },
           "exports": {
-            "mapValue": "summary-8435ce063fc32c1614f4d38f662eccfacacc622b12cff30a7d333a2000d44361"
+            "mapValue": "summary-17ea2f6e2dc978b7500df3b484fc251c6b51731e18404828a1474378ebbcb562"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -37,7 +37,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-8435ce063fc32c1614f4d38f662eccfacacc622b12cff30a7d333a2000d44361": {
+    "summary-17ea2f6e2dc978b7500df3b484fc251c6b51731e18404828a1474378ebbcb562": {
       "call": {
         "callbacks": [
           {
@@ -48,6 +48,11 @@
             "operation": "callback-0"
           }
         ],
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -73,7 +78,12 @@
               "event": "call"
             }
           }
-        ]
+        ],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": []
       },
       "shape": "callable"
     }
