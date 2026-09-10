@@ -697,3 +697,53 @@ be: sample the export, emit only on contradiction.
   `__defineGetter__` ×1 and `Object.create` ×2, so it sits in the 69% § 8
   measured as refused. The next real target has to come from the 273 clean
   packages, and has to be one a consumer actually imports.
+
+## 13. Can any real package produce a clean verdict now? (2026-09-10)
+
+§ 12 left `reads` certifiable and one question outstanding: pick a package
+from the 273 that install no accessor, certify it, and see whether a consumer
+goes clean. Answered by cross-referencing the clean set against what the
+corpus already proves, before spending a certification on it.
+
+**No, and the blocker is `returns`, not `reads`.**
+
+| | exports |
+| --- | --- |
+| in the clean set (deduplicated rows) | 1746 |
+| of which `creates` closes | 50 |
+| of which `returns` closes | **0** |
+
+SC9005 needs `reads ∧ returns ∧ creates`. `reads` can now close for all 1746.
+`creates` closes for 50, spread over eight packages — `@corvu/utils` and
+`@corvu-next/utils` (20 each), `@kobalte/solidbase` (6), two
+`@solid-primitives/analytics` exports, one in `@solid-primitives/input-mask`.
+`returns` closes for none of them, so every one still reports.
+
+`@solid-primitives/utils`, the obvious candidate at 99 clean exports and a
+dependency of most of the family, is worse than that: all nine domains are
+unknown for all 99, so the creates census refuses it outright.
+
+### Why `returns` is zero, and the one door still open
+
+The returns census decides two shapes: empty completion (ADR 0035) and a
+whole-parameter identity. A utility that computes and returns a value is
+neither. `@corvu/utils` has no void-returning export at all — the closest is
+`afterPaint`, which returns a `number`.
+
+So the only route to a clean verdict today is the *other* half of the returns
+work: the demand-scoping slice raises the obligation only where a consumer can
+read the result. An export whose result the consumer discards sheds `returns`,
+and then `creates ∧ reads` closed is the whole predicate.
+
+That narrows the search to **those 50 exports, called for effect**. Whether
+any of them is naturally called that way in real code is the next question,
+and it is a question about consumers rather than about packages.
+
+### What this says about the ordering
+
+Every measurement today has pointed at `reads` as the blocker, and it was —
+until it closed. The next one is `returns`, and it is a *census* limitation
+rather than a premise the producer cannot supply: the shapes it decides are
+empty completion and parameter identity, and nothing else. Extending it is a
+census question with no proxy-shaped hole underneath it, which makes it a
+smaller problem than `reads` was.
