@@ -1,0 +1,57 @@
+{
+  "basis": {
+    "report": "rust/target/ecosystem-investigations/2026-09-09-machine-full.json",
+    "unit": "published package archive (superset of any artifact-case closure inside it)",
+    "direction": "lower bound on survival"
+  },
+  "coverage": {
+    "rowsMeasured": 381,
+    "exportsMeasured": 8950,
+    "rowsMissing": 0,
+    "exportsMissing": 0
+  },
+  "core": {
+    "packagesClean": 273,
+    "packagesTotal": 381,
+    "exportsClean": 2372,
+    "exportsTotal": 8950
+  },
+  "byPattern": {
+    "proxy": {
+      "packages": 38,
+      "exports": 2539
+    },
+    "defineProperty": {
+      "packages": 84,
+      "exports": 6043
+    },
+    "defineGetter": {
+      "packages": 0,
+      "exports": 0
+    },
+    "objectCreate": {
+      "packages": 14,
+      "exports": 1367
+    },
+    "setPrototypeOf": {
+      "packages": 0,
+      "exports": 0
+    },
+    "protoAssignment": {
+      "packages": 13,
+      "exports": 1469
+    },
+    "computedObjectMember": {
+      "packages": 0,
+      "exports": 0
+    },
+    "reflect": {
+      "packages": 27,
+      "exports": 2426
+    }
+  },
+  "bundlerPreambleOnly": {
+    "packages": 18,
+    "exports": 3541
+  }
+}

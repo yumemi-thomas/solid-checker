@@ -1,0 +1,297 @@
+[
+  {
+    "id": "package-contracts__carried-value-kind",
+    "skipped": "no tsconfig"
+  },
+  {
+    "id": "package-contracts__torture-environment-conditions",
+    "skipped": "no tsconfig"
+  },
+  {
+    "id": "package-contracts__uncaptured-source-return",
+    "skipped": "no tsconfig"
+  },
+  {
+    "id": "package-contracts__unresolved-contract-export-attribution",
+    "skipped": "no tsconfig"
+  },
+  {
+    "id": "reactive-ir__package-callback-arguments-consumer",
+    "statusOn": "uncertifiable",
+    "statusOff": "certified",
+    "nOn": 2,
+    "nOff": 0,
+    "added": [
+      {
+        "id": "SC9005",
+        "rule": "package-contract-incomplete",
+        "kind": "uncertifiable",
+        "loc": "App.ts:1:1",
+        "ctx": "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+      }
+    ],
+    "removed": []
+  },
+  {
+    "id": "reactive-ir__package-callback-consumer",
+    "statusOn": "uncertifiable",
+    "statusOff": "certified",
+    "nOn": 5,
+    "nOff": 0,
+    "added": [
+      {
+        "id": "SC9005",
+        "rule": "package-contract-incomplete",
+        "kind": "uncertifiable",
+        "loc": "App.tsx:2:1",
+        "ctx": "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+      }
+    ],
+    "removed": []
+  },
+  {
+    "id": "reactive-ir__package-consumer",
+    "statusOn": "uncertifiable",
+    "statusOff": "certified",
+    "nOn": 2,
+    "nOff": 0,
+    "added": [
+      {
+        "id": "SC9005",
+        "rule": "package-contract-incomplete",
+        "kind": "uncertifiable",
+        "loc": "App.tsx:1:1",
+        "ctx": "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+      }
+    ],
+    "removed": []
+  },
+  {
+    "id": "reactive-ir__package-contract-install-shapes",
+    "statusOn": "uncertifiable",
+    "statusOff": "certified",
+    "nOn": 2,
+    "nOff": 0,
+    "added": [
+      {
+        "id": "SC9005",
+        "rule": "package-contract-incomplete",
+        "kind": "uncertifiable",
+        "loc": "App.ts:1:1",
+        "ctx": "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+      },
+      {
+        "id": "SC9005",
+        "rule": "package-contract-incomplete",
+        "kind": "uncertifiable",
+        "loc": "App.ts:3:1",
+        "ctx": "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+      }
+    ],
+    "removed": []
+  },
+  {
+    "id": "reactive-ir__package-contract-paths-shadow",
+    "statusOn": "uncertifiable",
+    "statusOff": "certified",
+    "nOn": 1,
+    "nOff": 0,
+    "added": [
+      {
+        "id": "SC9005",
+        "rule": "package-contract-incomplete",
+        "kind": "uncertifiable",
+        "loc": "App.ts:2:1",
+        "ctx": "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+      }
+    ],
+    "removed": []
+  },
+  {
+    "id": "reactive-ir__package-parameter-member-consumer",
+    "statusOn": "uncertifiable",
+    "statusOff": "certified",
+    "nOn": 2,
+    "nOff": 0,
+    "added": [
+      {
+        "id": "SC9005",
+        "rule": "package-contract-incomplete",
+        "kind": "uncertifiable",
+        "loc": "App.tsx:1:1",
+        "ctx": "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+      }
+    ],
+    "removed": []
+  },
+  {
+    "id": "reactive-ir__package-return-consumer",
+    "statusOn": "uncertifiable",
+    "statusOff": "certified",
+    "nOn": 1,
+    "nOff": 0,
+    "added": [
+      {
+        "id": "SC9005",
+        "rule": "package-contract-incomplete",
+        "kind": "uncertifiable",
+        "loc": "App.tsx:1:1",
+        "ctx": "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+      }
+    ],
+    "removed": []
+  },
+  {
+    "id": "reactive-ir__package-store-consumer",
+    "statusOn": "uncertifiable",
+    "statusOff": "certified",
+    "nOn": 1,
+    "nOff": 0,
+    "added": [
+      {
+        "id": "SC9005",
+        "rule": "package-contract-incomplete",
+        "kind": "uncertifiable",
+        "loc": "App.tsx:1:1",
+        "ctx": "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+      }
+    ],
+    "removed": []
+  },
+  {
+    "id": "reactive-ir__package-store-destructure",
+    "statusOn": "uncertifiable",
+    "statusOff": "certified",
+    "nOn": 1,
+    "nOff": 0,
+    "added": [
+      {
+        "id": "SC9005",
+        "rule": "package-contract-incomplete",
+        "kind": "uncertifiable",
+        "loc": "App.tsx:1:1",
+        "ctx": "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+      }
+    ],
+    "removed": []
+  },
+  {
+    "id": "reactive-ir__package-structured-return",
+    "statusOn": "uncertifiable",
+    "statusOff": "certified",
+    "nOn": 3,
+    "nOff": 0,
+    "added": [
+      {
+        "id": "SC9005",
+        "rule": "package-contract-incomplete",
+        "kind": "uncertifiable",
+        "loc": "App.tsx:2:1",
+        "ctx": "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+      }
+    ],
+    "removed": []
+  },
+  {
+    "id": "reactive-ir__package-structured-unresolved",
+    "statusOn": "uncertifiable",
+    "statusOff": "uncertifiable",
+    "nOn": 4,
+    "nOff": 3,
+    "added": [
+      {
+        "id": "SC9005",
+        "rule": "v1/package-contract-incomplete",
+        "kind": "uncertifiable",
+        "loc": "App.ts:3:1",
+        "ctx": "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+      }
+    ],
+    "removed": []
+  },
+  {
+    "id": "reactive-ir__package-unknown-callback-consumer",
+    "statusOn": "uncertifiable",
+    "statusOff": "certified",
+    "nOn": 2,
+    "nOff": 0,
+    "added": [
+      {
+        "id": "SC9005",
+        "rule": "package-contract-incomplete",
+        "kind": "uncertifiable",
+        "loc": "App.ts:2:1",
+        "ctx": "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+      }
+    ],
+    "removed": []
+  },
+  {
+    "id": "reactive-ir__package-unknown-export",
+    "statusOn": "uncertifiable",
+    "statusOff": "certified",
+    "nOn": 1,
+    "nOff": 0,
+    "added": [
+      {
+        "id": "SC9005",
+        "rule": "package-contract-incomplete",
+        "kind": "uncertifiable",
+        "loc": "App.tsx:1:1",
+        "ctx": "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+      }
+    ],
+    "removed": []
+  },
+  {
+    "id": "reactive-ir__package-unknown-returns-consumer",
+    "statusOn": "uncertifiable",
+    "statusOff": "certified",
+    "nOn": 2,
+    "nOff": 0,
+    "added": [
+      {
+        "id": "SC9005",
+        "rule": "package-contract-incomplete",
+        "kind": "uncertifiable",
+        "loc": "App.ts:1:1",
+        "ctx": "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+      }
+    ],
+    "removed": []
+  },
+  {
+    "id": "reactive-ir__package-variant-precedence-consumer",
+    "statusOn": "uncertifiable",
+    "statusOff": "certified",
+    "nOn": 2,
+    "nOff": 0,
+    "added": [
+      {
+        "id": "SC9005",
+        "rule": "package-contract-incomplete",
+        "kind": "uncertifiable",
+        "loc": "App.tsx:1:1",
+        "ctx": "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+      }
+    ],
+    "removed": []
+  },
+  {
+    "id": "reactive-ir__v1-reactivity",
+    "statusOn": "violation",
+    "statusOff": "violation",
+    "nOn": 18,
+    "nOff": 16,
+    "added": [
+      {
+        "id": "SC9005",
+        "rule": "v1/package-contract-incomplete",
+        "kind": "uncertifiable",
+        "loc": "App.tsx:3:1",
+        "ctx": "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+      }
+    ],
+    "removed": []
+  }
+]
