@@ -13,19 +13,19 @@
             "sha256": "cf1d95234859588fa34f347f33db1e805a01a72107e5c9737573a5ef825a822b"
           },
           "exports": {
-            "awaitThenableForm": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "capturedTaggedForm": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "coercionForm": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "forOfForm": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "getAccessorForm": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "instanceofForm": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "objectSpreadForm": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "plainCallForm": "summary-5f5b804e83be5aede7d0abaf2dc45cc361fe1b11fc38c0a3ccf72ca6ebf6f4dc",
-            "plainMemberForm": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "setAccessorForm": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
-            "spreadForm": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "taggedForm": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "unknownMemberForm": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "awaitThenableForm": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "capturedTaggedForm": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "coercionForm": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "forOfForm": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "getAccessorForm": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "instanceofForm": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "objectSpreadForm": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "plainCallForm": "summary-3a8858d7c65936bb057bc7846cfefb18019d594f9f4c0cb8d7919985be9b9c30",
+            "plainMemberForm": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "setAccessorForm": "summary-791cb4c57004018a3fb0b4d95eff7e5e6d9ddfa314766fc6a3ad977a3fa3d055",
+            "spreadForm": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "taggedForm": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "unknownMemberForm": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -49,7 +49,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-5f5b804e83be5aede7d0abaf2dc45cc361fe1b11fc38c0a3ccf72ca6ebf6f4dc": {
+    "summary-3a8858d7c65936bb057bc7846cfefb18019d594f9f4c0cb8d7919985be9b9c30": {
       "call": {
         "callbacks": [
           {
@@ -61,6 +61,7 @@
           }
         ],
         "closed": [
+          "reads",
           "creates",
           "returns"
         ],
@@ -85,37 +86,45 @@
           }
         ],
         "proposedClosures": [
+          "reads",
           "creates",
           "returns"
         ],
+        "reads": [],
         "returns": []
       },
       "shape": "callable"
     },
-    "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94": {
+    "summary-791cb4c57004018a3fb0b4d95eff7e5e6d9ddfa314766fc6a3ad977a3fa3d055": {
       "call": {
         "closed": [
+          "reads",
           "creates",
           "returns"
         ],
         "creates": [],
         "proposedClosures": [
+          "reads",
           "creates",
           "returns"
         ],
+        "reads": [],
         "returns": []
       },
       "shape": "callable"
     },
-    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
+    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
       "call": {
         "closed": [
+          "reads",
           "creates"
         ],
         "creates": [],
         "proposedClosures": [
+          "reads",
           "creates"
-        ]
+        ],
+        "reads": []
       },
       "shape": "callable"
     }

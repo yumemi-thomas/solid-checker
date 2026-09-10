@@ -16,7 +16,7 @@
             "Arrow": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
             "Direct": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
             "Helper": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
-            "inert": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1"
+            "inert": "summary-dff339376caaf3d23d0f9ef219335d4639ecdd3d3b6fd330406747059bfdbd31"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -80,7 +80,7 @@
       },
       "shape": "callable"
     },
-    "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1": {
+    "summary-dff339376caaf3d23d0f9ef219335d4639ecdd3d3b6fd330406747059bfdbd31": {
       "call": {
         "callbacks": [
           {
@@ -92,6 +92,7 @@
           }
         ],
         "closed": [
+          "reads",
           "creates"
         ],
         "creates": [],
@@ -115,8 +116,10 @@
           }
         ],
         "proposedClosures": [
+          "reads",
           "creates"
-        ]
+        ],
+        "reads": []
       },
       "shape": "callable"
     }

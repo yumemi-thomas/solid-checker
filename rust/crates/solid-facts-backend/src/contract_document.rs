@@ -17,12 +17,13 @@ use solid_reactive_ir::contract_semantics::{
     ArrayLength, ArtifactCase, ArtifactIdentity, CallbackInvocation, CapabilityClaim,
     CapabilityKnowledge, Cardinality, CardinalityScope, ClaimDomain, ContractProposal, Digest,
     EdgeKind, Event, ExportIdentity, ExportSemantics, ExportTargetIdentity, Guard, GuardAtom,
-    GuardPartition, GuardedCase, KnowledgeSet, Lifetime, Literal, NormalizedContract,
-    ObjectProperty, ObservableCapability, Operation, OperationEdge, OperationId, OperationKind,
-    OwnerCapabilities, OwnerProduction, OwnerRelation, OwnerRequirements, OwnerSource,
-    PackageIdentity, ReactiveRole, Requirement, ResolutionStep, Resource, ResourceCapability,
-    ResourceId, ResourceKind, ResourceState, SEMANTIC_MODEL_VERSION, Schedule, StabilityKnowledge,
-    Tracking, Trigger, UpperBound, ValueKind, ValueShape, ValueSource,
+    GuardPartition, GuardedCase, KnowledgeSet, Lifetime, Literal, ModuleInitializationClaim,
+    NormalizedContract, ObjectProperty, ObservableCapability, Operation, OperationEdge,
+    OperationId, OperationKind, OwnerCapabilities, OwnerProduction, OwnerRelation,
+    OwnerRequirements, OwnerSource, PackageIdentity, ReactiveRole, Requirement, ResolutionStep,
+    Resource, ResourceCapability, ResourceId, ResourceKind, ResourceState, SEMANTIC_MODEL_VERSION,
+    Schedule, StabilityKnowledge, Tracking, Trigger, UpperBound, ValueKind, ValueShape,
+    ValueSource,
 };
 
 use crate::contract_interface::ContractFailure;
@@ -212,6 +213,14 @@ fn compact(
         }
         if artifact_case.stability == StabilityKnowledge::Experimental {
             case.insert("stability".into(), json!("experimental"));
+        }
+        if let Some(initialization) = artifact_case.initialization {
+            case.insert(
+                "initialization".into(),
+                match initialization {
+                    ModuleInitializationClaim::Inert => json!("inert"),
+                },
+            );
         }
         case.insert("exports".into(), JsonValue::Object(exports));
         entrypoint_cases
@@ -1290,6 +1299,8 @@ enum WireEntrypoint {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WireUnconditionalEntrypoint {
+    #[serde(default, deserialize_with = "deserialize_initialization")]
+    initialization: Option<WireModuleInitialization>,
     artifact: WireRuntimeArtifact,
     declarations: WireFile,
     #[serde(default)]
@@ -1308,6 +1319,8 @@ struct WireConditionalEntrypoint {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WireArtifactCase {
+    #[serde(default, deserialize_with = "deserialize_initialization")]
+    initialization: Option<WireModuleInitialization>,
     resolution: WireResolution,
     artifact: WireRuntimeArtifact,
     declarations: WireFile,
@@ -1316,6 +1329,18 @@ struct WireArtifactCase {
     #[serde(default)]
     stability: Option<WireStability>,
     exports: BTreeMap<String, WireExportReference>,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum WireModuleInitialization {
+    Inert,
+}
+
+fn deserialize_initialization<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<WireModuleInitialization>, D::Error> {
+    WireModuleInitialization::deserialize(deserializer).map(Some)
 }
 
 #[derive(Clone, Deserialize)]
@@ -2165,6 +2190,7 @@ fn expand(document: WireDocument) -> Result<NormalizedContract, ContractFailure>
                     case.declarations,
                     case.transform,
                     case.stability,
+                    case.initialization,
                     case.exports,
                     &document.summaries,
                     &mut used_summaries,
@@ -2187,6 +2213,7 @@ fn expand(document: WireDocument) -> Result<NormalizedContract, ContractFailure>
                         case.declarations,
                         case.transform,
                         case.stability,
+                        case.initialization,
                         case.exports,
                         &document.summaries,
                         &mut used_summaries,
@@ -2273,6 +2300,7 @@ fn expand_artifact_case(
     declarations: WireFile,
     transform: Option<WireFile>,
     stability: Option<WireStability>,
+    initialization: Option<WireModuleInitialization>,
     exports: BTreeMap<String, WireExportReference>,
     summaries: &BTreeMap<String, WireSummary>,
     used_summaries: &mut BTreeSet<String>,
@@ -2348,6 +2376,9 @@ fn expand_artifact_case(
     }
 
     Ok(ArtifactCase {
+        initialization: initialization.map(|value| match value {
+            WireModuleInitialization::Inert => ModuleInitializationClaim::Inert,
+        }),
         id: case_id,
         entrypoint: entrypoint.into(),
         resolution_trace,
@@ -3458,6 +3489,32 @@ mod tests {
         }
     }
 
+    #[test]
+    fn inert_initialization_is_explicit_round_tripped_and_identity_bound() {
+        let mut document: JsonValue = serde_json::from_slice(MINIMAL).unwrap();
+        document["entrypoints"]["."]["exports"] = json!({});
+        document["summaries"] = json!({});
+        let absent = normalized(&serde_json::to_vec(&document).unwrap());
+        document["entrypoints"]["."]["initialization"] = json!("inert");
+        let inert = normalized(&serde_json::to_vec(&document).unwrap());
+        assert_eq!(
+            inert.artifact_cases()[0].initialization,
+            Some(ModuleInitializationClaim::Inert)
+        );
+        assert_ne!(absent.semantic_digest(), inert.semantic_digest());
+        let encoded = encode(&inert, &SidecarDigests::default(), true).unwrap();
+        assert_eq!(inert, normalized(&encoded));
+        for unsupported in [JsonValue::Null, json!(false), json!("unknown"), json!({})] {
+            document["entrypoints"]["."]["initialization"] = unsupported;
+            assert!(decode(&serde_json::to_vec(&document).unwrap()).is_err());
+        }
+        document["entrypoints"]["."]
+            .as_object_mut()
+            .unwrap()
+            .remove("initialization");
+        assert_eq!(absent, normalized(&serde_json::to_vec(&document).unwrap()));
+    }
+
     /// The composed golden really carries the field, and it survives the
     /// round trip as the same `(export, operation)` pair.
     ///
@@ -3544,8 +3601,11 @@ mod tests {
                 r#"{"closed":["creates"],"creates":[],"proposedClosures":["creates","creates"]}"#,
                 "duplicate closed domain",
             ),
+            // `writes`, not `reads`: `reads` became proposable on 2026-09-10
+            // and this row needs a domain that still has no closure proof
+            // mode. See `ClaimDomain::PROPOSABLE`.
             (
-                r#"{"closed":["reads"],"reads":[],"proposedClosures":["reads"]}"#,
+                r#"{"closed":["writes"],"writes":[],"proposedClosures":["writes"]}"#,
                 "no closure proof mode",
             ),
         ] {

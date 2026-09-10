@@ -60,7 +60,7 @@
           },
           "exports": {
             "Direct": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "Isolated": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "Isolated": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1called/default",
@@ -83,7 +83,7 @@
           },
           "exports": {
             "App": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "Isolated": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "Isolated": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1children/default",
@@ -106,7 +106,7 @@
           },
           "exports": {
             "App": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "Isolated": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "Isolated": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1closed/default",
@@ -128,8 +128,8 @@
             "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
           },
           "exports": {
-            "App": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "Isolated": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "App": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "Isolated": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1intrinsic/default",
@@ -221,7 +221,7 @@
           },
           "exports": {
             "App": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "Isolated": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "Isolated": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1rendered/default",
@@ -267,7 +267,7 @@
           },
           "exports": {
             "App": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "Isolated": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "Isolated": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1shadowed/default",
@@ -291,6 +291,21 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
+    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
     "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
       "call": {},
       "shape": "callable"

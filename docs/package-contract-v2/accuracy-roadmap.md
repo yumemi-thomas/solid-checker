@@ -462,12 +462,45 @@ closed claims per domain so the intermediate progress is visible.
    **ADR 0049** repairs the premise chain where a caller omits an optional
    argument: the slot receives `undefined`, a primitive, which is stronger than
    the `any` it used to degrade to. It moved **nothing** on the corpus, and the
-   shortfall names the blocker one line deeper — `applyPointDelta` assigns its
-   own `point` parameter from a call to an unannotated helper, so the next
-   call's slot 0 is `any`. Closing that needs the caller's twin to know the
-   helper returns a number: the "annotate the callee in the caller's twin"
-   route ADR 0045 rejected as too large, and now the named next step for this
-   cluster.
+   initial reconstruction of that shortfall was wrong. The measured chain
+   keeps the second call's slot 0 as `number`; the first call's scale slot is
+   `never`, narrowed from the omitted `undefined`. ADR 0051 fixes the explicit
+   bottom-type classification that refused this slot before inspecting its
+   type flag. See the [measured investigation](phase21/2026-09-07-creates-opportunity-ranking.md).
+   The subsequent full 418-probe run confirmed all six `applyBoxDelta`
+   closures: withheld **506 → 500**, creates census **449 → 443**, certified /
+   refused rows unchanged at **368 / 30**. The
+   [complete measurement](phase21/2026-09-07-protocol35-census-measurement.md)
+   inventories every remaining candidate and row refusal.
+
+   **ADR 0052** implements the authorized receipt-composition decision for
+   external calls: exact declaration/export binding records a conditional
+   child claim, authenticated composition discharges it, and finalization
+   binds the same requirement root. Full corpus: withheld **500 → 468**,
+   creates census **443 → 411**, vetoes 37 and returns 20 unchanged; rows
+   **368 / 30**. Dependency first refusals fall 48 → 10, but six expose
+   returned-callable blockers, so the measured gain is 32. See the
+   [current exhaustive measurement and ranking](phase21/2026-09-07-dependency-census-measurement.md).
+
+   **ADR 0053** takes the SVG helper's complete return set: both returns name
+   the same local data-only allocation. Protocol 36 carries the exact call,
+   callee, allocation and return sites, bound to the helper's execution
+   census. Full corpus: **468 → 462**, creates census **411 → 405**, all six
+   SVG claims explicitly closed in receipt-bound mains. No other first
+   refusal changes. [Current inventory and next target](phase21/2026-09-07-literal-result-census-measurement.md).
+
+   **ADR 0054** binds one returned callable with primitive captures and adds
+   exact anonymous-node compiler-symbol binding in protocol 37. It clears
+   six factory first refusals but no candidates: `buildHTMLStyles` now reaches
+   a failed `TransformTemplate | undefined` premise in `buildTransform`.
+   Withheld stays **462**; returned-callable refusals 52 → 46 and template
+   coercions 7 → 13. [Measured shortfall and next fact fix](phase21/2026-09-07-factory-census-measurement.md).
+
+   **ADR 0055** supplies complete imported union spelling and constituent
+   declaration identity in protocol 38. Withheld stays **462**. Twelve helper
+   premise failures clear but further coercions remain; six other occurrences
+   now expose alias text expansion rather than an unresolved type. No candidate
+   closure is inferred. [Measured next blockers](phase21/2026-09-07-union-census-measurement.md).
 
    **ADR 0050** takes the restriction every root premise carried — "written
    nowhere" — and shows the question was never flow-sensitive: if every value a

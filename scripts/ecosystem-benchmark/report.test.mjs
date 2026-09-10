@@ -141,6 +141,22 @@ test("report exposes aggregate worker phase timings", () => {
   assert.match(markdown, /install 700 ms, generation 950 ms, harness 150 ms/);
 });
 
+test("report retains recipe and exact recovery requests without inventing old configuration", () => {
+  const input = {
+    manifest: makeManifest({ results: [] }), results: [],
+    startedAt: "2026-09-07T09:00:00.000Z", finishedAt: "2026-09-07T09:00:01.000Z"
+  };
+  const entrypointRecovery = { allSelectedProbes: false, probeIds: ["package@1|solid2|floor"] };
+  const configured = buildReport({ ...input, checker: {
+    probeRecipeCorpus: "/exact/recipes", entrypointRecovery
+  } });
+  assert.equal(configured.checker.probeRecipeCorpus, "/exact/recipes");
+  assert.deepEqual(configured.checker.entrypointRecovery, entrypointRecovery);
+  assert.equal(buildReport({ ...input, checker: { probeRecipeCorpus: null } }).checker.probeRecipeCorpus, null);
+  assert.equal(Object.hasOwn(buildReport(input).checker, "probeRecipeCorpus"), false);
+  assert.equal(Object.hasOwn(buildReport(input).checker, "entrypointRecovery"), false);
+});
+
 // A minimal manifest good enough for `manifestStats` (rowCount/probeCount)
 // and for the `limitations` verbatim-copy requirement — buildReport never
 // calls `validateManifest`, so this does not need to satisfy every
@@ -1263,6 +1279,18 @@ test("a filtered report identifies itself as partial rather than reading as a fu
   });
   assert.equal(full.scope.kind, "full");
   assert.match(renderMarkdown(full), /- Scope: full corpus/);
+});
+
+test("a package report preserves the selector through normalization and rendering", () => {
+  const report = buildReport({
+    manifest: { generatedAt: "2026-01-01T00:00:00.000Z", rows: [] },
+    results: [],
+    startedAt: "2026-01-01T00:00:00.000Z",
+    finishedAt: "2026-01-01T00:00:01.000Z",
+    scope: { kind: "filtered", packages: ["@solid-primitives/utils"] }
+  });
+  assert.deepEqual(report.scope.packages, ["@solid-primitives/utils"]);
+  assert.match(renderMarkdown(report), /Scope: PARTIAL -- packages @solid-primitives\/utils/);
 });
 
 test("an exact-probe report retains its complete row identity set", () => {

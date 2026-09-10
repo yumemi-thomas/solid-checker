@@ -13,10 +13,10 @@
             "sha256": "fccf25ebacc7e48d19b350dc830b561dc9149870d0bcf7f444286654035ca6af"
           },
           "exports": {
-            "ArrayPattern": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "MemberAlias": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "ObjectPattern": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "Parameter": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1"
+            "ArrayPattern": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "MemberAlias": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "ObjectPattern": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "Parameter": "summary-dff339376caaf3d23d0f9ef219335d4639ecdd3d3b6fd330406747059bfdbd31"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -40,7 +40,22 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1": {
+    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-dff339376caaf3d23d0f9ef219335d4639ecdd3d3b6fd330406747059bfdbd31": {
       "call": {
         "callbacks": [
           {
@@ -52,6 +67,7 @@
           }
         ],
         "closed": [
+          "reads",
           "creates"
         ],
         "creates": [],
@@ -75,20 +91,10 @@
           }
         ],
         "proposedClosures": [
-          "creates"
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
-      "call": {
-        "closed": [
+          "reads",
           "creates"
         ],
-        "creates": [],
-        "proposedClosures": [
-          "creates"
-        ]
+        "reads": []
       },
       "shape": "callable"
     }

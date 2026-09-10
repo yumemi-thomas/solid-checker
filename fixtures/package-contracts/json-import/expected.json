@@ -13,8 +13,8 @@
             "sha256": "01ef698a55b332151747460c0d1f6582fb7c5fc81186c53deb9dc60472d5c0dc"
           },
           "exports": {
-            "packageName": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "packageVersion": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+            "packageName": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "packageVersion": "summary-d0ecc97e0894e16992490fbc1fe8cb56b99877b8864e856948f4adbb1fc29e3b"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -38,19 +38,30 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
-      "call": {},
-      "shape": "plain"
-    },
-    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
+    "summary-d0ecc97e0894e16992490fbc1fe8cb56b99877b8864e856948f4adbb1fc29e3b": {
       "call": {
         "closed": [
+          "reads"
+        ],
+        "proposedClosures": [
+          "reads"
+        ],
+        "reads": []
+      },
+      "shape": "plain"
+    },
+    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
+      "call": {
+        "closed": [
+          "reads",
           "creates"
         ],
         "creates": [],
         "proposedClosures": [
+          "reads",
           "creates"
-        ]
+        ],
+        "reads": []
       },
       "shape": "callable"
     }

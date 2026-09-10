@@ -17,14 +17,13 @@ nothing about certifiable behavior. It is a census decision, not a refusal, and
 it must not suppress the sibling module case or the proposal.
 
 `./assets/empty.js` (zero bytes) and `./assets/comments-only.js` (every byte a
-comment) are **refused**, and they are here to pin the one boundary of the
-`non-emitting-module-target` disposition that a broken build could otherwise
-walk through. Both files emit no JavaScript, and neither is inapplicable: a
-module that declares at least one type is a deliberate type module, while a
-module with no statements at all is indistinguishable from a publish defect —
-`@solid-devtools/shared@0.20.0` ships a zero-byte `dist/index.js` — and nothing
-in the bytes tells those apart. `multi-entrypoint`'s `./empty` pins the third
-spelling of the same emptiness, `export {}`.
+comment) now propose explicit `initialization: "inert"` claims. They remain
+runtime modules, not inapplicable assets. The complete JavaScript parser census
+positively proves the narrow evaluation claim; it does not prove that the
+publisher intended to ship an empty API or that an application is healthy.
+Certification independently checks the authenticated bytes and ESM package
+scope (ADR 0089). `multi-entrypoint`'s `./empty` remains refused because that
+fixture selects TypeScript source, outside this published-JavaScript proof.
 
 The rule is about *entrypoints only*: an asset an analyzed module imports is
 still an ordinary closure member with the role the closure gives it, and

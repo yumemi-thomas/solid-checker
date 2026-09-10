@@ -1,0 +1,2569 @@
+{
+  "authoritative": false,
+  "baseline": {
+    "path": "rust/target/ecosystem-investigations/2026-09-08-original-helper-full.json",
+    "digest": "sha256:7ee58c116e8acff5b96359be7e7be1372aabab56db93c59bc82f198756c6aea2"
+  },
+  "probeId": "solid-devtools@0.34.5|solid1|only",
+  "before": [
+    {
+      "coordinate": {
+        "catalog": "accepted-contracts.json",
+        "catalogDigest": "sha256:152134846d6b1ed55771a1f249c07c65fc3e5dd145ad7b27a978edf661bbbb62"
+      },
+      "documentDigest": "sha256:347f3dee2ef5b1bc83151a4c52ecfefbda5970e31270cb0748e1964bc23b1409",
+      "receiptDigest": "sha256:3d463c347436a8c28d9bbbc9be930f5e9c1d82511b3c1074fc3d6c6e595b19d3",
+      "receiptBindings": {
+        "semanticModelVersion": 1,
+        "proofVersion": 2,
+        "proofPolicy": 2,
+        "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+        "mainDigest": "sha256:347f3dee2ef5b1bc83151a4c52ecfefbda5970e31270cb0748e1964bc23b1409",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-99c055f2148f8cdf8db5b5cfe567630f337e106ac8f6121514221275172a130e.mjs",
+        "specifier": "solid-devtools/vite",
+        "resolvedImportRoot": "sha256:c8f55c0f4455c7671a66caae6e563e463466517ec20cbce2fbffb380860db4b9",
+        "semanticDigest": "sha256:5a6f3a1bd045d89272f8e4c92934aac2770962358eac76be70a3770940d16604",
+        "artifactProvenanceRoot": "sha256:1c06586267f5dd2226f638cb21cb277157c2d2c2b48d56b5148a226859af09f9",
+        "snapshotRoot": "sha256:558bbed02c036a35e5743f5eb57f0e28a3ed2ac216f973d6488fdbe01208e46e",
+        "packageRoot": "sha256:2b157753a4e4bf0d2f51cf9e7f6e066470ecfa821cbd2fd60ffc4fc368d95002",
+        "manifestRoot": "sha256:63bd877baaa3e9ad4283ba142fee2d5b8489ad3276a98c2428ef3f7521294616",
+        "artifactsRoot": "sha256:3ee2b7b296cc2e48dd75fa8820bb52e301d17b49b40657dd648d75c9fd5f41e0",
+        "declarationsRoot": "sha256:401e3474317870d73216928fde88c8bfa22fb5dd28f12d0c15f0e8e44f37a97e",
+        "transformRoot": "sha256:bc20df313559c4c74de7ea7751df05345c6e34cd79a23f9fda03aef10460b8df",
+        "exportsRoot": "sha256:8c395ede6cea7c08cc5a126e19003cca9964251f54c24accdfb7e56fd5000c8a",
+        "closureRoot": "sha256:b2b70b03bcbd3441de8b4bc46bcddaf311d17b4af06666458e5c3100ae83f940",
+        "demandGraphRoot": "sha256:975cb14ee9a80422d7a2298aeaa08965c39d6c3542c384d6b94a2bc6759164a2",
+        "verifiedPositiveRoot": "sha256:f21759f15aa45e94bfa81cb57447934796d9d2c2d8f0e8a685140467655af988",
+        "witnessRoots": {
+          "accepted-dependency-composition": "sha256:d6da8f4433ceb6962557cf09bced197e5ea632b031177f5c4749dc266266a57c",
+          "argument-binding": "sha256:184a6a3078e8a9e809dace7b14e02bc2880cd1cf42d48134d407f96f0c105808",
+          "artifact-declarations": "sha256:401e3474317870d73216928fde88c8bfa22fb5dd28f12d0c15f0e8e44f37a97e",
+          "callable-path": "sha256:34a61844662c92fecb32927b57168dc84a2d52bb88b704ebbf0917d9c5694135",
+          "compiler-reconciliation": "sha256:40589ff3717a5589a03d6214e6bba6a362f22efe139074fbcb0ccbd638ddefc6",
+          "domain-exhaustiveness": "sha256:1f143c107b6337451035ae0355a76ce37da857533045e3763cd510ba6a46459c",
+          "export-identity": "sha256:8c395ede6cea7c08cc5a126e19003cca9964251f54c24accdfb7e56fd5000c8a",
+          "export-resolution": "sha256:3ee2b7b296cc2e48dd75fa8820bb52e301d17b49b40657dd648d75c9fd5f41e0",
+          "guard-partition": "sha256:226fd503044af1b27e6dea86f16d859f760cc68d02da48db253f8f75cbdd4394",
+          "manifest-entrypoint": "sha256:63bd877baaa3e9ad4283ba142fee2d5b8489ad3276a98c2428ef3f7521294616",
+          "module-closure": "sha256:b2b70b03bcbd3441de8b4bc46bcddaf311d17b4af06666458e5c3100ae83f940",
+          "operation-cardinality": "sha256:776e4e1d53b04345aa385322f703cf98ea7d502b0a7f49ca6246597906bfc016",
+          "operation-reachability": "sha256:55525ac90f083849a455705499a009e1009ca254587478be436b6be65bca26a3",
+          "package-identity": "sha256:2b157753a4e4bf0d2f51cf9e7f6e066470ecfa821cbd2fd60ffc4fc368d95002",
+          "recursive-value-shape": "sha256:3b013811bf90143a1539f73132d31af81d664516ae09fe0ee2cfb562a32386cf",
+          "rest-spread-coverage": "sha256:2e6058dfc1f040c90d663d6afdc8d727ae7429b803ede779a408e0bb283fc2ca",
+          "selected-signature": "sha256:6eb5b7602e26e00262f75d550f793dd4e929a31faed361f9bf7dd71892c35779"
+        },
+        "producerSessionsRoot": "sha256:bfece36745d932c9c9ddeab5fe8529a3e504f3a62d44604e5a7161f862e56241",
+        "dependencyReceiptsRoot": "sha256:86c256457ef61f4d89fd4271ea47d8ae95bbb722f8c9de7488849a07ef8ae4e0",
+        "dependencyTrustRoot": "sha256:29e88a6fe5684d191b1463780415000e1e91f27ff0cc3d74b11ef7f6ced585f9",
+        "probeGateRoot": "sha256:4a0c6e782de812200dba6cb8b03e68cb2b926ba65b9d9d9858e536d696971a2c",
+        "closedClaimsRoot": "sha256:288b0beb646a30e8441ec89e65cb508dde66373d2a634b13a6d772a7f20ebb87",
+        "verifierSourceDigest": "sha256:d5a8f3dfec87ff73366715de01d8d95090141245a16137806e16a9123617d10a",
+        "verifierBuildDigest": "sha256:47c220603fcb7a6f4580670562fdeec66f406176a8bb4d26451b7f28069fa795",
+        "issuerKind": "persistent-local",
+        "issuerScope": "ecosystem-benchmark:6f45d3f67e21cc4bed5c9d9b3253933d9b5f1a06eb042f7a7ad728ce860657d1",
+        "keyId": "ed25519:sha256:01985da766cc0f6164da5b64b145790c97fe3aa92cf6ac568ea9b976b9a15560",
+        "signatureAlgorithm": "ed25519"
+      },
+      "resolution": {
+        "specifier": "solid-devtools/vite",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-99c055f2148f8cdf8db5b5cfe567630f337e106ac8f6121514221275172a130e.mjs",
+        "requestedEntrypoint": "./vite",
+        "packageName": "solid-devtools",
+        "packageVersion": "0.34.5",
+        "packageIntegrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+        "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools",
+        "packageManifest": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/package.json",
+          "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+        },
+        "runtime": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite.js",
+          "digest": "sha256:429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+        },
+        "declarations": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite.d.ts",
+          "digest": "sha256:70040d1e8e13efb6826d8bdd215fbd19806aa6366804fa2794166be8e867c108"
+        },
+        "runtimeTrace": {
+          "branch": "/exports/.~1vite/import/default",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "./vite"
+            },
+            {
+              "condition": "import",
+              "target": "/exports/.~1vite"
+            },
+            {
+              "condition": "default",
+              "target": "/exports/.~1vite/import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/vite.js"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": "/exports/.~1vite/import/types",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "./vite"
+            },
+            {
+              "condition": "import",
+              "target": "/exports/.~1vite"
+            },
+            {
+              "condition": "types",
+              "target": "/exports/.~1vite/import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/vite.d.ts"
+            }
+          ]
+        },
+        "closure": {
+          "entries": [
+            {
+              "role": "runtime",
+              "path": "./dist/chunk-RDZMZMK7.js",
+              "digest": "sha256:3006c971426aa352e18d009f8b35c88d827ab7d0970715318f75ef5ce9403cdd"
+            },
+            {
+              "role": "runtime",
+              "path": "./dist/vite.js",
+              "digest": "sha256:429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+            },
+            {
+              "role": "declaration",
+              "path": "./dist/vite.d.ts",
+              "digest": "sha256:70040d1e8e13efb6826d8bdd215fbd19806aa6366804fa2794166be8e867c108"
+            },
+            {
+              "role": "declaration",
+              "path": "./dist/vite/vite.d.ts",
+              "digest": "sha256:b3963bbd4757fd35dd2dde8ef0de7c41572b55b8aa4fae49ef549f176502b550"
+            },
+            {
+              "role": "manifest",
+              "path": "./package.json",
+              "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+            },
+            {
+              "role": "resolution-input",
+              "path": "./package.json",
+              "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+            }
+          ],
+          "hazards": [
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:@babel/core",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:@babel/types",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:@solid-devtools/debugger/types",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:node:path",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/vite.js:@babel/core",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/vite.js:@babel/plugin-syntax-typescript",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/vite.js:@solid-devtools/debugger/types",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/vite.js:node:path",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/vite.js:vite",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            }
+          ],
+          "digest": "sha256:a90e35a9fea1e7e84bb7285e023c8326ce912a4ab6b17a906fa65ef0e7b00e8b"
+        },
+        "exports": {
+          "DevtoolsModule": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite.js",
+                "digest": "sha256:429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+              },
+              "exportName": "DevtoolsModule"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite/vite.d.ts",
+                "digest": "sha256:b3963bbd4757fd35dd2dde8ef0de7c41572b55b8aa4fae49ef549f176502b550"
+              },
+              "exportName": "DevtoolsModule"
+            }
+          },
+          "default": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite.js",
+                "digest": "sha256:429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+              },
+              "exportName": "devtoolsPlugin"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite/vite.d.ts",
+                "digest": "sha256:b3963bbd4757fd35dd2dde8ef0de7c41572b55b8aa4fae49ef549f176502b550"
+              },
+              "exportName": "devtoolsPlugin"
+            }
+          },
+          "devtoolsPlugin": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite.js",
+                "digest": "sha256:429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+              },
+              "exportName": "devtoolsPlugin"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite/vite.d.ts",
+                "digest": "sha256:b3963bbd4757fd35dd2dde8ef0de7c41572b55b8aa4fae49ef549f176502b550"
+              },
+              "exportName": "devtoolsPlugin"
+            }
+          }
+        },
+        "declarationExports": [
+          "DevtoolsModule",
+          "default",
+          "devtoolsPlugin"
+        ],
+        "authority": "standalonePackageResolver"
+      },
+      "main": {
+        "entrypoints": {
+          "./vite": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "a90e35a9fea1e7e84bb7285e023c8326ce912a4ab6b17a906fa65ef0e7b00e8b",
+                  "path": "./dist/vite.js",
+                  "sha256": "429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+                },
+                "declarations": {
+                  "path": "./dist/vite.d.ts",
+                  "sha256": "70040d1e8e13efb6826d8bdd215fbd19806aa6366804fa2794166be8e867c108"
+                },
+                "exports": {
+                  "DevtoolsModule": "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b",
+                  "default": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "devtoolsPlugin": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/.~1vite/import/default",
+                  "typesBranch": "/exports/.~1vite/import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+          },
+          "name": "solid-devtools",
+          "version": "0.34.5"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b": {
+            "call": {},
+            "shape": "unknown"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ],
+  "after": [
+    {
+      "coordinate": {
+        "artifactCaseId": "artifact-case:5adc05a2de205d61a9903e9c8bb74a7f97bba8e7c7a556ad31c9275461fcb29c",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-35370c9d5ea7b669264b1690de037aef3d676fcfba5767df72dc1bda6f42829b.mjs",
+        "specifier": "solid-devtools/vite",
+        "resolvedImportRoot": "sha256:dc008e8f77a9af311c0a974ce4036f85b6fe7dc800958f374d7d06d24cbe91bc",
+        "semanticDigest": "sha256:5a6f3a1bd045d89272f8e4c92934aac2770962358eac76be70a3770940d16604",
+        "receiptDigest": "sha256:c3151e22516314f762074be36a3adb97f0b146347c360089af2208f4cd78d92c",
+        "catalog": "cases/dc008e8f77a9af311c0a974ce4036f85b6fe7dc800958f374d7d06d24cbe91bc/accepted-contracts.json",
+        "catalogDigest": "sha256:a7f2332b05a565aeccec671dfcadef255cbc8210fdb4f3740f33bce061eec32d"
+      },
+      "documentDigest": "sha256:347f3dee2ef5b1bc83151a4c52ecfefbda5970e31270cb0748e1964bc23b1409",
+      "receiptDigest": "sha256:c3151e22516314f762074be36a3adb97f0b146347c360089af2208f4cd78d92c",
+      "receiptBindings": {
+        "semanticModelVersion": 1,
+        "proofVersion": 2,
+        "proofPolicy": 2,
+        "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+        "mainDigest": "sha256:347f3dee2ef5b1bc83151a4c52ecfefbda5970e31270cb0748e1964bc23b1409",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-35370c9d5ea7b669264b1690de037aef3d676fcfba5767df72dc1bda6f42829b.mjs",
+        "specifier": "solid-devtools/vite",
+        "resolvedImportRoot": "sha256:dc008e8f77a9af311c0a974ce4036f85b6fe7dc800958f374d7d06d24cbe91bc",
+        "semanticDigest": "sha256:5a6f3a1bd045d89272f8e4c92934aac2770962358eac76be70a3770940d16604",
+        "artifactProvenanceRoot": "sha256:1c06586267f5dd2226f638cb21cb277157c2d2c2b48d56b5148a226859af09f9",
+        "snapshotRoot": "sha256:558bbed02c036a35e5743f5eb57f0e28a3ed2ac216f973d6488fdbe01208e46e",
+        "packageRoot": "sha256:2b157753a4e4bf0d2f51cf9e7f6e066470ecfa821cbd2fd60ffc4fc368d95002",
+        "manifestRoot": "sha256:63bd877baaa3e9ad4283ba142fee2d5b8489ad3276a98c2428ef3f7521294616",
+        "artifactsRoot": "sha256:3ee2b7b296cc2e48dd75fa8820bb52e301d17b49b40657dd648d75c9fd5f41e0",
+        "declarationsRoot": "sha256:401e3474317870d73216928fde88c8bfa22fb5dd28f12d0c15f0e8e44f37a97e",
+        "transformRoot": "sha256:bc20df313559c4c74de7ea7751df05345c6e34cd79a23f9fda03aef10460b8df",
+        "exportsRoot": "sha256:8c395ede6cea7c08cc5a126e19003cca9964251f54c24accdfb7e56fd5000c8a",
+        "closureRoot": "sha256:b2b70b03bcbd3441de8b4bc46bcddaf311d17b4af06666458e5c3100ae83f940",
+        "demandGraphRoot": "sha256:975cb14ee9a80422d7a2298aeaa08965c39d6c3542c384d6b94a2bc6759164a2",
+        "verifiedPositiveRoot": "sha256:00e703315a23d26c55d02b10ebbd0aa843268a0e851b2729ad119bcd95e24e41",
+        "witnessRoots": {
+          "accepted-dependency-composition": "sha256:d6da8f4433ceb6962557cf09bced197e5ea632b031177f5c4749dc266266a57c",
+          "argument-binding": "sha256:184a6a3078e8a9e809dace7b14e02bc2880cd1cf42d48134d407f96f0c105808",
+          "artifact-declarations": "sha256:401e3474317870d73216928fde88c8bfa22fb5dd28f12d0c15f0e8e44f37a97e",
+          "callable-path": "sha256:f99ad8ed468e643a11986ac437cd64f023a840b708d3de9d973291934824295f",
+          "compiler-reconciliation": "sha256:40589ff3717a5589a03d6214e6bba6a362f22efe139074fbcb0ccbd638ddefc6",
+          "domain-exhaustiveness": "sha256:1f143c107b6337451035ae0355a76ce37da857533045e3763cd510ba6a46459c",
+          "export-identity": "sha256:8c395ede6cea7c08cc5a126e19003cca9964251f54c24accdfb7e56fd5000c8a",
+          "export-resolution": "sha256:3ee2b7b296cc2e48dd75fa8820bb52e301d17b49b40657dd648d75c9fd5f41e0",
+          "guard-partition": "sha256:226fd503044af1b27e6dea86f16d859f760cc68d02da48db253f8f75cbdd4394",
+          "manifest-entrypoint": "sha256:63bd877baaa3e9ad4283ba142fee2d5b8489ad3276a98c2428ef3f7521294616",
+          "module-closure": "sha256:b2b70b03bcbd3441de8b4bc46bcddaf311d17b4af06666458e5c3100ae83f940",
+          "operation-cardinality": "sha256:776e4e1d53b04345aa385322f703cf98ea7d502b0a7f49ca6246597906bfc016",
+          "operation-reachability": "sha256:55525ac90f083849a455705499a009e1009ca254587478be436b6be65bca26a3",
+          "package-identity": "sha256:2b157753a4e4bf0d2f51cf9e7f6e066470ecfa821cbd2fd60ffc4fc368d95002",
+          "recursive-value-shape": "sha256:4bb1c75bc5b183e78ffd0d63ee1765323887e1e33586febb10d63b2816e859ff",
+          "rest-spread-coverage": "sha256:2e6058dfc1f040c90d663d6afdc8d727ae7429b803ede779a408e0bb283fc2ca",
+          "selected-signature": "sha256:6eb5b7602e26e00262f75d550f793dd4e929a31faed361f9bf7dd71892c35779"
+        },
+        "producerSessionsRoot": "sha256:b9ae1906f6d0613d42435903970e6df89376728f6af13d0e5d07246f27045419",
+        "dependencyReceiptsRoot": "sha256:b8d5209b30f2551a46632f34d329f64d973de34df436c5070c6a914e490fdb31",
+        "dependencyTrustRoot": "sha256:c87f2042b920fbd4b652ad8c87552281bbb9529a63afc0360eb16ef55ce4eb16",
+        "probeGateRoot": "sha256:4a0c6e782de812200dba6cb8b03e68cb2b926ba65b9d9d9858e536d696971a2c",
+        "closedClaimsRoot": "sha256:288b0beb646a30e8441ec89e65cb508dde66373d2a634b13a6d772a7f20ebb87",
+        "verifierSourceDigest": "sha256:d5a8f3dfec87ff73366715de01d8d95090141245a16137806e16a9123617d10a",
+        "verifierBuildDigest": "sha256:47c220603fcb7a6f4580670562fdeec66f406176a8bb4d26451b7f28069fa795",
+        "issuerKind": "persistent-local",
+        "issuerScope": "inert-entrypoint-investigation",
+        "keyId": "ed25519:sha256:620982ca58634d8f1991164f906b425e882412369060dcc312d53644733d86c7",
+        "signatureAlgorithm": "ed25519"
+      },
+      "resolution": {
+        "specifier": "solid-devtools/vite",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-35370c9d5ea7b669264b1690de037aef3d676fcfba5767df72dc1bda6f42829b.mjs",
+        "requestedEntrypoint": "./vite",
+        "packageName": "solid-devtools",
+        "packageVersion": "0.34.5",
+        "packageIntegrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+        "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools",
+        "packageManifest": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/package.json",
+          "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+        },
+        "runtime": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite.js",
+          "digest": "sha256:429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+        },
+        "declarations": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite.d.ts",
+          "digest": "sha256:70040d1e8e13efb6826d8bdd215fbd19806aa6366804fa2794166be8e867c108"
+        },
+        "runtimeTrace": {
+          "branch": "/exports/.~1vite/import/default",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "./vite"
+            },
+            {
+              "condition": "import",
+              "target": "/exports/.~1vite"
+            },
+            {
+              "condition": "default",
+              "target": "/exports/.~1vite/import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/vite.js"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": "/exports/.~1vite/import/types",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "./vite"
+            },
+            {
+              "condition": "import",
+              "target": "/exports/.~1vite"
+            },
+            {
+              "condition": "types",
+              "target": "/exports/.~1vite/import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/vite.d.ts"
+            }
+          ]
+        },
+        "closure": {
+          "entries": [
+            {
+              "role": "runtime",
+              "path": "./dist/chunk-RDZMZMK7.js",
+              "digest": "sha256:3006c971426aa352e18d009f8b35c88d827ab7d0970715318f75ef5ce9403cdd"
+            },
+            {
+              "role": "runtime",
+              "path": "./dist/vite.js",
+              "digest": "sha256:429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+            },
+            {
+              "role": "declaration",
+              "path": "./dist/vite.d.ts",
+              "digest": "sha256:70040d1e8e13efb6826d8bdd215fbd19806aa6366804fa2794166be8e867c108"
+            },
+            {
+              "role": "declaration",
+              "path": "./dist/vite/vite.d.ts",
+              "digest": "sha256:b3963bbd4757fd35dd2dde8ef0de7c41572b55b8aa4fae49ef549f176502b550"
+            },
+            {
+              "role": "manifest",
+              "path": "./package.json",
+              "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+            },
+            {
+              "role": "resolution-input",
+              "path": "./package.json",
+              "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+            }
+          ],
+          "hazards": [
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:@babel/core",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:@babel/types",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:@solid-devtools/debugger/types",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:node:path",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/vite.js:@babel/core",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/vite.js:@babel/plugin-syntax-typescript",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/vite.js:@solid-devtools/debugger/types",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/vite.js:node:path",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/vite.js:vite",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            }
+          ],
+          "digest": "sha256:a90e35a9fea1e7e84bb7285e023c8326ce912a4ab6b17a906fa65ef0e7b00e8b"
+        },
+        "exports": {
+          "DevtoolsModule": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite.js",
+                "digest": "sha256:429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+              },
+              "exportName": "DevtoolsModule"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite/vite.d.ts",
+                "digest": "sha256:b3963bbd4757fd35dd2dde8ef0de7c41572b55b8aa4fae49ef549f176502b550"
+              },
+              "exportName": "DevtoolsModule"
+            }
+          },
+          "default": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite.js",
+                "digest": "sha256:429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+              },
+              "exportName": "devtoolsPlugin"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite/vite.d.ts",
+                "digest": "sha256:b3963bbd4757fd35dd2dde8ef0de7c41572b55b8aa4fae49ef549f176502b550"
+              },
+              "exportName": "devtoolsPlugin"
+            }
+          },
+          "devtoolsPlugin": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite.js",
+                "digest": "sha256:429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+              },
+              "exportName": "devtoolsPlugin"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite/vite.d.ts",
+                "digest": "sha256:b3963bbd4757fd35dd2dde8ef0de7c41572b55b8aa4fae49ef549f176502b550"
+              },
+              "exportName": "devtoolsPlugin"
+            }
+          }
+        },
+        "declarationExports": [
+          "DevtoolsModule",
+          "default",
+          "devtoolsPlugin"
+        ],
+        "authority": "standalonePackageResolver"
+      },
+      "main": {
+        "entrypoints": {
+          "./vite": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "a90e35a9fea1e7e84bb7285e023c8326ce912a4ab6b17a906fa65ef0e7b00e8b",
+                  "path": "./dist/vite.js",
+                  "sha256": "429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+                },
+                "declarations": {
+                  "path": "./dist/vite.d.ts",
+                  "sha256": "70040d1e8e13efb6826d8bdd215fbd19806aa6366804fa2794166be8e867c108"
+                },
+                "exports": {
+                  "DevtoolsModule": "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b",
+                  "default": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "devtoolsPlugin": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/.~1vite/import/default",
+                  "typesBranch": "/exports/.~1vite/import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+          },
+          "name": "solid-devtools",
+          "version": "0.34.5"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b": {
+            "call": {},
+            "shape": "unknown"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    },
+    {
+      "coordinate": {
+        "artifactCaseId": "artifact-case:671931b61f0b4755b643a4a79b0b2f4ebc8357dbbbadf8bd71a878116d5fd85e",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-35370c9d5ea7b669264b1690de037aef3d676fcfba5767df72dc1bda6f42829b.mjs",
+        "specifier": "solid-devtools",
+        "resolvedImportRoot": "sha256:8807eb58573351a6c3734ddc4f8cfc33df6dea1ab9acb80bcd06abf14292557b",
+        "semanticDigest": "sha256:24f0d42fc4f07ab47ab901ada724b211773a1c29cf56d72157c89ee853c54c2c",
+        "receiptDigest": "sha256:2c788d6b7f94547bf0f9ada460b223fe5abfed37bb7c209eaa3372cea7402d73",
+        "catalog": "cases/8807eb58573351a6c3734ddc4f8cfc33df6dea1ab9acb80bcd06abf14292557b/accepted-contracts.json",
+        "catalogDigest": "sha256:930c1687e0e018ef3d241ba56b2c045d4a4d7c45d93ae819aac136753f7a40a8"
+      },
+      "documentDigest": "sha256:c0c7b3b4abb881e0218383d44c9b16d95f4678bd0fa65903145c35b5611a79c3",
+      "receiptDigest": "sha256:2c788d6b7f94547bf0f9ada460b223fe5abfed37bb7c209eaa3372cea7402d73",
+      "receiptBindings": {
+        "semanticModelVersion": 1,
+        "proofVersion": 2,
+        "proofPolicy": 2,
+        "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+        "mainDigest": "sha256:c0c7b3b4abb881e0218383d44c9b16d95f4678bd0fa65903145c35b5611a79c3",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-35370c9d5ea7b669264b1690de037aef3d676fcfba5767df72dc1bda6f42829b.mjs",
+        "specifier": "solid-devtools",
+        "resolvedImportRoot": "sha256:8807eb58573351a6c3734ddc4f8cfc33df6dea1ab9acb80bcd06abf14292557b",
+        "semanticDigest": "sha256:24f0d42fc4f07ab47ab901ada724b211773a1c29cf56d72157c89ee853c54c2c",
+        "artifactProvenanceRoot": "sha256:1c06586267f5dd2226f638cb21cb277157c2d2c2b48d56b5148a226859af09f9",
+        "snapshotRoot": "sha256:558bbed02c036a35e5743f5eb57f0e28a3ed2ac216f973d6488fdbe01208e46e",
+        "packageRoot": "sha256:18aab33c28f7848c54a555a8e5b5cd982dfd7885ba88dc33809ed1a937efe6de",
+        "manifestRoot": "sha256:b83a3eac90766d55f35a300c74699c8b58c3d4168dff8489c82920c107c2bd10",
+        "artifactsRoot": "sha256:60dbc51f14c5ef556aae2fb3cda59d69367af54c952bad7e2eb65ed2eae32d6e",
+        "declarationsRoot": "sha256:6d773c493c5d4d73baf355953aedd28c0bd260b01e7acbbc770b4619f434d3a9",
+        "transformRoot": "sha256:f7704652661ae441bdeb5d1452460c8c1374f159859549ef167086cabc0379bb",
+        "exportsRoot": "sha256:6b9464bfcdb4f88e8d4dccb66393e2911ec07c1a5532ad487967f1cf1bbef1bc",
+        "closureRoot": "sha256:3bbb8a651afd4b3564e5a674f3e81a9922055610856c489b8b3ce949df05210c",
+        "demandGraphRoot": "sha256:4753f0ed6672b0e7eef5e659a950967a83869e5bbb097b59032f777b872b9260",
+        "verifiedPositiveRoot": "sha256:6ec306083ead78c58a0d97c02b112d0ff25fce37603c036e801c93bb4c48b5e2",
+        "witnessRoots": {
+          "accepted-dependency-composition": "sha256:1a8add264071ea0d5f97a2fa9cf889e45ba659283c82fc97433d0f3a452de94d",
+          "argument-binding": "sha256:171498f124cd1a548ddbb05b0eec739505039702894ab2c239318ffadfe0a186",
+          "artifact-declarations": "sha256:6d773c493c5d4d73baf355953aedd28c0bd260b01e7acbbc770b4619f434d3a9",
+          "callable-path": "sha256:347a3b7b39e6e7e204ab9754621f66cbcda03986532818bea0c5234a3a58c398",
+          "compiler-reconciliation": "sha256:8ad56060d2ca794577220e4408b7aa6a92dc24121ae5e8f2bede2432a1628ea4",
+          "domain-exhaustiveness": "sha256:a43b4ff104b1c9c9ae9dc116c6ba2cdde490ee74ec0d5d8306bac310b24de4bd",
+          "export-identity": "sha256:6b9464bfcdb4f88e8d4dccb66393e2911ec07c1a5532ad487967f1cf1bbef1bc",
+          "export-resolution": "sha256:60dbc51f14c5ef556aae2fb3cda59d69367af54c952bad7e2eb65ed2eae32d6e",
+          "guard-partition": "sha256:3499203cf1306e0598e2d079175d48c84d3a05bdc5a75f3527a662dbd2200cfa",
+          "manifest-entrypoint": "sha256:b83a3eac90766d55f35a300c74699c8b58c3d4168dff8489c82920c107c2bd10",
+          "module-closure": "sha256:3bbb8a651afd4b3564e5a674f3e81a9922055610856c489b8b3ce949df05210c",
+          "operation-cardinality": "sha256:c0c5c3d94f907058dcf21e82ad69d803a61c7bcd3344bf0e00a1d17791156ad7",
+          "operation-reachability": "sha256:f73af5be29e2651ab1db98ac954e15a549f3ba5b4923bb6f9ca4ac32475dabf5",
+          "package-identity": "sha256:18aab33c28f7848c54a555a8e5b5cd982dfd7885ba88dc33809ed1a937efe6de",
+          "recursive-value-shape": "sha256:02506c1415b11288fdc2176d6134cfcef8027d77755ac5fe2b6c55e5356554aa",
+          "rest-spread-coverage": "sha256:27570c7fe953bd4d841ffb6dda64f58b9ee952a70e67e70bf44b3baaf78cd8da",
+          "selected-signature": "sha256:bdef07f3043f91ff89baaa64ed1e1296ff3f12a3c8d5ac746291dd00a0d1d1e7"
+        },
+        "producerSessionsRoot": "sha256:ae69ac11dd79a544cba93a81893e6812ca3d32caeab5acb285584c00ead01e30",
+        "dependencyReceiptsRoot": "sha256:484e3a6e10652b84bcb7e7534cdcae554f02203843e04ef421b17a0e83c3b88d",
+        "dependencyTrustRoot": "sha256:93ba29f215dc27a23aaf11cd0caeab056ddf5b0dcead001001695c36d8f97f05",
+        "probeGateRoot": "sha256:5b8a8963232070fb9fed4c28aaa9745a521499db21c26af73b119c17d8d9412b",
+        "closedClaimsRoot": "sha256:2cb6aa467234e9ee187e49a0437abf8cf4738dbf168adfd3fc7f0b24d8f33554",
+        "verifierSourceDigest": "sha256:d5a8f3dfec87ff73366715de01d8d95090141245a16137806e16a9123617d10a",
+        "verifierBuildDigest": "sha256:47c220603fcb7a6f4580670562fdeec66f406176a8bb4d26451b7f28069fa795",
+        "issuerKind": "persistent-local",
+        "issuerScope": "inert-entrypoint-investigation",
+        "keyId": "ed25519:sha256:620982ca58634d8f1991164f906b425e882412369060dcc312d53644733d86c7",
+        "signatureAlgorithm": "ed25519"
+      },
+      "resolution": {
+        "specifier": "solid-devtools",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-35370c9d5ea7b669264b1690de037aef3d676fcfba5767df72dc1bda6f42829b.mjs",
+        "requestedEntrypoint": ".",
+        "packageName": "solid-devtools",
+        "packageVersion": "0.34.5",
+        "packageIntegrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+        "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools",
+        "packageManifest": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/package.json",
+          "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+        },
+        "runtime": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/index_noop.js",
+          "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "declarations": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/index.d.ts",
+          "digest": "sha256:0bc700979988009128a36fa70c76f0bca4d1802e74bea5d24bead58831c8709a"
+        },
+        "runtimeTrace": {
+          "branch": "/exports/./import/default",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "."
+            },
+            {
+              "condition": "import",
+              "target": "/exports/."
+            },
+            {
+              "condition": "default",
+              "target": "/exports/./import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/index_noop.js"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": "/exports/./import/types",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "."
+            },
+            {
+              "condition": "import",
+              "target": "/exports/."
+            },
+            {
+              "condition": "types",
+              "target": "/exports/./import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/index.d.ts"
+            }
+          ]
+        },
+        "closure": {
+          "entries": [
+            {
+              "role": "runtime",
+              "path": "./dist/index_noop.js",
+              "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "role": "declaration",
+              "path": "./dist/index.d.ts",
+              "digest": "sha256:0bc700979988009128a36fa70c76f0bca4d1802e74bea5d24bead58831c8709a"
+            },
+            {
+              "role": "declaration",
+              "path": "./dist/setup.d.ts",
+              "digest": "sha256:3dd599e998a8fdd7d3e9bbd3755c6f5e2b5abffcae2a0c067d427673e2606938"
+            },
+            {
+              "role": "manifest",
+              "path": "./package.json",
+              "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+            },
+            {
+              "role": "resolution-input",
+              "path": "./package.json",
+              "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+            }
+          ],
+          "digest": "sha256:9bd3f55988073002aa6096e9d1c657f9c11caa578c1796dfc09d0e7ba28a38fb"
+        },
+        "authority": "standalonePackageResolver"
+      },
+      "main": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "9bd3f55988073002aa6096e9d1c657f9c11caa578c1796dfc09d0e7ba28a38fb",
+                  "path": "./dist/index_noop.js",
+                  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "0bc700979988009128a36fa70c76f0bca4d1802e74bea5d24bead58831c8709a"
+                },
+                "exports": {},
+                "initialization": "inert",
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+          },
+          "name": "solid-devtools",
+          "version": "0.34.5"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {}
+      }
+    },
+    {
+      "coordinate": {
+        "artifactCaseId": "artifact-case:bb8a26e1057fe5fbd9cd6c62d0adb6ff8a8ceab31ada2c23f4fe4aa6bafc625a",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-35370c9d5ea7b669264b1690de037aef3d676fcfba5767df72dc1bda6f42829b.mjs",
+        "specifier": "solid-devtools/babel",
+        "resolvedImportRoot": "sha256:ccfad65a1be89d8a6a8de5ce23d25631a04618c13551e702775254903dffabff",
+        "semanticDigest": "sha256:32f7d41e91ca49bbe8f70e9d1b73d05d3cabd1a465ed881569b6ae91ab19c3eb",
+        "receiptDigest": "sha256:d0b4322d4153dbc1319d2c740a7077ec00663c72b3685f43509efe97d3b43231",
+        "catalog": "cases/ccfad65a1be89d8a6a8de5ce23d25631a04618c13551e702775254903dffabff/accepted-contracts.json",
+        "catalogDigest": "sha256:239be7365274ba577c8770f76fd436af797ab4401acfcccb18133927e7c18b2c"
+      },
+      "documentDigest": "sha256:a91ac4491a23ade0eed8badd8cef40f086fe1dc47b7d924e3b93d30a8d9e1465",
+      "receiptDigest": "sha256:d0b4322d4153dbc1319d2c740a7077ec00663c72b3685f43509efe97d3b43231",
+      "receiptBindings": {
+        "semanticModelVersion": 1,
+        "proofVersion": 2,
+        "proofPolicy": 2,
+        "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+        "mainDigest": "sha256:a91ac4491a23ade0eed8badd8cef40f086fe1dc47b7d924e3b93d30a8d9e1465",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-35370c9d5ea7b669264b1690de037aef3d676fcfba5767df72dc1bda6f42829b.mjs",
+        "specifier": "solid-devtools/babel",
+        "resolvedImportRoot": "sha256:ccfad65a1be89d8a6a8de5ce23d25631a04618c13551e702775254903dffabff",
+        "semanticDigest": "sha256:32f7d41e91ca49bbe8f70e9d1b73d05d3cabd1a465ed881569b6ae91ab19c3eb",
+        "artifactProvenanceRoot": "sha256:1c06586267f5dd2226f638cb21cb277157c2d2c2b48d56b5148a226859af09f9",
+        "snapshotRoot": "sha256:558bbed02c036a35e5743f5eb57f0e28a3ed2ac216f973d6488fdbe01208e46e",
+        "packageRoot": "sha256:f32292af9ff6363a7fe5b26cd75b6a4c4e70a090e924e6cd12d1512e950867a1",
+        "manifestRoot": "sha256:bef4d2963540b8da7026178c4aaaa7f95a5e5783a2491b69e84c70cca9dc29ab",
+        "artifactsRoot": "sha256:a4e2be29e2884cbd4afd969a7742f16448964dd50617737f7479dd7e9155d6a6",
+        "declarationsRoot": "sha256:a74e7678ea42d0cf563509af5b51ede73c363740501fef5cb9ab32a6d3ce291c",
+        "transformRoot": "sha256:654e5b82a3bd1dd191428f91a6300281ffb7720a66c15fe0e90e326485f355fc",
+        "exportsRoot": "sha256:761470bd8d67aff4104eae3382a956568247f3bb72f732d162057b294435a2e7",
+        "closureRoot": "sha256:0185fca8c21a5dd9787f47a878261a09625c2bb5d4682a041c25603c91595145",
+        "demandGraphRoot": "sha256:104c2ec933dab436778be68970da67ab7c985990d229c15043bac40b1f760bfa",
+        "verifiedPositiveRoot": "sha256:62b20a9afe79a463b33d9b55beea8173582d1c665330df672abed680f819dcda",
+        "witnessRoots": {
+          "accepted-dependency-composition": "sha256:5506089f2e612a4c9e1ff588e14a9d081cfb2eedd1c7e6c689f6d600b989512a",
+          "argument-binding": "sha256:dd784de94a4054808c31344c3b504507c22340b960d51133971f85716a08188c",
+          "artifact-declarations": "sha256:a74e7678ea42d0cf563509af5b51ede73c363740501fef5cb9ab32a6d3ce291c",
+          "callable-path": "sha256:babb2c7466c7aa657cbd8771bee478c1c0b68d979698085875013902bcfe4019",
+          "compiler-reconciliation": "sha256:1ebe2c5322410c9570258824e0c29afe6e260403473d2c7723f65c32324433bd",
+          "domain-exhaustiveness": "sha256:a84304257190b1d1762ba61b01f2b1047d71300cd81ad92b39a151d0fd7c52be",
+          "export-identity": "sha256:761470bd8d67aff4104eae3382a956568247f3bb72f732d162057b294435a2e7",
+          "export-resolution": "sha256:a4e2be29e2884cbd4afd969a7742f16448964dd50617737f7479dd7e9155d6a6",
+          "guard-partition": "sha256:86be34ce3dddf1aca508154ba3b8495e75a04cd0c6e2ddb8d56e30e000da07f3",
+          "manifest-entrypoint": "sha256:bef4d2963540b8da7026178c4aaaa7f95a5e5783a2491b69e84c70cca9dc29ab",
+          "module-closure": "sha256:0185fca8c21a5dd9787f47a878261a09625c2bb5d4682a041c25603c91595145",
+          "operation-cardinality": "sha256:fa34c62fa436c0206a588678ac8fe1528924460ed8f5cfd9d7abe1e0dc61de21",
+          "operation-reachability": "sha256:3ea84dd1485d3e6236bda4c793cc88ad34a80bb8c154d206a7181074a5375d1b",
+          "package-identity": "sha256:f32292af9ff6363a7fe5b26cd75b6a4c4e70a090e924e6cd12d1512e950867a1",
+          "recursive-value-shape": "sha256:d26ce0c1af60adb3a33e92ae74562b14b19d1a92b30db49d626b7ec38473c651",
+          "rest-spread-coverage": "sha256:cc57f54b0ec8d744d0b23f35724892abb3ccaddf2385a0101dc423a88333cf06",
+          "selected-signature": "sha256:7f20bb131813bc968083408d51fd378aac8f70fd47f84b0bbadb18c0d8ee64eb"
+        },
+        "producerSessionsRoot": "sha256:89b848c3e6abc7da5bced82408d15e477298d581013de32b5044c69120ae107a",
+        "dependencyReceiptsRoot": "sha256:492fcc4e74d27e5dc70f6096adf56e92d49161a017f447dbcd40f9b2d82647e9",
+        "dependencyTrustRoot": "sha256:e14d79360f8c0e823a93e47ef62ceb4bb2b93067cb6ce3277328dcc6115aa5c9",
+        "probeGateRoot": "sha256:d82a37105bd7ff3095ffaa70382c69f79aa844e57df7490559fe5626fe491b9c",
+        "closedClaimsRoot": "sha256:7a03e66ddc73bb88089c628d10832dca8fd3b89c074a4f90c08eb6ee503a7d93",
+        "verifierSourceDigest": "sha256:d5a8f3dfec87ff73366715de01d8d95090141245a16137806e16a9123617d10a",
+        "verifierBuildDigest": "sha256:47c220603fcb7a6f4580670562fdeec66f406176a8bb4d26451b7f28069fa795",
+        "issuerKind": "persistent-local",
+        "issuerScope": "inert-entrypoint-investigation",
+        "keyId": "ed25519:sha256:620982ca58634d8f1991164f906b425e882412369060dcc312d53644733d86c7",
+        "signatureAlgorithm": "ed25519"
+      },
+      "resolution": {
+        "specifier": "solid-devtools/babel",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-35370c9d5ea7b669264b1690de037aef3d676fcfba5767df72dc1bda6f42829b.mjs",
+        "requestedEntrypoint": "./babel",
+        "packageName": "solid-devtools",
+        "packageVersion": "0.34.5",
+        "packageIntegrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+        "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools",
+        "packageManifest": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/package.json",
+          "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+        },
+        "runtime": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/babel.js",
+          "digest": "sha256:c74c202db108a1e3d0418a160a9eb305dedb162a58cfee3c86cef4e93ad00e65"
+        },
+        "declarations": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/babel.d.ts",
+          "digest": "sha256:c29487b112b20398eff875c9f1a1d1d482ec9f3588d354cab9a462f6ca6422cc"
+        },
+        "runtimeTrace": {
+          "branch": "/exports/.~1babel/import/default",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "./babel"
+            },
+            {
+              "condition": "import",
+              "target": "/exports/.~1babel"
+            },
+            {
+              "condition": "default",
+              "target": "/exports/.~1babel/import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/babel.js"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": "/exports/.~1babel/import/types",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "./babel"
+            },
+            {
+              "condition": "import",
+              "target": "/exports/.~1babel"
+            },
+            {
+              "condition": "types",
+              "target": "/exports/.~1babel/import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/babel.d.ts"
+            }
+          ]
+        },
+        "closure": {
+          "entries": [
+            {
+              "role": "runtime",
+              "path": "./dist/babel.js",
+              "digest": "sha256:c74c202db108a1e3d0418a160a9eb305dedb162a58cfee3c86cef4e93ad00e65"
+            },
+            {
+              "role": "runtime",
+              "path": "./dist/chunk-RDZMZMK7.js",
+              "digest": "sha256:3006c971426aa352e18d009f8b35c88d827ab7d0970715318f75ef5ce9403cdd"
+            },
+            {
+              "role": "declaration",
+              "path": "./dist/babel.d.ts",
+              "digest": "sha256:c29487b112b20398eff875c9f1a1d1d482ec9f3588d354cab9a462f6ca6422cc"
+            },
+            {
+              "role": "declaration",
+              "path": "./dist/babel/babel.d.ts",
+              "digest": "sha256:e8ed4cbdaad09bcad703979d9a78c1f858d1ffa03555997cb19c21a25ef5a2f5"
+            },
+            {
+              "role": "manifest",
+              "path": "./package.json",
+              "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+            },
+            {
+              "role": "resolution-input",
+              "path": "./package.json",
+              "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+            }
+          ],
+          "hazards": [
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:@babel/core",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:@babel/types",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:@solid-devtools/debugger/types",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:node:path",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            }
+          ],
+          "digest": "sha256:4c7f243afd99e9cc53e48d2ea50d0292308ec369a2a8c4ff6532470c03af0cc7"
+        },
+        "exports": {
+          "SDT_GET_OWNER": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/chunk-RDZMZMK7.js",
+                "digest": "sha256:3006c971426aa352e18d009f8b35c88d827ab7d0970715318f75ef5ce9403cdd"
+              },
+              "exportName": "SDT_GET_OWNER"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/babel/babel.d.ts",
+                "digest": "sha256:e8ed4cbdaad09bcad703979d9a78c1f858d1ffa03555997cb19c21a25ef5a2f5"
+              },
+              "exportName": "SDT_GET_OWNER"
+            }
+          },
+          "jsxLocationPlugin": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/chunk-RDZMZMK7.js",
+                "digest": "sha256:3006c971426aa352e18d009f8b35c88d827ab7d0970715318f75ef5ce9403cdd"
+              },
+              "exportName": "jsxLocationPlugin"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/babel/babel.d.ts",
+                "digest": "sha256:e8ed4cbdaad09bcad703979d9a78c1f858d1ffa03555997cb19c21a25ef5a2f5"
+              },
+              "exportName": "jsxLocationPlugin"
+            }
+          },
+          "namePlugin": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/chunk-RDZMZMK7.js",
+                "digest": "sha256:3006c971426aa352e18d009f8b35c88d827ab7d0970715318f75ef5ce9403cdd"
+              },
+              "exportName": "namePlugin"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/babel/babel.d.ts",
+                "digest": "sha256:e8ed4cbdaad09bcad703979d9a78c1f858d1ffa03555997cb19c21a25ef5a2f5"
+              },
+              "exportName": "namePlugin"
+            }
+          }
+        },
+        "declarationExports": [
+          "SDT_GET_OWNER",
+          "jsxLocationPlugin",
+          "namePlugin"
+        ],
+        "authority": "standalonePackageResolver"
+      },
+      "main": {
+        "entrypoints": {
+          "./babel": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "4c7f243afd99e9cc53e48d2ea50d0292308ec369a2a8c4ff6532470c03af0cc7",
+                  "path": "./dist/babel.js",
+                  "sha256": "c74c202db108a1e3d0418a160a9eb305dedb162a58cfee3c86cef4e93ad00e65"
+                },
+                "declarations": {
+                  "path": "./dist/babel.d.ts",
+                  "sha256": "c29487b112b20398eff875c9f1a1d1d482ec9f3588d354cab9a462f6ca6422cc"
+                },
+                "exports": {
+                  "SDT_GET_OWNER": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "jsxLocationPlugin": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "namePlugin": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/.~1babel/import/default",
+                  "typesBranch": "/exports/.~1babel/import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+          },
+          "name": "solid-devtools",
+          "version": "0.34.5"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+            "call": {},
+            "shape": "plain"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    },
+    {
+      "coordinate": {
+        "artifactCaseId": "artifact-case:d88cf63109c2d217404f36caeb200c18ee9b5c5d69a0e7437187d5f213c13f52",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-35370c9d5ea7b669264b1690de037aef3d676fcfba5767df72dc1bda6f42829b.mjs",
+        "specifier": "solid-devtools/setup",
+        "resolvedImportRoot": "sha256:d5cff1fd0f44b4d6d21191d33c07b3530d1b0506dc821fae3987e168a2f3a565",
+        "semanticDigest": "sha256:1718ceddba0560760003349ab3834d9fd88e1fcd82f81435ae0d6d815cef614a",
+        "receiptDigest": "sha256:372cec8b1506874b299813b56bf6b5982def29ff98a633c614bd3cd53ce0b3a4",
+        "catalog": "cases/d5cff1fd0f44b4d6d21191d33c07b3530d1b0506dc821fae3987e168a2f3a565/accepted-contracts.json",
+        "catalogDigest": "sha256:7bd9126c1d50be862023640d3325fe6db5cb56d91b028ef9c929b0a9cf90e589"
+      },
+      "documentDigest": "sha256:b9c3ea850bd0fda6cee17079e13cec96486f8640d7d4528e752f252c3ed0d907",
+      "receiptDigest": "sha256:372cec8b1506874b299813b56bf6b5982def29ff98a633c614bd3cd53ce0b3a4",
+      "receiptBindings": {
+        "semanticModelVersion": 1,
+        "proofVersion": 2,
+        "proofPolicy": 2,
+        "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+        "mainDigest": "sha256:b9c3ea850bd0fda6cee17079e13cec96486f8640d7d4528e752f252c3ed0d907",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-35370c9d5ea7b669264b1690de037aef3d676fcfba5767df72dc1bda6f42829b.mjs",
+        "specifier": "solid-devtools/setup",
+        "resolvedImportRoot": "sha256:d5cff1fd0f44b4d6d21191d33c07b3530d1b0506dc821fae3987e168a2f3a565",
+        "semanticDigest": "sha256:1718ceddba0560760003349ab3834d9fd88e1fcd82f81435ae0d6d815cef614a",
+        "artifactProvenanceRoot": "sha256:1c06586267f5dd2226f638cb21cb277157c2d2c2b48d56b5148a226859af09f9",
+        "snapshotRoot": "sha256:558bbed02c036a35e5743f5eb57f0e28a3ed2ac216f973d6488fdbe01208e46e",
+        "packageRoot": "sha256:02038b746382a1dae807224c16802272933ecf73c190074f33e0a2f7435bd5d8",
+        "manifestRoot": "sha256:7461b36e5fc0812bc83eb071d95b0330fa65cbeae524ab6b6fd9314c64a8ec4f",
+        "artifactsRoot": "sha256:54192e13a52e34d5c760123ab8730d019c1cdca94135edf01640aa20bae97cd6",
+        "declarationsRoot": "sha256:b29c5ba7357c2dc4a81e5159d301f664cd878e036bf68d7f2a2676cd0c5f3834",
+        "transformRoot": "sha256:fe3de2d2414953f2188810feb100b642a717d58ba3ae7bd6458da1069b12ef27",
+        "exportsRoot": "sha256:0cd9e008d564eb26700aa50cdd4999cf663eba78c7d3908f9047df23522003cd",
+        "closureRoot": "sha256:a881cceec95fe7e0782416f951958ff0fcd8001310a944303c216fc1fedd513c",
+        "demandGraphRoot": "sha256:a28335d5210b0a713f1617d0524ee144663992da8b2e220ee038239c7273864a",
+        "verifiedPositiveRoot": "sha256:68a604dae6212c165be8e0db4f59b49acc869dc1889bb071ff80e92acbad1aa6",
+        "witnessRoots": {
+          "accepted-dependency-composition": "sha256:a98fb6239f9396cb9056686f9f2e59e9cb5a4676b1af6f23dad97b75dfc0460f",
+          "argument-binding": "sha256:fb1c89a75e88507c3b6756c2a0defe0ea73b371d7db24cfc79fab897af57d8f5",
+          "artifact-declarations": "sha256:b29c5ba7357c2dc4a81e5159d301f664cd878e036bf68d7f2a2676cd0c5f3834",
+          "callable-path": "sha256:18763cc47404b2f39730e658f6e9223092accd63119cee4c378afc044186474a",
+          "compiler-reconciliation": "sha256:7af6caae03322dff00128e4fac536d1c3dd3bb3412d38073c343650b3f3009dd",
+          "domain-exhaustiveness": "sha256:d59ada3c28c459dd78f3791f110cf0b911de1e17ad1ab8755cbf3e1c33d68212",
+          "export-identity": "sha256:0cd9e008d564eb26700aa50cdd4999cf663eba78c7d3908f9047df23522003cd",
+          "export-resolution": "sha256:54192e13a52e34d5c760123ab8730d019c1cdca94135edf01640aa20bae97cd6",
+          "guard-partition": "sha256:8ea1fb98937204a0650443c9e4d641b40169644a6d21ea942567f1fe8c6fe552",
+          "manifest-entrypoint": "sha256:7461b36e5fc0812bc83eb071d95b0330fa65cbeae524ab6b6fd9314c64a8ec4f",
+          "module-closure": "sha256:a881cceec95fe7e0782416f951958ff0fcd8001310a944303c216fc1fedd513c",
+          "operation-cardinality": "sha256:caf3e843db97b11dad435e3d0aecc2ff987de524bb071ea4357ede1d89d2c36f",
+          "operation-reachability": "sha256:32677fd9fcfc5794a7b5edb11fa61e9c5afd0cf1402c11be24f13d8c4f979a54",
+          "package-identity": "sha256:02038b746382a1dae807224c16802272933ecf73c190074f33e0a2f7435bd5d8",
+          "recursive-value-shape": "sha256:66a4d6893aee8abca8c3afa170c97df42fbbac3af9f5bd90e17e45b2aaac9598",
+          "rest-spread-coverage": "sha256:1d7f5bcf9df0ae42200c95e1ba271f6cf80e250c64f01c23a673fba003508a86",
+          "selected-signature": "sha256:d27bd9eaa00aa2a59cb6fd7bfa6e5c9a55548b3840a1bc6e87695f69d0dd571d"
+        },
+        "producerSessionsRoot": "sha256:9aa2a9db2c65fa2201a86f64b387c9a37ba870eb5fdc608f271d51d8d5a8acb8",
+        "dependencyReceiptsRoot": "sha256:38566ee473221c2b2b7ac439382129d45380402050e76af0e15142ef7d159e5b",
+        "dependencyTrustRoot": "sha256:b19decf32a3e60143356f821e283288afb6eb724c5b62bbd1555038d05bd6b71",
+        "probeGateRoot": "sha256:a4dd337e0ebb6d2f8a5741dc73487eb37d56bb1d207ed662fc5846505c7069cd",
+        "closedClaimsRoot": "sha256:3bdab30fea84d7a0db2f78a8f6cba0a9bbd17a132a80a25748d59fd4c2bd0ab2",
+        "verifierSourceDigest": "sha256:d5a8f3dfec87ff73366715de01d8d95090141245a16137806e16a9123617d10a",
+        "verifierBuildDigest": "sha256:47c220603fcb7a6f4580670562fdeec66f406176a8bb4d26451b7f28069fa795",
+        "issuerKind": "persistent-local",
+        "issuerScope": "inert-entrypoint-investigation",
+        "keyId": "ed25519:sha256:620982ca58634d8f1991164f906b425e882412369060dcc312d53644733d86c7",
+        "signatureAlgorithm": "ed25519"
+      },
+      "resolution": {
+        "specifier": "solid-devtools/setup",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-35370c9d5ea7b669264b1690de037aef3d676fcfba5767df72dc1bda6f42829b.mjs",
+        "requestedEntrypoint": "./setup",
+        "packageName": "solid-devtools",
+        "packageVersion": "0.34.5",
+        "packageIntegrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+        "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools",
+        "packageManifest": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/package.json",
+          "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+        },
+        "runtime": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/setup_noop.js",
+          "digest": "sha256:597b725df5e79ac95e3f80a01e829062c7983bd4019aaf87cacdea9ac8c98986"
+        },
+        "declarations": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/setup.d.ts",
+          "digest": "sha256:3dd599e998a8fdd7d3e9bbd3755c6f5e2b5abffcae2a0c067d427673e2606938"
+        },
+        "runtimeTrace": {
+          "branch": "/exports/.~1setup/import/default",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "./setup"
+            },
+            {
+              "condition": "import",
+              "target": "/exports/.~1setup"
+            },
+            {
+              "condition": "default",
+              "target": "/exports/.~1setup/import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/setup_noop.js"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": "/exports/.~1setup/import/types",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "./setup"
+            },
+            {
+              "condition": "import",
+              "target": "/exports/.~1setup"
+            },
+            {
+              "condition": "types",
+              "target": "/exports/.~1setup/import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/setup.d.ts"
+            }
+          ]
+        },
+        "closure": {
+          "entries": [
+            {
+              "role": "runtime",
+              "path": "./dist/setup_noop.js",
+              "digest": "sha256:597b725df5e79ac95e3f80a01e829062c7983bd4019aaf87cacdea9ac8c98986"
+            },
+            {
+              "role": "declaration",
+              "path": "./dist/setup.d.ts",
+              "digest": "sha256:3dd599e998a8fdd7d3e9bbd3755c6f5e2b5abffcae2a0c067d427673e2606938"
+            },
+            {
+              "role": "manifest",
+              "path": "./package.json",
+              "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+            },
+            {
+              "role": "resolution-input",
+              "path": "./package.json",
+              "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+            }
+          ],
+          "dependencies": [
+            {
+              "specifier": "@solid-devtools/debugger/setup",
+              "packageName": "@solid-devtools/debugger",
+              "artifactCase": "artifact-case:094e87ab73ec39089b531c20df476f4b7193f74f7bfe48570e21f63358b005a2",
+              "acceptedContractDigest": "sha256:2f93820f5639235496102e879dcdccc3a03f8b66ab9a76cf4a4d061bf70a022f"
+            }
+          ],
+          "digest": "sha256:4a3d9b3fd3ec78c701f4cd6991e82d34158f0a7fbd984b8690891ce90079d661"
+        },
+        "exports": {
+          "setElementInterface": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/setup_noop.js",
+                "digest": "sha256:597b725df5e79ac95e3f80a01e829062c7983bd4019aaf87cacdea9ac8c98986"
+              },
+              "exportName": "setElementInterface"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/@solid-devtools/debugger/dist/setup.d.ts",
+                "digest": "sha256:004016b52383bc3648ed3a4d8f3ea38772393c11d7e194222f1552149354c315"
+              },
+              "exportName": "setElementInterface"
+            }
+          },
+          "setLocatorOptions": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/setup_noop.js",
+                "digest": "sha256:597b725df5e79ac95e3f80a01e829062c7983bd4019aaf87cacdea9ac8c98986"
+              },
+              "exportName": "setLocatorOptions"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/@solid-devtools/debugger/dist/setup.d.ts",
+                "digest": "sha256:004016b52383bc3648ed3a4d8f3ea38772393c11d7e194222f1552149354c315"
+              },
+              "exportName": "setLocatorOptions"
+            }
+          }
+        },
+        "declarationExports": [
+          "setElementInterface",
+          "setLocatorOptions"
+        ],
+        "authority": "standalonePackageResolver"
+      },
+      "main": {
+        "entrypoints": {
+          "./setup": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "4a3d9b3fd3ec78c701f4cd6991e82d34158f0a7fbd984b8690891ce90079d661",
+                  "path": "./dist/setup_noop.js",
+                  "sha256": "597b725df5e79ac95e3f80a01e829062c7983bd4019aaf87cacdea9ac8c98986"
+                },
+                "declarations": {
+                  "path": "./dist/setup.d.ts",
+                  "sha256": "3dd599e998a8fdd7d3e9bbd3755c6f5e2b5abffcae2a0c067d427673e2606938"
+                },
+                "exports": {
+                  "setElementInterface": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "setLocatorOptions": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/.~1setup/import/default",
+                  "typesBranch": "/exports/.~1setup/import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+          },
+          "name": "solid-devtools",
+          "version": "0.34.5"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ],
+  "priorScoped": [
+    {
+      "coordinate": {
+        "artifactCaseId": "artifact-case:5adc05a2de205d61a9903e9c8bb74a7f97bba8e7c7a556ad31c9275461fcb29c",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-763f736be2131f51dd54546548eb843ae37bf30653dcdc3c82c6f7a764796292.mjs",
+        "specifier": "solid-devtools/vite",
+        "resolvedImportRoot": "sha256:0acee7a618fbf89ea14693c9790f54e43f023c4a3a19db96cb22980898150932",
+        "semanticDigest": "sha256:5a6f3a1bd045d89272f8e4c92934aac2770962358eac76be70a3770940d16604",
+        "receiptDigest": "sha256:7787718a0d5a346fcda277c923e8d7fd4778565287bf10dcefdc97312e9cae3e",
+        "catalog": "cases/0acee7a618fbf89ea14693c9790f54e43f023c4a3a19db96cb22980898150932/accepted-contracts.json",
+        "catalogDigest": "sha256:3e1cb15078e3ed48b4c5bab1db2cefc8c8a4d1a89d6769afdd59608346b72bfd"
+      },
+      "documentDigest": "sha256:347f3dee2ef5b1bc83151a4c52ecfefbda5970e31270cb0748e1964bc23b1409",
+      "receiptDigest": "sha256:7787718a0d5a346fcda277c923e8d7fd4778565287bf10dcefdc97312e9cae3e",
+      "receiptBindings": {
+        "semanticModelVersion": 1,
+        "proofVersion": 2,
+        "proofPolicy": 2,
+        "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+        "mainDigest": "sha256:347f3dee2ef5b1bc83151a4c52ecfefbda5970e31270cb0748e1964bc23b1409",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-763f736be2131f51dd54546548eb843ae37bf30653dcdc3c82c6f7a764796292.mjs",
+        "specifier": "solid-devtools/vite",
+        "resolvedImportRoot": "sha256:0acee7a618fbf89ea14693c9790f54e43f023c4a3a19db96cb22980898150932",
+        "semanticDigest": "sha256:5a6f3a1bd045d89272f8e4c92934aac2770962358eac76be70a3770940d16604",
+        "artifactProvenanceRoot": "sha256:1c06586267f5dd2226f638cb21cb277157c2d2c2b48d56b5148a226859af09f9",
+        "snapshotRoot": "sha256:558bbed02c036a35e5743f5eb57f0e28a3ed2ac216f973d6488fdbe01208e46e",
+        "packageRoot": "sha256:2b157753a4e4bf0d2f51cf9e7f6e066470ecfa821cbd2fd60ffc4fc368d95002",
+        "manifestRoot": "sha256:63bd877baaa3e9ad4283ba142fee2d5b8489ad3276a98c2428ef3f7521294616",
+        "artifactsRoot": "sha256:3ee2b7b296cc2e48dd75fa8820bb52e301d17b49b40657dd648d75c9fd5f41e0",
+        "declarationsRoot": "sha256:401e3474317870d73216928fde88c8bfa22fb5dd28f12d0c15f0e8e44f37a97e",
+        "transformRoot": "sha256:bc20df313559c4c74de7ea7751df05345c6e34cd79a23f9fda03aef10460b8df",
+        "exportsRoot": "sha256:8c395ede6cea7c08cc5a126e19003cca9964251f54c24accdfb7e56fd5000c8a",
+        "closureRoot": "sha256:b2b70b03bcbd3441de8b4bc46bcddaf311d17b4af06666458e5c3100ae83f940",
+        "demandGraphRoot": "sha256:975cb14ee9a80422d7a2298aeaa08965c39d6c3542c384d6b94a2bc6759164a2",
+        "verifiedPositiveRoot": "sha256:32e6b2b284c0678a5c2d27ddf1de5b9554d8c935285dd34126194f346b8e5265",
+        "witnessRoots": {
+          "accepted-dependency-composition": "sha256:d6da8f4433ceb6962557cf09bced197e5ea632b031177f5c4749dc266266a57c",
+          "argument-binding": "sha256:184a6a3078e8a9e809dace7b14e02bc2880cd1cf42d48134d407f96f0c105808",
+          "artifact-declarations": "sha256:401e3474317870d73216928fde88c8bfa22fb5dd28f12d0c15f0e8e44f37a97e",
+          "callable-path": "sha256:fc52d542f577946473eb16a059f4ca98ec33986d0e1db44ab8055ddc910f7eab",
+          "compiler-reconciliation": "sha256:40589ff3717a5589a03d6214e6bba6a362f22efe139074fbcb0ccbd638ddefc6",
+          "domain-exhaustiveness": "sha256:1f143c107b6337451035ae0355a76ce37da857533045e3763cd510ba6a46459c",
+          "export-identity": "sha256:8c395ede6cea7c08cc5a126e19003cca9964251f54c24accdfb7e56fd5000c8a",
+          "export-resolution": "sha256:3ee2b7b296cc2e48dd75fa8820bb52e301d17b49b40657dd648d75c9fd5f41e0",
+          "guard-partition": "sha256:226fd503044af1b27e6dea86f16d859f760cc68d02da48db253f8f75cbdd4394",
+          "manifest-entrypoint": "sha256:63bd877baaa3e9ad4283ba142fee2d5b8489ad3276a98c2428ef3f7521294616",
+          "module-closure": "sha256:b2b70b03bcbd3441de8b4bc46bcddaf311d17b4af06666458e5c3100ae83f940",
+          "operation-cardinality": "sha256:776e4e1d53b04345aa385322f703cf98ea7d502b0a7f49ca6246597906bfc016",
+          "operation-reachability": "sha256:55525ac90f083849a455705499a009e1009ca254587478be436b6be65bca26a3",
+          "package-identity": "sha256:2b157753a4e4bf0d2f51cf9e7f6e066470ecfa821cbd2fd60ffc4fc368d95002",
+          "recursive-value-shape": "sha256:8a8a2d5bd999683829da965f5b31ac6210e478caf53112c68fcdd99790c01939",
+          "rest-spread-coverage": "sha256:2e6058dfc1f040c90d663d6afdc8d727ae7429b803ede779a408e0bb283fc2ca",
+          "selected-signature": "sha256:6eb5b7602e26e00262f75d550f793dd4e929a31faed361f9bf7dd71892c35779"
+        },
+        "producerSessionsRoot": "sha256:00992bdbb0c730092b6524ce0a8b568a0a1f9d6546634affae2edc675d0cdfb3",
+        "dependencyReceiptsRoot": "sha256:0991604a6a2e8377ca07bad18935624397e05dc10639476e86da1f7c61cc179a",
+        "dependencyTrustRoot": "sha256:94feba15c648c424d18674974e9b1fdb00538ae5d4430e6181f48fc4595e7d23",
+        "probeGateRoot": "sha256:4a0c6e782de812200dba6cb8b03e68cb2b926ba65b9d9d9858e536d696971a2c",
+        "closedClaimsRoot": "sha256:288b0beb646a30e8441ec89e65cb508dde66373d2a634b13a6d772a7f20ebb87",
+        "verifierSourceDigest": "sha256:d5a8f3dfec87ff73366715de01d8d95090141245a16137806e16a9123617d10a",
+        "verifierBuildDigest": "sha256:47c220603fcb7a6f4580670562fdeec66f406176a8bb4d26451b7f28069fa795",
+        "issuerKind": "persistent-local",
+        "issuerScope": "inert-entrypoint-investigation",
+        "keyId": "ed25519:sha256:d2c3df0247ad1ae1a9f9c7c1af1b939bd266c19e7ba656eb15682844dd75f6ab",
+        "signatureAlgorithm": "ed25519"
+      },
+      "resolution": {
+        "specifier": "solid-devtools/vite",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-763f736be2131f51dd54546548eb843ae37bf30653dcdc3c82c6f7a764796292.mjs",
+        "requestedEntrypoint": "./vite",
+        "packageName": "solid-devtools",
+        "packageVersion": "0.34.5",
+        "packageIntegrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+        "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools",
+        "packageManifest": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/package.json",
+          "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+        },
+        "runtime": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite.js",
+          "digest": "sha256:429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+        },
+        "declarations": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite.d.ts",
+          "digest": "sha256:70040d1e8e13efb6826d8bdd215fbd19806aa6366804fa2794166be8e867c108"
+        },
+        "runtimeTrace": {
+          "branch": "/exports/.~1vite/import/default",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "./vite"
+            },
+            {
+              "condition": "import",
+              "target": "/exports/.~1vite"
+            },
+            {
+              "condition": "default",
+              "target": "/exports/.~1vite/import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/vite.js"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": "/exports/.~1vite/import/types",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "./vite"
+            },
+            {
+              "condition": "import",
+              "target": "/exports/.~1vite"
+            },
+            {
+              "condition": "types",
+              "target": "/exports/.~1vite/import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/vite.d.ts"
+            }
+          ]
+        },
+        "closure": {
+          "entries": [
+            {
+              "role": "runtime",
+              "path": "./dist/chunk-RDZMZMK7.js",
+              "digest": "sha256:3006c971426aa352e18d009f8b35c88d827ab7d0970715318f75ef5ce9403cdd"
+            },
+            {
+              "role": "runtime",
+              "path": "./dist/vite.js",
+              "digest": "sha256:429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+            },
+            {
+              "role": "declaration",
+              "path": "./dist/vite.d.ts",
+              "digest": "sha256:70040d1e8e13efb6826d8bdd215fbd19806aa6366804fa2794166be8e867c108"
+            },
+            {
+              "role": "declaration",
+              "path": "./dist/vite/vite.d.ts",
+              "digest": "sha256:b3963bbd4757fd35dd2dde8ef0de7c41572b55b8aa4fae49ef549f176502b550"
+            },
+            {
+              "role": "manifest",
+              "path": "./package.json",
+              "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+            },
+            {
+              "role": "resolution-input",
+              "path": "./package.json",
+              "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+            }
+          ],
+          "hazards": [
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:@babel/core",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:@babel/types",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:@solid-devtools/debugger/types",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:node:path",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/vite.js:@babel/core",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/vite.js:@babel/plugin-syntax-typescript",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/vite.js:@solid-devtools/debugger/types",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/vite.js:node:path",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/vite.js:vite",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            }
+          ],
+          "digest": "sha256:a90e35a9fea1e7e84bb7285e023c8326ce912a4ab6b17a906fa65ef0e7b00e8b"
+        },
+        "exports": {
+          "DevtoolsModule": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite.js",
+                "digest": "sha256:429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+              },
+              "exportName": "DevtoolsModule"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite/vite.d.ts",
+                "digest": "sha256:b3963bbd4757fd35dd2dde8ef0de7c41572b55b8aa4fae49ef549f176502b550"
+              },
+              "exportName": "DevtoolsModule"
+            }
+          },
+          "default": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite.js",
+                "digest": "sha256:429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+              },
+              "exportName": "devtoolsPlugin"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite/vite.d.ts",
+                "digest": "sha256:b3963bbd4757fd35dd2dde8ef0de7c41572b55b8aa4fae49ef549f176502b550"
+              },
+              "exportName": "devtoolsPlugin"
+            }
+          },
+          "devtoolsPlugin": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite.js",
+                "digest": "sha256:429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+              },
+              "exportName": "devtoolsPlugin"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/vite/vite.d.ts",
+                "digest": "sha256:b3963bbd4757fd35dd2dde8ef0de7c41572b55b8aa4fae49ef549f176502b550"
+              },
+              "exportName": "devtoolsPlugin"
+            }
+          }
+        },
+        "declarationExports": [
+          "DevtoolsModule",
+          "default",
+          "devtoolsPlugin"
+        ],
+        "authority": "standalonePackageResolver"
+      },
+      "main": {
+        "entrypoints": {
+          "./vite": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "a90e35a9fea1e7e84bb7285e023c8326ce912a4ab6b17a906fa65ef0e7b00e8b",
+                  "path": "./dist/vite.js",
+                  "sha256": "429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+                },
+                "declarations": {
+                  "path": "./dist/vite.d.ts",
+                  "sha256": "70040d1e8e13efb6826d8bdd215fbd19806aa6366804fa2794166be8e867c108"
+                },
+                "exports": {
+                  "DevtoolsModule": "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b",
+                  "default": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "devtoolsPlugin": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/.~1vite/import/default",
+                  "typesBranch": "/exports/.~1vite/import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+          },
+          "name": "solid-devtools",
+          "version": "0.34.5"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b": {
+            "call": {},
+            "shape": "unknown"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    },
+    {
+      "coordinate": {
+        "artifactCaseId": "artifact-case:671931b61f0b4755b643a4a79b0b2f4ebc8357dbbbadf8bd71a878116d5fd85e",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-763f736be2131f51dd54546548eb843ae37bf30653dcdc3c82c6f7a764796292.mjs",
+        "specifier": "solid-devtools",
+        "resolvedImportRoot": "sha256:55a68b38175ba0806f881d1287609728d9b30ac0840cbf4f44ebe5f268d63090",
+        "semanticDigest": "sha256:24f0d42fc4f07ab47ab901ada724b211773a1c29cf56d72157c89ee853c54c2c",
+        "receiptDigest": "sha256:3e3029483ee1fd5b52b3f3d26ea45c94c9ec1a6c25e2d0e135b51a092ebf3c72",
+        "catalog": "cases/55a68b38175ba0806f881d1287609728d9b30ac0840cbf4f44ebe5f268d63090/accepted-contracts.json",
+        "catalogDigest": "sha256:27cbe5c063ce6091239abecef31c891821499e7db063dd19d7a9d1a8a68c76ca"
+      },
+      "documentDigest": "sha256:c0c7b3b4abb881e0218383d44c9b16d95f4678bd0fa65903145c35b5611a79c3",
+      "receiptDigest": "sha256:3e3029483ee1fd5b52b3f3d26ea45c94c9ec1a6c25e2d0e135b51a092ebf3c72",
+      "receiptBindings": {
+        "semanticModelVersion": 1,
+        "proofVersion": 2,
+        "proofPolicy": 2,
+        "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+        "mainDigest": "sha256:c0c7b3b4abb881e0218383d44c9b16d95f4678bd0fa65903145c35b5611a79c3",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-763f736be2131f51dd54546548eb843ae37bf30653dcdc3c82c6f7a764796292.mjs",
+        "specifier": "solid-devtools",
+        "resolvedImportRoot": "sha256:55a68b38175ba0806f881d1287609728d9b30ac0840cbf4f44ebe5f268d63090",
+        "semanticDigest": "sha256:24f0d42fc4f07ab47ab901ada724b211773a1c29cf56d72157c89ee853c54c2c",
+        "artifactProvenanceRoot": "sha256:1c06586267f5dd2226f638cb21cb277157c2d2c2b48d56b5148a226859af09f9",
+        "snapshotRoot": "sha256:558bbed02c036a35e5743f5eb57f0e28a3ed2ac216f973d6488fdbe01208e46e",
+        "packageRoot": "sha256:18aab33c28f7848c54a555a8e5b5cd982dfd7885ba88dc33809ed1a937efe6de",
+        "manifestRoot": "sha256:b83a3eac90766d55f35a300c74699c8b58c3d4168dff8489c82920c107c2bd10",
+        "artifactsRoot": "sha256:60dbc51f14c5ef556aae2fb3cda59d69367af54c952bad7e2eb65ed2eae32d6e",
+        "declarationsRoot": "sha256:6d773c493c5d4d73baf355953aedd28c0bd260b01e7acbbc770b4619f434d3a9",
+        "transformRoot": "sha256:f7704652661ae441bdeb5d1452460c8c1374f159859549ef167086cabc0379bb",
+        "exportsRoot": "sha256:6b9464bfcdb4f88e8d4dccb66393e2911ec07c1a5532ad487967f1cf1bbef1bc",
+        "closureRoot": "sha256:3bbb8a651afd4b3564e5a674f3e81a9922055610856c489b8b3ce949df05210c",
+        "demandGraphRoot": "sha256:4753f0ed6672b0e7eef5e659a950967a83869e5bbb097b59032f777b872b9260",
+        "verifiedPositiveRoot": "sha256:6ec306083ead78c58a0d97c02b112d0ff25fce37603c036e801c93bb4c48b5e2",
+        "witnessRoots": {
+          "accepted-dependency-composition": "sha256:1a8add264071ea0d5f97a2fa9cf889e45ba659283c82fc97433d0f3a452de94d",
+          "argument-binding": "sha256:171498f124cd1a548ddbb05b0eec739505039702894ab2c239318ffadfe0a186",
+          "artifact-declarations": "sha256:6d773c493c5d4d73baf355953aedd28c0bd260b01e7acbbc770b4619f434d3a9",
+          "callable-path": "sha256:347a3b7b39e6e7e204ab9754621f66cbcda03986532818bea0c5234a3a58c398",
+          "compiler-reconciliation": "sha256:8ad56060d2ca794577220e4408b7aa6a92dc24121ae5e8f2bede2432a1628ea4",
+          "domain-exhaustiveness": "sha256:a43b4ff104b1c9c9ae9dc116c6ba2cdde490ee74ec0d5d8306bac310b24de4bd",
+          "export-identity": "sha256:6b9464bfcdb4f88e8d4dccb66393e2911ec07c1a5532ad487967f1cf1bbef1bc",
+          "export-resolution": "sha256:60dbc51f14c5ef556aae2fb3cda59d69367af54c952bad7e2eb65ed2eae32d6e",
+          "guard-partition": "sha256:3499203cf1306e0598e2d079175d48c84d3a05bdc5a75f3527a662dbd2200cfa",
+          "manifest-entrypoint": "sha256:b83a3eac90766d55f35a300c74699c8b58c3d4168dff8489c82920c107c2bd10",
+          "module-closure": "sha256:3bbb8a651afd4b3564e5a674f3e81a9922055610856c489b8b3ce949df05210c",
+          "operation-cardinality": "sha256:c0c5c3d94f907058dcf21e82ad69d803a61c7bcd3344bf0e00a1d17791156ad7",
+          "operation-reachability": "sha256:f73af5be29e2651ab1db98ac954e15a549f3ba5b4923bb6f9ca4ac32475dabf5",
+          "package-identity": "sha256:18aab33c28f7848c54a555a8e5b5cd982dfd7885ba88dc33809ed1a937efe6de",
+          "recursive-value-shape": "sha256:02506c1415b11288fdc2176d6134cfcef8027d77755ac5fe2b6c55e5356554aa",
+          "rest-spread-coverage": "sha256:27570c7fe953bd4d841ffb6dda64f58b9ee952a70e67e70bf44b3baaf78cd8da",
+          "selected-signature": "sha256:bdef07f3043f91ff89baaa64ed1e1296ff3f12a3c8d5ac746291dd00a0d1d1e7"
+        },
+        "producerSessionsRoot": "sha256:ae69ac11dd79a544cba93a81893e6812ca3d32caeab5acb285584c00ead01e30",
+        "dependencyReceiptsRoot": "sha256:6f00e5787475c6edf4d22ce332372190069b9f1816945a49051b4f31a1df029a",
+        "dependencyTrustRoot": "sha256:75e49361352809df37ffb6c4efdab7f65bfb04665f5a90ad30c74d567e9ee64a",
+        "probeGateRoot": "sha256:5b8a8963232070fb9fed4c28aaa9745a521499db21c26af73b119c17d8d9412b",
+        "closedClaimsRoot": "sha256:2cb6aa467234e9ee187e49a0437abf8cf4738dbf168adfd3fc7f0b24d8f33554",
+        "verifierSourceDigest": "sha256:d5a8f3dfec87ff73366715de01d8d95090141245a16137806e16a9123617d10a",
+        "verifierBuildDigest": "sha256:47c220603fcb7a6f4580670562fdeec66f406176a8bb4d26451b7f28069fa795",
+        "issuerKind": "persistent-local",
+        "issuerScope": "inert-entrypoint-investigation",
+        "keyId": "ed25519:sha256:d2c3df0247ad1ae1a9f9c7c1af1b939bd266c19e7ba656eb15682844dd75f6ab",
+        "signatureAlgorithm": "ed25519"
+      },
+      "resolution": {
+        "specifier": "solid-devtools",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-763f736be2131f51dd54546548eb843ae37bf30653dcdc3c82c6f7a764796292.mjs",
+        "requestedEntrypoint": ".",
+        "packageName": "solid-devtools",
+        "packageVersion": "0.34.5",
+        "packageIntegrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+        "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools",
+        "packageManifest": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/package.json",
+          "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+        },
+        "runtime": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/index_noop.js",
+          "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "declarations": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/index.d.ts",
+          "digest": "sha256:0bc700979988009128a36fa70c76f0bca4d1802e74bea5d24bead58831c8709a"
+        },
+        "runtimeTrace": {
+          "branch": "/exports/./import/default",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "."
+            },
+            {
+              "condition": "import",
+              "target": "/exports/."
+            },
+            {
+              "condition": "default",
+              "target": "/exports/./import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/index_noop.js"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": "/exports/./import/types",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "."
+            },
+            {
+              "condition": "import",
+              "target": "/exports/."
+            },
+            {
+              "condition": "types",
+              "target": "/exports/./import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/index.d.ts"
+            }
+          ]
+        },
+        "closure": {
+          "entries": [
+            {
+              "role": "runtime",
+              "path": "./dist/index_noop.js",
+              "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "role": "declaration",
+              "path": "./dist/index.d.ts",
+              "digest": "sha256:0bc700979988009128a36fa70c76f0bca4d1802e74bea5d24bead58831c8709a"
+            },
+            {
+              "role": "declaration",
+              "path": "./dist/setup.d.ts",
+              "digest": "sha256:3dd599e998a8fdd7d3e9bbd3755c6f5e2b5abffcae2a0c067d427673e2606938"
+            },
+            {
+              "role": "manifest",
+              "path": "./package.json",
+              "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+            },
+            {
+              "role": "resolution-input",
+              "path": "./package.json",
+              "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+            }
+          ],
+          "digest": "sha256:9bd3f55988073002aa6096e9d1c657f9c11caa578c1796dfc09d0e7ba28a38fb"
+        },
+        "authority": "standalonePackageResolver"
+      },
+      "main": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "9bd3f55988073002aa6096e9d1c657f9c11caa578c1796dfc09d0e7ba28a38fb",
+                  "path": "./dist/index_noop.js",
+                  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "0bc700979988009128a36fa70c76f0bca4d1802e74bea5d24bead58831c8709a"
+                },
+                "exports": {},
+                "initialization": "inert",
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+          },
+          "name": "solid-devtools",
+          "version": "0.34.5"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {}
+      }
+    },
+    {
+      "coordinate": {
+        "artifactCaseId": "artifact-case:bb8a26e1057fe5fbd9cd6c62d0adb6ff8a8ceab31ada2c23f4fe4aa6bafc625a",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-763f736be2131f51dd54546548eb843ae37bf30653dcdc3c82c6f7a764796292.mjs",
+        "specifier": "solid-devtools/babel",
+        "resolvedImportRoot": "sha256:ebdf2818200227b2d0633e906b7e91aab3957c90395617994d205db17ae05835",
+        "semanticDigest": "sha256:32f7d41e91ca49bbe8f70e9d1b73d05d3cabd1a465ed881569b6ae91ab19c3eb",
+        "receiptDigest": "sha256:6481cd1ea0a88ff164c82fcaf811f1ec16999c7d310e13a65c7369f29dc61975",
+        "catalog": "cases/ebdf2818200227b2d0633e906b7e91aab3957c90395617994d205db17ae05835/accepted-contracts.json",
+        "catalogDigest": "sha256:ed84bc35aa3d09c156b849ba374dc2aab49ca2d271d8ad655c082455b33fb8c3"
+      },
+      "documentDigest": "sha256:a91ac4491a23ade0eed8badd8cef40f086fe1dc47b7d924e3b93d30a8d9e1465",
+      "receiptDigest": "sha256:6481cd1ea0a88ff164c82fcaf811f1ec16999c7d310e13a65c7369f29dc61975",
+      "receiptBindings": {
+        "semanticModelVersion": 1,
+        "proofVersion": 2,
+        "proofPolicy": 2,
+        "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+        "mainDigest": "sha256:a91ac4491a23ade0eed8badd8cef40f086fe1dc47b7d924e3b93d30a8d9e1465",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-763f736be2131f51dd54546548eb843ae37bf30653dcdc3c82c6f7a764796292.mjs",
+        "specifier": "solid-devtools/babel",
+        "resolvedImportRoot": "sha256:ebdf2818200227b2d0633e906b7e91aab3957c90395617994d205db17ae05835",
+        "semanticDigest": "sha256:32f7d41e91ca49bbe8f70e9d1b73d05d3cabd1a465ed881569b6ae91ab19c3eb",
+        "artifactProvenanceRoot": "sha256:1c06586267f5dd2226f638cb21cb277157c2d2c2b48d56b5148a226859af09f9",
+        "snapshotRoot": "sha256:558bbed02c036a35e5743f5eb57f0e28a3ed2ac216f973d6488fdbe01208e46e",
+        "packageRoot": "sha256:f32292af9ff6363a7fe5b26cd75b6a4c4e70a090e924e6cd12d1512e950867a1",
+        "manifestRoot": "sha256:bef4d2963540b8da7026178c4aaaa7f95a5e5783a2491b69e84c70cca9dc29ab",
+        "artifactsRoot": "sha256:a4e2be29e2884cbd4afd969a7742f16448964dd50617737f7479dd7e9155d6a6",
+        "declarationsRoot": "sha256:a74e7678ea42d0cf563509af5b51ede73c363740501fef5cb9ab32a6d3ce291c",
+        "transformRoot": "sha256:654e5b82a3bd1dd191428f91a6300281ffb7720a66c15fe0e90e326485f355fc",
+        "exportsRoot": "sha256:761470bd8d67aff4104eae3382a956568247f3bb72f732d162057b294435a2e7",
+        "closureRoot": "sha256:0185fca8c21a5dd9787f47a878261a09625c2bb5d4682a041c25603c91595145",
+        "demandGraphRoot": "sha256:104c2ec933dab436778be68970da67ab7c985990d229c15043bac40b1f760bfa",
+        "verifiedPositiveRoot": "sha256:68d939183ef5d8184b4d6b5ef4412f2cdbfccd595045f978f7d6485f66ac5bc6",
+        "witnessRoots": {
+          "accepted-dependency-composition": "sha256:5506089f2e612a4c9e1ff588e14a9d081cfb2eedd1c7e6c689f6d600b989512a",
+          "argument-binding": "sha256:dd784de94a4054808c31344c3b504507c22340b960d51133971f85716a08188c",
+          "artifact-declarations": "sha256:a74e7678ea42d0cf563509af5b51ede73c363740501fef5cb9ab32a6d3ce291c",
+          "callable-path": "sha256:2b4e8958e8813cb922acf0c177fca20cfe00d55a4f11a8add15756028892e812",
+          "compiler-reconciliation": "sha256:1ebe2c5322410c9570258824e0c29afe6e260403473d2c7723f65c32324433bd",
+          "domain-exhaustiveness": "sha256:a84304257190b1d1762ba61b01f2b1047d71300cd81ad92b39a151d0fd7c52be",
+          "export-identity": "sha256:761470bd8d67aff4104eae3382a956568247f3bb72f732d162057b294435a2e7",
+          "export-resolution": "sha256:a4e2be29e2884cbd4afd969a7742f16448964dd50617737f7479dd7e9155d6a6",
+          "guard-partition": "sha256:86be34ce3dddf1aca508154ba3b8495e75a04cd0c6e2ddb8d56e30e000da07f3",
+          "manifest-entrypoint": "sha256:bef4d2963540b8da7026178c4aaaa7f95a5e5783a2491b69e84c70cca9dc29ab",
+          "module-closure": "sha256:0185fca8c21a5dd9787f47a878261a09625c2bb5d4682a041c25603c91595145",
+          "operation-cardinality": "sha256:fa34c62fa436c0206a588678ac8fe1528924460ed8f5cfd9d7abe1e0dc61de21",
+          "operation-reachability": "sha256:3ea84dd1485d3e6236bda4c793cc88ad34a80bb8c154d206a7181074a5375d1b",
+          "package-identity": "sha256:f32292af9ff6363a7fe5b26cd75b6a4c4e70a090e924e6cd12d1512e950867a1",
+          "recursive-value-shape": "sha256:1a55767e6c8681b5f3e1136c3c5266d407d53275958e18292f4e474d1ac715ac",
+          "rest-spread-coverage": "sha256:cc57f54b0ec8d744d0b23f35724892abb3ccaddf2385a0101dc423a88333cf06",
+          "selected-signature": "sha256:7f20bb131813bc968083408d51fd378aac8f70fd47f84b0bbadb18c0d8ee64eb"
+        },
+        "producerSessionsRoot": "sha256:76de1d275b2718c9eff30d97a60debaba572e6736851f26fec8c049723b2b391",
+        "dependencyReceiptsRoot": "sha256:5d126fafdb78279112f203dfed0a2beb05ec80ae069759806f160e1ca7019494",
+        "dependencyTrustRoot": "sha256:4fa7d9528415dce1f117668a899d61f5c0079a7b0f158a4d87322c5817146236",
+        "probeGateRoot": "sha256:d82a37105bd7ff3095ffaa70382c69f79aa844e57df7490559fe5626fe491b9c",
+        "closedClaimsRoot": "sha256:7a03e66ddc73bb88089c628d10832dca8fd3b89c074a4f90c08eb6ee503a7d93",
+        "verifierSourceDigest": "sha256:d5a8f3dfec87ff73366715de01d8d95090141245a16137806e16a9123617d10a",
+        "verifierBuildDigest": "sha256:47c220603fcb7a6f4580670562fdeec66f406176a8bb4d26451b7f28069fa795",
+        "issuerKind": "persistent-local",
+        "issuerScope": "inert-entrypoint-investigation",
+        "keyId": "ed25519:sha256:d2c3df0247ad1ae1a9f9c7c1af1b939bd266c19e7ba656eb15682844dd75f6ab",
+        "signatureAlgorithm": "ed25519"
+      },
+      "resolution": {
+        "specifier": "solid-devtools/babel",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-763f736be2131f51dd54546548eb843ae37bf30653dcdc3c82c6f7a764796292.mjs",
+        "requestedEntrypoint": "./babel",
+        "packageName": "solid-devtools",
+        "packageVersion": "0.34.5",
+        "packageIntegrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+        "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools",
+        "packageManifest": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/package.json",
+          "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+        },
+        "runtime": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/babel.js",
+          "digest": "sha256:c74c202db108a1e3d0418a160a9eb305dedb162a58cfee3c86cef4e93ad00e65"
+        },
+        "declarations": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/babel.d.ts",
+          "digest": "sha256:c29487b112b20398eff875c9f1a1d1d482ec9f3588d354cab9a462f6ca6422cc"
+        },
+        "runtimeTrace": {
+          "branch": "/exports/.~1babel/import/default",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "./babel"
+            },
+            {
+              "condition": "import",
+              "target": "/exports/.~1babel"
+            },
+            {
+              "condition": "default",
+              "target": "/exports/.~1babel/import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/babel.js"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": "/exports/.~1babel/import/types",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "./babel"
+            },
+            {
+              "condition": "import",
+              "target": "/exports/.~1babel"
+            },
+            {
+              "condition": "types",
+              "target": "/exports/.~1babel/import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/babel.d.ts"
+            }
+          ]
+        },
+        "closure": {
+          "entries": [
+            {
+              "role": "runtime",
+              "path": "./dist/babel.js",
+              "digest": "sha256:c74c202db108a1e3d0418a160a9eb305dedb162a58cfee3c86cef4e93ad00e65"
+            },
+            {
+              "role": "runtime",
+              "path": "./dist/chunk-RDZMZMK7.js",
+              "digest": "sha256:3006c971426aa352e18d009f8b35c88d827ab7d0970715318f75ef5ce9403cdd"
+            },
+            {
+              "role": "declaration",
+              "path": "./dist/babel.d.ts",
+              "digest": "sha256:c29487b112b20398eff875c9f1a1d1d482ec9f3588d354cab9a462f6ca6422cc"
+            },
+            {
+              "role": "declaration",
+              "path": "./dist/babel/babel.d.ts",
+              "digest": "sha256:e8ed4cbdaad09bcad703979d9a78c1f858d1ffa03555997cb19c21a25ef5a2f5"
+            },
+            {
+              "role": "manifest",
+              "path": "./package.json",
+              "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+            },
+            {
+              "role": "resolution-input",
+              "path": "./package.json",
+              "digest": "sha256:ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+            }
+          ],
+          "hazards": [
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:@babel/core",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:@babel/types",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:@solid-devtools/debugger/types",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/chunk-RDZMZMK7.js:node:path",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            }
+          ],
+          "digest": "sha256:4c7f243afd99e9cc53e48d2ea50d0292308ec369a2a8c4ff6532470c03af0cc7"
+        },
+        "exports": {
+          "SDT_GET_OWNER": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/chunk-RDZMZMK7.js",
+                "digest": "sha256:3006c971426aa352e18d009f8b35c88d827ab7d0970715318f75ef5ce9403cdd"
+              },
+              "exportName": "SDT_GET_OWNER"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/babel/babel.d.ts",
+                "digest": "sha256:e8ed4cbdaad09bcad703979d9a78c1f858d1ffa03555997cb19c21a25ef5a2f5"
+              },
+              "exportName": "SDT_GET_OWNER"
+            }
+          },
+          "jsxLocationPlugin": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/chunk-RDZMZMK7.js",
+                "digest": "sha256:3006c971426aa352e18d009f8b35c88d827ab7d0970715318f75ef5ce9403cdd"
+              },
+              "exportName": "jsxLocationPlugin"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/babel/babel.d.ts",
+                "digest": "sha256:e8ed4cbdaad09bcad703979d9a78c1f858d1ffa03555997cb19c21a25ef5a2f5"
+              },
+              "exportName": "jsxLocationPlugin"
+            }
+          },
+          "namePlugin": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/chunk-RDZMZMK7.js",
+                "digest": "sha256:3006c971426aa352e18d009f8b35c88d827ab7d0970715318f75ef5ce9403cdd"
+              },
+              "exportName": "namePlugin"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/solid-devtools/dist/babel/babel.d.ts",
+                "digest": "sha256:e8ed4cbdaad09bcad703979d9a78c1f858d1ffa03555997cb19c21a25ef5a2f5"
+              },
+              "exportName": "namePlugin"
+            }
+          }
+        },
+        "declarationExports": [
+          "SDT_GET_OWNER",
+          "jsxLocationPlugin",
+          "namePlugin"
+        ],
+        "authority": "standalonePackageResolver"
+      },
+      "main": {
+        "entrypoints": {
+          "./babel": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "4c7f243afd99e9cc53e48d2ea50d0292308ec369a2a8c4ff6532470c03af0cc7",
+                  "path": "./dist/babel.js",
+                  "sha256": "c74c202db108a1e3d0418a160a9eb305dedb162a58cfee3c86cef4e93ad00e65"
+                },
+                "declarations": {
+                  "path": "./dist/babel.d.ts",
+                  "sha256": "c29487b112b20398eff875c9f1a1d1d482ec9f3588d354cab9a462f6ca6422cc"
+                },
+                "exports": {
+                  "SDT_GET_OWNER": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "jsxLocationPlugin": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "namePlugin": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/.~1babel/import/default",
+                  "typesBranch": "/exports/.~1babel/import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+          },
+          "name": "solid-devtools",
+          "version": "0.34.5"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+            "call": {},
+            "shape": "plain"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ],
+  "priorMainDocumentsPreserved": true,
+  "ordinaryAnalysis": {
+    "receiptAuthenticated": true,
+    "exactCaseSelected": true
+  },
+  "stageDurationsMs": {
+    "artifactAcquisition": 1.23,
+    "proposalGeneration": 2548.41,
+    "demandPlanning": 0.04,
+    "witnessAcquisition": 2144.47,
+    "certification": 0.02,
+    "receiptIssuance": 0.01,
+    "catalogPublication": 0
+  },
+  "metricChanged": false,
+  "completeRowGain": 0,
+  "remaining": [
+    "./package.json",
+    "browser/development root case"
+  ],
+  "native": {
+    "path": "/private/tmp/declaration-reexport-final-measured-native",
+    "executedPath": "rust/target/debug/solid-checker-rust",
+    "digest": "sha256:6a0b651ab4a49e8e2aa9ec6bd4e48f951b0be6d8b02e2fc377a7f6a1bda73625",
+    "producerDigest": "sha256:e8568bfb2022f0e1d8f82b5e694e1f4223820ab46413999f2491beb93823f118"
+  }
+}

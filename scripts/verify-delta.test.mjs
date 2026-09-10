@@ -105,7 +105,7 @@ test("the longest matching prefix wins, so no row swallows another's directory",
   assert.deepEqual(classify("rust/crates/solid-facts/src/dialect.rs").checks, ["facts-lib"]);
 });
 
-test("a mapped change set runs its rows' checks, a fresh binary first, then the universal set", () => {
+test("a mapped change set runs preflight checks before building and testing", () => {
   const plan = planFor([
     "rust/crates/solid-reactive-ir/src/lib.rs",
     "fixtures/reactive-ir/store-flow/App.tsx",
@@ -117,11 +117,11 @@ test("a mapped change set runs its rows' checks, a fresh binary first, then the 
     // AGENTS.md's table says "coverage compare (fresh debug binary)", and a
     // coverage run against a stale binary is the trap the document warns about.
     "build-typefacts",
+    ...UNIVERSAL,
     "build-debug",
     "ir-lib",
     "coverage",
     "ownership-gate",
-    ...UNIVERSAL,
   ]);
   // No duplicate, even though both rows select coverage.
   assert.equal(plan.checks.filter((check) => check === "coverage").length, 1);
@@ -133,10 +133,10 @@ test("a change that needs no checker skips the debug build", () => {
   assert.ok(!plan.checks.includes("build-debug"));
 });
 
-test("the universal handoff set is appended to every mapped plan", () => {
+test("the universal handoff set precedes tests in every mapped plan", () => {
   for (const row of ROWS) {
     const plan = planFor([`${row.prefix}probe`]);
-    assert.deepEqual(plan.checks.slice(-UNIVERSAL.length), UNIVERSAL, row.prefix);
+    assert.deepEqual(plan.checks.slice(1, 1 + UNIVERSAL.length), UNIVERSAL, row.prefix);
   }
   // Nothing changed is still the universal set, never nothing at all.
   assert.deepEqual(planFor([]).checks, ["build-typefacts", ...UNIVERSAL]);

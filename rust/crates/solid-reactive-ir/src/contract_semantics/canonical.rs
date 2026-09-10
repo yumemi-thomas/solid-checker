@@ -50,6 +50,12 @@ pub(super) fn semantic_digest(
             .any(|export| !export.call.proposed_closures().is_empty())
     });
     let mut writer = CanonicalWriter::new();
+    let initialization = artifact_cases
+        .iter()
+        .any(|case| case.initialization.is_some());
+    if initialization {
+        writer.text("solid-checker:semantic-module-initialization:v1");
+    }
     writer.text(match (composed, proposed_closure) {
         (false, false) => SEMANTIC_DIGEST_DOMAIN,
         (true, false) => SEMANTIC_DIGEST_DOMAIN_COMPOSED,
@@ -58,6 +64,7 @@ pub(super) fn semantic_digest(
     });
     writer.composed_provenance = composed;
     writer.proposed_closure = proposed_closure;
+    writer.initialization = initialization;
     writer.u16(SEMANTIC_MODEL_VERSION);
     writer.package(package);
     writer.sequence(artifact_cases, CanonicalWriter::artifact_case);
@@ -93,6 +100,8 @@ struct CanonicalWriter {
     /// Whether this stream belongs to a proposed-closure digest family. Set
     /// the same way, from the contract, and false for every other entry point.
     proposed_closure: bool,
+    /// Separate digest family: legacy cases retain their exact old stream.
+    initialization: bool,
 }
 
 impl CanonicalWriter {
@@ -101,6 +110,7 @@ impl CanonicalWriter {
             hash: Sha256::new(),
             composed_provenance: false,
             proposed_closure: false,
+            initialization: false,
         }
     }
 
@@ -192,6 +202,12 @@ impl CanonicalWriter {
 
     fn artifact_case(&mut self, case: &ArtifactCase) {
         self.artifact_case_subject_identity(case);
+        if self.initialization {
+            self.u8(match case.initialization {
+                None => 0,
+                Some(ModuleInitializationClaim::Inert) => 1,
+            });
+        }
         self.stability(case.stability);
         self.usize(case.exports.len());
         for (name, export) in &case.exports {

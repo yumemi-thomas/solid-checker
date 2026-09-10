@@ -5,8 +5,8 @@
 // expensive ones can wait. Applied by hand it is a judgement call made under
 // time pressure, which is the condition under which the wrong row gets picked.
 // This runs the table instead: it reads what actually changed, prints the row
-// it matched for every path, and runs exactly those checks plus the universal
-// handoff set the table always appends.
+// it matched for every path, and runs the universal preflight before the
+// selected tests and gates.
 //
 //   bun scripts/verify-delta.mjs             plan and run
 //   bun scripts/verify-delta.mjs --dry-run   print the plan, run nothing
@@ -44,6 +44,7 @@ import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { identity as typefactsIdentity } from "./typefacts-source-identity.mjs";
+import { certificationEnvironment } from "./lib/certification-environment.mjs";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -142,7 +143,7 @@ export const CHECKS = {
   verify: { command: ["scripts/verify.sh"] },
 };
 
-/** AGENTS.md's universal handoff set, in the order the document lists it. */
+/** AGENTS.md's universal handoff set, run before expensive tests and gates. */
 export const UNIVERSAL = [
   "fmt-check",
   "whitespace-check",
@@ -261,6 +262,7 @@ export function planFor(paths) {
     // set can report that it needs rebuilding. The stamp check is ~10ms when it
     // is already current.
     "build-typefacts",
+    ...UNIVERSAL,
     ...(needsChecker ? ["build-debug"] : []),
     // Before the process tests: it rebuilds with the harness pins recomputed,
     // and everything after it should run against that binary.
@@ -268,7 +270,6 @@ export function planFor(paths) {
     ...["facts-lib", "ir-lib", "backend-process", "contract-process"].filter((id) => selected.has(id)),
     ...["coverage", "ownership-gate", "conformance"].filter((id) => selected.has(id)),
     ...["bun-test-cli", "bun-test-wasm"].filter((id) => selected.has(id)),
-    ...UNIVERSAL,
   ];
   return { full: false, unmapped, decisions, checks: ordered };
 }
@@ -471,14 +472,18 @@ function main() {
   }
 
   console.log("");
+  let cargoEnvironment;
   for (const check of plan.checks) {
     for (const command of commandsOf(check)) {
       const started = Date.now();
       const [executable, ...args] = command;
+      if (executable === "cargo") cargoEnvironment ??= certificationEnvironment(ROOT);
       const result = spawnSync(executable, args, {
         cwd: ROOT,
         stdio: "inherit",
-        env: { ...process.env, ...(CHECKS[check].env ?? {}) },
+        // Later Bun/Make drivers can invoke Cargo too (bundle conformance is
+        // one). Keep the same pins across the whole selected plan.
+        env: { ...(cargoEnvironment ?? process.env), ...(CHECKS[check].env ?? {}) },
       });
       const seconds = ((Date.now() - started) / 1000).toFixed(2);
       if (result.error || result.status !== 0) {

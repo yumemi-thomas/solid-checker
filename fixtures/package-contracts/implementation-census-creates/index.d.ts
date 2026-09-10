@@ -125,3 +125,9 @@ export declare function joinedArms(source: any): unknown;
 export declare function writtenFromModuleValue(source: any, flag: any): unknown;
 export declare function writtenFromTwoSlots(first: any, second: any, flag: any): unknown;
 export declare function writtenByDestructuring(source: any, other: any): unknown;
+// ADR 0051: the omitted fifth helper argument is explicitly `undefined` and
+// narrows to `never` on the guarded leaf call. The two controls keep the
+// argument explicit so `unknown` and `any` remain actual coercion premises.
+export declare function omittedBoxScale(value: number): number;
+export declare function unknownBoxScale(value: number, boxScale: unknown): number;
+export declare function untypedBoxScale(value: number, boxScale: any): number;

@@ -233,6 +233,7 @@ impl Authority {
             ),
         };
         ArtifactCase {
+            initialization: None,
             id: id.into(),
             entrypoint: entrypoint.into(),
             resolution_trace: trace

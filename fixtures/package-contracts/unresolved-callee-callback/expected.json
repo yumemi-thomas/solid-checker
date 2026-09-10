@@ -13,8 +13,8 @@
             "sha256": "fd8c543a00b385f47a924a91aaff2df91e7ca506e6d5c6f0b81cd5d45ff03e71"
           },
           "exports": {
-            "mapParam": "summary-8e800eff6ddbdabfd339f5dfad278e3aa7623ae76cb8598687f1d3fbdd01821f",
-            "noMember": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "mapParam": "summary-97ee7c944587bfb7d49ea7777ea0cd27c101e8d08c7c0e8a5e37de7203e8d3b2",
+            "noMember": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -38,9 +38,10 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-8e800eff6ddbdabfd339f5dfad278e3aa7623ae76cb8598687f1d3fbdd01821f": {
+    "summary-97ee7c944587bfb7d49ea7777ea0cd27c101e8d08c7c0e8a5e37de7203e8d3b2": {
       "call": {
         "closed": [
+          "reads",
           "creates"
         ],
         "creates": [],
@@ -73,6 +74,7 @@
           }
         ],
         "proposedClosures": [
+          "reads",
           "creates"
         ],
         "reads": [
@@ -81,15 +83,18 @@
       },
       "shape": "callable"
     },
-    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
+    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
       "call": {
         "closed": [
+          "reads",
           "creates"
         ],
         "creates": [],
         "proposedClosures": [
+          "reads",
           "creates"
-        ]
+        ],
+        "reads": []
       },
       "shape": "callable"
     }

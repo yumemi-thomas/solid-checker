@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "f19c7e8e4540fdca44ed44f9612c5f8b3b4a596653b649f98931b2d9ef7413a7",
+            "closureSha256": "e2952b586cf7f47828214765bc9df2247291d9c40252bdf91d5744fe507aedae",
             "path": "./index.js",
-            "sha256": "8bc02e87cb81e64bbf5f677978c83af72c420eb65b8560612e451ef09b37eb9b"
+            "sha256": "e231c83f7f5aafab1a83de9f9b32307ac9f1eedf114ca6095991d5b72504548d"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "229485a8a20b3cf3a53ae081a5864c53d5a15cc908a364eb4127ddbd1498cd6b"
+            "sha256": "8a2193f2d7eaa1d30671f60f0ae30b0ad374c20e25a86266c4f7e05f0c8f7a20"
           },
           "exports": {
             "accessorTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -57,6 +57,7 @@
             "moduleReceiverRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "nestedCallableParameterRead": "summary-8e800eff6ddbdabfd339f5dfad278e3aa7623ae76cb8598687f1d3fbdd01821f",
             "noRecipe": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
+            "omittedBoxScale": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "overloaded": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
             "ownArrayRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "ownRestSpread": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -86,7 +87,9 @@
             "taggedTemplate": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "toStringTagViaCall": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "typedCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "unknownBoxScale": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "unresolved": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "untypedBoxScale": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "untypedCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "updateOnParameter": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "viaHelperChain": "summary-5f5b804e83be5aede7d0abaf2dc45cc361fe1b11fc38c0a3ccf72ca6ebf6f4dc",

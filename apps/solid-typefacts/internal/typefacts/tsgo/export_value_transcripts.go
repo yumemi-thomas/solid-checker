@@ -178,6 +178,7 @@ func (p *project) exportValueTranscriptLocked(
 			premise,
 		)
 		transcript.Implementation = &implementation
+		transcript.Initializer = p.exportInitializerTranscriptLocked(*demand.ImplementationLocation)
 	}
 	if demand.LocalDeclarationLocation != nil {
 		local := p.localDeclarationImplementationTranscriptLocked(
@@ -316,9 +317,14 @@ func (p *project) exportImplementationTranscriptLocked(
 	)
 	transcript.Signature = &selected
 	transcript.ParameterUses = p.parameterUseCensusLocked(ctx, implementation)
+	transcript.UnwrittenParameters = p.unwrittenParameterBindingsLocked(implementation, transcript.Signature, location)
+	transcript.InitialParameterReads = p.initialParameterReadsLocked(implementation, transcript.Signature, location, transcript.ParameterUses)
 	transcript.ControlFlow = p.controlFlowCensusLocked(implementation)
 	transcript.CallableReturns = p.callableReturnCensusesLocked(implementation)
 	transcript.Calls = p.implementationCallCensusLocked(implementation)
+	if nodeLocation(implementation).Path == location.Path {
+		transcript.OriginalHelperReads = p.originalHelperReadsLocked(implementation, transcript.Signature, transcript.Calls, transcript.ParameterUses)
+	}
 	transcript.UncensusedInvokingForms = p.uncensusedInvokingFormCensusLocked(implementation)
 	// ADR 0045: whether the value this body hands its caller is provably a
 	// primitive, over the same program the forms above were classified on. A
@@ -449,20 +455,27 @@ func (p *project) localDeclarationImplementationTranscriptLocked(
 	// The declared name, when there is one, is what names the symbol; a
 	// `const helper = () => …` carries its name on the enclosing variable
 	// declaration instead, which is the one indirection taken here. An
-	// anonymous callable resolves no symbol, and the transcript stays open on
-	// `symbolUnresolved` rather than describing a body it cannot identify.
+	// anonymous callable instead uses its own compiler signature symbol when
+	// that symbol independently declares this exact node (protocol 37).
 	name := implementation.Name()
 	if name == nil {
 		if parent := implementation.Parent; parent != nil && ast.IsVariableDeclaration(parent) {
 			name = parent.Name()
 		}
 	}
-	if name == nil || !ast.IsIdentifier(name) {
-		transcript.OpenReasons = append(transcript.OpenReasons, "symbolUnresolved")
-		return transcript
+	var target *ast.Symbol
+	if name != nil && ast.IsIdentifier(name) {
+		transcript.QueryName = name.Text()
+		target = p.canonicalSymbol(p.checker.GetSymbolAtLocation(name))
+	} else if ast.IsArrowFunction(implementation) || ast.IsFunctionExpression(implementation) {
+		// An exact anonymous callable node has its own compiler signature
+		// symbol. Require that symbol to declare this very node; containment
+		// or borrowing an enclosing factory's symbol proves no identity.
+		target = p.canonicalSymbol(implementation.Symbol())
+		if target != nil && (len(target.Declarations) != 1 || target.Declarations[0] != implementation) {
+			target = nil
+		}
 	}
-	transcript.QueryName = name.Text()
-	target := p.canonicalSymbol(p.checker.GetSymbolAtLocation(name))
 	if target == nil {
 		transcript.OpenReasons = append(transcript.OpenReasons, "symbolUnresolved")
 		return transcript
@@ -494,9 +507,14 @@ func (p *project) localDeclarationImplementationTranscriptLocked(
 	)
 	transcript.Signature = &selected
 	transcript.ParameterUses = p.parameterUseCensusLocked(ctx, implementation)
+	transcript.UnwrittenParameters = p.unwrittenParameterBindingsLocked(implementation, transcript.Signature, location)
+	transcript.InitialParameterReads = p.initialParameterReadsLocked(implementation, transcript.Signature, location, transcript.ParameterUses)
 	transcript.ControlFlow = p.controlFlowCensusLocked(implementation)
 	transcript.CallableReturns = p.callableReturnCensusesLocked(implementation)
 	transcript.Calls = p.implementationCallCensusLocked(implementation)
+	if nodeLocation(implementation).Path == location.Path {
+		transcript.OriginalHelperReads = p.originalHelperReadsLocked(implementation, transcript.Signature, transcript.Calls, transcript.ParameterUses)
+	}
 	transcript.UncensusedInvokingForms = p.uncensusedInvokingFormCensusLocked(implementation)
 	// ADR 0045: whether the value this body hands its caller is provably a
 	// primitive, over the same program the forms above were classified on. A
@@ -999,6 +1017,12 @@ func (p *project) returnValueSourcesLocked(expression *ast.Node) []typefacts.Imp
 		}
 		if ast.IsArrayLiteralExpression(node) {
 			for index, element := range node.AsArrayLiteralExpression().Elements.Nodes {
+				// A spread's runtime length is not its single syntax position.
+				// Only the prefix retains exact tuple indexes; nested arrays
+				// stop their own walk without erasing an outer sibling.
+				if ast.IsSpreadElement(element) {
+					break
+				}
 				item := index
 				walk(element, append(path, typefacts.PathSegment{Kind: typefacts.PathSegmentTuple, Index: &item}))
 			}

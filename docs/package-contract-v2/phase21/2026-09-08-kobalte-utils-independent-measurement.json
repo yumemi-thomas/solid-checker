@@ -1,0 +1,415 @@
+{
+  "format": "entrypoint-recovery-measurement",
+  "authoritative": false,
+  "base": {
+    "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/ecosystem-investigations/2026-09-08-initial-reads-full.json",
+    "digest": "sha256:34cdf6be8d8e3f175cd37f8151848e449ba3dcff5bc8fadc983f378ba847d65c",
+    "finishedAt": "2026-09-07T15:57:05.462Z",
+    "counts": {
+      "complete": 0,
+      "partial": 0,
+      "refused": 1,
+      "not-advanced": 0
+    }
+  },
+  "after": {
+    "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/ecosystem-investigations/2026-09-08-kobalte-utils-independent.json",
+    "digest": "sha256:342e91e251f5b88a663bd787018c6ab410d7fc2326fea9717338163d579bd28a",
+    "finishedAt": "2026-09-07T16:49:46.008Z",
+    "counts": {
+      "complete": 0,
+      "partial": 0,
+      "refused": 1,
+      "not-advanced": 0
+    }
+  },
+  "binary": {
+    "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/verify/solid-checker-rust",
+    "digest": "sha256:17b08405401f742b5e8769336be594d91862d0e0ba5637bcf4472f1c09576a97",
+    "producer": "sha256:6a1aff3e6fb04e31acbd5243fd55a44a5a79cfe3a15166b86ba3909b12400290",
+    "stamp": {
+      "format": 1,
+      "sourceDigest": "929e9e0b0f2a06012d0951c6aed1dba6f4aacc012888753948301466f61f85bc",
+      "toolchain": "go version go1.26.5 darwin/arm64",
+      "buildId": "dev"
+    }
+  },
+  "transitions": [],
+  "selected": [
+    {
+      "probeId": "@kobalte/utils@0.9.2|solid1|only",
+      "before": {
+        "status": "refused",
+        "cases": []
+      },
+      "after": {
+        "status": "refused",
+        "cases": []
+      },
+      "coverageBefore": null,
+      "coverageAfter": null,
+      "certificationRefusal": "solid-checker-rust: policy-2 case-set finalization failed: Type Facts certification failed during live export-value verification: Type Facts demand sha256:20da6f010f7f1bbd0cedc8b0a245aab46f4029f72f40e1c31f3c1bed2febd41f is locally open: recursive-value-shape (artifact-case:4428aaa5ded09533d107ca061ddcc9932d833d8b6c66b6ece2e613b63b9178b9:scrollIntoViewport): parameter-rooted read lacks positive original-input identity",
+      "generationRefusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @solid-primitives/keyed has no exact runtime binding for export Key"
+        },
+        {
+          "entrypoint": ".",
+          "conditions": [
+            "solid"
+          ],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @solid-primitives/keyed has no exact runtime binding for export Key"
+        },
+        {
+          "entrypoint": "./src/external.ts",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @solid-primitives/keyed has no exact runtime binding for export Key"
+        },
+        {
+          "entrypoint": "./src/index.ts",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @solid-primitives/keyed has no exact runtime binding for export Key"
+        }
+      ],
+      "recovery": {
+        "entrypointRecovery": {
+          "cases": [
+            {
+              "entrypoint": "./src/array.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/assertion.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/create-generate-id.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/create-global-listeners.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/dom.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/enums.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/events.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/focus-manager.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/focus-without-scrolling.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/get-scroll-parent.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/is-virtual-event.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/noop.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/number.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/platform.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/polygon.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/props.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/run-after-transition.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/scroll-into-view.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/styles.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/tabbable.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": ".",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": ".",
+              "conditions": [
+                "import",
+                "solid"
+              ]
+            },
+            {
+              "entrypoint": "./src/external.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/index.ts",
+              "conditions": [
+                "import"
+              ]
+            }
+          ],
+          "retainedCases": [
+            {
+              "entrypoint": "./src/array.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/assertion.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/create-generate-id.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/create-global-listeners.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/dom.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/enums.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/events.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/focus-manager.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/focus-without-scrolling.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/get-scroll-parent.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/is-virtual-event.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/noop.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/number.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/platform.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/polygon.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/props.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/run-after-transition.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/scroll-into-view.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/styles.ts",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./src/tabbable.ts",
+              "conditions": [
+                "import"
+              ]
+            }
+          ],
+          "remainingRefusals": [],
+          "combinedRefusal": "solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification failed for graph node @kobalte/utils@0.9.2 (./src/scroll-into-view.ts) during live graph export-value verification: Type Facts demand sha256:20da6f010f7f1bbd0cedc8b0a245aab46f4029f72f40e1c31f3c1bed2febd41f is locally open: recursive-value-shape (artifact-case:4428aaa5ded09533d107ca061ddcc9932d833d8b6c66b6ece2e613b63b9178b9:scrollIntoViewport): parameter-rooted read lacks positive original-input identity"
+        },
+        "rootCases": 24,
+        "canonicalNodes": 113,
+        "acquiredPublishedArtifacts": 13,
+        "acquisitionUnits": 90,
+        "graphAcquisitionDurationMs": 4.87,
+        "resolutionSession": {
+          "requests": 0,
+          "semanticAcquisitions": 0,
+          "semanticCacheHits": 0,
+          "semanticCacheInvalidations": 0,
+          "moduleDescriptionsParsed": 105,
+          "typeScriptProgramsCreated": 0
+        },
+        "compilerSourceClosureCensus": 4,
+        "proposalGenerations": 113,
+        "proposalGenerationsShared": 65,
+        "proposalFrontiers": [
+          {
+            "nodes": 44,
+            "durationMs": 1946.33
+          },
+          {
+            "nodes": 22,
+            "durationMs": 991.45
+          },
+          {
+            "nodes": 20,
+            "durationMs": 327.49
+          },
+          {
+            "nodes": 17,
+            "durationMs": 673.52
+          },
+          {
+            "nodes": 6,
+            "durationMs": 250.31
+          },
+          {
+            "nodes": 4,
+            "durationMs": 819.73
+          }
+        ],
+        "graphNodeReferences": 181,
+        "nativeCertificationTransactions": 2,
+        "typeFactsCaseSetBatches": 2,
+        "partialProposalFrontier": true,
+        "reusedProposalForRecovery": true
+      }
+    }
+  ],
+  "preservation": [],
+  "metricChanged": false,
+  "existingEntrypointSelectionsPreserved": true
+}

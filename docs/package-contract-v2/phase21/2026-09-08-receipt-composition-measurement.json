@@ -1,0 +1,49 @@
+{
+  "before": {
+    "probes": 418,
+    "entrypoints": 1151,
+    "rootsCertified": 370,
+    "certified": 386,
+    "refused": 23,
+    "notAttempted": 9,
+    "timedOut": 0
+  },
+  "after": {
+    "probes": 418,
+    "entrypoints": 1152,
+    "rootsCertified": 371,
+    "certified": 386,
+    "refused": 23,
+    "notAttempted": 9,
+    "timedOut": 0
+  },
+  "identical": 417,
+  "changed": [
+    {
+      "probe": "solid-js@2.0.0-rc.3|solid2|only",
+      "kind": "changed",
+      "before": {
+        "status": "official",
+        "class": "partial-success",
+        "certification": "certified",
+        "lane": "reused-proposal",
+        "laneRequested": "reused-proposal",
+        "entrypoints": 1,
+        "root": false,
+        "stage": "catalog-publication",
+        "timedOut": false
+      },
+      "after": {
+        "status": "official",
+        "class": "partial-success",
+        "certification": "certified",
+        "lane": "published-graph",
+        "laneRequested": "entrypoint-recovery",
+        "entrypoints": 2,
+        "root": true,
+        "stage": "catalog-publication",
+        "timedOut": false
+      }
+    }
+  ]
+}

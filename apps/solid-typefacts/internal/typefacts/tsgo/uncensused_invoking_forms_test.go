@@ -1527,6 +1527,51 @@ export function ownArrayRead(index: any): unknown {
 	return ownArray[index];
 }
 
+const ownProxy = new Proxy({ value: 1 }, { get: () => 1 });
+
+export function ownProxyRead(): unknown {
+	return ownProxy.value;
+}
+
+const ownDefinedTable: any = {};
+Object.defineProperty(ownDefinedTable, "value", { get: () => 1 });
+
+class OwnAccessorClass {
+	get value(): number {
+		return 1;
+	}
+}
+const ownAccessorInstance = new OwnAccessorClass();
+
+export function ownDefinedRead(): unknown {
+	return ownDefinedTable.value;
+}
+
+export function ownAccessorLiteralRead(): unknown {
+	return ownAccessorTable.first;
+}
+
+export function ownAccessorClassRead(): unknown {
+	return ownAccessorInstance.value;
+}
+
+const ownTypedAccessor = {
+	get value(): number {
+		return 1;
+	},
+};
+
+const ownTypedDefined: { value: number } = { value: 1 };
+Object.defineProperty(ownTypedDefined, "value", { get: () => 2 });
+
+export function ownTypedAccessorRead(): unknown {
+	return ownTypedAccessor.value;
+}
+
+export function ownTypedDefinedRead(): unknown {
+	return ownTypedDefined.value;
+}
+
 export function ownTableMemberRead(key: any): unknown {
 	return ownTable[key].value;
 }
@@ -1683,6 +1728,33 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 		// of these and the derivation below is what separates them.
 		{"ownTableRead", []*int{nil}},
 		{"ownArrayRead", []*int{nil}},
+		// **Zero forms**, and the count is the finding. `ownProxy.value` is a
+		// `Proxy` whose target types as `{ value: number }`, so the checker
+		// resolves the member to a data property and records nothing: the
+		// producer states, in this file's own header, that a trap "is out of
+		// the producer's reach entirely" and that a consumer needing "no trap
+		// ran" must obtain that premise elsewhere. There is no form here to
+		// root, and therefore none for a census to refuse.
+		{"ownProxyRead", []*int{}},
+		// The rest of the invisible-read family, measured 2026-09-10, and it
+		// narrows what `ownProxyRead`'s zero means considerably.
+		//
+		// A **declared** accessor is seen: both a typed object literal's getter
+		// and a class getter record one `get-accessor` form on a direct,
+		// resolvable member access. So the producer is not blind to reads
+		// through accessors in general.
+		{"ownTypedAccessorRead", []*int{nil}},
+		{"ownAccessorClassRead", []*int{nil}},
+		// An accessor **installed at run time**, on a receiver whose declared
+		// type still says data property, is the case that records nothing —
+		// and `ownProxyRead` is the same shape, not a separate one. Neither
+		// leaves a declaration for a census to walk.
+		{"ownTypedDefinedRead", []*int{}},
+		// The same `defineProperty`, visible again as soon as the receiver is
+		// `any`: the member does not resolve, so the form exists and the census
+		// refuses it. The type is what hides it, not the descriptor.
+		{"ownDefinedRead", []*int{nil}},
+		{"ownAccessorLiteralRead", []*int{nil}},
 		// The outer read of a chain refuses; the inner one is the first form.
 		{"ownTableMemberRead", []*int{nil, nil}},
 		{"ownAccessorTableRead", []*int{nil}},
@@ -1829,6 +1901,31 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 			t.Fatalf("%s: no form states derivation %q", testCase.export, testCase.derivation)
 		}
 	}
+
+	// A read of a proxy this program built records **no form at all**, and
+	// that is the load-bearing fact rather than a gap in this table.
+	//
+	// TypeScript types a `Proxy` as its target, so `ownProxy.value` resolves
+	// to a data property and the classifier records nothing —
+	// `PropertyAccessUnknownAccessor` exists only for a member the checker
+	// *cannot* resolve. This file's own header says why that is correct: a
+	// trap "is out of the producer's reach entirely", and "a consumer whose
+	// claim requires that no trap ran must obtain that premise elsewhere".
+	//
+	// The consequence for the `reads` domain is exact: an implementation
+	// census cannot refuse what it cannot see, so it cannot decide a
+	// `reads: []` closure over a source the export owns. Admitting the domain
+	// to that census on the strength of the form machinery alone would certify
+	// a false closure for exactly this shape. See
+	// `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`.
+	proxy := implementationTranscriptFor(t, analyzer, path, subjectSource, "ownProxyRead")
+	if len(proxy.UncensusedInvokingForms) != 0 {
+		t.Fatalf(
+			"ownProxyRead: %d forms (%v); a resolved data-property access records none, and a census that assumed otherwise would be unsound",
+			len(proxy.UncensusedInvokingForms),
+			markerKinds(proxy.UncensusedInvokingForms),
+		)
+	}
 }
 
 func TestCallAndApplyStateTheirReceiverAndThisParameter(t *testing.T) {
@@ -1869,6 +1966,140 @@ func TestCallAndApplyStateTheirReceiverAndThisParameter(t *testing.T) {
 		}
 		for _, form := range transcript.UncensusedInvokingForms {
 			t.Fatalf("%s: unexpected uncensused form %s at %d", testCase.export, form.Kind, form.Location.StartByte)
+		}
+	}
+}
+
+// Every way to make a property access run code where the receiver's *declared*
+// type still says data property. This is the exhaustiveness question the
+// `reads` census refusal set turns on (reads-veto-observation-design.md § 7,
+// § 8): a shape that records **zero** forms is invisible to the census and has
+// to be caught syntactically, and one that records a form is already refused.
+//
+// The table is the claim. A shape missing from it is a hole in the refusal
+// set, so add the case here before adding the pattern there.
+const runtimeAccessorSource = `
+type Boxed = { value: number };
+const accessorProto = {
+	get value(): number {
+		return 1;
+	},
+};
+
+const installedByDefineProperty: Boxed = { value: 1 };
+Object.defineProperty(installedByDefineProperty, "value", { get: () => 2 });
+
+const installedByDefineProperties: Boxed = { value: 1 };
+Object.defineProperties(installedByDefineProperties, { value: { get: () => 2 } });
+
+const installedByCreate = Object.create(null, { value: { get: () => 2 } }) as Boxed;
+
+const installedByReflect: Boxed = { value: 1 };
+Reflect.defineProperty(installedByReflect, "value", { get: () => 2 });
+
+const installedByLegacyGetter: Boxed = { value: 1 };
+(installedByLegacyGetter as any).__defineGetter__("value", () => 2);
+
+const installedBySetPrototypeOf: Boxed = { value: 1 };
+Object.setPrototypeOf(installedBySetPrototypeOf, accessorProto);
+
+const installedByProtoAssignment: Boxed = { value: 1 };
+(installedByProtoAssignment as any).__proto__ = accessorProto;
+
+const installedByProxy = new Proxy<Boxed>({ value: 1 }, { get: () => 2 });
+const installedByRevocableProxy = Proxy.revocable<Boxed>({ value: 1 }, { get: () => 2 }).proxy;
+
+const untypedReceiver: any = { value: 1 };
+
+const declaredOnLiteral = {
+	get value(): number {
+		return 1;
+	},
+};
+
+class DeclaredOnClass {
+	get value(): number {
+		return 1;
+	}
+}
+const declaredOnInstance = new DeclaredOnClass();
+
+export function readDefineProperty(): unknown {
+	return installedByDefineProperty.value;
+}
+export function readDefineProperties(): unknown {
+	return installedByDefineProperties.value;
+}
+export function readCreate(): unknown {
+	return installedByCreate.value;
+}
+export function readReflect(): unknown {
+	return installedByReflect.value;
+}
+export function readLegacyGetter(): unknown {
+	return installedByLegacyGetter.value;
+}
+export function readSetPrototypeOf(): unknown {
+	return installedBySetPrototypeOf.value;
+}
+export function readProtoAssignment(): unknown {
+	return installedByProtoAssignment.value;
+}
+export function readProxy(): unknown {
+	return installedByProxy.value;
+}
+export function readRevocableProxy(): unknown {
+	return installedByRevocableProxy.value;
+}
+export function readUntypedReceiver(): unknown {
+	return untypedReceiver.value;
+}
+export function readDeclaredOnLiteral(): unknown {
+	return declaredOnLiteral.value;
+}
+export function readDeclaredOnClass(): unknown {
+	return declaredOnInstance.value;
+}
+`
+
+func TestRuntimeInstalledAccessorReadsAreInvisibleToTheProducer(t *testing.T) {
+	analyzer, dir := markerProject(t, map[string]string{"accessors.ts": runtimeAccessorSource})
+	path := filepath.Join(dir, "accessors.ts")
+	for _, testCase := range []struct {
+		export string
+		// Number of uncensused invoking forms the producer records for the one
+		// property read. Zero means the census sees nothing and the shape must
+		// be in the syntactic refusal set.
+		forms int
+		why   string
+	}{
+		{"readDefineProperty", 0, "descriptor installed at run time; the type still says data property"},
+		{"readDefineProperties", 0, "same, plural form"},
+		{"readCreate", 0, "descriptor map passed to Object.create"},
+		{"readReflect", 0, "same descriptor through Reflect"},
+		{"readLegacyGetter", 0, "__defineGetter__"},
+		{"readSetPrototypeOf", 0, "the accessor is on a prototype installed at run time"},
+		{"readProtoAssignment", 0, "same, through __proto__"},
+		{"readProxy", 0, "a trap is out of the producer's reach entirely"},
+		{"readRevocableProxy", 0, "Proxy.revocable is a second spelling of the same hazard"},
+		// Controls. These are seen, so the census already refuses them and they
+		// need no syntactic rule — and because they must be nonzero, a
+		// silently degraded analysis cannot make the nine zeros above pass.
+		{"readUntypedReceiver", 1, "an unresolvable member records property-access-unknown-accessor"},
+		{"readDeclaredOnLiteral", 1, "a declared getter records get-accessor"},
+		{"readDeclaredOnClass", 1, "a declared class getter does too"},
+	} {
+		transcript := implementationTranscriptFor(t, analyzer, path, runtimeAccessorSource, testCase.export)
+		forms := transcript.UncensusedInvokingForms
+		if len(forms) != testCase.forms {
+			t.Errorf(
+				"%s: %d forms (%v), want %d — %s",
+				testCase.export,
+				len(forms),
+				markerKinds(forms),
+				testCase.forms,
+				testCase.why,
+			)
 		}
 	}
 }

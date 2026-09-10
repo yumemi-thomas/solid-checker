@@ -771,6 +771,18 @@ fn derive_closed_claims_root(
     selected_case: &super::ArtifactCase,
 ) -> Result<Digest, ReceiptValidationError> {
     let mut closed = BTreeSet::new();
+    if let Some(super::ModuleInitializationClaim::Inert) = selected_case.initialization {
+        // Like positive export claims below, this is an explicit semantic
+        // claim, not an inferred closure of an empty export census. Issuance
+        // must first discharge its authenticated module-initialization proof.
+        let mut hash = CanonicalHash::new(b"solid-checker-inert-module-claim-v1");
+        hash.text(contract.semantic_digest().as_str());
+        hash.text(&selected_case.id);
+        closed.insert(
+            SemanticClaimId::parse(format!("claim:v1:{}", hash.finish().as_str()))
+                .expect("canonical initialization claim digest is valid"),
+        );
+    }
     for (export_name, export) in &selected_case.exports {
         for path in super::validate::closed_claims(export) {
             let subject = SemanticClaimSubject {

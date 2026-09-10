@@ -1,0 +1,864 @@
+{
+  "format": "inert-initialization-scoped-measurement",
+  "authoritative": false,
+  "baseline": {
+    "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/ecosystem-investigations/2026-09-08-original-helper-full.json",
+    "digest": "sha256:7ee58c116e8acff5b96359be7e7be1372aabab56db93c59bc82f198756c6aea2",
+    "complete": 327,
+    "partial": 64,
+    "refused": 18,
+    "notAdvanced": 9,
+    "artifactCases": 1535
+  },
+  "newCertifiedEntrypointOccurrences": 6,
+  "completeRowTransitions": 0,
+  "metricCorrection": false,
+  "fullCorpusRerun": false,
+  "binary": {
+    "native": "sha256:4c1bfa644deb389dddb351185be9e5f587ccdf4ff3f6d45ac1033849e7163d3d",
+    "producer": "sha256:e8568bfb2022f0e1d8f82b5e694e1f4223820ab46413999f2491beb93823f118"
+  },
+  "rows": [
+    {
+      "probeId": "@tanstack/solid-start@1.168.47|solid1|only",
+      "beforeCases": [
+        {
+          "entrypoint": "./plugin/rsbuild",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "b35556037c18c6f40f05dd8a556fc71ad74c5aa9b680e0be4331078061f15999",
+              "path": "./dist/esm/plugin/rsbuild.js",
+              "sha256": "281bbcaa50d9a8996698c46c45e03f602d180903269c356813b95ddde9acb7cd"
+            },
+            "declarations": {
+              "path": "./dist/esm/plugin/rsbuild.d.ts",
+              "sha256": "73a5c4a74a533ff606b8c896c193703e632c0f6bf93faf8a2ccd75bb262deb1a"
+            },
+            "exports": {
+              "tanstackStart": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1plugin~1rsbuild/import/default",
+              "typesBranch": "/exports/.~1plugin~1rsbuild/import/types"
+            }
+          },
+          "catalog": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-MNbCpS/@tanstack__solid-start@1.168.47--solid1--only.json.accepted-catalog/case-sets/e8c2db0aaa39983d7ff67a0a9ccddafdafcb361efb2cea2c5bffe624e5955cf5/cases/ff0f305c2ee01a183991b38fd864466ed83f5484d8861cf93a53ab2c2387b432/accepted-contracts.json",
+          "documentDigest": "sha256:fb767445c151f7dc23793cf2278225ba694b35f05dc9ef2c16a9363995c87703",
+          "receiptDigest": "sha256:e2498a051d2bf131c141e8d5c33c04e41288e2d653b4e8a96ba4511d7938a22b"
+        },
+        {
+          "entrypoint": "./plugin/vite",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "6b5b95e315493cfb7562a8fcae7ff7d37b9fa6b8b5adf76e4735efdf2a347582",
+              "path": "./dist/esm/plugin/vite.js",
+              "sha256": "278db7993167197aa4ffa9858f4172fab716233acca1caa779217e4799cb9e09"
+            },
+            "declarations": {
+              "path": "./dist/esm/plugin/vite.d.ts",
+              "sha256": "aa8cdf8e76c3ffecffc64b7bc3e47f6860cab41e69d1867343b590bdf353a307"
+            },
+            "exports": {
+              "tanstackStart": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1plugin~1vite/import/default",
+              "typesBranch": "/exports/.~1plugin~1vite/import/types"
+            }
+          },
+          "catalog": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-MNbCpS/@tanstack__solid-start@1.168.47--solid1--only.json.accepted-catalog/case-sets/e8c2db0aaa39983d7ff67a0a9ccddafdafcb361efb2cea2c5bffe624e5955cf5/cases/e61fc1d5dc24310aa286275dd08d38857ed9247611d59d09d69c6931dd2ee930/accepted-contracts.json",
+          "documentDigest": "sha256:22f8fcde7271f743d577fc526e9982c6767bf1eab3e4e7566bc29e22043cb2f9",
+          "receiptDigest": "sha256:7c61b532b9fde2f029ad17fd146efbe28b67313e25a1e30277f784005a21406c"
+        },
+        {
+          "entrypoint": "./server-entry",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "da165e6221dfd1bea1c985047119f710b5e0777c3a58aa0a7e0d415f729fce2f",
+              "path": "./dist/default-entry/esm/server.js",
+              "sha256": "d1bbe2066dca8ec10672af3f59af8e3c5c1b081af6b197d65a8b8a3fae22a7eb"
+            },
+            "declarations": {
+              "path": "./dist/default-entry/esm/server.d.ts",
+              "sha256": "23eeacbd44f22199579d2b4b4f6dd5a64accb588cd3f29a8601762937edbd64e"
+            },
+            "exports": {
+              "createServerEntry": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+              "default": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1server-entry/import/default",
+              "typesBranch": "/exports/.~1server-entry/import/types"
+            }
+          },
+          "catalog": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-MNbCpS/@tanstack__solid-start@1.168.47--solid1--only.json.accepted-catalog/case-sets/e8c2db0aaa39983d7ff67a0a9ccddafdafcb361efb2cea2c5bffe624e5955cf5/cases/80a0c9e9952b3a3132b6a81cbdbb140c489b2fa25a2c16c7db45e8696a89db11/accepted-contracts.json",
+          "documentDigest": "sha256:d4cf6c12ba83f4cb75d3574ddce9b061350cf5f336589baf03b8e38c63b8e842",
+          "receiptDigest": "sha256:d33df8fe87de336197b6d3ae8ba29e67e09b2f14657d21e39bfeeb845e35758c"
+        }
+      ],
+      "newSeparatelyPublishedCases": [
+        {
+          "entrypoint": "./server-only",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "2c8eca7aa031073aa01aa0c8690892cd216a5a63f4579c72c1d298e3c8861ff3",
+              "path": "./dist/esm/server-only.js",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "declarations": {
+              "path": "./dist/esm/server-only.d.ts",
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+            },
+            "exports": {},
+            "initialization": "inert",
+            "resolution": {
+              "runtimeBranch": "/exports/.~1server-only/import/default",
+              "typesBranch": "/exports/.~1server-only/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-sLwDSS/catalog/case-sets/e46f0473f537bafab3855173e8cf5e71a36c66853d8a4cd628b6a7b34a97e8b6/cases/219886abe24c63a75c67c18aca7de934465c7fbbaf3fe7bc22d7d82805004b08/accepted-contracts.json",
+          "documentDigest": "sha256:0b3edf8d9c3d9ec94ef13c3c15742fba7436b1a158309a68b21f883f87b929dc",
+          "receiptDigest": "sha256:67c80723b78517b762c09be6839789828eb49e1397b0a770ad9b03f786b3caee"
+        },
+        {
+          "entrypoint": "./client-only",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "6cbb51fe6eb964f2a2f591274f176f447a0c18c5910333ce11f88aad782a4997",
+              "path": "./dist/esm/client-only.js",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "declarations": {
+              "path": "./dist/esm/client-only.d.ts",
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+            },
+            "exports": {},
+            "initialization": "inert",
+            "resolution": {
+              "runtimeBranch": "/exports/.~1client-only/import/default",
+              "typesBranch": "/exports/.~1client-only/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-sLwDSS/catalog/case-sets/e46f0473f537bafab3855173e8cf5e71a36c66853d8a4cd628b6a7b34a97e8b6/cases/93c7aaa07d13d0e5469af70fc89129313e1124953e23d5d4a74623e1b97410be/accepted-contracts.json",
+          "documentDigest": "sha256:9e77435ffdf6afb03eb11ba2cb7fae212b1868de5ae3e86e31f0627fac3937d5",
+          "receiptDigest": "sha256:339306ec8c41c2157bddb238b05268989e898dcb30f63582c2a2ac52888e16a9"
+        }
+      ],
+      "ordinaryAnalysis": {
+        "receiptAuthenticated": true,
+        "exactCaseSelected": true
+      },
+      "audit": "/private/tmp/inert-entrypoints-sLwDSS/audit.json",
+      "baselineCoverage": {
+        "declaredEntrypoints": 13,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 3,
+        "rootCertified": false
+      },
+      "combinedPublicationMeasured": true,
+      "combinedCases": [
+        {
+          "entrypoint": "./server-only",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "2c8eca7aa031073aa01aa0c8690892cd216a5a63f4579c72c1d298e3c8861ff3",
+              "path": "./dist/esm/server-only.js",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "declarations": {
+              "path": "./dist/esm/server-only.d.ts",
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+            },
+            "exports": {},
+            "initialization": "inert",
+            "resolution": {
+              "runtimeBranch": "/exports/.~1server-only/import/default",
+              "typesBranch": "/exports/.~1server-only/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-XGn7Ey/catalog/case-sets/23741193e3bcb1a8548d94599c93cbc349363e725fb4677f56a0e26b6f98396b/cases/f6f3b64b45dd209d1c8524a8466cce27eb477724e41a488f1cbe969905a6efd7/accepted-contracts.json",
+          "documentDigest": "sha256:0b3edf8d9c3d9ec94ef13c3c15742fba7436b1a158309a68b21f883f87b929dc",
+          "receiptDigest": "sha256:2e58eafe4f6a8989e5364821f3065cc4a770df2dcdcb2e22dd41fe0629ebd6d4"
+        },
+        {
+          "entrypoint": "./client-only",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "6cbb51fe6eb964f2a2f591274f176f447a0c18c5910333ce11f88aad782a4997",
+              "path": "./dist/esm/client-only.js",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "declarations": {
+              "path": "./dist/esm/client-only.d.ts",
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+            },
+            "exports": {},
+            "initialization": "inert",
+            "resolution": {
+              "runtimeBranch": "/exports/.~1client-only/import/default",
+              "typesBranch": "/exports/.~1client-only/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-XGn7Ey/catalog/case-sets/23741193e3bcb1a8548d94599c93cbc349363e725fb4677f56a0e26b6f98396b/cases/2cab54359339c12f75aa4bea0b4a7d663c26e7db31ec4b24192015a848d510aa/accepted-contracts.json",
+          "documentDigest": "sha256:9e77435ffdf6afb03eb11ba2cb7fae212b1868de5ae3e86e31f0627fac3937d5",
+          "receiptDigest": "sha256:5a377fec3c2f5d2f289bdffed3ec4817e44a51965561d8049a3b099d1735520b"
+        },
+        {
+          "entrypoint": "./plugin/rsbuild",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "b35556037c18c6f40f05dd8a556fc71ad74c5aa9b680e0be4331078061f15999",
+              "path": "./dist/esm/plugin/rsbuild.js",
+              "sha256": "281bbcaa50d9a8996698c46c45e03f602d180903269c356813b95ddde9acb7cd"
+            },
+            "declarations": {
+              "path": "./dist/esm/plugin/rsbuild.d.ts",
+              "sha256": "73a5c4a74a533ff606b8c896c193703e632c0f6bf93faf8a2ccd75bb262deb1a"
+            },
+            "exports": {
+              "tanstackStart": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1plugin~1rsbuild/import/default",
+              "typesBranch": "/exports/.~1plugin~1rsbuild/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-XGn7Ey/catalog/case-sets/23741193e3bcb1a8548d94599c93cbc349363e725fb4677f56a0e26b6f98396b/cases/889ac9153d357db772267f4cd869819d117868af7dbf94f0b01c10ce15f5a3dd/accepted-contracts.json",
+          "documentDigest": "sha256:fb767445c151f7dc23793cf2278225ba694b35f05dc9ef2c16a9363995c87703",
+          "receiptDigest": "sha256:be31b46475ca6b38b480d0827d654bb3f07337ead27f4d29a26bf895d0948e74"
+        },
+        {
+          "entrypoint": "./plugin/vite",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "6b5b95e315493cfb7562a8fcae7ff7d37b9fa6b8b5adf76e4735efdf2a347582",
+              "path": "./dist/esm/plugin/vite.js",
+              "sha256": "278db7993167197aa4ffa9858f4172fab716233acca1caa779217e4799cb9e09"
+            },
+            "declarations": {
+              "path": "./dist/esm/plugin/vite.d.ts",
+              "sha256": "aa8cdf8e76c3ffecffc64b7bc3e47f6860cab41e69d1867343b590bdf353a307"
+            },
+            "exports": {
+              "tanstackStart": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1plugin~1vite/import/default",
+              "typesBranch": "/exports/.~1plugin~1vite/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-XGn7Ey/catalog/case-sets/23741193e3bcb1a8548d94599c93cbc349363e725fb4677f56a0e26b6f98396b/cases/c716545f54f6843060180eb377333b75c369e4829c5cc695cd5891ffabd165dc/accepted-contracts.json",
+          "documentDigest": "sha256:22f8fcde7271f743d577fc526e9982c6767bf1eab3e4e7566bc29e22043cb2f9",
+          "receiptDigest": "sha256:a99d577ad3947e7274638a7d194edfa0896db151d2d25741787e62c9eb2cface"
+        },
+        {
+          "entrypoint": "./server-entry",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "da165e6221dfd1bea1c985047119f710b5e0777c3a58aa0a7e0d415f729fce2f",
+              "path": "./dist/default-entry/esm/server.js",
+              "sha256": "d1bbe2066dca8ec10672af3f59af8e3c5c1b081af6b197d65a8b8a3fae22a7eb"
+            },
+            "declarations": {
+              "path": "./dist/default-entry/esm/server.d.ts",
+              "sha256": "23eeacbd44f22199579d2b4b4f6dd5a64accb588cd3f29a8601762937edbd64e"
+            },
+            "exports": {
+              "createServerEntry": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+              "default": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1server-entry/import/default",
+              "typesBranch": "/exports/.~1server-entry/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-XGn7Ey/catalog/case-sets/23741193e3bcb1a8548d94599c93cbc349363e725fb4677f56a0e26b6f98396b/cases/589c6d023059ef60dfbccab356a89dedc5bbe82c30378cb930ddd85eeac189ad/accepted-contracts.json",
+          "documentDigest": "sha256:d4cf6c12ba83f4cb75d3574ddce9b061350cf5f336589baf03b8e38c63b8e842",
+          "receiptDigest": "sha256:33ca1fce985af152df50c917373d89b36b573ca925072b5f01a7ef9554184897"
+        }
+      ],
+      "priorAcceptedMainBytesPreserved": true,
+      "combinedAudit": "/private/tmp/inert-entrypoints-XGn7Ey/audit.json",
+      "combinedOrdinaryAnalysis": {
+        "receiptAuthenticated": true,
+        "exactCaseSelected": true
+      },
+      "beforeEntrypoints": [
+        "./plugin/rsbuild",
+        "./plugin/vite",
+        "./server-entry"
+      ],
+      "afterEntrypoints": [
+        "./client-only",
+        "./plugin/rsbuild",
+        "./plugin/vite",
+        "./server-entry",
+        "./server-only"
+      ],
+      "rowTransition": "partial-to-partial"
+    },
+    {
+      "probeId": "@tanstack/solid-start@2.0.0-rc.2|solid2|floor",
+      "beforeCases": [
+        {
+          "entrypoint": "./plugin/vite",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "5bcf9fcc3587852756766a58e6879f4976f2509f09f6f1cee73c0d4690a80b45",
+              "path": "./dist/esm/plugin/vite.js",
+              "sha256": "6924ca8455df2fe3158ba7496476bcf33d5aa5fd49748c0ac14a99565e956877"
+            },
+            "declarations": {
+              "path": "./dist/esm/plugin/vite.d.ts",
+              "sha256": "aa8cdf8e76c3ffecffc64b7bc3e47f6860cab41e69d1867343b590bdf353a307"
+            },
+            "exports": {
+              "tanstackStart": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1plugin~1vite/import/default",
+              "typesBranch": "/exports/.~1plugin~1vite/import/types"
+            }
+          },
+          "catalog": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-6mGN9x/@tanstack__solid-start@2.0.0-rc.2--solid2--floor.json.accepted-catalog/case-sets/3ae7de70ac32a5c5d367dd9ed8e6fc5ba0f335155f8858a66b30f81e47d6e4ff/cases/98422cffdebefa92913feaf37c947904258af2f737846b282086003c6c5312f3/accepted-contracts.json",
+          "documentDigest": "sha256:f7b782ffc728bf4975999464bcb13ce9b46349ba1c6859da09c5ba7de551c414",
+          "receiptDigest": "sha256:c7fb09863c2f4aec879d0f4acf3a57aa5ca7f5f7309a6d7ddbda6f74464b8f32"
+        },
+        {
+          "entrypoint": "./server-entry",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "c300de1bca2021915918154dc9d90b3be3d2a889a9d078128fac40e5064ccaab",
+              "path": "./dist/default-entry/esm/server.js",
+              "sha256": "d1bbe2066dca8ec10672af3f59af8e3c5c1b081af6b197d65a8b8a3fae22a7eb"
+            },
+            "declarations": {
+              "path": "./dist/default-entry/esm/server.d.ts",
+              "sha256": "23eeacbd44f22199579d2b4b4f6dd5a64accb588cd3f29a8601762937edbd64e"
+            },
+            "exports": {
+              "createServerEntry": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+              "default": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1server-entry/import/default",
+              "typesBranch": "/exports/.~1server-entry/import/types"
+            }
+          },
+          "catalog": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-6mGN9x/@tanstack__solid-start@2.0.0-rc.2--solid2--floor.json.accepted-catalog/case-sets/3ae7de70ac32a5c5d367dd9ed8e6fc5ba0f335155f8858a66b30f81e47d6e4ff/cases/c34b0b3f4af8ffe057c47b9ac5cc1e2f30524798da74aa6bd0d20e350d488967/accepted-contracts.json",
+          "documentDigest": "sha256:363ad4e55a4ff5b4c8e648d839750361f512ba5b4d4e3e09bd8cab9a8f91420b",
+          "receiptDigest": "sha256:a45bac6c4525efb493760ee563fb292133b2f5d4e7e5e2a104e392eaea22f5e3"
+        },
+        {
+          "entrypoint": "./plugin/rsbuild",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "13752e874ede67fbeb77a539a295f07ea344822a96e914cfd91587f581e0b61c",
+              "path": "./dist/esm/plugin/rsbuild.js",
+              "sha256": "281bbcaa50d9a8996698c46c45e03f602d180903269c356813b95ddde9acb7cd"
+            },
+            "declarations": {
+              "path": "./dist/esm/plugin/rsbuild.d.ts",
+              "sha256": "73a5c4a74a533ff606b8c896c193703e632c0f6bf93faf8a2ccd75bb262deb1a"
+            },
+            "exports": {
+              "tanstackStart": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1plugin~1rsbuild/import/default",
+              "typesBranch": "/exports/.~1plugin~1rsbuild/import/types"
+            }
+          },
+          "catalog": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-6mGN9x/@tanstack__solid-start@2.0.0-rc.2--solid2--floor.json.accepted-catalog/case-sets/3ae7de70ac32a5c5d367dd9ed8e6fc5ba0f335155f8858a66b30f81e47d6e4ff/cases/d64aae024c7e2bb62f4042531405aa52c82e9793a1f0eac6a0e3c905c0df6dbb/accepted-contracts.json",
+          "documentDigest": "sha256:86ae6c579e471afe4fe3a0ef212fe694766520b7c2dcb4a5ede92b0bfb358df9",
+          "receiptDigest": "sha256:c4d85ad4ecee2a0e77936382090e24444de7125936f56906520a6115bf440095"
+        }
+      ],
+      "newSeparatelyPublishedCases": [
+        {
+          "entrypoint": "./server-only",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "be44de0b3c790b2dc9e2a51a55ab061145c4a634bf26a7834132ba2d3497dafb",
+              "path": "./dist/esm/server-only.js",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "declarations": {
+              "path": "./dist/esm/server-only.d.ts",
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+            },
+            "exports": {},
+            "initialization": "inert",
+            "resolution": {
+              "runtimeBranch": "/exports/.~1server-only/import/default",
+              "typesBranch": "/exports/.~1server-only/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-dVPjTq/catalog/case-sets/8ee18fbd089af4d10ad35bc86db478ce12e7c28fda842ba3f104886a123e5a84/cases/705aef0bb6eae2f5c2fafa07ef25205fa374f6241b5519d1332205a07d4b81a8/accepted-contracts.json",
+          "documentDigest": "sha256:1d9531cd894f9924722ba087e24cf7359c90c9cac84a2a2be20950ff1eee5393",
+          "receiptDigest": "sha256:40851dea49335b55ee49500b39c928f1924bec9a106a91135b48d62d578d06d3"
+        },
+        {
+          "entrypoint": "./client-only",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "99713a9d5a2c69b006ffd29c36b30e49b9642a111642eb289ac4bb74ef2d519b",
+              "path": "./dist/esm/client-only.js",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "declarations": {
+              "path": "./dist/esm/client-only.d.ts",
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+            },
+            "exports": {},
+            "initialization": "inert",
+            "resolution": {
+              "runtimeBranch": "/exports/.~1client-only/import/default",
+              "typesBranch": "/exports/.~1client-only/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-dVPjTq/catalog/case-sets/8ee18fbd089af4d10ad35bc86db478ce12e7c28fda842ba3f104886a123e5a84/cases/5d8ca551a071838e7f5bd13cd96fca320a1800e404f35b4c2d005150a205c02b/accepted-contracts.json",
+          "documentDigest": "sha256:19320d327ee4764e3a105ac3917a8c4f91001f76a75d5f0cace9348bb16ec269",
+          "receiptDigest": "sha256:d1beb296cf2f9e0c4ef63ea584cdfa38384ef659901f2f3aec106e85e7717cc9"
+        }
+      ],
+      "ordinaryAnalysis": {
+        "receiptAuthenticated": true,
+        "exactCaseSelected": true
+      },
+      "audit": "/private/tmp/inert-entrypoints-dVPjTq/audit.json",
+      "baselineCoverage": {
+        "declaredEntrypoints": 13,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 3,
+        "rootCertified": false
+      },
+      "combinedPublicationMeasured": true,
+      "combinedCases": [
+        {
+          "entrypoint": "./plugin/vite",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "5bcf9fcc3587852756766a58e6879f4976f2509f09f6f1cee73c0d4690a80b45",
+              "path": "./dist/esm/plugin/vite.js",
+              "sha256": "6924ca8455df2fe3158ba7496476bcf33d5aa5fd49748c0ac14a99565e956877"
+            },
+            "declarations": {
+              "path": "./dist/esm/plugin/vite.d.ts",
+              "sha256": "aa8cdf8e76c3ffecffc64b7bc3e47f6860cab41e69d1867343b590bdf353a307"
+            },
+            "exports": {
+              "tanstackStart": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1plugin~1vite/import/default",
+              "typesBranch": "/exports/.~1plugin~1vite/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-6KJapM/catalog/case-sets/ea66ed2379575c25bfedef14b8185131899004e4168b6d948bbe355736bbba5f/cases/c1c97b870df280b6b2dcd7c5ee017b77c7888496e4aeb285391344905d00f2a4/accepted-contracts.json",
+          "documentDigest": "sha256:f7b782ffc728bf4975999464bcb13ce9b46349ba1c6859da09c5ba7de551c414",
+          "receiptDigest": "sha256:62f00c46c3bae0ccabac42fc2ca82e353a6bfcf41f754c869b8b3f95fd3f55f3"
+        },
+        {
+          "entrypoint": "./server-only",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "be44de0b3c790b2dc9e2a51a55ab061145c4a634bf26a7834132ba2d3497dafb",
+              "path": "./dist/esm/server-only.js",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "declarations": {
+              "path": "./dist/esm/server-only.d.ts",
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+            },
+            "exports": {},
+            "initialization": "inert",
+            "resolution": {
+              "runtimeBranch": "/exports/.~1server-only/import/default",
+              "typesBranch": "/exports/.~1server-only/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-6KJapM/catalog/case-sets/ea66ed2379575c25bfedef14b8185131899004e4168b6d948bbe355736bbba5f/cases/7e6c640f3791faac7bd39f1bc21e3f5046579015d903faa813e19ecf4ee76f14/accepted-contracts.json",
+          "documentDigest": "sha256:1d9531cd894f9924722ba087e24cf7359c90c9cac84a2a2be20950ff1eee5393",
+          "receiptDigest": "sha256:3cf976e8b5b504cb99314bd29029274c3d66aaa4c5837e81731b7a823aff65ac"
+        },
+        {
+          "entrypoint": "./client-only",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "99713a9d5a2c69b006ffd29c36b30e49b9642a111642eb289ac4bb74ef2d519b",
+              "path": "./dist/esm/client-only.js",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "declarations": {
+              "path": "./dist/esm/client-only.d.ts",
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+            },
+            "exports": {},
+            "initialization": "inert",
+            "resolution": {
+              "runtimeBranch": "/exports/.~1client-only/import/default",
+              "typesBranch": "/exports/.~1client-only/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-6KJapM/catalog/case-sets/ea66ed2379575c25bfedef14b8185131899004e4168b6d948bbe355736bbba5f/cases/e03597a499efcf511e6f78c4c8751be2ea795288daaa7e465d7b175bc92ee1fa/accepted-contracts.json",
+          "documentDigest": "sha256:19320d327ee4764e3a105ac3917a8c4f91001f76a75d5f0cace9348bb16ec269",
+          "receiptDigest": "sha256:59550431838755d5f34878d3223fe1234ccc94d7836ccc756be826da53a0c667"
+        },
+        {
+          "entrypoint": "./server-entry",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "c300de1bca2021915918154dc9d90b3be3d2a889a9d078128fac40e5064ccaab",
+              "path": "./dist/default-entry/esm/server.js",
+              "sha256": "d1bbe2066dca8ec10672af3f59af8e3c5c1b081af6b197d65a8b8a3fae22a7eb"
+            },
+            "declarations": {
+              "path": "./dist/default-entry/esm/server.d.ts",
+              "sha256": "23eeacbd44f22199579d2b4b4f6dd5a64accb588cd3f29a8601762937edbd64e"
+            },
+            "exports": {
+              "createServerEntry": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+              "default": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1server-entry/import/default",
+              "typesBranch": "/exports/.~1server-entry/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-6KJapM/catalog/case-sets/ea66ed2379575c25bfedef14b8185131899004e4168b6d948bbe355736bbba5f/cases/c0484cc5ea12cb2f7504259ab2973e143cb05b1e91bf59a88a74950a843838d6/accepted-contracts.json",
+          "documentDigest": "sha256:363ad4e55a4ff5b4c8e648d839750361f512ba5b4d4e3e09bd8cab9a8f91420b",
+          "receiptDigest": "sha256:f031a9e6f1751787b45085bfd39cb9cb35e7530489537a544ccf97f07c3f015f"
+        },
+        {
+          "entrypoint": "./plugin/rsbuild",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "13752e874ede67fbeb77a539a295f07ea344822a96e914cfd91587f581e0b61c",
+              "path": "./dist/esm/plugin/rsbuild.js",
+              "sha256": "281bbcaa50d9a8996698c46c45e03f602d180903269c356813b95ddde9acb7cd"
+            },
+            "declarations": {
+              "path": "./dist/esm/plugin/rsbuild.d.ts",
+              "sha256": "73a5c4a74a533ff606b8c896c193703e632c0f6bf93faf8a2ccd75bb262deb1a"
+            },
+            "exports": {
+              "tanstackStart": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1plugin~1rsbuild/import/default",
+              "typesBranch": "/exports/.~1plugin~1rsbuild/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-6KJapM/catalog/case-sets/ea66ed2379575c25bfedef14b8185131899004e4168b6d948bbe355736bbba5f/cases/1c04e044532e467537ca01213b3f8697308a447b95376d30ae654219e0d1b896/accepted-contracts.json",
+          "documentDigest": "sha256:86ae6c579e471afe4fe3a0ef212fe694766520b7c2dcb4a5ede92b0bfb358df9",
+          "receiptDigest": "sha256:9813ca33f1c364b6cae1e0d2129ca3eb9bb15c0eaa821b5b06429142b56b6567"
+        }
+      ],
+      "priorAcceptedMainBytesPreserved": true,
+      "combinedAudit": "/private/tmp/inert-entrypoints-6KJapM/audit.json",
+      "combinedOrdinaryAnalysis": {
+        "receiptAuthenticated": true,
+        "exactCaseSelected": true
+      },
+      "beforeEntrypoints": [
+        "./plugin/rsbuild",
+        "./plugin/vite",
+        "./server-entry"
+      ],
+      "afterEntrypoints": [
+        "./client-only",
+        "./plugin/rsbuild",
+        "./plugin/vite",
+        "./server-entry",
+        "./server-only"
+      ],
+      "rowTransition": "partial-to-partial"
+    },
+    {
+      "probeId": "@tanstack/solid-start@2.0.0-rc.2|solid2|head",
+      "beforeCases": [
+        {
+          "entrypoint": "./plugin/vite",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "5bcf9fcc3587852756766a58e6879f4976f2509f09f6f1cee73c0d4690a80b45",
+              "path": "./dist/esm/plugin/vite.js",
+              "sha256": "6924ca8455df2fe3158ba7496476bcf33d5aa5fd49748c0ac14a99565e956877"
+            },
+            "declarations": {
+              "path": "./dist/esm/plugin/vite.d.ts",
+              "sha256": "aa8cdf8e76c3ffecffc64b7bc3e47f6860cab41e69d1867343b590bdf353a307"
+            },
+            "exports": {
+              "tanstackStart": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1plugin~1vite/import/default",
+              "typesBranch": "/exports/.~1plugin~1vite/import/types"
+            }
+          },
+          "catalog": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-ThVKkI/@tanstack__solid-start@2.0.0-rc.2--solid2--head.json.accepted-catalog/case-sets/c19176beef6b7381852ceec9b7127871acb8983ad98cb315ab8963e481278727/cases/f5754adb377ad767e2a64b1b2cd44b56016d15a04d3ef27eb49c8d961a490427/accepted-contracts.json",
+          "documentDigest": "sha256:f7b782ffc728bf4975999464bcb13ce9b46349ba1c6859da09c5ba7de551c414",
+          "receiptDigest": "sha256:b683e746a4efb83718fb70a7593855b2eb0b79730ee31d71ae76754d4389c886"
+        },
+        {
+          "entrypoint": "./server-entry",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "c300de1bca2021915918154dc9d90b3be3d2a889a9d078128fac40e5064ccaab",
+              "path": "./dist/default-entry/esm/server.js",
+              "sha256": "d1bbe2066dca8ec10672af3f59af8e3c5c1b081af6b197d65a8b8a3fae22a7eb"
+            },
+            "declarations": {
+              "path": "./dist/default-entry/esm/server.d.ts",
+              "sha256": "23eeacbd44f22199579d2b4b4f6dd5a64accb588cd3f29a8601762937edbd64e"
+            },
+            "exports": {
+              "createServerEntry": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+              "default": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1server-entry/import/default",
+              "typesBranch": "/exports/.~1server-entry/import/types"
+            }
+          },
+          "catalog": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-ThVKkI/@tanstack__solid-start@2.0.0-rc.2--solid2--head.json.accepted-catalog/case-sets/c19176beef6b7381852ceec9b7127871acb8983ad98cb315ab8963e481278727/cases/f7c4a3d4fd8b5ed4e75f45184cace207f23952ac306d01d920a788b4fd5c6fd8/accepted-contracts.json",
+          "documentDigest": "sha256:363ad4e55a4ff5b4c8e648d839750361f512ba5b4d4e3e09bd8cab9a8f91420b",
+          "receiptDigest": "sha256:262f1f906efac625aadcb4bc1b3b081bfdab13a87c686802b2f6bfe57dea4c2a"
+        },
+        {
+          "entrypoint": "./plugin/rsbuild",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "13752e874ede67fbeb77a539a295f07ea344822a96e914cfd91587f581e0b61c",
+              "path": "./dist/esm/plugin/rsbuild.js",
+              "sha256": "281bbcaa50d9a8996698c46c45e03f602d180903269c356813b95ddde9acb7cd"
+            },
+            "declarations": {
+              "path": "./dist/esm/plugin/rsbuild.d.ts",
+              "sha256": "73a5c4a74a533ff606b8c896c193703e632c0f6bf93faf8a2ccd75bb262deb1a"
+            },
+            "exports": {
+              "tanstackStart": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1plugin~1rsbuild/import/default",
+              "typesBranch": "/exports/.~1plugin~1rsbuild/import/types"
+            }
+          },
+          "catalog": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-ThVKkI/@tanstack__solid-start@2.0.0-rc.2--solid2--head.json.accepted-catalog/case-sets/c19176beef6b7381852ceec9b7127871acb8983ad98cb315ab8963e481278727/cases/6056f14a4a38df423a8a161014c66efb4d48dc636f4851a1ef54e4d964065297/accepted-contracts.json",
+          "documentDigest": "sha256:86ae6c579e471afe4fe3a0ef212fe694766520b7c2dcb4a5ede92b0bfb358df9",
+          "receiptDigest": "sha256:c2b81857259930309a313e024135ad4f18ec73c35c245ca3b8685614368cb758"
+        }
+      ],
+      "newSeparatelyPublishedCases": [
+        {
+          "entrypoint": "./server-only",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "be44de0b3c790b2dc9e2a51a55ab061145c4a634bf26a7834132ba2d3497dafb",
+              "path": "./dist/esm/server-only.js",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "declarations": {
+              "path": "./dist/esm/server-only.d.ts",
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+            },
+            "exports": {},
+            "initialization": "inert",
+            "resolution": {
+              "runtimeBranch": "/exports/.~1server-only/import/default",
+              "typesBranch": "/exports/.~1server-only/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-Et3YFX/catalog/case-sets/db31de7562fc47a7119bbe8669dd1cc88899c552e6d21220f7b1004c336aa298/cases/49c32d5e8d8427be8be1a60d4d11db4070d646487587938c13a45b09cd94b191/accepted-contracts.json",
+          "documentDigest": "sha256:1d9531cd894f9924722ba087e24cf7359c90c9cac84a2a2be20950ff1eee5393",
+          "receiptDigest": "sha256:6ffdaaf34948f997593902502af90f46c4045dc2753145184602f2665b78db08"
+        },
+        {
+          "entrypoint": "./client-only",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "99713a9d5a2c69b006ffd29c36b30e49b9642a111642eb289ac4bb74ef2d519b",
+              "path": "./dist/esm/client-only.js",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "declarations": {
+              "path": "./dist/esm/client-only.d.ts",
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+            },
+            "exports": {},
+            "initialization": "inert",
+            "resolution": {
+              "runtimeBranch": "/exports/.~1client-only/import/default",
+              "typesBranch": "/exports/.~1client-only/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-Et3YFX/catalog/case-sets/db31de7562fc47a7119bbe8669dd1cc88899c552e6d21220f7b1004c336aa298/cases/8e321b918e52064483d6905d4d27a6bf32c527ec9fad8ce8b7278314a0bf7990/accepted-contracts.json",
+          "documentDigest": "sha256:19320d327ee4764e3a105ac3917a8c4f91001f76a75d5f0cace9348bb16ec269",
+          "receiptDigest": "sha256:a433a4ba067f9297c338e29ccedd6054288c91f2f8b3055daa616aabaa850eae"
+        }
+      ],
+      "ordinaryAnalysis": {
+        "receiptAuthenticated": true,
+        "exactCaseSelected": true
+      },
+      "audit": "/private/tmp/inert-entrypoints-Et3YFX/audit.json",
+      "baselineCoverage": {
+        "declaredEntrypoints": 13,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 3,
+        "rootCertified": false
+      },
+      "combinedPublicationMeasured": true,
+      "combinedCases": [
+        {
+          "entrypoint": "./plugin/vite",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "5bcf9fcc3587852756766a58e6879f4976f2509f09f6f1cee73c0d4690a80b45",
+              "path": "./dist/esm/plugin/vite.js",
+              "sha256": "6924ca8455df2fe3158ba7496476bcf33d5aa5fd49748c0ac14a99565e956877"
+            },
+            "declarations": {
+              "path": "./dist/esm/plugin/vite.d.ts",
+              "sha256": "aa8cdf8e76c3ffecffc64b7bc3e47f6860cab41e69d1867343b590bdf353a307"
+            },
+            "exports": {
+              "tanstackStart": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1plugin~1vite/import/default",
+              "typesBranch": "/exports/.~1plugin~1vite/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-w21yTT/catalog/case-sets/f7d99c300c1d7d216180a47fa0f5b464ced7b44d691afa0f5a3be7f427a674a7/cases/5dc2892d59165b8787ed76f24fcaa5e7e398225c422694f42b7b47c865a38f94/accepted-contracts.json",
+          "documentDigest": "sha256:f7b782ffc728bf4975999464bcb13ce9b46349ba1c6859da09c5ba7de551c414",
+          "receiptDigest": "sha256:a9c9df41e9f9bd29653b488c06efd7ecfe76d9e299a6a13bfa9b9143572327b6"
+        },
+        {
+          "entrypoint": "./server-only",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "be44de0b3c790b2dc9e2a51a55ab061145c4a634bf26a7834132ba2d3497dafb",
+              "path": "./dist/esm/server-only.js",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "declarations": {
+              "path": "./dist/esm/server-only.d.ts",
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+            },
+            "exports": {},
+            "initialization": "inert",
+            "resolution": {
+              "runtimeBranch": "/exports/.~1server-only/import/default",
+              "typesBranch": "/exports/.~1server-only/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-w21yTT/catalog/case-sets/f7d99c300c1d7d216180a47fa0f5b464ced7b44d691afa0f5a3be7f427a674a7/cases/0582d187287e7d1b0b6944e6d3188467840e11b5f76ceaa69c86835bac9ee478/accepted-contracts.json",
+          "documentDigest": "sha256:1d9531cd894f9924722ba087e24cf7359c90c9cac84a2a2be20950ff1eee5393",
+          "receiptDigest": "sha256:3cd910005632440e4aff49a32645535efadf774d1c8c5083cd7ebe4873fb7a07"
+        },
+        {
+          "entrypoint": "./client-only",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "99713a9d5a2c69b006ffd29c36b30e49b9642a111642eb289ac4bb74ef2d519b",
+              "path": "./dist/esm/client-only.js",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "declarations": {
+              "path": "./dist/esm/client-only.d.ts",
+              "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+            },
+            "exports": {},
+            "initialization": "inert",
+            "resolution": {
+              "runtimeBranch": "/exports/.~1client-only/import/default",
+              "typesBranch": "/exports/.~1client-only/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-w21yTT/catalog/case-sets/f7d99c300c1d7d216180a47fa0f5b464ced7b44d691afa0f5a3be7f427a674a7/cases/23800bd10b9c87bb58d34317edb86ff7c8e8c4631ea1fa5da8c90299a4406e01/accepted-contracts.json",
+          "documentDigest": "sha256:19320d327ee4764e3a105ac3917a8c4f91001f76a75d5f0cace9348bb16ec269",
+          "receiptDigest": "sha256:55d414fbe8f114540709313b1dfc8ba9f0eb5408b87d11e92b37277a7d4a61c8"
+        },
+        {
+          "entrypoint": "./server-entry",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "c300de1bca2021915918154dc9d90b3be3d2a889a9d078128fac40e5064ccaab",
+              "path": "./dist/default-entry/esm/server.js",
+              "sha256": "d1bbe2066dca8ec10672af3f59af8e3c5c1b081af6b197d65a8b8a3fae22a7eb"
+            },
+            "declarations": {
+              "path": "./dist/default-entry/esm/server.d.ts",
+              "sha256": "23eeacbd44f22199579d2b4b4f6dd5a64accb588cd3f29a8601762937edbd64e"
+            },
+            "exports": {
+              "createServerEntry": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+              "default": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1server-entry/import/default",
+              "typesBranch": "/exports/.~1server-entry/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-w21yTT/catalog/case-sets/f7d99c300c1d7d216180a47fa0f5b464ced7b44d691afa0f5a3be7f427a674a7/cases/8f5fe04d37eb58caedd417cef5fdf4403cf3ae22c530a7f1a0f5661486a7a2b0/accepted-contracts.json",
+          "documentDigest": "sha256:363ad4e55a4ff5b4c8e648d839750361f512ba5b4d4e3e09bd8cab9a8f91420b",
+          "receiptDigest": "sha256:8a2d75465b7a8ebef32caa047b498caa50b2351fe3edef717a37f57e577c1b69"
+        },
+        {
+          "entrypoint": "./plugin/rsbuild",
+          "artifactCase": {
+            "artifact": {
+              "closureSha256": "13752e874ede67fbeb77a539a295f07ea344822a96e914cfd91587f581e0b61c",
+              "path": "./dist/esm/plugin/rsbuild.js",
+              "sha256": "281bbcaa50d9a8996698c46c45e03f602d180903269c356813b95ddde9acb7cd"
+            },
+            "declarations": {
+              "path": "./dist/esm/plugin/rsbuild.d.ts",
+              "sha256": "73a5c4a74a533ff606b8c896c193703e632c0f6bf93faf8a2ccd75bb262deb1a"
+            },
+            "exports": {
+              "tanstackStart": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1plugin~1rsbuild/import/default",
+              "typesBranch": "/exports/.~1plugin~1rsbuild/import/types"
+            }
+          },
+          "catalog": "/private/tmp/inert-entrypoints-w21yTT/catalog/case-sets/f7d99c300c1d7d216180a47fa0f5b464ced7b44d691afa0f5a3be7f427a674a7/cases/d966d01a769f38527dc6af39d76b65e914a0e670403f1128b358f51b94a2bc57/accepted-contracts.json",
+          "documentDigest": "sha256:86ae6c579e471afe4fe3a0ef212fe694766520b7c2dcb4a5ede92b0bfb358df9",
+          "receiptDigest": "sha256:dc5497f08a24ea9c0fe5f5e33a06c1bd8456dd36e43ba2c0cb7e88949b955008"
+        }
+      ],
+      "priorAcceptedMainBytesPreserved": true,
+      "combinedAudit": "/private/tmp/inert-entrypoints-w21yTT/audit.json",
+      "combinedOrdinaryAnalysis": {
+        "receiptAuthenticated": true,
+        "exactCaseSelected": true
+      },
+      "beforeEntrypoints": [
+        "./plugin/rsbuild",
+        "./plugin/vite",
+        "./server-entry"
+      ],
+      "afterEntrypoints": [
+        "./client-only",
+        "./plugin/rsbuild",
+        "./plugin/vite",
+        "./server-entry",
+        "./server-only"
+      ],
+      "rowTransition": "partial-to-partial"
+    }
+  ],
+  "combinedCaseCount": 15,
+  "preservedBaselineCases": 9,
+  "newCases": 6,
+  "initialScopedBinary": {
+    "native": "sha256:5add14a94d431b32048473736fa58b706daa79fd6fdbfe9a258dc326f0ba2764",
+    "producer": "sha256:e8568bfb2022f0e1d8f82b5e694e1f4223820ab46413999f2491beb93823f118"
+  }
+}

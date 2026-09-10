@@ -1,0 +1,82 @@
+{
+ "format": "entrypoint-recovery-measurement",
+ "authoritative": false,
+ "adr": "0070",
+ "base": {
+  "path": "rust/target/ecosystem-investigations/2026-09-08-positional-full-v2.json",
+  "digest": "sha256:75bb1e0569991f00f0d621fa9016623fd7a99dfc5558b980d757e3ad0da84881",
+  "timeoutSeconds": 600,
+  "counts": {
+   "complete": 324,
+   "partial": 62,
+   "refused": 23,
+   "certifiedEntrypoints": 1148,
+   "rowsWithRootCertified": 369
+  }
+ },
+ "after": {
+  "path": "rust/target/ecosystem-investigations/2026-09-08-prepared-selection-full-v2.json",
+  "digest": "sha256:10a9ed10b2c89bad752985e3b0276b204814b3c5d11ed0733584daa9de32090a",
+  "finishedAt": "2026-09-08T02:24:28.062Z",
+  "durationMs": 816206,
+  "timeoutSeconds": 900,
+  "timeoutNote": "raised from 600 s so no row times out; the base run had no timeouts at 600 s, so the semantic comparison is unaffected",
+  "counts": {
+   "complete": 324,
+   "partial": 62,
+   "refused": 23,
+   "certifiedEntrypoints": 1151,
+   "rowsWithRootCertified": 370
+  }
+ },
+ "changedRows": [
+  {
+   "probeId": "@kobalte/utils@0.9.2|solid1|only",
+   "before": {
+    "status": "certified",
+    "certifiedEntrypoints": 19,
+    "rootCertified": false,
+    "stage": "catalog-publication"
+   },
+   "after": {
+    "status": "certified",
+    "certifiedEntrypoints": 22,
+    "rootCertified": true,
+    "stage": "catalog-publication"
+   }
+  }
+ ],
+ "preservedRowCount": 417,
+ "dependencyCompositionCases": {
+  "total": 173,
+  "recoveredBefore": 24,
+  "recoveredAfter": 28,
+  "stillLost": 145,
+  "rowsStillLosing": 44
+ },
+ "strategyRows": [
+  "@kobalte/utils@0.9.2|solid1|only",
+  "@tanstack/solid-router@1.170.30|solid1|only",
+  "@tanstack/solid-router@2.0.0-rc.2|solid2|floor",
+  "@tanstack/solid-router@2.0.0-rc.2|solid2|head"
+ ],
+ "kobalteUtils": {
+  "publishedCases": 23,
+  "caseRefusals": [
+   {
+    "entrypoint": "./src/scroll-into-view.ts",
+    "conditions": [
+     "import"
+    ],
+    "stage": "witness-acquisition",
+    "owner": "certifier",
+    "demandId": "sha256:20da6f010f7f1bbd0cedc8b0a245aab46f4029f72f40e1c31f3c1bed2febd41f",
+    "family": "recursive-value-shape",
+    "reason": "solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification failed for graph node @kobalte/utils@0.9.2 (./src/scroll-into-view.ts) during live graph export-value verification: Type Facts demand sha256:20da6f010f7f1bbd0cedc8b0a245aab46f4029f72f40e1c31f3c1bed2febd41f is locally open: recursive-value-shape (artifact-case:4428aaa5ded09533d107ca061ddcc9932d833d8b6c66b6ece2e613b63b9178b9:scrollIntoViewport): parameter-rooted read lacks positive original-input identity"
+   }
+  ],
+  "retainedBaselineRefusal": "solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification failed for graph node @kobalte/utils@0.9.2 (./src/scroll-into-view.ts) during live graph export-value verification: Type Facts demand sha256:20da6f010f7f1bbd0cedc8b0a245aab46f4029f72f40e1c31f3c1bed2febd41f is locally open: recursive-value-shape (artifact-case:4428aaa5ded09533d107ca061ddcc9932d833d8b6c66b6ece2e613b63b9178b9:scrollIntoViewport): parameter-rooted read lacks positive original-input identity",
+  "nativeCertificationTransactions": 14,
+  "certificationDurationMs": 606518
+ }
+}

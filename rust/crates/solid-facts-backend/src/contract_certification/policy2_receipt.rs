@@ -32,7 +32,13 @@ const TRUST_CONFIGURATION_FORMAT: &str = "solid-checker-policy2-trust-configurat
 const TRUST_CONFIGURATION_VERSION: u16 = 1;
 const MAX_STRING_BYTES: usize = 16 * 1024;
 const MAX_ROOTS: usize = 256;
-const RECEIPT_WITNESS_FAMILIES: [&str; 17] = [
+/// Every witness family a policy-2 receipt must bind, in canonical order.
+///
+/// Public so an out-of-crate test issuer can construct a complete
+/// [`Policy2ReceiptBindings`] without duplicating the list; the roots
+/// themselves carry the authority, and [`Policy2ReceiptBindings::validate`]
+/// still requires exactly these keys.
+pub const RECEIPT_WITNESS_FAMILIES: [&str; 17] = [
     "package-identity",
     "manifest-entrypoint",
     "export-resolution",
@@ -656,6 +662,29 @@ pub fn canonicalize_policy2_main(document: &[u8]) -> Result<Vec<u8>, Policy2Rece
 pub fn policy2_main_semantic_digest(canonical_main: &[u8]) -> Result<String, Policy2ReceiptError> {
     validate_canonical_main(canonical_main)
         .map(|(_, contract)| contract.semantic_digest().as_str().to_owned())
+}
+
+/// Recomputes the closed-claims root from an already canonical policy-2 main.
+///
+/// The consumer rebinds this root when it authenticates a receipt, so an
+/// issuer cannot assert a closure the document does not carry. Exposed
+/// alongside [`policy2_main_semantic_digest`] so an out-of-crate issuer can
+/// bind it without reaching into the semantic model.
+pub fn policy2_main_closed_claims_root(
+    canonical_main: &[u8],
+) -> Result<String, Policy2ReceiptError> {
+    let (_, contract) = validate_canonical_main(canonical_main)?;
+    let selected = contract
+        .artifact_cases()
+        .first()
+        .ok_or(Policy2ReceiptError::InvalidBinding {
+            field: "closedClaimsRoot",
+        })?
+        .id
+        .clone();
+    solid_reactive_ir::contract_semantics::proof::policy2_closed_claims_root(&contract, &selected)
+        .map(|digest| digest.as_str().to_owned())
+        .map_err(|error| Policy2ReceiptError::MainDocument(error.to_string()))
 }
 
 /// Canonical identity of the complete resolver answer selected for one

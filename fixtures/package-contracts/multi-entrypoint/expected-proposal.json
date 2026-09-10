@@ -2,7 +2,7 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:544359c1d62b09cc9006df21cba6672953801a0b7b608d72f2d149b74820acc7",
+  "semanticDigest": "sha256:46307ac2df8e44956a25a80b5f3a2e64077b49c74d442724b770ac64c5814508",
   "closureCandidates": [
     {
       "claimId": "claim:v1:sha256:0c737cc9666baf2717f2e4620cfe1117f3397471b644b99ea89e3cbbf2fc8b07",
@@ -387,25 +387,6 @@
       }
     },
     {
-      "claimId": "claim:v1:sha256:094a5c014271de70ddf191cbb8d9103eadf410248945f3f5a85149df95b89839",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.ts",
-        "runtimeDigest": "sha256:699c98dfa55f68e9e69d5a1c079f0057eff36ba9984ac70cde2c23f852f14828",
-        "declarationsPath": "./index.ts",
-        "declarationsDigest": "sha256:699c98dfa55f68e9e69d5a1c079f0057eff36ba9984ac70cde2c23f852f14828",
-        "closureDigest": "sha256:72a8f54c6b72d0063a50f766fbd3406c24538c12e4a280f043328619c409325c"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:351baf262d41c317e4320b39e37750519a618d351589ffee5151cf3805817268",
-        "export": "rootConstant",
-        "path": {
-          "kind": "call",
-          "domain": "reads"
-        }
-      }
-    },
-    {
       "claimId": "claim:v1:sha256:109eb787955071efbf565114d70f175b4b15d2a050fbaa7ace5b6e985800711e",
       "artifact": {
         "entrypoint": ".",
@@ -747,25 +728,6 @@
       }
     },
     {
-      "claimId": "claim:v1:sha256:4278f31830e0f430717396d7524a3bcd66fb583384bea02e7e85a8b6956e43f0",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.ts",
-        "runtimeDigest": "sha256:699c98dfa55f68e9e69d5a1c079f0057eff36ba9984ac70cde2c23f852f14828",
-        "declarationsPath": "./index.ts",
-        "declarationsDigest": "sha256:699c98dfa55f68e9e69d5a1c079f0057eff36ba9984ac70cde2c23f852f14828",
-        "closureDigest": "sha256:72a8f54c6b72d0063a50f766fbd3406c24538c12e4a280f043328619c409325c"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:351baf262d41c317e4320b39e37750519a618d351589ffee5151cf3805817268",
-        "export": "default",
-        "path": {
-          "kind": "call",
-          "domain": "reads"
-        }
-      }
-    },
-    {
       "claimId": "claim:v1:sha256:44d27701e86e9b03927c4cb179e78abb6247d37e744dd43d190f58bf91e25b75",
       "artifact": {
         "entrypoint": "./state",
@@ -951,25 +913,6 @@
         "path": {
           "kind": "call",
           "domain": "writes"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:65cff9a94883a160e134f6ac6075fbf2084e05b50aeb3a2f27648b98ba97497f",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.ts",
-        "runtimeDigest": "sha256:699c98dfa55f68e9e69d5a1c079f0057eff36ba9984ac70cde2c23f852f14828",
-        "declarationsPath": "./index.ts",
-        "declarationsDigest": "sha256:699c98dfa55f68e9e69d5a1c079f0057eff36ba9984ac70cde2c23f852f14828",
-        "closureDigest": "sha256:72a8f54c6b72d0063a50f766fbd3406c24538c12e4a280f043328619c409325c"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:351baf262d41c317e4320b39e37750519a618d351589ffee5151cf3805817268",
-        "export": "rootValue",
-        "path": {
-          "kind": "call",
-          "domain": "reads"
         }
       }
     },

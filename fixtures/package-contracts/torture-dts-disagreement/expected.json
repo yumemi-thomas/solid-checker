@@ -13,7 +13,7 @@
             "sha256": "4a8ecda6b4cff83ec675ed26048a6122f8ec7a7ee54b0a204add076976656f7e"
           },
           "exports": {
-            "runtimeFactory": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "runtimeFactory": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -37,15 +37,18 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
+    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
       "call": {
         "closed": [
+          "reads",
           "creates"
         ],
         "creates": [],
         "proposedClosures": [
+          "reads",
           "creates"
-        ]
+        ],
+        "reads": []
       },
       "shape": "callable"
     }

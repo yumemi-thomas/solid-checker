@@ -13,7 +13,7 @@
             "sha256": "c2eaacd972ae63a9a49b71c24aa994d36dc78f362115a42820e82a13c4735ad9"
           },
           "exports": {
-            "createWidget": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "createWidget": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -35,7 +35,7 @@
             "sha256": "1e3f71b741ad799c1cdda860186e672d9e26d7cfdd6cd9580eae9adbc30e0c87"
           },
           "exports": {
-            "label": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "label": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1label/default",
@@ -59,15 +59,18 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
+    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
       "call": {
         "closed": [
+          "reads",
           "creates"
         ],
         "creates": [],
         "proposedClosures": [
+          "reads",
           "creates"
-        ]
+        ],
+        "reads": []
       },
       "shape": "callable"
     }

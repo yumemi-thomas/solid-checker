@@ -1,0 +1,2844 @@
+{
+  "diagnostic": true,
+  "authoritative": false,
+  "probeId": "@corvu/popover@0.2.0|solid1|only",
+  "baseline": {
+    "path": "rust/target/ecosystem-investigations/2026-09-08-verified-retained-floor-full.json",
+    "digest": "sha256:15c947a5de23f032c8bc7d6a73e2e15010669aa2371e9966bc7be222dd423bae",
+    "retainedArtifacts": {
+      "projectDir": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3QQP1l",
+      "outputDir": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-q7Ajg4"
+    },
+    "manifestPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3QQP1l/node_modules/@corvu/popover/package.json",
+    "manifestDigest": "sha256:9d796bdc1ae1e42129e5df7e090a4183b44b241990e417017041f6a4de1b7ee4"
+  },
+  "result": {
+    "path": "/private/tmp/retained-graph-native-NwsJtf/result.json",
+    "digest": "sha256:5c773153ea993dc69aced42bf01529cea7992fab2aa9f12c5eb64a1a86ce23ea",
+    "elapsedMs": 35053,
+    "sourceDigests": {
+      "/Users/thomas/Documents/Github/solid-checker/rust/target/verify/solid-checker-rust": "f3bd5b60b10a5bb77ee48ac991838a12e96049d2354c685333f5277ddee7fb4d",
+      "/Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts": "f8fdae219199d947e5116a745f75e1d865438962c4ac02102be3f1438e28506a",
+      "/Users/thomas/Documents/Github/solid-checker/packages/cli/scripts/certify-contract.mjs": "54d65b6bfe466551b1f3e75b286777bc20f71d1fa816149ac20155994372907c",
+      "/Users/thomas/Documents/Github/solid-checker/packages/cli/scripts/retained-proposal-graphs.mjs": "2402d9930a6107deeff4f6073718002be2a9e1a693cd77e4e6d31f494558f9bb"
+    },
+    "ordinaryAnalysis": {
+      "receiptAuthenticated": true,
+      "exactCaseSelected": true
+    }
+  },
+  "publication": {
+    "pointerPath": "/private/tmp/retained-graph-native-NwsJtf/catalog/accepted-contract-case-set.json",
+    "pointer": {
+      "format": "solid-checker-accepted-contract-case-set-pointer",
+      "caseSetVersion": 1,
+      "document": "case-sets/6663dd873198dc726a90b974ad5a0aba5c14d9331af7e37f25c1e9c1f57ca62a/accepted-contract-case-set.json",
+      "documentDigest": "sha256:6663dd873198dc726a90b974ad5a0aba5c14d9331af7e37f25c1e9c1f57ca62a"
+    },
+    "caseSetPath": "/private/tmp/retained-graph-native-NwsJtf/catalog/case-sets/6663dd873198dc726a90b974ad5a0aba5c14d9331af7e37f25c1e9c1f57ca62a/accepted-contract-case-set.json"
+  },
+  "before": {
+    "status": "refused",
+    "acceptedEntrypoints": [],
+    "acceptedArtifactCases": []
+  },
+  "after": {
+    "status": "complete",
+    "coverage": {
+      "declaredEntrypoints": 1,
+      "declaredWildcard": false,
+      "certifiedEntrypoints": 1,
+      "rootCertified": true
+    },
+    "acceptedEntrypoints": [
+      "."
+    ],
+    "acceptedArtifactCases": [
+      {
+        "entrypoint": ".",
+        "selection": {
+          "artifact": {
+            "closureSha256": "0a1e7ce068b7352ac22d614e1595359ecb278106661074f221da61b143f3f6f9",
+            "path": "./dist/index.jsx",
+            "sha256": "afcf2a8229b0da812f56ac8d46a90f56ccb3a0f2589597f86e955ec87452967b"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "e2716d6e767679b51be4bea379110078d8edf4f2b270943f2fd658cbfdc72560"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./solid",
+            "typesBranch": "/exports/./types"
+          }
+        },
+        "coordinate": {
+          "artifactCaseId": "artifact-case:c3cf608ee034655eb8b9c4acee90c42cd02a7d51f55a794754706235068578ac",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3QQP1l/node_modules/@corvu/.solid-checker-certification-c057201f9b258f49bbffa7f139d556affd2a951781705c2c9178568391c7a073.mjs",
+          "specifier": "@corvu/popover",
+          "resolvedImportRoot": "sha256:b803531d73e9e762b67378132c4e41cfcb79ba618b024c81fb319c5746ad5623",
+          "semanticDigest": "sha256:42783f62edf00eafdc4886a2da0dde7f4633d5a4c99dc099d1509ef5bf923fab",
+          "receiptDigest": "sha256:32171cceac86935d879958de7baaf79297178505f310cc1d14970500b8412419",
+          "catalog": "cases/b803531d73e9e762b67378132c4e41cfcb79ba618b024c81fb319c5746ad5623/accepted-contracts.json",
+          "catalogDigest": "sha256:460ec943b8a1e286f5647ef086213cf7359337160b8bdb39afb2c0c6c5784307"
+        },
+        "catalogPath": "/private/tmp/retained-graph-native-NwsJtf/catalog/case-sets/6663dd873198dc726a90b974ad5a0aba5c14d9331af7e37f25c1e9c1f57ca62a/cases/b803531d73e9e762b67378132c4e41cfcb79ba618b024c81fb319c5746ad5623/accepted-contracts.json",
+        "documentPath": "/private/tmp/retained-graph-native-NwsJtf/catalog/case-sets/6663dd873198dc726a90b974ad5a0aba5c14d9331af7e37f25c1e9c1f57ca62a/cases/b803531d73e9e762b67378132c4e41cfcb79ba618b024c81fb319c5746ad5623/objects/d7a2e6eac6745aa0901516af75c885b58a46ae913a1c4dfc1958daa6ba5736bd.main.json",
+        "receiptPath": "/private/tmp/retained-graph-native-NwsJtf/catalog/case-sets/6663dd873198dc726a90b974ad5a0aba5c14d9331af7e37f25c1e9c1f57ca62a/cases/b803531d73e9e762b67378132c4e41cfcb79ba618b024c81fb319c5746ad5623/objects/32171cceac86935d879958de7baaf79297178505f310cc1d14970500b8412419.receipt.json",
+        "documentDigest": "sha256:d7a2e6eac6745aa0901516af75c885b58a46ae913a1c4dfc1958daa6ba5736bd",
+        "receiptDigest": "sha256:32171cceac86935d879958de7baaf79297178505f310cc1d14970500b8412419",
+        "receiptPayload": {
+          "semanticModelVersion": 1,
+          "proofVersion": 2,
+          "proofPolicy": 2,
+          "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+          "mainDigest": "sha256:d7a2e6eac6745aa0901516af75c885b58a46ae913a1c4dfc1958daa6ba5736bd",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3QQP1l/node_modules/@corvu/.solid-checker-certification-c057201f9b258f49bbffa7f139d556affd2a951781705c2c9178568391c7a073.mjs",
+          "specifier": "@corvu/popover",
+          "resolvedImportRoot": "sha256:b803531d73e9e762b67378132c4e41cfcb79ba618b024c81fb319c5746ad5623",
+          "semanticDigest": "sha256:42783f62edf00eafdc4886a2da0dde7f4633d5a4c99dc099d1509ef5bf923fab",
+          "artifactProvenanceRoot": "sha256:5ccc1684ca2807e468d4dc5d6700f4f96baf6a26db950b5a0cdb135a38c97196",
+          "snapshotRoot": "sha256:35b43b8511b1ae2d7de1090ede2a46a1655b4481b8409d20d897b3917a08c3be",
+          "packageRoot": "sha256:4eded843f6265bc1da41ae91573a7ee820d66f434c3669447187c099ad3b1a5e",
+          "manifestRoot": "sha256:957f070b2c8e146d3a1362b55122b930ec2c96db9f304217e10bd535ad6eaa34",
+          "artifactsRoot": "sha256:e97e47116c383aeac4c12d5dce3164b4eb99559f995f41b7776080b64b08db3c",
+          "declarationsRoot": "sha256:aa4183e6be138e129222656830ff725a74574549497c9aea3fa7568fc4bdbcc6",
+          "transformRoot": "sha256:47a48cc1927584961140daf4d5b1783e761d35f99afca4437908da3b2a703686",
+          "exportsRoot": "sha256:5cd5039f699d4d3bb42f22ff6e99568dd02088f72bd89c9a1d228a9fb8892c1a",
+          "closureRoot": "sha256:d2e49eaa77c62aa78aa4c3c7e983df83a87e1329289fc8da10c66f4bedcef9e0",
+          "demandGraphRoot": "sha256:6adabeef2550da115dc653c59b5fa7bc79957022468a6b98398447b5cb69fd92",
+          "verifiedPositiveRoot": "sha256:2b072c12a005802bde6a40d6c8b8e17cdceb0dd5a7859e1d02b774e0ef952f2e",
+          "witnessRoots": {
+            "accepted-dependency-composition": "sha256:a0bd1993cb2f47887c5e18a1d836d898942f462e0705ee73c749e815ffc8ba53",
+            "argument-binding": "sha256:166a7165cb44e309e70515114aad94324862499760fa19990693b4e6727e0151",
+            "artifact-declarations": "sha256:aa4183e6be138e129222656830ff725a74574549497c9aea3fa7568fc4bdbcc6",
+            "callable-path": "sha256:36420cb4079801f3ea4f1e88ac8a11b3a023ef75035c87712174b4147cb22145",
+            "compiler-reconciliation": "sha256:4d54846ff56f53dec57d92d5d759ba46a018afe60b081e87aae2f0aef030e43f",
+            "domain-exhaustiveness": "sha256:ccd83372487b2abf49bdce46dada4c043067602e75332be974c438788102fdff",
+            "export-identity": "sha256:5cd5039f699d4d3bb42f22ff6e99568dd02088f72bd89c9a1d228a9fb8892c1a",
+            "export-resolution": "sha256:e97e47116c383aeac4c12d5dce3164b4eb99559f995f41b7776080b64b08db3c",
+            "guard-partition": "sha256:260b391526261088a9aad4ee341dab2019ba3b01860c90b2bf1460f89316ea81",
+            "manifest-entrypoint": "sha256:957f070b2c8e146d3a1362b55122b930ec2c96db9f304217e10bd535ad6eaa34",
+            "module-closure": "sha256:d2e49eaa77c62aa78aa4c3c7e983df83a87e1329289fc8da10c66f4bedcef9e0",
+            "operation-cardinality": "sha256:5c48d59492151df8ad5c949ed32e9f1b02bb860a5430b1283481f3e5e7307e6b",
+            "operation-reachability": "sha256:69940f7e0bdd66b6698a8c7d2e30fb7c3c1d17ece77e92f34bddf2c1b27578f7",
+            "package-identity": "sha256:4eded843f6265bc1da41ae91573a7ee820d66f434c3669447187c099ad3b1a5e",
+            "recursive-value-shape": "sha256:6eb739a0f17f9a560edce6243e28c15ca125e18359e38614ce9f78e00810f401",
+            "rest-spread-coverage": "sha256:5157e1eabca91a63cfae6e52f547b1d8d56526e0d6f0849789f5cfa66cec43c5",
+            "selected-signature": "sha256:3ce75ef3b916762829e920ac648c52ff1b7749ab1311fbd6c3d1dcb13bbe3cfe"
+          },
+          "producerSessionsRoot": "sha256:4110123e29c4276ff66325577a965c2d40bd84016d4068e597f252ea01e9eb4b",
+          "dependencyReceiptsRoot": "sha256:c82c652e47832f6cbd01fdb58d3dd29d7ae758893a213f455b927f71ab987153",
+          "dependencyTrustRoot": "sha256:abf184198d31e89dcb8174911f513e391c91eab79cb30bc8e15f5dd24dee4b68",
+          "probeGateRoot": "sha256:fd4b82d0f4e56bb7ba56a5340e552b88628bcab3c6673d7f376a95b3ffd62c23",
+          "closedClaimsRoot": "sha256:c4bdfe40b3dd608a5fef6499c570af3ab33c8546027a3ec735435c2ea6875c59",
+          "verifierSourceDigest": "sha256:4826237da0d8a1a55fdc402960347ccb87de85317f64c00ca448734f7df04b35",
+          "verifierBuildDigest": "sha256:6fa2930d8880fe197563899823e137b7b29b296da3683e758eb059b21ff2a663",
+          "issuerKind": "persistent-local",
+          "issuerScope": "diagnostic:retained-proposal-graphs",
+          "keyId": "ed25519:sha256:066315d78851fb57c792e5750730dc3cabb64e06db20a73a9407640d72e41726",
+          "signatureAlgorithm": "ed25519"
+        },
+        "resolution": {
+          "specifier": "@corvu/popover",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3QQP1l/node_modules/@corvu/.solid-checker-certification-c057201f9b258f49bbffa7f139d556affd2a951781705c2c9178568391c7a073.mjs",
+          "requestedEntrypoint": ".",
+          "packageName": "@corvu/popover",
+          "packageVersion": "0.2.0",
+          "packageIntegrity": "sha512-zynRWyRV7mk2uX7t/COQL4OEa6H6FBgOxxlXLQJ1BV8hTiBJwmfAN/yB/9jy+zlp0G9vp64E8VdsNn6gxUEUEQ==",
+          "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3QQP1l/node_modules/@corvu/popover",
+          "packageManifest": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3QQP1l/node_modules/@corvu/popover/package.json",
+            "digest": "sha256:9d796bdc1ae1e42129e5df7e090a4183b44b241990e417017041f6a4de1b7ee4"
+          },
+          "runtime": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3QQP1l/node_modules/@corvu/popover/dist/index.jsx",
+            "digest": "sha256:afcf2a8229b0da812f56ac8d46a90f56ccb3a0f2589597f86e955ec87452967b"
+          },
+          "declarations": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3QQP1l/node_modules/@corvu/popover/dist/index.d.ts",
+            "digest": "sha256:e2716d6e767679b51be4bea379110078d8edf4f2b270943f2fd658cbfdc72560"
+          },
+          "runtimeTrace": {
+            "branch": "/exports/./solid",
+            "steps": [
+              {
+                "condition": "subpath",
+                "target": "."
+              },
+              {
+                "condition": "solid",
+                "target": "/exports/."
+              },
+              {
+                "condition": "target",
+                "target": "./dist/index.jsx"
+              }
+            ]
+          },
+          "declarationTrace": {
+            "branch": "/exports/./types",
+            "steps": [
+              {
+                "condition": "subpath",
+                "target": "."
+              },
+              {
+                "condition": "types",
+                "target": "/exports/."
+              },
+              {
+                "condition": "target",
+                "target": "./dist/index.d.ts"
+              }
+            ]
+          },
+          "closure": {
+            "entries": [
+              {
+                "role": "runtime",
+                "path": "./dist/index.jsx",
+                "digest": "sha256:afcf2a8229b0da812f56ac8d46a90f56ccb3a0f2589597f86e955ec87452967b"
+              },
+              {
+                "role": "declaration",
+                "path": "./dist/index.d.ts",
+                "digest": "sha256:e2716d6e767679b51be4bea379110078d8edf4f2b270943f2fd658cbfdc72560"
+              },
+              {
+                "role": "manifest",
+                "path": "./package.json",
+                "digest": "sha256:9d796bdc1ae1e42129e5df7e090a4183b44b241990e417017041f6a4de1b7ee4"
+              },
+              {
+                "role": "resolution-input",
+                "path": "./package.json",
+                "digest": "sha256:9d796bdc1ae1e42129e5df7e090a4183b44b241990e417017041f6a4de1b7ee4"
+              }
+            ],
+            "dependencies": [
+              {
+                "specifier": "@corvu/dialog",
+                "packageName": "@corvu/dialog",
+                "artifactCase": "artifact-case:9d44066d122023e903c8761f8b133c65c844e7df12ca28979ae58989fa1c587f",
+                "acceptedContractDigest": "sha256:6d74277b3c27af0e84489cba4e5b2d973f020e85aef6b271b48fc5caf5c044c9"
+              },
+              {
+                "specifier": "@corvu/utils",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:9ce298e866393cd9a77f469a389791175b7cc0bdcdc0918f76eed8d8138ee2e5",
+                "acceptedContractDigest": "sha256:75ede785fc1e09dd38708b3b31aeb8a82ca4872f952d119ae2f4e0f6057e04ac"
+              },
+              {
+                "specifier": "@corvu/utils/components/FloatingArrow",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:95ff9697a24fdb1faf3fcc502261c00e3205e7e1868f5b08d97f14e5066db8e6",
+                "acceptedContractDigest": "sha256:607d0a2588f40f6a8fc580ac8d06a4c740351a9f8833dd99beb07cf319a336e0"
+              },
+              {
+                "specifier": "@corvu/utils/create/floating",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:5526b6d8a10802d014b4a718990061fc950ee8d86badc43aa62cd1ee1632eb44",
+                "acceptedContractDigest": "sha256:40a9084ff2f45a14e2b02463dc41f97aad5e53fc30486bb399104628153281c4"
+              },
+              {
+                "specifier": "@corvu/utils/create/keyedContext",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:ca6a0bb518db18db014de0f4ca85656ea670a0a67997f5a2c7885c2f8fe1e8cf",
+                "acceptedContractDigest": "sha256:a56f1a0d58fe65bb98dca655e01f69f040fedecfbd95da0b6b05d6c01f37a96d"
+              },
+              {
+                "specifier": "@corvu/utils/create/once",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:ac7232fbcc5774534286dbe2312986170fa7c9681db491197391dbeb732fa405",
+                "acceptedContractDigest": "sha256:426156b3c2f1531dbdbb3f6b4af1b91d3ee0e58ea77d6957371b4f39eb6c96dd"
+              },
+              {
+                "specifier": "@corvu/utils/dom",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:2c64155d6b415641eb0be641c8621113ba9df853637e7af49c48f260beacd045",
+                "acceptedContractDigest": "sha256:56e3aa65eed3fa6ed75e9654ba9fcd66803adfd666523cfd3b8045441fc1707b"
+              },
+              {
+                "specifier": "@corvu/utils/dynamic",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:3e6195fb8c079dc17406c26ab4c08fe89bef5e45d587e2eb1620bc1e948c3215",
+                "acceptedContractDigest": "sha256:b0710685a0e11ea36a8cb0702ef8a3231acaa1de90cb5cb82bb47a1a93e018bb"
+              },
+              {
+                "specifier": "@corvu/utils/floating",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:08cb32773fd556078bdd9b00a5918bdd2b7a139621696be5059fc1491f0275d1",
+                "acceptedContractDigest": "sha256:2ca9ee8dd563a88598ce035712b07fe23679a8aa2194f157fc7909806d3c2936"
+              },
+              {
+                "specifier": "@corvu/utils/reactivity",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:4ccb5b333d2cbf64ba5df0bdc28c72e4003528ff039ee9ef2660251374e10564",
+                "acceptedContractDigest": "sha256:d20510370b12615d8aa84537f85b8a073c51166efe98f3558fe991b92e4f7ab7"
+              },
+              {
+                "specifier": "solid-js",
+                "packageName": "solid-js",
+                "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+                "acceptedContractDigest": "sha256:472fbfe2770d66ba195e483e6ced9368f2e7055b19f7c6b6603ac9848d332fed"
+              }
+            ],
+            "digest": "sha256:0a1e7ce068b7352ac22d614e1595359ecb278106661074f221da61b143f3f6f9"
+          },
+          "authority": "standalonePackageResolver"
+        },
+        "claims": {
+          "Anchor": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Arrow": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Close": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Content": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Description": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Label": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Overlay": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Portal": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Root": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Trigger": {
+            "call": {},
+            "shape": "callable"
+          },
+          "default": {
+            "call": {},
+            "shape": "callable"
+          },
+          "useContext": {
+            "call": {},
+            "shape": "callable"
+          },
+          "useDialogContext": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      },
+      {
+        "entrypoint": ".",
+        "selection": {
+          "artifact": {
+            "closureSha256": "a72dfbc83df8fb5ce8078e55e1379c4d95594c412881c708c9e3fd38ad9f16b6",
+            "path": "./dist/index.js",
+            "sha256": "8d105a2c0be6e9e5431abd191d0585592ebc2abe78557b74b8abc3bd12a602de"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "e2716d6e767679b51be4bea379110078d8edf4f2b270943f2fd658cbfdc72560"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./types"
+          }
+        },
+        "coordinate": {
+          "artifactCaseId": "artifact-case:f745ece0751117da3009aa76f25b9d3bcc67c349518c04829c3f8cec7c5955b5",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3QQP1l/node_modules/@corvu/.solid-checker-certification-c057201f9b258f49bbffa7f139d556affd2a951781705c2c9178568391c7a073.mjs",
+          "specifier": "@corvu/popover",
+          "resolvedImportRoot": "sha256:142d08495d97c4754d26f8dbc13508581a4a9c3290b7205c58314b37822ea5d4",
+          "semanticDigest": "sha256:0c85bb371fc26ca996e4a006d54bb54f6379bca9274f0a35afe655cf0c1af9f4",
+          "receiptDigest": "sha256:73df2f37804f895e4e36bffd55c3f915b8837b6e55994d44275fcc02344455c6",
+          "catalog": "cases/142d08495d97c4754d26f8dbc13508581a4a9c3290b7205c58314b37822ea5d4/accepted-contracts.json",
+          "catalogDigest": "sha256:2ea750546863d85103c2f34888ea731aaf0483e604f24c024341946b8fd15b35"
+        },
+        "catalogPath": "/private/tmp/retained-graph-native-NwsJtf/catalog/case-sets/6663dd873198dc726a90b974ad5a0aba5c14d9331af7e37f25c1e9c1f57ca62a/cases/142d08495d97c4754d26f8dbc13508581a4a9c3290b7205c58314b37822ea5d4/accepted-contracts.json",
+        "documentPath": "/private/tmp/retained-graph-native-NwsJtf/catalog/case-sets/6663dd873198dc726a90b974ad5a0aba5c14d9331af7e37f25c1e9c1f57ca62a/cases/142d08495d97c4754d26f8dbc13508581a4a9c3290b7205c58314b37822ea5d4/objects/ff4541f750e4dfaeca21059609c65245b98c635ba365396526407e0839fd1c74.main.json",
+        "receiptPath": "/private/tmp/retained-graph-native-NwsJtf/catalog/case-sets/6663dd873198dc726a90b974ad5a0aba5c14d9331af7e37f25c1e9c1f57ca62a/cases/142d08495d97c4754d26f8dbc13508581a4a9c3290b7205c58314b37822ea5d4/objects/73df2f37804f895e4e36bffd55c3f915b8837b6e55994d44275fcc02344455c6.receipt.json",
+        "documentDigest": "sha256:ff4541f750e4dfaeca21059609c65245b98c635ba365396526407e0839fd1c74",
+        "receiptDigest": "sha256:73df2f37804f895e4e36bffd55c3f915b8837b6e55994d44275fcc02344455c6",
+        "receiptPayload": {
+          "semanticModelVersion": 1,
+          "proofVersion": 2,
+          "proofPolicy": 2,
+          "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+          "mainDigest": "sha256:ff4541f750e4dfaeca21059609c65245b98c635ba365396526407e0839fd1c74",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3QQP1l/node_modules/@corvu/.solid-checker-certification-c057201f9b258f49bbffa7f139d556affd2a951781705c2c9178568391c7a073.mjs",
+          "specifier": "@corvu/popover",
+          "resolvedImportRoot": "sha256:142d08495d97c4754d26f8dbc13508581a4a9c3290b7205c58314b37822ea5d4",
+          "semanticDigest": "sha256:0c85bb371fc26ca996e4a006d54bb54f6379bca9274f0a35afe655cf0c1af9f4",
+          "artifactProvenanceRoot": "sha256:5ccc1684ca2807e468d4dc5d6700f4f96baf6a26db950b5a0cdb135a38c97196",
+          "snapshotRoot": "sha256:35b43b8511b1ae2d7de1090ede2a46a1655b4481b8409d20d897b3917a08c3be",
+          "packageRoot": "sha256:b802c97b7346088a7d495c449970379dd72e87dc1eebe5103719f4d3f0ef09e4",
+          "manifestRoot": "sha256:ec1b3e6608fb49d8ded51c826313227a809ef75820d03966635a72986da50510",
+          "artifactsRoot": "sha256:930430eef1c757e657f5e822385a8cd4a69c6447fa975824d153815c781a95fb",
+          "declarationsRoot": "sha256:bb82b3e40445c2bbd7531448f3f049c6de0d58be9ad8ed4b655c151989dac6f5",
+          "transformRoot": "sha256:1c04f3ec3c19186c11018e97132a022b4b93ae5cdf65c45bc90bf058346a20e4",
+          "exportsRoot": "sha256:4de65162d908010693c4c6b7f6334b66d63275fe9ec297529e11f880dae3b823",
+          "closureRoot": "sha256:f2c6d54a61289292c47b9f3082a38588e46acaf6f2538016f782837dcff58bc0",
+          "demandGraphRoot": "sha256:4af8117201a8acfb3c7ace1d0df5094fad5d62e328e2b7d8323f3cc51be69f04",
+          "verifiedPositiveRoot": "sha256:7feb74bbbedf135ab391c9d86389eb3d205d23bee1419decbbcdf7b16add5120",
+          "witnessRoots": {
+            "accepted-dependency-composition": "sha256:48c11700cb83f23d9312cc0cc09936eb56aaa16fe0bd3e4360cdedcc91acc8ab",
+            "argument-binding": "sha256:5122d18456a0d8e7dca1bab9d6d1a7f9a00512c4db0d496a8edf5896ed02c198",
+            "artifact-declarations": "sha256:bb82b3e40445c2bbd7531448f3f049c6de0d58be9ad8ed4b655c151989dac6f5",
+            "callable-path": "sha256:7362631ea91e658f0437a9abe9fe60e54589d4562ea929f9648f794830b794d8",
+            "compiler-reconciliation": "sha256:b322c0f0aa27446edbd210d2302c0f384cdd7e3693370db971452e5bbc76a13d",
+            "domain-exhaustiveness": "sha256:0278a159e746b1662b01fc5c778ca3fac4919dafafff5f5c64dc359fcc96aed3",
+            "export-identity": "sha256:4de65162d908010693c4c6b7f6334b66d63275fe9ec297529e11f880dae3b823",
+            "export-resolution": "sha256:930430eef1c757e657f5e822385a8cd4a69c6447fa975824d153815c781a95fb",
+            "guard-partition": "sha256:fdfe5458f68e50577a77e4f6ccee78ef4f6bd8f0a0156a5fbd9b5a360bdf90b1",
+            "manifest-entrypoint": "sha256:ec1b3e6608fb49d8ded51c826313227a809ef75820d03966635a72986da50510",
+            "module-closure": "sha256:f2c6d54a61289292c47b9f3082a38588e46acaf6f2538016f782837dcff58bc0",
+            "operation-cardinality": "sha256:cf9000ef8f5245355a78378984171841953e966374f4d2406859190417912e6c",
+            "operation-reachability": "sha256:a804ba2652640bab8cd55987ae63919c9255fd825fcece296b5269e0b6129bd4",
+            "package-identity": "sha256:b802c97b7346088a7d495c449970379dd72e87dc1eebe5103719f4d3f0ef09e4",
+            "recursive-value-shape": "sha256:9b9b396278df863f3c224c3357186fe3d88ae461e6cf17750b72ca2a7f7ed646",
+            "rest-spread-coverage": "sha256:3398d2b8b6912eb18336d8e6af5ac510f9eb49a4cb8544ecac0b148029ce6e8b",
+            "selected-signature": "sha256:003b47dab1b1ad2b9870996f413f41b402c70ef749b7b710197e4f3ce0b72488"
+          },
+          "producerSessionsRoot": "sha256:bf942082ac7f9e7c93b7389e2c29824d78a6369b9707be5b2e560ce93e7aa148",
+          "dependencyReceiptsRoot": "sha256:0938e24d1f06ddd1fe9b39e0ba4c5be498e9018ffafb77af38c907848e5b08e5",
+          "dependencyTrustRoot": "sha256:93925f94c22ff3f92be81715249bd837db4fdd3b27cc7fad047f7e3e0b1f5822",
+          "probeGateRoot": "sha256:a92ac3689cb65babad2fbf9422e8310b24646aa32d0ca9141100a010e301a426",
+          "closedClaimsRoot": "sha256:41dfd484283b012ddc33a7f49b4e136efd39e1fd6ed375d9613e64fa9f61fd72",
+          "verifierSourceDigest": "sha256:4826237da0d8a1a55fdc402960347ccb87de85317f64c00ca448734f7df04b35",
+          "verifierBuildDigest": "sha256:6fa2930d8880fe197563899823e137b7b29b296da3683e758eb059b21ff2a663",
+          "issuerKind": "persistent-local",
+          "issuerScope": "diagnostic:retained-proposal-graphs",
+          "keyId": "ed25519:sha256:066315d78851fb57c792e5750730dc3cabb64e06db20a73a9407640d72e41726",
+          "signatureAlgorithm": "ed25519"
+        },
+        "resolution": {
+          "specifier": "@corvu/popover",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3QQP1l/node_modules/@corvu/.solid-checker-certification-c057201f9b258f49bbffa7f139d556affd2a951781705c2c9178568391c7a073.mjs",
+          "requestedEntrypoint": ".",
+          "packageName": "@corvu/popover",
+          "packageVersion": "0.2.0",
+          "packageIntegrity": "sha512-zynRWyRV7mk2uX7t/COQL4OEa6H6FBgOxxlXLQJ1BV8hTiBJwmfAN/yB/9jy+zlp0G9vp64E8VdsNn6gxUEUEQ==",
+          "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3QQP1l/node_modules/@corvu/popover",
+          "packageManifest": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3QQP1l/node_modules/@corvu/popover/package.json",
+            "digest": "sha256:9d796bdc1ae1e42129e5df7e090a4183b44b241990e417017041f6a4de1b7ee4"
+          },
+          "runtime": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3QQP1l/node_modules/@corvu/popover/dist/index.js",
+            "digest": "sha256:8d105a2c0be6e9e5431abd191d0585592ebc2abe78557b74b8abc3bd12a602de"
+          },
+          "declarations": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3QQP1l/node_modules/@corvu/popover/dist/index.d.ts",
+            "digest": "sha256:e2716d6e767679b51be4bea379110078d8edf4f2b270943f2fd658cbfdc72560"
+          },
+          "runtimeTrace": {
+            "branch": "/exports/./default",
+            "steps": [
+              {
+                "condition": "subpath",
+                "target": "."
+              },
+              {
+                "condition": "default",
+                "target": "/exports/."
+              },
+              {
+                "condition": "target",
+                "target": "./dist/index.js"
+              }
+            ]
+          },
+          "declarationTrace": {
+            "branch": "/exports/./types",
+            "steps": [
+              {
+                "condition": "subpath",
+                "target": "."
+              },
+              {
+                "condition": "types",
+                "target": "/exports/."
+              },
+              {
+                "condition": "target",
+                "target": "./dist/index.d.ts"
+              }
+            ]
+          },
+          "closure": {
+            "entries": [
+              {
+                "role": "runtime",
+                "path": "./dist/index.js",
+                "digest": "sha256:8d105a2c0be6e9e5431abd191d0585592ebc2abe78557b74b8abc3bd12a602de"
+              },
+              {
+                "role": "declaration",
+                "path": "./dist/index.d.ts",
+                "digest": "sha256:e2716d6e767679b51be4bea379110078d8edf4f2b270943f2fd658cbfdc72560"
+              },
+              {
+                "role": "manifest",
+                "path": "./package.json",
+                "digest": "sha256:9d796bdc1ae1e42129e5df7e090a4183b44b241990e417017041f6a4de1b7ee4"
+              },
+              {
+                "role": "resolution-input",
+                "path": "./package.json",
+                "digest": "sha256:9d796bdc1ae1e42129e5df7e090a4183b44b241990e417017041f6a4de1b7ee4"
+              }
+            ],
+            "dependencies": [
+              {
+                "specifier": "@corvu/dialog",
+                "packageName": "@corvu/dialog",
+                "artifactCase": "artifact-case:ea484095cd581c8167a75d6d7232c21078558f40e3d4dcac54c63f86b9f9fc01",
+                "acceptedContractDigest": "sha256:9cd4ebc70290df9ec874b40dd61bf2e18bc59188ac8e80c631930f328389f577"
+              },
+              {
+                "specifier": "@corvu/utils",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:9c8a04d9f32e565294f5b96dcce32d71a1d2dfe8398a81a49f6ed0678e2db929",
+                "acceptedContractDigest": "sha256:2dc68ae1798ddce5ac2ad7902cd0c68638fd7f593cab696fe5899b596774ada0"
+              },
+              {
+                "specifier": "@corvu/utils/components/FloatingArrow",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:fcaa93cdeda88d4eda0bfa29e577c67f82e7e1d399ddacf4b14c369e0951fef4",
+                "acceptedContractDigest": "sha256:26f18f38d636e4e46965f336e23e2744ee5d83b50b22933f9a2c2832f85e3d3e"
+              },
+              {
+                "specifier": "@corvu/utils/create/floating",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:f459a7a4daadb8bc77aee099815df8a23ea4ff8543da1d68de6855ff5bc2f514",
+                "acceptedContractDigest": "sha256:4a4710c37b5d0d3a75e9a35b8d75ae9c991c8455e3091bdea34797f95ae425c5"
+              },
+              {
+                "specifier": "@corvu/utils/create/keyedContext",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:635146407c3a72acd509a2b1db20bda8742feaf87731ff9b1db658b9ae6b86a2",
+                "acceptedContractDigest": "sha256:f28a1f84bd3c0cc81cd0c3ee796d27a45ce8eec114ddccffea7b529250bb55d7"
+              },
+              {
+                "specifier": "@corvu/utils/create/once",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:754e3f9816abd61b4d6460391f8dde55a3087a1aa4a7b4e47046891dfe37a1e6",
+                "acceptedContractDigest": "sha256:5c67b6d2ea69f9aecd1c815067aa7e0ed59c8f6e34df0a4fd45663770867be51"
+              },
+              {
+                "specifier": "@corvu/utils/dom",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:84d6a8cd6af86d14ff90de35550d57a163b19ad8eec05d481a9580502fd55911",
+                "acceptedContractDigest": "sha256:0d19b0d6cc29e6cb49ebfd0d9da5e6bd478b4821fc0df953185c781abe5b8b02"
+              },
+              {
+                "specifier": "@corvu/utils/dynamic",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:00d0d2d1c26d5902a613ba3114869b36f09f06593de0bb3f30eace6386090ab3",
+                "acceptedContractDigest": "sha256:a3a735441cf6279e401901b4133ff064843bf598710e2d8cb6924d17191b6e84"
+              },
+              {
+                "specifier": "@corvu/utils/floating",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:40e88018e54ced6cedb3dda4a4d154231fdec3aee5fef716bfcab5169b5fdbd7",
+                "acceptedContractDigest": "sha256:2b0422fd53651168af89144cc72dd9b51ef8764b1047c5d36073c0f6d2093569"
+              },
+              {
+                "specifier": "@corvu/utils/reactivity",
+                "packageName": "@corvu/utils",
+                "artifactCase": "artifact-case:9e170a86c50f3bda641662e7bce6a8b846db4acb0d288dce5fd679518ed3d125",
+                "acceptedContractDigest": "sha256:3ec3caa2c64af59290f05cd5d1223b41290659a493523208c413ba35668dd0d2"
+              },
+              {
+                "specifier": "solid-js",
+                "packageName": "solid-js",
+                "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+                "acceptedContractDigest": "sha256:472fbfe2770d66ba195e483e6ced9368f2e7055b19f7c6b6603ac9848d332fed"
+              },
+              {
+                "specifier": "solid-js/web",
+                "packageName": "solid-js",
+                "artifactCase": "artifact-case:b1a0dc82a475dce5c38242b7782f666954de5e76c544019068e3941141e514c9",
+                "acceptedContractDigest": "sha256:93a51ee722504b9a350f1ae9246210302d9053154a5820568cd0601fbccc8c9d"
+              }
+            ],
+            "digest": "sha256:a72dfbc83df8fb5ce8078e55e1379c4d95594c412881c708c9e3fd38ad9f16b6"
+          },
+          "authority": "standalonePackageResolver"
+        },
+        "claims": {
+          "Anchor": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Arrow": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Close": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Content": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Description": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Label": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Overlay": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Portal": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Root": {
+            "call": {},
+            "shape": "callable"
+          },
+          "Trigger": {
+            "call": {},
+            "shape": "callable"
+          },
+          "default": {
+            "call": {},
+            "shape": "callable"
+          },
+          "useContext": {
+            "call": {},
+            "shape": "callable"
+          },
+          "useDialogContext": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    ]
+  },
+  "dependencies": [],
+  "dependencyEvidenceScope": "This case-set publishes the two root catalogs. Their receipt payloads bind dependencyReceiptsRoot and dependencyTrustRoot; resolution.closure.dependencies names exact immediate dependency artifact cases and accepted contract digests. Unpublished child catalogs are not counted or reconstructed from leftovers.",
+  "transitions": [
+    {
+      "before": "refused",
+      "after": "complete"
+    }
+  ],
+  "newArtifactCases": 2,
+  "newEntrypointNames": 1,
+  "oldAcceptedCasesInThisRow": 0,
+  "globalPreservation": "pending full corpus",
+  "metricChanged": false,
+  "excludedCandidate": {
+    "path": "/private/tmp/retained-graph-native-Q6jPyF/result.json",
+    "reason": "broader origin rule failed fallback-only counterexample; not counted"
+  },
+  "withheldClosures": [
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:058176581242d960832ead38bf5c2be36a5577dfa8f9dafd5789dc2d98130865",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:058176581242d960832ead38bf5c2be36a5577dfa8f9dafd5789dc2d98130865",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:b1a0dc82a475dce5c38242b7782f666954de5e76c544019068e3941141e514c9",
+      "domain": "returns",
+      "export": "dynamicProperty",
+      "node": {
+        "digest": "sha256:020436db912c3d9f3cead54e1c9105f9f5a642ce83d6210b7a8dd726b208e8c7",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:9300c93be34c96e027a3ba741db3745c89ef48b7eb7d68627d0aa59491df5de6"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "access",
+      "node": {
+        "digest": "sha256:03457de2444e01b2f30edbfe10d145713237cb40336f065d65c9ba9f9a6903a6",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"access\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:38..78 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:3a40480945183ce50758323c7721df63842576dcb2ae28ff4b821513db80d71a"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "chain",
+      "node": {
+        "digest": "sha256:03457de2444e01b2f30edbfe10d145713237cb40336f065d65c9ba9f9a6903a6",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"chain\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:92..208 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:e2358763e3e9f425cf38dacdfba6189930f337cc8ef3e44adf93649be089d2cb"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "mergeRefs",
+      "node": {
+        "digest": "sha256:03457de2444e01b2f30edbfe10d145713237cb40336f065d65c9ba9f9a6903a6",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"mergeRefs\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:226..264 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:25dbfe59bb42ef0b85bb9859180bd7d8530d2ba2d58f412067215eae7fd325f8"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "some",
+      "node": {
+        "digest": "sha256:03457de2444e01b2f30edbfe10d145713237cb40336f065d65c9ba9f9a6903a6",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"some\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:277..343 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:ebe461843bae9006f6eaf2b1239948046c72e7f721e833d2a4ca901362e8cb93"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:aef898edbeb2f390bac469219126cfb78beed06db4bd74430a4da04ed6908023",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:aef898edbeb2f390bac469219126cfb78beed06db4bd74430a4da04ed6908023",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:8dc0ce8f4438368c1d4cde5e4ffac45359644526fc075adf80ce65b489bf1ea5",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:8dc0ce8f4438368c1d4cde5e4ffac45359644526fc075adf80ce65b489bf1ea5",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:177e88ecded8da7f85c6295e071e20a7429d09981d8b0b30adec5acbc2511e30",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:177e88ecded8da7f85c6295e071e20a7429d09981d8b0b30adec5acbc2511e30",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:ecc4ddf26da71daf42fa56f5713962709270094867d8ca2513d5ef047688bb93",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:ecc4ddf26da71daf42fa56f5713962709270094867d8ca2513d5ef047688bb93",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:2807b4d7bc92fd68e52c6f4ae4cc25ad4a8d75d45cc7f9bb15ef2063eb5b848c",
+      "domain": "creates",
+      "export": "getScrollAtLocation",
+      "node": {
+        "digest": "sha256:1b2fe415de0a75fd81f83d774be11a4f5051d2c18301ee51f0166b6334f6d447",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: iteration-protocol (ArrayBindingPattern) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/solid-prevent-scroll/node_modules/@corvu/utils/dist/scroll/index.js:920..958, reach unknown",
+      "semanticClaimId": "claim:v1:sha256:81b73094756480daa4c8977d40badc12aafc0c00d5d472feccae3ca54f01b7a5"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:e1be80e5bf761019c4ea70b2996b7ac1fcfe2e30d37f62deada3017748eede14",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:e1be80e5bf761019c4ea70b2996b7ac1fcfe2e30d37f62deada3017748eede14",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:b1a0dc82a475dce5c38242b7782f666954de5e76c544019068e3941141e514c9",
+      "domain": "returns",
+      "export": "dynamicProperty",
+      "node": {
+        "digest": "sha256:f75bdc6b3786aa7f0341326c71074d5949993d3ea5d774a0b703170f675b389e",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:9300c93be34c96e027a3ba741db3745c89ef48b7eb7d68627d0aa59491df5de6"
+    },
+    {
+      "artifactCase": "artifact-case:f34410e88fd1b098ba717edf6bb3dff50d8733870160d4b80667a5a2a052d3ce",
+      "domain": "creates",
+      "export": "combineStyle",
+      "node": {
+        "digest": "sha256:35c4f5b7ae5c6fbc5590a55b79e34afa85e577215eb6e64b79be710462924d8b",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (SpreadAssignment) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-9/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js:368..372, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:fa76592d45200075bc52c383cc8a794e82e8fecc2168870a3672bd1189ad232e"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:cc24d1eca51c6fca010a798602bed163c61712ae79e6c8777ca09ec716731840",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:cc24d1eca51c6fca010a798602bed163c61712ae79e6c8777ca09ec716731840",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:a7c136a797778677f6d0d36847736e7f5ddd87314daa39de602088d5ac666eea",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:a7c136a797778677f6d0d36847736e7f5ddd87314daa39de602088d5ac666eea",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:f34410e88fd1b098ba717edf6bb3dff50d8733870160d4b80667a5a2a052d3ce",
+      "domain": "creates",
+      "export": "combineStyle",
+      "node": {
+        "digest": "sha256:2849ce4cf1b2cadbc0054ee8632d038a5858e9f1c3d5ff9193445e4038d418ba",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (SpreadAssignment) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-9/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js:368..372, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:fa76592d45200075bc52c383cc8a794e82e8fecc2168870a3672bd1189ad232e"
+    },
+    {
+      "artifactCase": "artifact-case:1b8ce990fb0ee5829fe76cf23d32666c21e6d9e81ea6bb298a3ae675d6eceb27",
+      "domain": "creates",
+      "export": "dataIf",
+      "node": {
+        "digest": "sha256:29453a58cde861e89d662d14a222c5fa15131f05e9ff0bb05f53a2221d285698",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"dataIf\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/VPNLJWYW.js:403..441 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:405efd828ca91406210d29c947bf5535dca3d7e05dbabe2f70c205f3bdb7c217"
+    },
+    {
+      "artifactCase": "artifact-case:1b8ce990fb0ee5829fe76cf23d32666c21e6d9e81ea6bb298a3ae675d6eceb27",
+      "domain": "creates",
+      "export": "isButton",
+      "node": {
+        "digest": "sha256:29453a58cde861e89d662d14a222c5fa15131f05e9ff0bb05f53a2221d285698",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"isButton\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/VPNLJWYW.js:207..388 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:5b233ab27fb986544e4ac445f2cd30ea32fb601b3e87ebbfb1c877a59637a93b"
+    },
+    {
+      "artifactCase": "artifact-case:1b8ce990fb0ee5829fe76cf23d32666c21e6d9e81ea6bb298a3ae675d6eceb27",
+      "domain": "creates",
+      "export": "isFunction",
+      "node": {
+        "digest": "sha256:29453a58cde861e89d662d14a222c5fa15131f05e9ff0bb05f53a2221d285698",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"isFunction\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/VPNLJWYW.js:38..110 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:b9c8f3da1abff1b85e99dc2793ffda58f859b5f47221996f62b910efc59d9ea8"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "clamp",
+      "node": {
+        "digest": "sha256:296ef0205dec0d422101fcf1a2bffe9a8a33fe2522fbc2476b317811fb6e24f7",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses \"max\" declared at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:358..361: the binding is initialized by an expression that is not a function or arrow literal, and the census does not trace values, called at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:615..642",
+      "semanticClaimId": "claim:v1:sha256:abca8c6037915ff9d3c7b37383da946ca9403f5e73212e131782ac139d369f96"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "getAlignmentSides",
+      "node": {
+        "digest": "sha256:296ef0205dec0d422101fcf1a2bffe9a8a33fe2522fbc2476b317811fb6e24f7",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: coercion (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:3193..3245, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:75ea1fdb9fa9429cadba9b3dbeab2c503b356900bc88d21f880b660d8fa305d3"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "getExpandedPlacements",
+      "node": {
+        "digest": "sha256:296ef0205dec0d422101fcf1a2bffe9a8a33fe2522fbc2476b317811fb6e24f7",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: coercion (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:3193..3245, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:58079cf8eb39f1bd20f920d8ed0640026bb888097f181854553ac38407059809"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "getOppositeAxisPlacements",
+      "node": {
+        "digest": "sha256:296ef0205dec0d422101fcf1a2bffe9a8a33fe2522fbc2476b317811fb6e24f7",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses the standard-library member `Array.map`: argument 0 is a slot the reviewed invoker table says the member invokes and is neither rooted at a parameter of this implementation nor a callable literal inside the transcript being censused, so control reaches a callable the census cannot see, called at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:3037..3076",
+      "semanticClaimId": "claim:v1:sha256:ffd1e0cf173aa16ce09b00b37369ea92454b31ec4cba5d61194c6a42bf67e667"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "getOppositePlacement",
+      "node": {
+        "digest": "sha256:296ef0205dec0d422101fcf1a2bffe9a8a33fe2522fbc2476b317811fb6e24f7",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: coercion (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:3193..3245, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:0a17bd128e82b5e2324f0ae10554f58f543f6ebc287b63f9d0e2f8ae300d83e3"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:2e1d16a48a49bbd9cfb695589d3d97879f4abbe6c10b0d73ad0687a126542803",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:2e1d16a48a49bbd9cfb695589d3d97879f4abbe6c10b0d73ad0687a126542803",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "access",
+      "node": {
+        "digest": "sha256:30ef862debdeaf92345fbf6f0cbe9b8e7b206b842781afd62e97e741fcdbc80d",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"access\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:38..78 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:3a40480945183ce50758323c7721df63842576dcb2ae28ff4b821513db80d71a"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "chain",
+      "node": {
+        "digest": "sha256:30ef862debdeaf92345fbf6f0cbe9b8e7b206b842781afd62e97e741fcdbc80d",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"chain\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:92..208 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:e2358763e3e9f425cf38dacdfba6189930f337cc8ef3e44adf93649be089d2cb"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "mergeRefs",
+      "node": {
+        "digest": "sha256:30ef862debdeaf92345fbf6f0cbe9b8e7b206b842781afd62e97e741fcdbc80d",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"mergeRefs\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:226..264 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:25dbfe59bb42ef0b85bb9859180bd7d8530d2ba2d58f412067215eae7fd325f8"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "some",
+      "node": {
+        "digest": "sha256:30ef862debdeaf92345fbf6f0cbe9b8e7b206b842781afd62e97e741fcdbc80d",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"some\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:277..343 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:ebe461843bae9006f6eaf2b1239948046c72e7f721e833d2a4ca901362e8cb93"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:652425f5dd40296a6f4881b1ea0722efe201ed98e2a51c7c1fe5324bdeb389c6",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:652425f5dd40296a6f4881b1ea0722efe201ed98e2a51c7c1fe5324bdeb389c6",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:cb30720e367d0739ae0aea17bc9a58bc536507ad2362281634dfb1cf8ecff8bf",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:cb30720e367d0739ae0aea17bc9a58bc536507ad2362281634dfb1cf8ecff8bf",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:b1a0dc82a475dce5c38242b7782f666954de5e76c544019068e3941141e514c9",
+      "domain": "returns",
+      "export": "dynamicProperty",
+      "node": {
+        "digest": "sha256:6f743716fbc051048a47d976b64aebf682b421949bd5ec8a74ca212579e96416",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:9300c93be34c96e027a3ba741db3745c89ef48b7eb7d68627d0aa59491df5de6"
+    },
+    {
+      "artifactCase": "artifact-case:1b8ce990fb0ee5829fe76cf23d32666c21e6d9e81ea6bb298a3ae675d6eceb27",
+      "domain": "creates",
+      "export": "dataIf",
+      "node": {
+        "digest": "sha256:7528b492918fc6d5cdc33cc8023940b9636ef7d8c377b0e243ac3026ea6add04",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"dataIf\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/VPNLJWYW.js:403..441 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:405efd828ca91406210d29c947bf5535dca3d7e05dbabe2f70c205f3bdb7c217"
+    },
+    {
+      "artifactCase": "artifact-case:1b8ce990fb0ee5829fe76cf23d32666c21e6d9e81ea6bb298a3ae675d6eceb27",
+      "domain": "creates",
+      "export": "isButton",
+      "node": {
+        "digest": "sha256:7528b492918fc6d5cdc33cc8023940b9636ef7d8c377b0e243ac3026ea6add04",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"isButton\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/VPNLJWYW.js:207..388 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:5b233ab27fb986544e4ac445f2cd30ea32fb601b3e87ebbfb1c877a59637a93b"
+    },
+    {
+      "artifactCase": "artifact-case:1b8ce990fb0ee5829fe76cf23d32666c21e6d9e81ea6bb298a3ae675d6eceb27",
+      "domain": "creates",
+      "export": "isFunction",
+      "node": {
+        "digest": "sha256:7528b492918fc6d5cdc33cc8023940b9636ef7d8c377b0e243ac3026ea6add04",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"isFunction\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/VPNLJWYW.js:38..110 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:b9c8f3da1abff1b85e99dc2793ffda58f859b5f47221996f62b910efc59d9ea8"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:fe35d847c5b4af36f20dea5436d74cee07052d55305fef652306771c05a684b7",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:fe35d847c5b4af36f20dea5436d74cee07052d55305fef652306771c05a684b7",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:2c232c092b9b668e3527560382a08788e656c189343818f2f816e24eca1d1a75",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:2c232c092b9b668e3527560382a08788e656c189343818f2f816e24eca1d1a75",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "access",
+      "node": {
+        "digest": "sha256:66ffa87aad24055c5302afbce880bfab031b2d4feb571f5f22bc7666ed2a26a7",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"access\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:38..78 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:3a40480945183ce50758323c7721df63842576dcb2ae28ff4b821513db80d71a"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "chain",
+      "node": {
+        "digest": "sha256:66ffa87aad24055c5302afbce880bfab031b2d4feb571f5f22bc7666ed2a26a7",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"chain\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:92..208 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:e2358763e3e9f425cf38dacdfba6189930f337cc8ef3e44adf93649be089d2cb"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "mergeRefs",
+      "node": {
+        "digest": "sha256:66ffa87aad24055c5302afbce880bfab031b2d4feb571f5f22bc7666ed2a26a7",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"mergeRefs\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:226..264 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:25dbfe59bb42ef0b85bb9859180bd7d8530d2ba2d58f412067215eae7fd325f8"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "some",
+      "node": {
+        "digest": "sha256:66ffa87aad24055c5302afbce880bfab031b2d4feb571f5f22bc7666ed2a26a7",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"some\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:277..343 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:ebe461843bae9006f6eaf2b1239948046c72e7f721e833d2a4ca901362e8cb93"
+    },
+    {
+      "artifactCase": "artifact-case:b1a0dc82a475dce5c38242b7782f666954de5e76c544019068e3941141e514c9",
+      "domain": "returns",
+      "export": "dynamicProperty",
+      "node": {
+        "digest": "sha256:770e9fa392fc38389958c619683b44005e60cb1e0fd82cf35a24ecd982ea9bd4",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:9300c93be34c96e027a3ba741db3745c89ef48b7eb7d68627d0aa59491df5de6"
+    },
+    {
+      "artifactCase": "artifact-case:f34410e88fd1b098ba717edf6bb3dff50d8733870160d4b80667a5a2a052d3ce",
+      "domain": "creates",
+      "export": "combineStyle",
+      "node": {
+        "digest": "sha256:dde76850b7f379119e23e08dec9cc515e59aba46eaf33196914659a1400fcc52",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (SpreadAssignment) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-9/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js:368..372, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:fa76592d45200075bc52c383cc8a794e82e8fecc2168870a3672bd1189ad232e"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:bbdc8282feca4ba6604366004506705ff474ca07dc71499b11c5bbbc8391239e",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:bbdc8282feca4ba6604366004506705ff474ca07dc71499b11c5bbbc8391239e",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "access",
+      "node": {
+        "digest": "sha256:eff5b21b7cc6a408ffabe275a75d48fe1587aa8c4c48e49e74011585fea550ab",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"access\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:38..78 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:3a40480945183ce50758323c7721df63842576dcb2ae28ff4b821513db80d71a"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "chain",
+      "node": {
+        "digest": "sha256:eff5b21b7cc6a408ffabe275a75d48fe1587aa8c4c48e49e74011585fea550ab",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"chain\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:92..208 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:e2358763e3e9f425cf38dacdfba6189930f337cc8ef3e44adf93649be089d2cb"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "mergeRefs",
+      "node": {
+        "digest": "sha256:eff5b21b7cc6a408ffabe275a75d48fe1587aa8c4c48e49e74011585fea550ab",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"mergeRefs\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:226..264 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:25dbfe59bb42ef0b85bb9859180bd7d8530d2ba2d58f412067215eae7fd325f8"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "some",
+      "node": {
+        "digest": "sha256:eff5b21b7cc6a408ffabe275a75d48fe1587aa8c4c48e49e74011585fea550ab",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"some\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:277..343 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:ebe461843bae9006f6eaf2b1239948046c72e7f721e833d2a4ca901362e8cb93"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:6cf0b7983822fc4017b496c18301b4f80a8372924c8cbc053a09557f4d44c71d",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:6cf0b7983822fc4017b496c18301b4f80a8372924c8cbc053a09557f4d44c71d",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:f34410e88fd1b098ba717edf6bb3dff50d8733870160d4b80667a5a2a052d3ce",
+      "domain": "creates",
+      "export": "combineStyle",
+      "node": {
+        "digest": "sha256:9be19529800189d9065ffcefa26dd3869d61dda9f89cb32e8d3a87858ebc93d7",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (SpreadAssignment) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-9/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js:368..372, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:fa76592d45200075bc52c383cc8a794e82e8fecc2168870a3672bd1189ad232e"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "access",
+      "node": {
+        "digest": "sha256:a1c7c6961a6c2c61d48de202272a0cd45e3654e2f750c5e99ad8cc2ada136a80",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"access\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:38..78 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:3a40480945183ce50758323c7721df63842576dcb2ae28ff4b821513db80d71a"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "chain",
+      "node": {
+        "digest": "sha256:a1c7c6961a6c2c61d48de202272a0cd45e3654e2f750c5e99ad8cc2ada136a80",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"chain\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:92..208 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:e2358763e3e9f425cf38dacdfba6189930f337cc8ef3e44adf93649be089d2cb"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "mergeRefs",
+      "node": {
+        "digest": "sha256:a1c7c6961a6c2c61d48de202272a0cd45e3654e2f750c5e99ad8cc2ada136a80",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"mergeRefs\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:226..264 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:25dbfe59bb42ef0b85bb9859180bd7d8530d2ba2d58f412067215eae7fd325f8"
+    },
+    {
+      "artifactCase": "artifact-case:f5afb395fa919b4d72684037dba059c2b6fa66a5bba2e39545a5f258e6f63021",
+      "domain": "creates",
+      "export": "some",
+      "node": {
+        "digest": "sha256:a1c7c6961a6c2c61d48de202272a0cd45e3654e2f750c5e99ad8cc2ada136a80",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"some\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:277..343 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:ebe461843bae9006f6eaf2b1239948046c72e7f721e833d2a4ca901362e8cb93"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:310bdbede518b5aec3e19422c2c8efd32d72ff25caee7d69b8c9a1564c89dbe1",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:310bdbede518b5aec3e19422c2c8efd32d72ff25caee7d69b8c9a1564c89dbe1",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:9e170a86c50f3bda641662e7bce6a8b846db4acb0d288dce5fd679518ed3d125",
+      "domain": "creates",
+      "export": "some",
+      "node": {
+        "digest": "sha256:3215c7d88829c602dc4d73fe7152948b332e10a67c6b8f799d07d1030c9db0e1",
+        "package": "@corvu/utils",
+        "version": "0.3.2"
+      },
+      "reason": "census refused: creates census refuses a call through \"signal\" declared at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:318..324: a parameter of a nested callable is caller-supplied code, which the callbacks domain owns and this census cannot see, called at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/utils/dist/chunk/ZV6G25TT.js:331..339",
+      "semanticClaimId": "claim:v1:sha256:5570aa8feca2e77bb45443c2f0bb9340254a022a2a0c9e81277fb56a273ca549"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:7d111326e3778d50e9304ba19e70e021b9814175682038e416e632f4069b7520",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:7d111326e3778d50e9304ba19e70e021b9814175682038e416e632f4069b7520",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:79163e993f2e4c52473e2e067eb4c99fed5eea32996f3f9b6b0479b632f69049",
+      "domain": "creates",
+      "export": "limitShift",
+      "node": {
+        "digest": "sha256:65a361108bf909c89c4dc597883fa407ba80648ce6d48f73d8020926bb0e3e97",
+        "package": "@floating-ui/core",
+        "version": "1.8.0"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (BindingElement) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/core/dist/floating-ui.core.mjs:30815..30816, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:485c6ca8a3d8ec595d79135a13413d5ac993215eb6951499ada927781a0e2b16"
+    },
+    {
+      "artifactCase": "artifact-case:84d6a8cd6af86d14ff90de35550d57a163b19ad8eec05d481a9580502fd55911",
+      "domain": "creates",
+      "export": "combineStyle",
+      "node": {
+        "digest": "sha256:ce214b70396dc56ecf6925b90b569482ef067cf5e4c43255fd9b599091d86703",
+        "package": "@corvu/utils",
+        "version": "0.3.2"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (SpreadAssignment) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/utils/dist/chunk/3ILNQQ4T.js:368..372, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:3bbcd314079444f74ff83e7df2b17d628b910d6964f52339eaac050faadcc9db"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:d097c9695bbbffa305568c1fabf5e5e4cf0f26574a2a919bd149d90beaf48319",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:d097c9695bbbffa305568c1fabf5e5e4cf0f26574a2a919bd149d90beaf48319",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:b1a0dc82a475dce5c38242b7782f666954de5e76c544019068e3941141e514c9",
+      "domain": "returns",
+      "export": "dynamicProperty",
+      "node": {
+        "digest": "sha256:d90339069e977f9f4a974e49e5ed32920646cc67e3f4770711d54d864bc7cf53",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:9300c93be34c96e027a3ba741db3745c89ef48b7eb7d68627d0aa59491df5de6"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:879120d33aaf4c9bc613f72512ff12d618d45801532fc3380c16a7b91a352f45",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:879120d33aaf4c9bc613f72512ff12d618d45801532fc3380c16a7b91a352f45",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:1d311acb3467d439f2a09329da1770216a63d44466c1036ea199b14f65b252cd",
+      "domain": "creates",
+      "export": "getDocumentElement",
+      "node": {
+        "digest": "sha256:bbd7bc7d7a4e658186370f08f0b78610388e0c126667da75c503f1bf7a986d12",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (PropertyAccessExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs:728..748, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:4ca6e7c043c15256b6fa52f4988ad44ecce6e98007e18079edcb1c41f3e10f4e"
+    },
+    {
+      "artifactCase": "artifact-case:1d311acb3467d439f2a09329da1770216a63d44466c1036ea199b14f65b252cd",
+      "domain": "creates",
+      "export": "getNodeScroll",
+      "node": {
+        "digest": "sha256:bbd7bc7d7a4e658186370f08f0b78610388e0c126667da75c503f1bf7a986d12",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: instanceof (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs:1006..1047, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:0f82781c500433b88b2e5c4fee7ceec75dff5160c38ce950f84ab42253eb1300"
+    },
+    {
+      "artifactCase": "artifact-case:1d311acb3467d439f2a09329da1770216a63d44466c1036ea199b14f65b252cd",
+      "domain": "creates",
+      "export": "isElement",
+      "node": {
+        "digest": "sha256:bbd7bc7d7a4e658186370f08f0b78610388e0c126667da75c503f1bf7a986d12",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: instanceof (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs:1006..1047, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:26a2d14e66c699b000265949ec3796825a83c58707c336f9463d0288578a5105"
+    },
+    {
+      "artifactCase": "artifact-case:1d311acb3467d439f2a09329da1770216a63d44466c1036ea199b14f65b252cd",
+      "domain": "creates",
+      "export": "isHTMLElement",
+      "node": {
+        "digest": "sha256:bbd7bc7d7a4e658186370f08f0b78610388e0c126667da75c503f1bf7a986d12",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: instanceof (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs:1168..1213, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:385dc9ab4385794a1ae4eb2252e89bcf38a6e98fd13947ed1bc1294596857b3c"
+    },
+    {
+      "artifactCase": "artifact-case:1d311acb3467d439f2a09329da1770216a63d44466c1036ea199b14f65b252cd",
+      "domain": "creates",
+      "export": "isNode",
+      "node": {
+        "digest": "sha256:bbd7bc7d7a4e658186370f08f0b78610388e0c126667da75c503f1bf7a986d12",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: instanceof (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs:855..893, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:e2f437656eead71a5b3511d1bbe9ef8679c9171b8e6a329e66dad3c9d2ff66fb"
+    },
+    {
+      "artifactCase": "artifact-case:1d311acb3467d439f2a09329da1770216a63d44466c1036ea199b14f65b252cd",
+      "domain": "creates",
+      "export": "isShadowRoot",
+      "node": {
+        "digest": "sha256:bbd7bc7d7a4e658186370f08f0b78610388e0c126667da75c503f1bf7a986d12",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: instanceof (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs:1369..1413, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:7719a621b3d9912a2d15c5a59314fb2750e95c89edc686414786a0fb1d534215"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "clamp",
+      "node": {
+        "digest": "sha256:c570721f9487960ae4dbf82a36af9764a48a598294ca0cb42c646ca0c06e5d28",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses \"max\" declared at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:358..361: the binding is initialized by an expression that is not a function or arrow literal, and the census does not trace values, called at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:615..642",
+      "semanticClaimId": "claim:v1:sha256:abca8c6037915ff9d3c7b37383da946ca9403f5e73212e131782ac139d369f96"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "getAlignmentSides",
+      "node": {
+        "digest": "sha256:c570721f9487960ae4dbf82a36af9764a48a598294ca0cb42c646ca0c06e5d28",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: coercion (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:3193..3245, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:75ea1fdb9fa9429cadba9b3dbeab2c503b356900bc88d21f880b660d8fa305d3"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "getExpandedPlacements",
+      "node": {
+        "digest": "sha256:c570721f9487960ae4dbf82a36af9764a48a598294ca0cb42c646ca0c06e5d28",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: coercion (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:3193..3245, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:58079cf8eb39f1bd20f920d8ed0640026bb888097f181854553ac38407059809"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "getOppositeAxisPlacements",
+      "node": {
+        "digest": "sha256:c570721f9487960ae4dbf82a36af9764a48a598294ca0cb42c646ca0c06e5d28",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses the standard-library member `Array.map`: argument 0 is a slot the reviewed invoker table says the member invokes and is neither rooted at a parameter of this implementation nor a callable literal inside the transcript being censused, so control reaches a callable the census cannot see, called at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:3037..3076",
+      "semanticClaimId": "claim:v1:sha256:ffd1e0cf173aa16ce09b00b37369ea92454b31ec4cba5d61194c6a42bf67e667"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "getOppositePlacement",
+      "node": {
+        "digest": "sha256:c570721f9487960ae4dbf82a36af9764a48a598294ca0cb42c646ca0c06e5d28",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: coercion (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:3193..3245, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:0a17bd128e82b5e2324f0ae10554f58f543f6ebc287b63f9d0e2f8ae300d83e3"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:02eab6df65cb44ed1c86f634f3ed7e335ecb5271ff669553b09ecff3fc7546ad",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:02eab6df65cb44ed1c86f634f3ed7e335ecb5271ff669553b09ecff3fc7546ad",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:0c7c27575c9e03a34b10c3a70f657611c572f3ec5801a06bb649343c377849a2",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:0c7c27575c9e03a34b10c3a70f657611c572f3ec5801a06bb649343c377849a2",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:b1a0dc82a475dce5c38242b7782f666954de5e76c544019068e3941141e514c9",
+      "domain": "returns",
+      "export": "dynamicProperty",
+      "node": {
+        "digest": "sha256:933be56eab14218855c9e54fe77d6f3b6a029a3361d6e4e1603f38156efd3d10",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:9300c93be34c96e027a3ba741db3745c89ef48b7eb7d68627d0aa59491df5de6"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:e4694ee5086226df0576af8731f5b332c858a08187e43ec8701900c673269b49",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:e4694ee5086226df0576af8731f5b332c858a08187e43ec8701900c673269b49",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:051ebb5b052ad1f3998d01b797744cb57dd228a08d2e9c96f3ac5efcc7f4f740",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:051ebb5b052ad1f3998d01b797744cb57dd228a08d2e9c96f3ac5efcc7f4f740",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:217fb2844fbdc8d73a9236882abfab8d61257a67d6a5fb46db1de5db65882c45",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:217fb2844fbdc8d73a9236882abfab8d61257a67d6a5fb46db1de5db65882c45",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:21e86ce20860570ad4151512de0486b2c596cdf324ed337f7f4f5ba5bff9b0a2",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:21e86ce20860570ad4151512de0486b2c596cdf324ed337f7f4f5ba5bff9b0a2",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "access",
+      "node": {
+        "digest": "sha256:978668a41d0027cc41449baac54963bfbfc48c5a0276de92e3c1b9746d4f16f2",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"access\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:57..97 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:603be18ce8675988231659e4301de906353d4b5dbb6a5b37d5913d470257327e"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "chain",
+      "node": {
+        "digest": "sha256:978668a41d0027cc41449baac54963bfbfc48c5a0276de92e3c1b9746d4f16f2",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"chain\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:111..227 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:f163bab11efd75ae4e6014368aa1808cbde8682a7a310444397d971c8ec8eb6e"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "mergeRefs",
+      "node": {
+        "digest": "sha256:978668a41d0027cc41449baac54963bfbfc48c5a0276de92e3c1b9746d4f16f2",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"mergeRefs\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:245..283 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:32a830bd93788a34428144759fa521aab04aec5c5b55269dc3f784ed0a8414af"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "some",
+      "node": {
+        "digest": "sha256:978668a41d0027cc41449baac54963bfbfc48c5a0276de92e3c1b9746d4f16f2",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"some\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:296..362 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:d42402ddd17d55deb5f8c0240e2e5463a92b642f02f8f64d6ee727f9df618469"
+    },
+    {
+      "artifactCase": "artifact-case:ad1e1680148d8b577911a09014454149ffc564cf21550ce0dd9838b3a24d463d",
+      "domain": "creates",
+      "export": "getScrollAtLocation",
+      "node": {
+        "digest": "sha256:b43f90df004f318127c40c5266cb4b3f1a12b06c0473dfc87e788bbc74dae1d1",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: iteration-protocol (ArrayBindingPattern) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/solid-prevent-scroll/node_modules/@corvu/utils/dist/scroll/index.jsx:920..958, reach unknown",
+      "semanticClaimId": "claim:v1:sha256:6aeea2713b4beaef678aafe6e56b0644d49297fb5163773b80071cf7679846ba"
+    },
+    {
+      "artifactCase": "artifact-case:fd42a1d9dda954dae8c911fad3e828d82b47a4e85f5447e264836f53e6557e5e",
+      "domain": "creates",
+      "export": "combineStyle",
+      "node": {
+        "digest": "sha256:e824f45958148800c676f1e7a8f25a0386fccc2841a9611dc8b651aabc90e2f7",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (SpreadAssignment) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-12/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/chunk/GZJAOTUE.jsx:368..372, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:d1ba64474c0d87bda257ea8445adc7a160b2c8aea2bd2573bc55f2faddb2fc19"
+    },
+    {
+      "artifactCase": "artifact-case:77550142dae6654efbf27c749c56d8305f601aaa5d54150e3d2aed049c5492f6",
+      "domain": "creates",
+      "export": "dataIf",
+      "node": {
+        "digest": "sha256:12d80d5c225d1c3a73cbaf7e9cf90d86e9200bbf197f91d85bd017180f06f81a",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"dataIf\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/74BWZKBI.jsx:403..441 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:91d56efc913ad1157d5d526b2bb465d3705d9f586a608be715701a85276c6b7c"
+    },
+    {
+      "artifactCase": "artifact-case:77550142dae6654efbf27c749c56d8305f601aaa5d54150e3d2aed049c5492f6",
+      "domain": "creates",
+      "export": "isButton",
+      "node": {
+        "digest": "sha256:12d80d5c225d1c3a73cbaf7e9cf90d86e9200bbf197f91d85bd017180f06f81a",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"isButton\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/74BWZKBI.jsx:207..388 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:6311d8ff86371f1bb6c5103abc6c5ad8045e35d4ac2bb2828c353e51bbdffbc6"
+    },
+    {
+      "artifactCase": "artifact-case:77550142dae6654efbf27c749c56d8305f601aaa5d54150e3d2aed049c5492f6",
+      "domain": "creates",
+      "export": "isFunction",
+      "node": {
+        "digest": "sha256:12d80d5c225d1c3a73cbaf7e9cf90d86e9200bbf197f91d85bd017180f06f81a",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"isFunction\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/74BWZKBI.jsx:38..110 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:a5aefbf2de1649facbdc3ad7eba0a8024c191caeda3c36c639e0a5b7fd3cf6c1"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:146e4222c089eecafcc122a583bf3e9b2730f6992696f95196c409c2bfec2cfe",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:146e4222c089eecafcc122a583bf3e9b2730f6992696f95196c409c2bfec2cfe",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:1bbf69cb29e5b5e2d8313799367f0294679e83514d699701f71f7d4a9ff596b9",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:1bbf69cb29e5b5e2d8313799367f0294679e83514d699701f71f7d4a9ff596b9",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:2c64155d6b415641eb0be641c8621113ba9df853637e7af49c48f260beacd045",
+      "domain": "creates",
+      "export": "combineStyle",
+      "node": {
+        "digest": "sha256:1d61267ac7e1da8106cdb63ef9a3379418d58258423ff5e501297bcf6938461d",
+        "package": "@corvu/utils",
+        "version": "0.3.2"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (SpreadAssignment) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/utils/dist/chunk/NVYXOAAC.jsx:368..372, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:9536980a1691eaa23467a4548fba0366adf6d700de3b66a4bb224ba10fcda628"
+    },
+    {
+      "artifactCase": "artifact-case:1d311acb3467d439f2a09329da1770216a63d44466c1036ea199b14f65b252cd",
+      "domain": "creates",
+      "export": "getDocumentElement",
+      "node": {
+        "digest": "sha256:26b37da59e6b88e10bda4c1f4d0045c77088ac882b6bc89c3ce0c3f4d8987844",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (PropertyAccessExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs:728..748, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:4ca6e7c043c15256b6fa52f4988ad44ecce6e98007e18079edcb1c41f3e10f4e"
+    },
+    {
+      "artifactCase": "artifact-case:1d311acb3467d439f2a09329da1770216a63d44466c1036ea199b14f65b252cd",
+      "domain": "creates",
+      "export": "getNodeScroll",
+      "node": {
+        "digest": "sha256:26b37da59e6b88e10bda4c1f4d0045c77088ac882b6bc89c3ce0c3f4d8987844",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: instanceof (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs:1006..1047, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:0f82781c500433b88b2e5c4fee7ceec75dff5160c38ce950f84ab42253eb1300"
+    },
+    {
+      "artifactCase": "artifact-case:1d311acb3467d439f2a09329da1770216a63d44466c1036ea199b14f65b252cd",
+      "domain": "creates",
+      "export": "isElement",
+      "node": {
+        "digest": "sha256:26b37da59e6b88e10bda4c1f4d0045c77088ac882b6bc89c3ce0c3f4d8987844",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: instanceof (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs:1006..1047, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:26a2d14e66c699b000265949ec3796825a83c58707c336f9463d0288578a5105"
+    },
+    {
+      "artifactCase": "artifact-case:1d311acb3467d439f2a09329da1770216a63d44466c1036ea199b14f65b252cd",
+      "domain": "creates",
+      "export": "isHTMLElement",
+      "node": {
+        "digest": "sha256:26b37da59e6b88e10bda4c1f4d0045c77088ac882b6bc89c3ce0c3f4d8987844",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: instanceof (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs:1168..1213, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:385dc9ab4385794a1ae4eb2252e89bcf38a6e98fd13947ed1bc1294596857b3c"
+    },
+    {
+      "artifactCase": "artifact-case:1d311acb3467d439f2a09329da1770216a63d44466c1036ea199b14f65b252cd",
+      "domain": "creates",
+      "export": "isNode",
+      "node": {
+        "digest": "sha256:26b37da59e6b88e10bda4c1f4d0045c77088ac882b6bc89c3ce0c3f4d8987844",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: instanceof (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs:855..893, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:e2f437656eead71a5b3511d1bbe9ef8679c9171b8e6a329e66dad3c9d2ff66fb"
+    },
+    {
+      "artifactCase": "artifact-case:1d311acb3467d439f2a09329da1770216a63d44466c1036ea199b14f65b252cd",
+      "domain": "creates",
+      "export": "isShadowRoot",
+      "node": {
+        "digest": "sha256:26b37da59e6b88e10bda4c1f4d0045c77088ac882b6bc89c3ce0c3f4d8987844",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: instanceof (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs:1369..1413, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:7719a621b3d9912a2d15c5a59314fb2750e95c89edc686414786a0fb1d534215"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "clamp",
+      "node": {
+        "digest": "sha256:2916f9804d5437a66fb54e983c22fe3f860e42fc01a29c0c39c44f89a6459719",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses \"max\" declared at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:358..361: the binding is initialized by an expression that is not a function or arrow literal, and the census does not trace values, called at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:615..642",
+      "semanticClaimId": "claim:v1:sha256:abca8c6037915ff9d3c7b37383da946ca9403f5e73212e131782ac139d369f96"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "getAlignmentSides",
+      "node": {
+        "digest": "sha256:2916f9804d5437a66fb54e983c22fe3f860e42fc01a29c0c39c44f89a6459719",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: coercion (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:3193..3245, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:75ea1fdb9fa9429cadba9b3dbeab2c503b356900bc88d21f880b660d8fa305d3"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "getExpandedPlacements",
+      "node": {
+        "digest": "sha256:2916f9804d5437a66fb54e983c22fe3f860e42fc01a29c0c39c44f89a6459719",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: coercion (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:3193..3245, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:58079cf8eb39f1bd20f920d8ed0640026bb888097f181854553ac38407059809"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "getOppositeAxisPlacements",
+      "node": {
+        "digest": "sha256:2916f9804d5437a66fb54e983c22fe3f860e42fc01a29c0c39c44f89a6459719",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses the standard-library member `Array.map`: argument 0 is a slot the reviewed invoker table says the member invokes and is neither rooted at a parameter of this implementation nor a callable literal inside the transcript being censused, so control reaches a callable the census cannot see, called at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:3037..3076",
+      "semanticClaimId": "claim:v1:sha256:ffd1e0cf173aa16ce09b00b37369ea92454b31ec4cba5d61194c6a42bf67e667"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "getOppositePlacement",
+      "node": {
+        "digest": "sha256:2916f9804d5437a66fb54e983c22fe3f860e42fc01a29c0c39c44f89a6459719",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: coercion (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:3193..3245, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:0a17bd128e82b5e2324f0ae10554f58f543f6ebc287b63f9d0e2f8ae300d83e3"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:c383dc9ec47d4edb89b2f2aa6b4bd4fbbe6cf62b575defe4b4c11a6007c7f7d1",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:c383dc9ec47d4edb89b2f2aa6b4bd4fbbe6cf62b575defe4b4c11a6007c7f7d1",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:fd42a1d9dda954dae8c911fad3e828d82b47a4e85f5447e264836f53e6557e5e",
+      "domain": "creates",
+      "export": "combineStyle",
+      "node": {
+        "digest": "sha256:6b38981be47900e9a777df3f19c6dad941f4a7d8cf46ce60a0bbf4cfa2297c90",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (SpreadAssignment) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-12/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/chunk/GZJAOTUE.jsx:368..372, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:d1ba64474c0d87bda257ea8445adc7a160b2c8aea2bd2573bc55f2faddb2fc19"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "access",
+      "node": {
+        "digest": "sha256:87c3e25bdea92f563e2a5e955a9cd582d336191459f3ddf977e33640a5fb02c3",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"access\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:57..97 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:603be18ce8675988231659e4301de906353d4b5dbb6a5b37d5913d470257327e"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "chain",
+      "node": {
+        "digest": "sha256:87c3e25bdea92f563e2a5e955a9cd582d336191459f3ddf977e33640a5fb02c3",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"chain\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:111..227 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:f163bab11efd75ae4e6014368aa1808cbde8682a7a310444397d971c8ec8eb6e"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "mergeRefs",
+      "node": {
+        "digest": "sha256:87c3e25bdea92f563e2a5e955a9cd582d336191459f3ddf977e33640a5fb02c3",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"mergeRefs\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:245..283 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:32a830bd93788a34428144759fa521aab04aec5c5b55269dc3f784ed0a8414af"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "some",
+      "node": {
+        "digest": "sha256:87c3e25bdea92f563e2a5e955a9cd582d336191459f3ddf977e33640a5fb02c3",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"some\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:296..362 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:d42402ddd17d55deb5f8c0240e2e5463a92b642f02f8f64d6ee727f9df618469"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:37ad4c8277980b04708a2f0efc1d7f2e4a1260ef049cfd49ed3ab135fb990822",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:37ad4c8277980b04708a2f0efc1d7f2e4a1260ef049cfd49ed3ab135fb990822",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "access",
+      "node": {
+        "digest": "sha256:3d4454f369cac7c1e3d451f8463fb6facc00b034422b65fbe326400e2a4d1a51",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"access\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:57..97 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:603be18ce8675988231659e4301de906353d4b5dbb6a5b37d5913d470257327e"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "chain",
+      "node": {
+        "digest": "sha256:3d4454f369cac7c1e3d451f8463fb6facc00b034422b65fbe326400e2a4d1a51",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"chain\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:111..227 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:f163bab11efd75ae4e6014368aa1808cbde8682a7a310444397d971c8ec8eb6e"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "mergeRefs",
+      "node": {
+        "digest": "sha256:3d4454f369cac7c1e3d451f8463fb6facc00b034422b65fbe326400e2a4d1a51",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"mergeRefs\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:245..283 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:32a830bd93788a34428144759fa521aab04aec5c5b55269dc3f784ed0a8414af"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "some",
+      "node": {
+        "digest": "sha256:3d4454f369cac7c1e3d451f8463fb6facc00b034422b65fbe326400e2a4d1a51",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"some\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:296..362 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:d42402ddd17d55deb5f8c0240e2e5463a92b642f02f8f64d6ee727f9df618469"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "clamp",
+      "node": {
+        "digest": "sha256:ba7cd1a9bb786cfd8ff8c0e282d4a9ab3d77bda53f1bde5bd484e37614e40f9d",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses \"max\" declared at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:358..361: the binding is initialized by an expression that is not a function or arrow literal, and the census does not trace values, called at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:615..642",
+      "semanticClaimId": "claim:v1:sha256:abca8c6037915ff9d3c7b37383da946ca9403f5e73212e131782ac139d369f96"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "getAlignmentSides",
+      "node": {
+        "digest": "sha256:ba7cd1a9bb786cfd8ff8c0e282d4a9ab3d77bda53f1bde5bd484e37614e40f9d",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: coercion (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:3193..3245, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:75ea1fdb9fa9429cadba9b3dbeab2c503b356900bc88d21f880b660d8fa305d3"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "getExpandedPlacements",
+      "node": {
+        "digest": "sha256:ba7cd1a9bb786cfd8ff8c0e282d4a9ab3d77bda53f1bde5bd484e37614e40f9d",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: coercion (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:3193..3245, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:58079cf8eb39f1bd20f920d8ed0640026bb888097f181854553ac38407059809"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "getOppositeAxisPlacements",
+      "node": {
+        "digest": "sha256:ba7cd1a9bb786cfd8ff8c0e282d4a9ab3d77bda53f1bde5bd484e37614e40f9d",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses the standard-library member `Array.map`: argument 0 is a slot the reviewed invoker table says the member invokes and is neither rooted at a parameter of this implementation nor a callable literal inside the transcript being censused, so control reaches a callable the census cannot see, called at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:3037..3076",
+      "semanticClaimId": "claim:v1:sha256:ffd1e0cf173aa16ce09b00b37369ea92454b31ec4cba5d61194c6a42bf67e667"
+    },
+    {
+      "artifactCase": "artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43",
+      "domain": "creates",
+      "export": "getOppositePlacement",
+      "node": {
+        "digest": "sha256:ba7cd1a9bb786cfd8ff8c0e282d4a9ab3d77bda53f1bde5bd484e37614e40f9d",
+        "package": "@floating-ui/utils",
+        "version": "0.2.12"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: coercion (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs:3193..3245, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:0a17bd128e82b5e2324f0ae10554f58f543f6ebc287b63f9d0e2f8ae300d83e3"
+    },
+    {
+      "artifactCase": "artifact-case:79163e993f2e4c52473e2e067eb4c99fed5eea32996f3f9b6b0479b632f69049",
+      "domain": "creates",
+      "export": "limitShift",
+      "node": {
+        "digest": "sha256:a6458b5ba9177a8df456b8088b589c162c1e60e248b7a592c8ac202bd0cf4105",
+        "package": "@floating-ui/core",
+        "version": "1.8.0"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (BindingElement) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@floating-ui/core/dist/floating-ui.core.mjs:30815..30816, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:485c6ca8a3d8ec595d79135a13413d5ac993215eb6951499ada927781a0e2b16"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:4ebad80434d6ad6676762f43980dfa389e5f20543ae4829942b06481334442a4",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:4ebad80434d6ad6676762f43980dfa389e5f20543ae4829942b06481334442a4",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:fd42a1d9dda954dae8c911fad3e828d82b47a4e85f5447e264836f53e6557e5e",
+      "domain": "creates",
+      "export": "combineStyle",
+      "node": {
+        "digest": "sha256:5875c6e7585a08bb30f80358fefcc1cef491fb1eaeaf08a4a69719b15522eb9f",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (SpreadAssignment) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-12/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/chunk/GZJAOTUE.jsx:368..372, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:d1ba64474c0d87bda257ea8445adc7a160b2c8aea2bd2573bc55f2faddb2fc19"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:eca71962a9aa05d9b7ffdf5894ab8a154f7a38cd6ffa1384e97375967f50bf28",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:eca71962a9aa05d9b7ffdf5894ab8a154f7a38cd6ffa1384e97375967f50bf28",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:b1a0dc82a475dce5c38242b7782f666954de5e76c544019068e3941141e514c9",
+      "domain": "returns",
+      "export": "dynamicProperty",
+      "node": {
+        "digest": "sha256:5de94ab328575b140c75f61afb34db4ab1a2c103f611f93bb28fb1bd705f5566",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:9300c93be34c96e027a3ba741db3745c89ef48b7eb7d68627d0aa59491df5de6"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:8193390e502954d1b11c34afe1cee213e60dbae8e75e37d41f829fb360e2e823",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:8193390e502954d1b11c34afe1cee213e60dbae8e75e37d41f829fb360e2e823",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:63bac3b651fb45b8c54a53ee71596b302df49a2bc3cf11eb8631b3e34f7c8d51",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:63bac3b651fb45b8c54a53ee71596b302df49a2bc3cf11eb8631b3e34f7c8d51",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:b862943e753c8873cb60870ebf81217240c871ed6ce7436ee4f1f708c35544b5",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:b862943e753c8873cb60870ebf81217240c871ed6ce7436ee4f1f708c35544b5",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:77550142dae6654efbf27c749c56d8305f601aaa5d54150e3d2aed049c5492f6",
+      "domain": "creates",
+      "export": "dataIf",
+      "node": {
+        "digest": "sha256:a861d17131cda92bad919be5499668a0d73894b80a2f790544a8beb05e5b7b68",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"dataIf\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/74BWZKBI.jsx:403..441 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:91d56efc913ad1157d5d526b2bb465d3705d9f586a608be715701a85276c6b7c"
+    },
+    {
+      "artifactCase": "artifact-case:77550142dae6654efbf27c749c56d8305f601aaa5d54150e3d2aed049c5492f6",
+      "domain": "creates",
+      "export": "isButton",
+      "node": {
+        "digest": "sha256:a861d17131cda92bad919be5499668a0d73894b80a2f790544a8beb05e5b7b68",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"isButton\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/74BWZKBI.jsx:207..388 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:6311d8ff86371f1bb6c5103abc6c5ad8045e35d4ac2bb2828c353e51bbdffbc6"
+    },
+    {
+      "artifactCase": "artifact-case:77550142dae6654efbf27c749c56d8305f601aaa5d54150e3d2aed049c5492f6",
+      "domain": "creates",
+      "export": "isFunction",
+      "node": {
+        "digest": "sha256:a861d17131cda92bad919be5499668a0d73894b80a2f790544a8beb05e5b7b68",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"isFunction\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/74BWZKBI.jsx:38..110 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:a5aefbf2de1649facbdc3ad7eba0a8024c191caeda3c36c639e0a5b7fd3cf6c1"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "access",
+      "node": {
+        "digest": "sha256:cbca313dce68f2789c3695d974e1f4c5accb6ca92d0785517bbca6e66ef027e2",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"access\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:57..97 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:603be18ce8675988231659e4301de906353d4b5dbb6a5b37d5913d470257327e"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "chain",
+      "node": {
+        "digest": "sha256:cbca313dce68f2789c3695d974e1f4c5accb6ca92d0785517bbca6e66ef027e2",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"chain\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:111..227 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:f163bab11efd75ae4e6014368aa1808cbde8682a7a310444397d971c8ec8eb6e"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "mergeRefs",
+      "node": {
+        "digest": "sha256:cbca313dce68f2789c3695d974e1f4c5accb6ca92d0785517bbca6e66ef027e2",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"mergeRefs\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:245..283 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:32a830bd93788a34428144759fa521aab04aec5c5b55269dc3f784ed0a8414af"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "some",
+      "node": {
+        "digest": "sha256:cbca313dce68f2789c3695d974e1f4c5accb6ca92d0785517bbca6e66ef027e2",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"some\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:296..362 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:d42402ddd17d55deb5f8c0240e2e5463a92b642f02f8f64d6ee727f9df618469"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "access",
+      "node": {
+        "digest": "sha256:bbf5d752574cd77a1eb9dbda3cc1bfee568f39dcbcd73a7db399595044757a9e",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"access\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:57..97 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:603be18ce8675988231659e4301de906353d4b5dbb6a5b37d5913d470257327e"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "chain",
+      "node": {
+        "digest": "sha256:bbf5d752574cd77a1eb9dbda3cc1bfee568f39dcbcd73a7db399595044757a9e",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"chain\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:111..227 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:f163bab11efd75ae4e6014368aa1808cbde8682a7a310444397d971c8ec8eb6e"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "mergeRefs",
+      "node": {
+        "digest": "sha256:bbf5d752574cd77a1eb9dbda3cc1bfee568f39dcbcd73a7db399595044757a9e",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"mergeRefs\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:245..283 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:32a830bd93788a34428144759fa521aab04aec5c5b55269dc3f784ed0a8414af"
+    },
+    {
+      "artifactCase": "artifact-case:1d973826bf13ed4048925353d08322fa7a592ea968f8b92c170e64f1e082bd5c",
+      "domain": "creates",
+      "export": "some",
+      "node": {
+        "digest": "sha256:bbf5d752574cd77a1eb9dbda3cc1bfee568f39dcbcd73a7db399595044757a9e",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses a transcript at depth 0 whose declaration \"some\" at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:296..362 is not in this artifact's own runtime source: the census walks authenticated runtime bytes and nothing else",
+      "semanticClaimId": "claim:v1:sha256:d42402ddd17d55deb5f8c0240e2e5463a92b642f02f8f64d6ee727f9df618469"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:cb278e0f06b4fb3eded75aa19c2adaccec4b38f28b7b4bd10228785a1ea44e14",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:cb278e0f06b4fb3eded75aa19c2adaccec4b38f28b7b4bd10228785a1ea44e14",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:b60e67566e5805377558a5123292ab2179780d7e92e1980a7a2f166f09f77fb3",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:b60e67566e5805377558a5123292ab2179780d7e92e1980a7a2f166f09f77fb3",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:b1a0dc82a475dce5c38242b7782f666954de5e76c544019068e3941141e514c9",
+      "domain": "returns",
+      "export": "dynamicProperty",
+      "node": {
+        "digest": "sha256:fb4c83f3de63952392bf83590f558b7e6c73c2e946e340110cf84d0e25ba5249",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:9300c93be34c96e027a3ba741db3745c89ef48b7eb7d68627d0aa59491df5de6"
+    },
+    {
+      "artifactCase": "artifact-case:fd42a1d9dda954dae8c911fad3e828d82b47a4e85f5447e264836f53e6557e5e",
+      "domain": "creates",
+      "export": "combineStyle",
+      "node": {
+        "digest": "sha256:f44314229085f86bd23f657c1542d0e5bcaab0a47f7f84b1fed5a899d4fee2f1",
+        "package": "@corvu/utils",
+        "version": "0.4.2"
+      },
+      "reason": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (SpreadAssignment) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-12/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/chunk/GZJAOTUE.jsx:368..372, reach reachable",
+      "semanticClaimId": "claim:v1:sha256:d1ba64474c0d87bda257ea8445adc7a160b2c8aea2bd2573bc55f2faddb2fc19"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "Match",
+      "node": {
+        "digest": "sha256:8b6a63306d5f418de94523bff31e0391d48780ff4af6e2d635f6dec732820441",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:27ebbcdffa9dcb976f8423cbc750c6ad55161cae5625c87209abefaad970f80d"
+    },
+    {
+      "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+      "domain": "returns",
+      "export": "onCleanup",
+      "node": {
+        "digest": "sha256:8b6a63306d5f418de94523bff31e0391d48780ff4af6e2d635f6dec732820441",
+        "package": "solid-js",
+        "version": "1.9.14"
+      },
+      "reason": "no recipe in corpus",
+      "semanticClaimId": "claim:v1:sha256:d5046969e4a161d2f1309c4cf23735b390b5debc0ec347b82da0ecb6eae01918"
+    },
+    {
+      "artifactCase": "artifact-case:4ccb5b333d2cbf64ba5df0bdc28c72e4003528ff039ee9ef2660251374e10564",
+      "domain": "creates",
+      "export": "some",
+      "node": {
+        "digest": "sha256:d8df8544b6fbdd2ae9e168d4fde96f35f84339dec5e45a0f5c124630e58fedfc",
+        "package": "@corvu/utils",
+        "version": "0.3.2"
+      },
+      "reason": "census refused: creates census refuses a call through \"signal\" declared at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:337..343: a parameter of a nested callable is caller-supplied code, which the callbacks domain owns and this census cannot see, called at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-65212-8/node_modules/@corvu/utils/dist/chunk/U42ECMND.jsx:350..358",
+      "semanticClaimId": "claim:v1:sha256:70f8c1fb9412758b1721123aaee9efa5bcdc6ae1c40fdd2eb9c506a2dd2bb206"
+    }
+  ]
+}

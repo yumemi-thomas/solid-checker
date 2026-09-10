@@ -154,12 +154,13 @@ const RC3_CORE_PRIMITIVES_AUDIT: &str =
 /// that reading, not its conclusion; see [`AuditedCitation`] for the exact
 /// difference and ADR 0007 for why it is stated rather than smoothed over.
 ///
-/// # Only `creates`, and only for now
+/// # `creates` and `reads`, and only those
 ///
-/// Every row here is [`CallClaimDomain::Creates`]. The other seven kinded
-/// domains are withheld wholesale, because the audited documents' closures in
-/// them are not yet admissible as negative authority and each counter-example
-/// below is a defect against the *audit*, not against this table:
+/// Rows carry [`CallClaimDomain::Creates`] (28) and
+/// [`CallClaimDomain::Reads`] (19). The other six kinded domains are withheld
+/// wholesale, because the audited documents' closures in them are not yet
+/// admissible as negative authority and each counter-example below is a defect
+/// against the *audit*, not against this table:
 ///
 /// - **`returns`.** `snapshot`'s summary is `shape: "plain"` — it hands the
 ///   caller a value — and closes `returns: []`. `flush` and `latest` do the
@@ -177,13 +178,55 @@ const RC3_CORE_PRIMITIVES_AUDIT: &str =
 ///   (`contract_schema_exemptions`: "the normalized contract models it as a
 ///   read operation rather than invocation of a caller-supplied callback"),
 ///   which is precisely why the closure cannot be read as "invokes nothing".
-/// - **`reads`, `writes`, `invalidates`, `cleanups`, `disposals`.** No
-///   counter-example found, and no positive review performed either. They are
-///   silent because nothing here has read them, which is the only honest
-///   default: the implementation census needs `creates` first
-///   (`phase21/2026-09-03-implementation-census-plan.md` § 4.3) and `reads`
-///   second (§ 4.4), and a domain is added when it is audited, not when it is
-///   convenient.
+/// - **`writes`, `invalidates`, `cleanups`, `disposals`.** No counter-example
+///   found, and no positive review performed either. They are silent because
+///   nothing here has read them, which is the only honest default: a domain is
+///   added when it is audited, not when it is convenient.
+///
+/// # `reads`, admitted 2026-09-10
+///
+/// The positive review that `reads` had never had is
+/// `phase21/2026-09-10-reads-census-admission-review.md`, and it turned on a
+/// model question rather than on a counter-example. `Show`'s summary closes
+/// `reads: []` while both its operations guard on `{arg: 0, path: ["keyed"]}`;
+/// whether that is a contradiction depends on whether a *caller's* props proxy
+/// access is this export's read. `semantic-model.md` § reads
+/// **[Decision 2026-09-10]** settles that it is not — a proxy property access
+/// is this export's read only when the export owns the proxy, on exactly
+/// [`ADR 0034`](../../../../docs/adr/0034-parameter-rooted-accessor-disposition.md)'s
+/// argument about whose code runs. Under that decision every audited `reads`
+/// closure conforms as written, and no bundled document models a props access
+/// as a read, so the closures became derivable rows.
+///
+/// Nineteen of the twenty derivable rows ship. All five that the worksheet
+/// left open were read against the pinned rc.3 bytes on 2026-09-10
+/// (`phase21/2026-09-10-reads-negative-rows-audit-worksheet.md` § 6); four
+/// cleared and one did not.
+///
+/// - **`@solidjs/signals`'s `flush` and `action`, and `@solidjs/web`'s
+///   `render` and `hydrate`** ship under § reads
+///   **[Decision 2026-09-10]** on authorship: `flush()` drains `globalQueue`
+///   and runs computations a *third party* registered, and those reads belong
+///   to whoever registered them. Everything else in the four bodies routes to
+///   caller-supplied values (ADR 0034, ADR 0048) or to object literals the
+///   code built (ADR 0044).
+/// - **`solid-js`'s `createEffect`** stays **withheld**, and the reason moved.
+///   Its *server* path is clean: `server.js:810`'s `serverEffect` and
+///   `processResult` observe no source, and `ctx.serialize` — the reach that
+///   withdrew the `creates` row — serializes a promise. The counter-example is
+///   in the **client** build. Under `sharedConfig.hydrating` with
+///   `options.ssrSource === "client"`, `solid.js`'s `hydratedEffect` calls
+///   `withHydrationGate`, which does
+///   `createSignal$1(false, { ownedWrite: true })` and hands the accessor to a
+///   compute that reads it — a read of a signal **this export created**, which
+///   § reads counts even though it is scheduled. A guarded reach is still a
+///   reach and a row carries no condition, so the row is withheld rather than
+///   qualified.
+///
+/// Rows do **not** make the domain certifiable on their own: `reads` is not in
+/// `ClaimDomain::PROPOSABLE` and `reviewed_observation` has no `reads` entry,
+/// so no proposal reaches a census and every candidate withholds for want of a
+/// recipe. These rows are the terminator half, landed first.
 ///
 /// # Deliberately silent for `creates`
 ///
@@ -269,6 +312,20 @@ const RC3_CORE_PRIMITIVES_AUDIT: &str =
 /// makes the rows sound on that path — but the tier cannot see the split, so
 /// the rows rest on the audit having read both.
 const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
+    // `reads` on the same audited bytes. Its drain runs computations a
+    // third party registered, which § reads [Decision 2026-09-10]
+    // attributes to whoever registered them.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "action",
+        domain: CallClaimDomain::Reads,
+        citations: &[AuditedCitation::Summary {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-c094d35ac3f70f84acaae0d933ed0c4c46071004615d4a1351a11a01bf987552",
+            start_byte: 33507,
+            end_byte: 38878,
+        }],
+    },
     NegativeClaimRow {
         package: "@solidjs/signals",
         export: "action",
@@ -278,6 +335,18 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             summary: "summary-c094d35ac3f70f84acaae0d933ed0c4c46071004615d4a1351a11a01bf987552",
             start_byte: 33507,
             end_byte: 38878,
+        }],
+    },
+    // `reads` on the same audited bytes as the `creates` row below.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "createMemo",
+        domain: CallClaimDomain::Reads,
+        citations: &[AuditedCitation::Summary {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-6970e6d02d81c014fd7c2ef7aee46716c95cb9aac16a28e9f8adb95ece54eab1",
+            start_byte: 12806,
+            end_byte: 17314,
         }],
     },
     NegativeClaimRow {
@@ -291,6 +360,18 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             end_byte: 17314,
         }],
     },
+    // `reads` on the same audited bytes as the `creates` row below.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "createOptimistic",
+        domain: CallClaimDomain::Reads,
+        citations: &[AuditedCitation::Summary {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-92071bb735b571320a76e500e8f0dc47db0f11df19201d2b3931d2da5d763e37",
+            start_byte: 25043,
+            end_byte: 27967,
+        }],
+    },
     NegativeClaimRow {
         package: "@solidjs/signals",
         export: "createOptimistic",
@@ -300,6 +381,18 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             summary: "summary-92071bb735b571320a76e500e8f0dc47db0f11df19201d2b3931d2da5d763e37",
             start_byte: 25043,
             end_byte: 27967,
+        }],
+    },
+    // `reads` on the same audited bytes as the `creates` row below.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "createOptimisticStore",
+        domain: CallClaimDomain::Reads,
+        citations: &[AuditedCitation::Summary {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-034586f31ead4bb594c03ada1202fb3b439455294d049727cb6f898c65cf5283",
+            start_byte: 6985,
+            end_byte: 10025,
         }],
     },
     NegativeClaimRow {
@@ -410,6 +503,18 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             end_byte: 23217,
         }],
     },
+    // `reads` on the same audited bytes as the `creates` row below.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "createTrackedEffect",
+        domain: CallClaimDomain::Reads,
+        citations: &[AuditedCitation::Summary {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-aab0640db7c783a35e1c955cbf19c22197542f3eecb3f89b28433694eb07ff6a",
+            start_byte: 29857,
+            end_byte: 33425,
+        }],
+    },
     NegativeClaimRow {
         package: "@solidjs/signals",
         export: "createTrackedEffect",
@@ -419,6 +524,20 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             summary: "summary-aab0640db7c783a35e1c955cbf19c22197542f3eecb3f89b28433694eb07ff6a",
             start_byte: 29857,
             end_byte: 33425,
+        }],
+    },
+    // `reads` on the same audited bytes. Its drain runs computations a
+    // third party registered, which § reads [Decision 2026-09-10]
+    // attributes to whoever registered them.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "flush",
+        domain: CallClaimDomain::Reads,
+        citations: &[AuditedCitation::Summary {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-00fc668bf5acaf07e617a9118eb0ef43a7dc1ba6359be1ea580793a91a76efbe",
+            start_byte: 2598,
+            end_byte: 6903,
         }],
     },
     NegativeClaimRow {
@@ -505,6 +624,18 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             },
         ],
     },
+    // `reads` on the same audited bytes as the `creates` row below.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "onSettled",
+        domain: CallClaimDomain::Reads,
+        citations: &[AuditedCitation::Summary {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-5a08fc896d6f18c5378c69bc27d5fc1ddaeb013364aff1421330341801111663",
+            start_byte: 10107,
+            end_byte: 12724,
+        }],
+    },
     NegativeClaimRow {
         package: "@solidjs/signals",
         export: "onSettled",
@@ -514,6 +645,18 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             summary: "summary-5a08fc896d6f18c5378c69bc27d5fc1ddaeb013364aff1421330341801111663",
             start_byte: 10107,
             end_byte: 12724,
+        }],
+    },
+    // `reads` on the same audited bytes as the `creates` row below.
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "reconcile",
+        domain: CallClaimDomain::Reads,
+        citations: &[AuditedCitation::Summary {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-97b25908bde1ce8220884836f97f37a42f6719bcf3b723d9de5746955fcc12dd",
+            start_byte: 28049,
+            end_byte: 29775,
         }],
     },
     NegativeClaimRow {
@@ -575,6 +718,29 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             },
         ],
     },
+    // `reads` on the same audited bytes as the `creates` row below.
+    // Its only argument-path atoms are parameter-rooted, which
+    // `semantic-model.md` § reads [Decision 2026-09-10] assigns to the
+    // caller; the closure denies a read of a proxy this export owns.
+    NegativeClaimRow {
+        package: "@solidjs/web",
+        export: "clientOnly",
+        domain: CallClaimDomain::Reads,
+        citations: &[
+            AuditedCitation::Summary {
+                document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
+                summary: "summary-33b1f252bf40ccbf4afd30c2d3c9e9cc74f10c3ece12fee903d628e8da7c231e",
+                start_byte: 1987,
+                end_byte: 9470,
+            },
+            AuditedCitation::Summary {
+                document: "pkg/contracts/bundled/solid-v2/solidjs-web--web-node-server.json",
+                summary: "summary-483140acbc18aaa00d3db45337fdd8fd31997eceec74fb9a398e49abc7990ebf",
+                start_byte: 8958,
+                end_byte: 10326,
+            },
+        ],
+    },
     NegativeClaimRow {
         package: "@solidjs/web",
         export: "clientOnly",
@@ -594,10 +760,50 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             },
         ],
     },
+    // `reads` on the same audited bytes as the `creates` row below.
+    NegativeClaimRow {
+        package: "@solidjs/web",
+        export: "httpHeader",
+        domain: CallClaimDomain::Reads,
+        citations: &[
+            AuditedCitation::Summary {
+                document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
+                summary: "summary-f9d972edede76e2b96c176a3b0f83f6b9ae4f5528398a134a88373baf12ad54f",
+                start_byte: 22024,
+                end_byte: 22535,
+            },
+            AuditedCitation::Summary {
+                document: "pkg/contracts/bundled/solid-v2/solidjs-web--web-node-server.json",
+                summary: "summary-0ffbf4d4d8bc911a206487e2fea11778b4de8be1ba653b20a75bc8148856ec37",
+                start_byte: 1875,
+                end_byte: 4783,
+            },
+        ],
+    },
     NegativeClaimRow {
         package: "@solidjs/web",
         export: "httpHeader",
         domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Summary {
+                document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
+                summary: "summary-f9d972edede76e2b96c176a3b0f83f6b9ae4f5528398a134a88373baf12ad54f",
+                start_byte: 22024,
+                end_byte: 22535,
+            },
+            AuditedCitation::Summary {
+                document: "pkg/contracts/bundled/solid-v2/solidjs-web--web-node-server.json",
+                summary: "summary-0ffbf4d4d8bc911a206487e2fea11778b4de8be1ba653b20a75bc8148856ec37",
+                start_byte: 1875,
+                end_byte: 4783,
+            },
+        ],
+    },
+    // `reads` on the same audited bytes as the `creates` row below.
+    NegativeClaimRow {
+        package: "@solidjs/web",
+        export: "httpStatus",
+        domain: CallClaimDomain::Reads,
         citations: &[
             AuditedCitation::Summary {
                 document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
@@ -632,6 +838,50 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             },
         ],
     },
+    // `reads` on the same audited bytes as the `creates` row below.
+    // Its only argument-path atoms are parameter-rooted, which
+    // `semantic-model.md` § reads [Decision 2026-09-10] assigns to the
+    // caller; the closure denies a read of a proxy this export owns.
+    // Its only reach past caller-supplied values is `render`, whose own reads row
+    // rests on the same [Decision 2026-09-10]. The `creates` withholding below
+    // is about `render` registering a delegated root, which is not a read.
+    NegativeClaimRow {
+        package: "@solidjs/web",
+        export: "hydrate",
+        domain: CallClaimDomain::Reads,
+        citations: &[AuditedCitation::Summary {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
+            summary: "summary-7dc57984919daf1dd41a313f41608c3f779ecf3be74645aaeedf55473bbb255c",
+            start_byte: 13513,
+            end_byte: 15951,
+        }],
+    },
+    // `code()`, `flatten(tree)` and `insert(.., () => tree, ..)` all run over the
+    // caller's tree (ADR 0048); `element.firstChild` and `options.*` are not
+    // sources; the remaining reach is `flush()`, attributed by § reads
+    // [Decision 2026-09-10].
+    NegativeClaimRow {
+        package: "@solidjs/web",
+        export: "render",
+        domain: CallClaimDomain::Reads,
+        citations: &[AuditedCitation::Summary {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
+            summary: "summary-d6e8921e93fd37f6028c1ad809693ef42764ab602a477ba683dd4afc3efa7530",
+            start_byte: 16033,
+            end_byte: 21942,
+        }],
+    },
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "For",
+        domain: CallClaimDomain::Reads,
+        citations: &[AuditedCitation::Summary {
+            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
+            summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
+            start_byte: 6598,
+            end_byte: 12189,
+        }],
+    },
     NegativeClaimRow {
         package: "solid-js",
         export: "For",
@@ -654,10 +904,40 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             end_byte: 14398,
         }],
     },
+    // `reads` on the same audited bytes as the `creates` row below.
+    // Its only argument-path atoms are parameter-rooted, which
+    // `semantic-model.md` § reads [Decision 2026-09-10] assigns to the
+    // caller; the closure denies a read of a proxy this export owns.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "Match",
+        domain: CallClaimDomain::Reads,
+        citations: &[AuditedCitation::Summary {
+            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
+            summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
+            start_byte: 6598,
+            end_byte: 12189,
+        }],
+    },
     NegativeClaimRow {
         package: "solid-js",
         export: "Match",
         domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation::Summary {
+            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
+            summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
+            start_byte: 6598,
+            end_byte: 12189,
+        }],
+    },
+    // `reads` on the same audited bytes as the `creates` row below.
+    // Its only argument-path atoms are parameter-rooted, which
+    // `semantic-model.md` § reads [Decision 2026-09-10] assigns to the
+    // caller; the closure denies a read of a proxy this export owns.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "Repeat",
+        domain: CallClaimDomain::Reads,
         citations: &[AuditedCitation::Summary {
             document: "pkg/contracts/bundled/solid-v2/solid-js.json",
             summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
@@ -676,6 +956,21 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             end_byte: 12189,
         }],
     },
+    // `reads` on the same audited bytes as the `creates` row below.
+    // Its only argument-path atoms are parameter-rooted, which
+    // `semantic-model.md` § reads [Decision 2026-09-10] assigns to the
+    // caller; the closure denies a read of a proxy this export owns.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "Show",
+        domain: CallClaimDomain::Reads,
+        citations: &[AuditedCitation::Summary {
+            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
+            summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
+            start_byte: 6598,
+            end_byte: 12189,
+        }],
+    },
     NegativeClaimRow {
         package: "solid-js",
         export: "Show",
@@ -685,6 +980,21 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
             start_byte: 6598,
             end_byte: 12189,
+        }],
+    },
+    // `reads` on the same audited bytes as the `creates` row below.
+    // Its only argument-path atoms are parameter-rooted, which
+    // `semantic-model.md` § reads [Decision 2026-09-10] assigns to the
+    // caller; the closure denies a read of a proxy this export owns.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "affects",
+        domain: CallClaimDomain::Reads,
+        citations: &[AuditedCitation::Summary {
+            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
+            summary: "summary-92efacc141c683cc0a3779fa9106ff29f624ed876f3f6d0e0635643dec1d46fd",
+            start_byte: 22614,
+            end_byte: 24478,
         }],
     },
     NegativeClaimRow {
@@ -718,6 +1028,21 @@ const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
             summary: "summary-13d78920672aa68cb9fb09d4b51dafaf4281d67628d73e4ba93f06de39512c40",
             start_byte: 2366,
             end_byte: 4224,
+        }],
+    },
+    // `reads` on the same audited bytes as the `creates` row below.
+    // Its only argument-path atoms are parameter-rooted, which
+    // `semantic-model.md` § reads [Decision 2026-09-10] assigns to the
+    // caller; the closure denies a read of a proxy this export owns.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "refresh",
+        domain: CallClaimDomain::Reads,
+        citations: &[AuditedCitation::Summary {
+            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
+            summary: "summary-49a501fb15bcd7c7961085bd54009503618b3729e6e49e8d299f0eb90ad9d322",
+            start_byte: 4306,
+            end_byte: 6516,
         }],
     },
     NegativeClaimRow {
@@ -1982,6 +2307,7 @@ mod tests {
     const WITHHELD: &[(&str, &str, CallClaimDomain)] = &[
         ("@solidjs/web", "hydrate", CallClaimDomain::Creates),
         ("solid-js", "createEffect", CallClaimDomain::Creates),
+        ("solid-js", "createEffect", CallClaimDomain::Reads),
         ("solid-js", "createSignal", CallClaimDomain::Creates),
     ];
 
@@ -2451,7 +2777,7 @@ mod tests {
             NEGATIVE_ROWS.iter().map(|row| row.domain).collect();
         assert_eq!(
             admitted,
-            BTreeSet::from([CallClaimDomain::Creates]),
+            BTreeSet::from([CallClaimDomain::Creates, CallClaimDomain::Reads]),
             "a new domain was added to the table without widening this comparison"
         );
 
@@ -2550,12 +2876,16 @@ mod tests {
             "the shipped table is not the derivable table minus the withholdings"
         );
 
-        // 23 from the audited contract documents (25 closures, minus `hydrate`
-        // and `createEffect`, both withheld) plus the 5 the hand implementation
-        // census closed.
-        assert_eq!(from_json.len(), 25);
+        // 45 closures across the two admitted domains: 25 `creates` and 20
+        // `reads`. Shipped is that, minus the 3 withholdings that are
+        // derivable from a document (`hydrate` and `createEffect` for
+        // `creates`, `createEffect` for `reads`), plus the 5 the hand
+        // implementation census closed. `createSignal`'s `creates`
+        // withholding is derivable only from IMPLEMENTATION_AUDITED, so it is
+        // not subtracted here.
+        assert_eq!(from_json.len(), 45);
         assert_eq!(implementation_closed.len(), 5);
-        assert_eq!(shipped.len(), 28);
+        assert_eq!(shipped.len(), 47);
 
         // The two authorities must not be confusable from the row alone: a row
         // the hand census closed cites runtime bytes, and every other row cites

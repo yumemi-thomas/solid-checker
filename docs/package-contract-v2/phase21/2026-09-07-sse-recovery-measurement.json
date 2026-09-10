@@ -1,0 +1,2339 @@
+{
+  "format": "entrypoint-recovery-measurement",
+  "authoritative": false,
+  "base": {
+    "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/ecosystem-investigations/2026-09-07-union-full.json",
+    "digest": "sha256:69e5ceb0e51a742267b75a2df5516633e9ea357ebc0ae4e2c506498684176646",
+    "finishedAt": "2026-09-07T07:06:25.224Z",
+    "counts": {
+      "complete": 317,
+      "partial": 51,
+      "refused": 30,
+      "not-advanced": 20
+    },
+    "scope": "full corpus baseline; selected SSE rows compared below"
+  },
+  "after": {
+    "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/ecosystem-investigations/2026-09-07-sse-recovery.json",
+    "digest": "sha256:f7923c32eab57c6cf34f6a03b63b48090df792bdfa04fb4e4d60cef82fedd2c4",
+    "finishedAt": "2026-09-07T08:10:02.962Z",
+    "counts": {
+      "complete": 0,
+      "partial": 3,
+      "refused": 0,
+      "not-advanced": 0
+    },
+    "scope": "three SSE probes only; not a full corpus comparison"
+  },
+  "binary": {
+    "path": "/private/tmp/solid-checker-motion-evidence/solid-checker-verified",
+    "digest": "sha256:6dc43825c5d141dc46b76ed05656e7e531990dfad9933d8f76915ce63109a6f0",
+    "producer": "sha256:478e196c2c7d034e70e06de17de6db924a47bfbf20ac8c4a0d10219ffe9aeb16",
+    "stamp": {
+      "format": 1,
+      "sourceDigest": "fc64b350efc4f2d1e9945acf01d6bc0f34d6f974eb4c22f22a39ee67ccb33331",
+      "toolchain": "go version go1.26.5 darwin/arm64",
+      "buildId": "dev"
+    }
+  },
+  "transitions": [],
+  "selected": [
+    {
+      "probeId": "@solid-primitives/sse@0.0.103|solid1|only",
+      "before": {
+        "catalogRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-C2hozP/@solid-primitives__sse@0.0.103--solid1--only.json.accepted-catalog",
+        "pointer": null,
+        "cases": [
+          {
+            "entrypoint": "./worker",
+            "selection": {
+              "artifact": {
+                "closureSha256": "5501fc0844321dd880e5df5eb276df8c673e24df20f5cae81ca1eb452fc57f12",
+                "path": "./dist/worker.js",
+                "sha256": "26001aed451648c324c67802c447046d9d69750bfc2074cf0c1407bd41ceecb8"
+              },
+              "declarations": {
+                "path": "./dist/worker.d.ts",
+                "sha256": "9b35e6e5560ce0a8307edb6ddea09d87115081c18496906d8fab5fb14b6cf1cf"
+              },
+              "resolution": {
+                "runtimeBranch": "/exports/.~1worker/import/default",
+                "typesBranch": "/exports/.~1worker/import/types"
+              }
+            },
+            "coordinate": null,
+            "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-C2hozP/@solid-primitives__sse@0.0.103--solid1--only.json.accepted-catalog/accepted-contracts.json",
+            "documentDigest": "sha256:e1b6ed10bc5e2d7810d4d0ed8d6a6a0ef29d0f9831633d487e9608cceb1d9ec4",
+            "receiptDigest": "sha256:baf7b108fc5f490ce93ea8b9111f0c829f92b8070345b6a345fd7ff46b961143",
+            "receiptPayload": {
+              "semanticModelVersion": 1,
+              "proofVersion": 2,
+              "proofPolicy": 2,
+              "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+              "mainDigest": "sha256:e1b6ed10bc5e2d7810d4d0ed8d6a6a0ef29d0f9831633d487e9608cceb1d9ec4",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-BcrWr3/node_modules/@solid-primitives/.solid-checker-certification-b42b28b041540e80d5c8fb3496e1f378ad16d095f785e5076c19c798fcfd5e03.mjs",
+              "specifier": "@solid-primitives/sse/worker",
+              "resolvedImportRoot": "sha256:e02677fc8a74bf3594daa591cc2838c8b8b551985e7781e11e7203a95d59ee96",
+              "semanticDigest": "sha256:8982779b11ff89e32ad6ef1f496a72af86ea89afc18d0cdab27f656e29560960",
+              "artifactProvenanceRoot": "sha256:edbf7eba7533f4dbec268afe619505020502234296a608f879aa40a1b45d2035",
+              "snapshotRoot": "sha256:bf97935e51420f4a647f4d6577c847db5fc3bebbc689cffa3011f209317d1c0b",
+              "packageRoot": "sha256:5e8d52be48ef7ea75701a4fcd79f5a8268d5dbd424eb79a768f35f6e3e541a1b",
+              "manifestRoot": "sha256:aef4d4a12866dd4f6cee690830ef805c87c70c3510228edf598963ef671d4b12",
+              "artifactsRoot": "sha256:a032bfe9bb6f8148e3ac89cf8e4e27e8edf062ccc4005b6577f7f57df5c98ea9",
+              "declarationsRoot": "sha256:3a8de20053fc4e5b44e620753b1edfb47291aff1c89fea76149a7894f2cb8b61",
+              "transformRoot": "sha256:eca98997f2ba6793d4431bcdbab51556d9f1a5a939786fae3c5cad9ccda62743",
+              "exportsRoot": "sha256:bee020eeb6b8f86e2574a01f1e28e8eccd7a3d8fc48ee8c1469d63d8804334a2",
+              "closureRoot": "sha256:938bf29c8b13dcde1ce2d2087ef909fbba80e24f0a379f53dbce77dac1c1d270",
+              "demandGraphRoot": "sha256:58f4dc9dda428d34a1f306b15e4d0b237a0ae0798c9ac35f950a515ec1fc4421",
+              "verifiedPositiveRoot": "sha256:af95ee9706e9ebad099daf060fda43129a5f333bc1eed90577e7fceb7c984b1c",
+              "witnessRoots": {
+                "accepted-dependency-composition": "sha256:8904505b4dd26f5304fbd8bc828aba67b079edeff4431eae3e27cd6d2f83dd85",
+                "argument-binding": "sha256:2620945fd107f5414de2f8a3c0b19e5adbdd2de298ea4253c1aac35e7748caff",
+                "artifact-declarations": "sha256:3a8de20053fc4e5b44e620753b1edfb47291aff1c89fea76149a7894f2cb8b61",
+                "callable-path": "sha256:b90a86fbf2b4e76b0282a9951bde997b7e426ca332018ddd866c473791cce4f4",
+                "compiler-reconciliation": "sha256:e8e3a0ed53d14b62c294f9cfef53ee49b471dc35233f747931eb497e5c400b4c",
+                "domain-exhaustiveness": "sha256:79e23b52cd6971995735291a7da9e04cfdb9c028cc82592cb83ca27e3eed3a9d",
+                "export-identity": "sha256:bee020eeb6b8f86e2574a01f1e28e8eccd7a3d8fc48ee8c1469d63d8804334a2",
+                "export-resolution": "sha256:a032bfe9bb6f8148e3ac89cf8e4e27e8edf062ccc4005b6577f7f57df5c98ea9",
+                "guard-partition": "sha256:574c675870d5f054e6140c6ee85c42f3d4bc866321240b0d8a0300dfb1cf9276",
+                "manifest-entrypoint": "sha256:aef4d4a12866dd4f6cee690830ef805c87c70c3510228edf598963ef671d4b12",
+                "module-closure": "sha256:938bf29c8b13dcde1ce2d2087ef909fbba80e24f0a379f53dbce77dac1c1d270",
+                "operation-cardinality": "sha256:541fa514516e4cefab1762a7b985c7b192aae9c79fb44634435c5921fac94478",
+                "operation-reachability": "sha256:f252b176400cca0e569bc97ea08945a1bac199a127b7ded97afc0ca05076d9d4",
+                "package-identity": "sha256:5e8d52be48ef7ea75701a4fcd79f5a8268d5dbd424eb79a768f35f6e3e541a1b",
+                "recursive-value-shape": "sha256:70dca5bbb0ffbec3f69ef509fd751076475ff7e24f254767a83796d180c209fb",
+                "rest-spread-coverage": "sha256:3387de7f6132f0dca849228ee641a3c8f12225d37bb52a8a2759a85d0f91dc07",
+                "selected-signature": "sha256:5e7017cd871654a75452188506e782b58f7d0bbff5d96775c0dedfb934395481"
+              },
+              "producerSessionsRoot": "sha256:f9b10fe874d7c8497df7171eb41ef99e94356152974c6f57a0a6fce82e49bbeb",
+              "dependencyReceiptsRoot": "sha256:c392e0dd028b471472297015332f6b9171210cf9bb8e2f99738bc7906d7f9b8b",
+              "dependencyTrustRoot": "sha256:8cb4116a506a45f3571fa46531866ab69fc4494a7595dc8943f3240f679c904d",
+              "probeGateRoot": "sha256:8fdbe29009d63c69c7066b8813ca1e630f65284654dea90ae328f26fcfc3f12d",
+              "closedClaimsRoot": "sha256:63ecb0e0c1c73015fed36fdd20d13b5076024d0ff0487a87146f62460fb470d8",
+              "verifierSourceDigest": "sha256:fc64b350efc4f2d1e9945acf01d6bc0f34d6f974eb4c22f22a39ee67ccb33331",
+              "verifierBuildDigest": "sha256:b13a1cece363b8d4314cb1a03a2dd7833ad490b0fb739a882259123e69a2daa1",
+              "issuerKind": "persistent-local",
+              "issuerScope": "ecosystem-benchmark:994c676611234c802ae0edc2f89f11e94e20215cf7857b0bcd8554ddf3a4ef2a",
+              "keyId": "ed25519:sha256:8d35a78d61b386b0aa27414a328edb404164b1c1c45ed282bb19247cbf1957ed",
+              "signatureAlgorithm": "ed25519"
+            },
+            "resolution": {
+              "specifier": "@solid-primitives/sse/worker",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-BcrWr3/node_modules/@solid-primitives/.solid-checker-certification-b42b28b041540e80d5c8fb3496e1f378ad16d095f785e5076c19c798fcfd5e03.mjs",
+              "requestedEntrypoint": "./worker",
+              "packageName": "@solid-primitives/sse",
+              "packageVersion": "0.0.103",
+              "packageIntegrity": "sha512-ltbMpEpk4zwSxyo3ZCTMfM14RLUQHLufXkyoZJgJNofrCjbbW6MLdRJiGnC/7hEVr89cbU3OEKu9FYrqPAoAiA==",
+              "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-BcrWr3/node_modules/@solid-primitives/sse",
+              "packageManifest": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-BcrWr3/node_modules/@solid-primitives/sse/package.json",
+                "digest": "sha256:7ae55652fac7fb7339cf3043058e405c5b77ab87b330b0339f6e349ab04dc82f"
+              },
+              "runtime": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-BcrWr3/node_modules/@solid-primitives/sse/dist/worker.js",
+                "digest": "sha256:26001aed451648c324c67802c447046d9d69750bfc2074cf0c1407bd41ceecb8"
+              },
+              "declarations": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-BcrWr3/node_modules/@solid-primitives/sse/dist/worker.d.ts",
+                "digest": "sha256:9b35e6e5560ce0a8307edb6ddea09d87115081c18496906d8fab5fb14b6cf1cf"
+              },
+              "runtimeTrace": {
+                "branch": "/exports/.~1worker/import/default",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./worker"
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/.~1worker"
+                  },
+                  {
+                    "condition": "default",
+                    "target": "/exports/.~1worker/import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/worker.js"
+                  }
+                ]
+              },
+              "declarationTrace": {
+                "branch": "/exports/.~1worker/import/types",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./worker"
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/.~1worker"
+                  },
+                  {
+                    "condition": "types",
+                    "target": "/exports/.~1worker/import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/worker.d.ts"
+                  }
+                ]
+              },
+              "closure": {
+                "entries": [
+                  {
+                    "role": "runtime",
+                    "path": "./dist/sse.js",
+                    "digest": "sha256:8abf544922521443d5344d6f2cd0bf8f6bc801bfdf26bdfde3fe07a2fc03b28f"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/worker.js",
+                    "digest": "sha256:26001aed451648c324c67802c447046d9d69750bfc2074cf0c1407bd41ceecb8"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/sse.d.ts",
+                    "digest": "sha256:dbf1cbb522d22960b34ab15840e2c92b98330e77c41c82da0e7b07d0f24224db"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/worker.d.ts",
+                    "digest": "sha256:9b35e6e5560ce0a8307edb6ddea09d87115081c18496906d8fab5fb14b6cf1cf"
+                  },
+                  {
+                    "role": "manifest",
+                    "path": "./package.json",
+                    "digest": "sha256:7ae55652fac7fb7339cf3043058e405c5b77ab87b330b0339f6e349ab04dc82f"
+                  },
+                  {
+                    "role": "resolution-input",
+                    "path": "./package.json",
+                    "digest": "sha256:7ae55652fac7fb7339cf3043058e405c5b77ab87b330b0339f6e349ab04dc82f"
+                  }
+                ],
+                "hazards": [
+                  {
+                    "kind": "unaccepted-external-dependency",
+                    "source": "./dist/sse.js:@solid-primitives/utils",
+                    "affectedDomains": [
+                      "callbacks",
+                      "reads",
+                      "writes",
+                      "creates",
+                      "invalidates",
+                      "throws",
+                      "returns",
+                      "cleanups",
+                      "disposals"
+                    ]
+                  },
+                  {
+                    "kind": "unaccepted-external-dependency",
+                    "source": "./dist/sse.js:solid-js",
+                    "affectedDomains": [
+                      "callbacks",
+                      "reads",
+                      "writes",
+                      "creates",
+                      "invalidates",
+                      "throws",
+                      "returns",
+                      "cleanups",
+                      "disposals"
+                    ]
+                  },
+                  {
+                    "kind": "unaccepted-external-dependency",
+                    "source": "./dist/sse.js:solid-js/web",
+                    "affectedDomains": [
+                      "callbacks",
+                      "reads",
+                      "writes",
+                      "creates",
+                      "invalidates",
+                      "throws",
+                      "returns",
+                      "cleanups",
+                      "disposals"
+                    ]
+                  }
+                ],
+                "digest": "sha256:5501fc0844321dd880e5df5eb276df8c673e24df20f5cae81ca1eb452fc57f12"
+              },
+              "authority": "standalonePackageResolver"
+            },
+            "motionGlobalConfig": null,
+            "motionGlobalConfigSummary": null
+          }
+        ]
+      },
+      "after": {
+        "catalogRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-hAniIU/@solid-primitives__sse@0.0.103--solid1--only.json.accepted-catalog",
+        "pointer": {
+          "format": "solid-checker-accepted-contract-case-set-pointer",
+          "caseSetVersion": 1,
+          "document": "case-sets/2795598f825bbbf7f5ecb66716d5ba7f860f3c331d0546c1ad2304705dc41817/accepted-contract-case-set.json",
+          "documentDigest": "sha256:2795598f825bbbf7f5ecb66716d5ba7f860f3c331d0546c1ad2304705dc41817"
+        },
+        "cases": [
+          {
+            "entrypoint": ".",
+            "selection": {
+              "artifact": {
+                "closureSha256": "ff835a0b82af470ae8f0002f060c23045b4272da5686ba3dffc88e8c6b61dfbb",
+                "path": "./dist/index.js",
+                "sha256": "44b27adf95413469ff18821f1e9e6ca2b2aa764754a41e56334e883a047b137f"
+              },
+              "declarations": {
+                "path": "./dist/index.d.ts",
+                "sha256": "15d5630dfcd107d18de0dea37df1451f7c0817227008624a5fe5f0019966457c"
+              },
+              "resolution": {
+                "runtimeBranch": "/exports/./import/default",
+                "typesBranch": "/exports/./import/types"
+              }
+            },
+            "coordinate": {
+              "artifactCaseId": "artifact-case:83384a6208f160d9ec106813947dd10fdee70bee8159a9cd74f164854330eb4e",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-dZYGBh/node_modules/@solid-primitives/.solid-checker-certification-bdec5e14913e0c3660b8b5a9e6e4ed299050b4c467bdc78b8e149085b55a4f15.mjs",
+              "specifier": "@solid-primitives/sse",
+              "resolvedImportRoot": "sha256:dc5075ab3359544be36ba8dc25e95731bc93561ee96b6d68ef9a345d472034a4",
+              "semanticDigest": "sha256:5745103a65f88788db25b37ae3d7c2b35578593a5d370e360b2c54493c38e3d3",
+              "receiptDigest": "sha256:0f48b5ec101d638a630703ded50865cd5fa924573811ab7e21eddcf2c929a7c9",
+              "catalog": "cases/dc5075ab3359544be36ba8dc25e95731bc93561ee96b6d68ef9a345d472034a4/accepted-contracts.json",
+              "catalogDigest": "sha256:973674d4d838f8e6f2f4931dfbc41cf8280353a2a239fec091d254a4e6fe2a43"
+            },
+            "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-hAniIU/@solid-primitives__sse@0.0.103--solid1--only.json.accepted-catalog/case-sets/2795598f825bbbf7f5ecb66716d5ba7f860f3c331d0546c1ad2304705dc41817/cases/dc5075ab3359544be36ba8dc25e95731bc93561ee96b6d68ef9a345d472034a4/accepted-contracts.json",
+            "documentDigest": "sha256:8ee95b1103079bc3fd3bd933a59f3c25c7daf45585afe23a51983a34a6a0994d",
+            "receiptDigest": "sha256:0f48b5ec101d638a630703ded50865cd5fa924573811ab7e21eddcf2c929a7c9",
+            "receiptPayload": {
+              "semanticModelVersion": 1,
+              "proofVersion": 2,
+              "proofPolicy": 2,
+              "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+              "mainDigest": "sha256:8ee95b1103079bc3fd3bd933a59f3c25c7daf45585afe23a51983a34a6a0994d",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-dZYGBh/node_modules/@solid-primitives/.solid-checker-certification-bdec5e14913e0c3660b8b5a9e6e4ed299050b4c467bdc78b8e149085b55a4f15.mjs",
+              "specifier": "@solid-primitives/sse",
+              "resolvedImportRoot": "sha256:dc5075ab3359544be36ba8dc25e95731bc93561ee96b6d68ef9a345d472034a4",
+              "semanticDigest": "sha256:5745103a65f88788db25b37ae3d7c2b35578593a5d370e360b2c54493c38e3d3",
+              "artifactProvenanceRoot": "sha256:edbf7eba7533f4dbec268afe619505020502234296a608f879aa40a1b45d2035",
+              "snapshotRoot": "sha256:bf97935e51420f4a647f4d6577c847db5fc3bebbc689cffa3011f209317d1c0b",
+              "packageRoot": "sha256:96ab7c95351d4b1d73157a16cad9c7b75d6a689d94e95d0b08fb4f1509e59eec",
+              "manifestRoot": "sha256:62cecc9e2b8058fefd93e9b369882cc43080209693def1585e597c735b690643",
+              "artifactsRoot": "sha256:ef673a74afb9b617e37171015e7036dacfb4db3a2288045ece095571ac1f5e4b",
+              "declarationsRoot": "sha256:cee3bbda001c8636cb4a144cfe39d80917f0df55a59c9bc0ab25466988b5451d",
+              "transformRoot": "sha256:192a18f6c0c918e2b9df30fb66910bd7074c67342f7ddb9316195595fc7824f7",
+              "exportsRoot": "sha256:149bdbed4903aac023f7c7d1f9621aec53c2cd6bfc3cc906ff5ee729adc49f99",
+              "closureRoot": "sha256:f7209c75209e38406081f90c9fec78c40eda778337b1c76ec00711e66f3b6a65",
+              "demandGraphRoot": "sha256:cc5c5c91b9342f6e62ebf3e09a1c9af4269efb924f841f208ff2e99a160380dd",
+              "verifiedPositiveRoot": "sha256:9c505a2fc73a62de77c20e032b1faa0b842ea49b2170937bb3feaa5e342353a9",
+              "witnessRoots": {
+                "accepted-dependency-composition": "sha256:a5ff0a5b68a4cafaea36e910a66e635b6257b15b8e7becf12032875e9856e6be",
+                "argument-binding": "sha256:8b549c8a85a94fc273b2805b233f63e28beb90bcefdc80e86674d9f3c9710c71",
+                "artifact-declarations": "sha256:cee3bbda001c8636cb4a144cfe39d80917f0df55a59c9bc0ab25466988b5451d",
+                "callable-path": "sha256:4867211fe254d71d2bf7732fb2b5f6c90c9541179e8fc90e83e74e42028e5ad3",
+                "compiler-reconciliation": "sha256:f42923430d75ea4caafd7cd45e9212bd1d069feec959346f0c6276b27df78d6d",
+                "domain-exhaustiveness": "sha256:8bdd5df9d9c910992cb56e07dc4ee0af7bd06f0f52fb9b348127b8fa060a9fd0",
+                "export-identity": "sha256:149bdbed4903aac023f7c7d1f9621aec53c2cd6bfc3cc906ff5ee729adc49f99",
+                "export-resolution": "sha256:ef673a74afb9b617e37171015e7036dacfb4db3a2288045ece095571ac1f5e4b",
+                "guard-partition": "sha256:a60a9087aa33f6d1e011eb7a9b004ff7d01228f7debd2e6b75e4090fe6349960",
+                "manifest-entrypoint": "sha256:62cecc9e2b8058fefd93e9b369882cc43080209693def1585e597c735b690643",
+                "module-closure": "sha256:f7209c75209e38406081f90c9fec78c40eda778337b1c76ec00711e66f3b6a65",
+                "operation-cardinality": "sha256:e18081ec6808db9ec5104c46414a112224a4bca913fbbfe081b68bebd19304ef",
+                "operation-reachability": "sha256:db0de15db8074e356d43ca8e5248657cac933ff66e8dc674a404126568e5528c",
+                "package-identity": "sha256:96ab7c95351d4b1d73157a16cad9c7b75d6a689d94e95d0b08fb4f1509e59eec",
+                "recursive-value-shape": "sha256:19cd92effbb842f25e644a15d73707a84a6a5df597e1d1ccf330985b22a2ce90",
+                "rest-spread-coverage": "sha256:a0d96904f4b6daf66a2402c63b944edaf0247cb85b7514da3145d9666a4fd51b",
+                "selected-signature": "sha256:74a2c7fb8ae7ae9b3c35e1303d0de84f450422cc55807ebe04dfcc2c73508231"
+              },
+              "producerSessionsRoot": "sha256:a8749a32574bae1e4ad689ce8d2afc9748372b9238d134d1cfd16d42f05b1071",
+              "dependencyReceiptsRoot": "sha256:f951f65e90ea24997dd1428b21030d2532f80a089d873d6303f8e1b767a5f9cf",
+              "dependencyTrustRoot": "sha256:6da3affc83463b402b187cbebbb3be79fe4f4ce8ca8c0ff29f5530e0dec02ceb",
+              "probeGateRoot": "sha256:7d60fdcde17184d848659c59069cd21afd70eeda8c3dbadcb002127c6f744158",
+              "closedClaimsRoot": "sha256:aa8bc00e6903be8f6df6185957bd4da734339424e089813ea0767617cdb4ce91",
+              "verifierSourceDigest": "sha256:fc64b350efc4f2d1e9945acf01d6bc0f34d6f974eb4c22f22a39ee67ccb33331",
+              "verifierBuildDigest": "sha256:b13a1cece363b8d4314cb1a03a2dd7833ad490b0fb739a882259123e69a2daa1",
+              "issuerKind": "persistent-local",
+              "issuerScope": "ecosystem-benchmark:ba3c4128d846fc25f9502750c09c4495de9bff6c507e7dc1f87837f44b3afaea",
+              "keyId": "ed25519:sha256:41a2c4426ecfc6ff93c6a72d99fa4feeddb4bb71dfa1c1d2c0d5570db17fe708",
+              "signatureAlgorithm": "ed25519"
+            },
+            "resolution": {
+              "specifier": "@solid-primitives/sse",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-dZYGBh/node_modules/@solid-primitives/.solid-checker-certification-bdec5e14913e0c3660b8b5a9e6e4ed299050b4c467bdc78b8e149085b55a4f15.mjs",
+              "requestedEntrypoint": ".",
+              "packageName": "@solid-primitives/sse",
+              "packageVersion": "0.0.103",
+              "packageIntegrity": "sha512-ltbMpEpk4zwSxyo3ZCTMfM14RLUQHLufXkyoZJgJNofrCjbbW6MLdRJiGnC/7hEVr89cbU3OEKu9FYrqPAoAiA==",
+              "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-dZYGBh/node_modules/@solid-primitives/sse",
+              "packageManifest": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-dZYGBh/node_modules/@solid-primitives/sse/package.json",
+                "digest": "sha256:7ae55652fac7fb7339cf3043058e405c5b77ab87b330b0339f6e349ab04dc82f"
+              },
+              "runtime": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-dZYGBh/node_modules/@solid-primitives/sse/dist/index.js",
+                "digest": "sha256:44b27adf95413469ff18821f1e9e6ca2b2aa764754a41e56334e883a047b137f"
+              },
+              "declarations": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-dZYGBh/node_modules/@solid-primitives/sse/dist/index.d.ts",
+                "digest": "sha256:15d5630dfcd107d18de0dea37df1451f7c0817227008624a5fe5f0019966457c"
+              },
+              "runtimeTrace": {
+                "branch": "/exports/./import/default",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "."
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/."
+                  },
+                  {
+                    "condition": "default",
+                    "target": "/exports/./import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/index.js"
+                  }
+                ]
+              },
+              "declarationTrace": {
+                "branch": "/exports/./import/types",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "."
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/."
+                  },
+                  {
+                    "condition": "types",
+                    "target": "/exports/./import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/index.d.ts"
+                  }
+                ]
+              },
+              "closure": {
+                "entries": [
+                  {
+                    "role": "runtime",
+                    "path": "./dist/index.js",
+                    "digest": "sha256:44b27adf95413469ff18821f1e9e6ca2b2aa764754a41e56334e883a047b137f"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/sse.js",
+                    "digest": "sha256:8abf544922521443d5344d6f2cd0bf8f6bc801bfdf26bdfde3fe07a2fc03b28f"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/transform.js",
+                    "digest": "sha256:bad536356ec3305ce87b92b9f78633001da23d9c4f32695e111c7defbc21ff0d"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/index.d.ts",
+                    "digest": "sha256:15d5630dfcd107d18de0dea37df1451f7c0817227008624a5fe5f0019966457c"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/sse.d.ts",
+                    "digest": "sha256:dbf1cbb522d22960b34ab15840e2c92b98330e77c41c82da0e7b07d0f24224db"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/transform.d.ts",
+                    "digest": "sha256:bad536356ec3305ce87b92b9f78633001da23d9c4f32695e111c7defbc21ff0d"
+                  },
+                  {
+                    "role": "manifest",
+                    "path": "./package.json",
+                    "digest": "sha256:7ae55652fac7fb7339cf3043058e405c5b77ab87b330b0339f6e349ab04dc82f"
+                  },
+                  {
+                    "role": "resolution-input",
+                    "path": "./package.json",
+                    "digest": "sha256:7ae55652fac7fb7339cf3043058e405c5b77ab87b330b0339f6e349ab04dc82f"
+                  }
+                ],
+                "dependencies": [
+                  {
+                    "specifier": "@solid-primitives/utils",
+                    "packageName": "@solid-primitives/utils",
+                    "artifactCase": "artifact-case:201305cd89433417ed596f9aff1267a0a29f0b30afee037d526023d68599a8d5",
+                    "acceptedContractDigest": "sha256:3a217d2658d379da0b6568a957758d0ac52c16c689947973eb985c6ae34d4b1f"
+                  },
+                  {
+                    "specifier": "solid-js",
+                    "packageName": "solid-js",
+                    "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+                    "acceptedContractDigest": "sha256:79e5bb9aaafe4bc8c3bb0fc6735a78ce594004d7146786ed6c0cabf0aa72f3be"
+                  },
+                  {
+                    "specifier": "solid-js/web",
+                    "packageName": "solid-js",
+                    "artifactCase": "artifact-case:782f0f95d887ca06522ee658896b001c6f7039842440b45db75021fbf4506318",
+                    "acceptedContractDigest": "sha256:3cf0e8df9fcb38c680426833723dc245f10975f5ad21efb6d1753349b1c5c514"
+                  }
+                ],
+                "digest": "sha256:ff835a0b82af470ae8f0002f060c23045b4272da5686ba3dffc88e8c6b61dfbb"
+              },
+              "authority": "standalonePackageResolver"
+            },
+            "motionGlobalConfig": null,
+            "motionGlobalConfigSummary": null
+          },
+          {
+            "entrypoint": "./worker",
+            "selection": {
+              "artifact": {
+                "closureSha256": "42d42bbcb921ed065877e70ebb9e57a35b8a4b38fb42c0b8d03cb000bdc73d97",
+                "path": "./dist/worker.js",
+                "sha256": "26001aed451648c324c67802c447046d9d69750bfc2074cf0c1407bd41ceecb8"
+              },
+              "declarations": {
+                "path": "./dist/worker.d.ts",
+                "sha256": "9b35e6e5560ce0a8307edb6ddea09d87115081c18496906d8fab5fb14b6cf1cf"
+              },
+              "resolution": {
+                "runtimeBranch": "/exports/.~1worker/import/default",
+                "typesBranch": "/exports/.~1worker/import/types"
+              }
+            },
+            "coordinate": {
+              "artifactCaseId": "artifact-case:501010a24b04c6c99369ad91ffe65b86d62560e5c734959fb904c07dbcc46649",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-dZYGBh/node_modules/@solid-primitives/.solid-checker-certification-bdec5e14913e0c3660b8b5a9e6e4ed299050b4c467bdc78b8e149085b55a4f15.mjs",
+              "specifier": "@solid-primitives/sse/worker",
+              "resolvedImportRoot": "sha256:5efcf764a6722def37ec616563ad4893ba1bdcd2eb44ac7e86a8a3e443a2e627",
+              "semanticDigest": "sha256:8758b94c290d49da993d000e5a14b0faf8ae392159a5250524b63d204b60700d",
+              "receiptDigest": "sha256:b05bb3e4b3183c38f961185953a63338ff2efe9e8f706779d5fd3fa07dc1107e",
+              "catalog": "cases/5efcf764a6722def37ec616563ad4893ba1bdcd2eb44ac7e86a8a3e443a2e627/accepted-contracts.json",
+              "catalogDigest": "sha256:e870be4ef578186c971bb0038f41cff8a04a258010a36e691520c6d77ff046c6"
+            },
+            "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-hAniIU/@solid-primitives__sse@0.0.103--solid1--only.json.accepted-catalog/case-sets/2795598f825bbbf7f5ecb66716d5ba7f860f3c331d0546c1ad2304705dc41817/cases/5efcf764a6722def37ec616563ad4893ba1bdcd2eb44ac7e86a8a3e443a2e627/accepted-contracts.json",
+            "documentDigest": "sha256:f61222d78790e95a422b110dd3b77461aa4ca3f9173f772756e4ac40d9895d4f",
+            "receiptDigest": "sha256:b05bb3e4b3183c38f961185953a63338ff2efe9e8f706779d5fd3fa07dc1107e",
+            "receiptPayload": {
+              "semanticModelVersion": 1,
+              "proofVersion": 2,
+              "proofPolicy": 2,
+              "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+              "mainDigest": "sha256:f61222d78790e95a422b110dd3b77461aa4ca3f9173f772756e4ac40d9895d4f",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-dZYGBh/node_modules/@solid-primitives/.solid-checker-certification-bdec5e14913e0c3660b8b5a9e6e4ed299050b4c467bdc78b8e149085b55a4f15.mjs",
+              "specifier": "@solid-primitives/sse/worker",
+              "resolvedImportRoot": "sha256:5efcf764a6722def37ec616563ad4893ba1bdcd2eb44ac7e86a8a3e443a2e627",
+              "semanticDigest": "sha256:8758b94c290d49da993d000e5a14b0faf8ae392159a5250524b63d204b60700d",
+              "artifactProvenanceRoot": "sha256:edbf7eba7533f4dbec268afe619505020502234296a608f879aa40a1b45d2035",
+              "snapshotRoot": "sha256:bf97935e51420f4a647f4d6577c847db5fc3bebbc689cffa3011f209317d1c0b",
+              "packageRoot": "sha256:e2acbd8dc624cf54a58ec1c6d49c7adc440c11f300e9b7b8a23722f8c9e287d0",
+              "manifestRoot": "sha256:459c6ad0e61ba5d6b8c9eb498b0d3356223dc40f5dd0cf1c4de003f3cac0de37",
+              "artifactsRoot": "sha256:399c6e113efcc110e99d51fc99a621e51663a681202989ea8065f206925d0bff",
+              "declarationsRoot": "sha256:0cb467496644adb08219b57c7af69d6fcc4e5f196152be2bcb1c30bc788d78bb",
+              "transformRoot": "sha256:c8ae6a20c17d8d5e7e772410dc0acb89475815bfd46ce38567e351d8c5216ffe",
+              "exportsRoot": "sha256:912bbc45a3a8ff0c58ae6e9b860b2e0c86f7051f36fa67c49072de074b72d78b",
+              "closureRoot": "sha256:264a65b709f2e3a52ebd90dd909c2a5443f9d153695ecf2e2bc7eb1a809a3050",
+              "demandGraphRoot": "sha256:b33503fe35dc917e79ab97a56f8e4a1f45f4b2af0d91e66aa1d426734d13db02",
+              "verifiedPositiveRoot": "sha256:222b4ac2145348e53b12402b45a1661fbd5b67a4d377b3bc17e3f40f1d4256bc",
+              "witnessRoots": {
+                "accepted-dependency-composition": "sha256:63a61d4a7bdf5d8b4e1219bd2adb3e48dc5b4b359fb7e7fb02c921e8ed400f58",
+                "argument-binding": "sha256:d46b84b878b6aecbc89a63a693157d44d2594ffae8896f1d5220431f7727df33",
+                "artifact-declarations": "sha256:0cb467496644adb08219b57c7af69d6fcc4e5f196152be2bcb1c30bc788d78bb",
+                "callable-path": "sha256:18e0597effc98e87fecb787ad53a2924e681c155f4c998fef46ab1d7550ea83b",
+                "compiler-reconciliation": "sha256:ed2e1ded73f3e06b3d7a3eaeabc5f3f99cc58cd568ae7da0d5277385ffbabf85",
+                "domain-exhaustiveness": "sha256:9e36011528e3280bb6b5ee2b1fa82cca9962b9ba86c366ed8380270f7cc47638",
+                "export-identity": "sha256:912bbc45a3a8ff0c58ae6e9b860b2e0c86f7051f36fa67c49072de074b72d78b",
+                "export-resolution": "sha256:399c6e113efcc110e99d51fc99a621e51663a681202989ea8065f206925d0bff",
+                "guard-partition": "sha256:521525714b86161c71e63fcc2abbf7e99224a271d693e85a2013f4934f8b3718",
+                "manifest-entrypoint": "sha256:459c6ad0e61ba5d6b8c9eb498b0d3356223dc40f5dd0cf1c4de003f3cac0de37",
+                "module-closure": "sha256:264a65b709f2e3a52ebd90dd909c2a5443f9d153695ecf2e2bc7eb1a809a3050",
+                "operation-cardinality": "sha256:0680db4f4cf8d36cb4ddc3238aad5dd7102cda5187fb313a5c81b4ea3805ee75",
+                "operation-reachability": "sha256:86e47ca3514ee94e5a9c82bfbdef3c90f5d49c8dec30d9cc27803cf44ed6dda3",
+                "package-identity": "sha256:e2acbd8dc624cf54a58ec1c6d49c7adc440c11f300e9b7b8a23722f8c9e287d0",
+                "recursive-value-shape": "sha256:2157e349583b25e25d13e90be552a6d44b85c2c7078af47f18bd29afa92478ec",
+                "rest-spread-coverage": "sha256:ddabdd579b244abf1b4c7194332f11b27d8b7661db85f3ddc0e0a379fda9e919",
+                "selected-signature": "sha256:a57cccc850c79dc34514aefbaf6ce9e84d9495bb94db99296921cf9aac8a810e"
+              },
+              "producerSessionsRoot": "sha256:133b9b950313455b518bfeffd870debf3beed8592002d88f1370cd02e1e1270e",
+              "dependencyReceiptsRoot": "sha256:4b2ed4be0cf68b4b867cd0b20a35b695e22b1f8766f6f4848a548e4f7167373c",
+              "dependencyTrustRoot": "sha256:007c8ef1238a0c9faf71956d296145963e75912d13d51e01c177cc1a84f1fc0f",
+              "probeGateRoot": "sha256:95f64cd8a6ab213cf4b861e3176b1d217967a54cb03f7158519eeaa50e455f73",
+              "closedClaimsRoot": "sha256:1bd92b939d130505b2d51d6284ced7ddfa153d194e1552380cbab27d8add644f",
+              "verifierSourceDigest": "sha256:fc64b350efc4f2d1e9945acf01d6bc0f34d6f974eb4c22f22a39ee67ccb33331",
+              "verifierBuildDigest": "sha256:b13a1cece363b8d4314cb1a03a2dd7833ad490b0fb739a882259123e69a2daa1",
+              "issuerKind": "persistent-local",
+              "issuerScope": "ecosystem-benchmark:ba3c4128d846fc25f9502750c09c4495de9bff6c507e7dc1f87837f44b3afaea",
+              "keyId": "ed25519:sha256:41a2c4426ecfc6ff93c6a72d99fa4feeddb4bb71dfa1c1d2c0d5570db17fe708",
+              "signatureAlgorithm": "ed25519"
+            },
+            "resolution": {
+              "specifier": "@solid-primitives/sse/worker",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-dZYGBh/node_modules/@solid-primitives/.solid-checker-certification-bdec5e14913e0c3660b8b5a9e6e4ed299050b4c467bdc78b8e149085b55a4f15.mjs",
+              "requestedEntrypoint": "./worker",
+              "packageName": "@solid-primitives/sse",
+              "packageVersion": "0.0.103",
+              "packageIntegrity": "sha512-ltbMpEpk4zwSxyo3ZCTMfM14RLUQHLufXkyoZJgJNofrCjbbW6MLdRJiGnC/7hEVr89cbU3OEKu9FYrqPAoAiA==",
+              "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-dZYGBh/node_modules/@solid-primitives/sse",
+              "packageManifest": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-dZYGBh/node_modules/@solid-primitives/sse/package.json",
+                "digest": "sha256:7ae55652fac7fb7339cf3043058e405c5b77ab87b330b0339f6e349ab04dc82f"
+              },
+              "runtime": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-dZYGBh/node_modules/@solid-primitives/sse/dist/worker.js",
+                "digest": "sha256:26001aed451648c324c67802c447046d9d69750bfc2074cf0c1407bd41ceecb8"
+              },
+              "declarations": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-dZYGBh/node_modules/@solid-primitives/sse/dist/worker.d.ts",
+                "digest": "sha256:9b35e6e5560ce0a8307edb6ddea09d87115081c18496906d8fab5fb14b6cf1cf"
+              },
+              "runtimeTrace": {
+                "branch": "/exports/.~1worker/import/default",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./worker"
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/.~1worker"
+                  },
+                  {
+                    "condition": "default",
+                    "target": "/exports/.~1worker/import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/worker.js"
+                  }
+                ]
+              },
+              "declarationTrace": {
+                "branch": "/exports/.~1worker/import/types",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./worker"
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/.~1worker"
+                  },
+                  {
+                    "condition": "types",
+                    "target": "/exports/.~1worker/import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/worker.d.ts"
+                  }
+                ]
+              },
+              "closure": {
+                "entries": [
+                  {
+                    "role": "runtime",
+                    "path": "./dist/sse.js",
+                    "digest": "sha256:8abf544922521443d5344d6f2cd0bf8f6bc801bfdf26bdfde3fe07a2fc03b28f"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/worker.js",
+                    "digest": "sha256:26001aed451648c324c67802c447046d9d69750bfc2074cf0c1407bd41ceecb8"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/sse.d.ts",
+                    "digest": "sha256:dbf1cbb522d22960b34ab15840e2c92b98330e77c41c82da0e7b07d0f24224db"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/worker.d.ts",
+                    "digest": "sha256:9b35e6e5560ce0a8307edb6ddea09d87115081c18496906d8fab5fb14b6cf1cf"
+                  },
+                  {
+                    "role": "manifest",
+                    "path": "./package.json",
+                    "digest": "sha256:7ae55652fac7fb7339cf3043058e405c5b77ab87b330b0339f6e349ab04dc82f"
+                  },
+                  {
+                    "role": "resolution-input",
+                    "path": "./package.json",
+                    "digest": "sha256:7ae55652fac7fb7339cf3043058e405c5b77ab87b330b0339f6e349ab04dc82f"
+                  }
+                ],
+                "dependencies": [
+                  {
+                    "specifier": "@solid-primitives/utils",
+                    "packageName": "@solid-primitives/utils",
+                    "artifactCase": "artifact-case:201305cd89433417ed596f9aff1267a0a29f0b30afee037d526023d68599a8d5",
+                    "acceptedContractDigest": "sha256:3a217d2658d379da0b6568a957758d0ac52c16c689947973eb985c6ae34d4b1f"
+                  },
+                  {
+                    "specifier": "solid-js",
+                    "packageName": "solid-js",
+                    "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+                    "acceptedContractDigest": "sha256:79e5bb9aaafe4bc8c3bb0fc6735a78ce594004d7146786ed6c0cabf0aa72f3be"
+                  },
+                  {
+                    "specifier": "solid-js/web",
+                    "packageName": "solid-js",
+                    "artifactCase": "artifact-case:782f0f95d887ca06522ee658896b001c6f7039842440b45db75021fbf4506318",
+                    "acceptedContractDigest": "sha256:3cf0e8df9fcb38c680426833723dc245f10975f5ad21efb6d1753349b1c5c514"
+                  }
+                ],
+                "digest": "sha256:42d42bbcb921ed065877e70ebb9e57a35b8a4b38fb42c0b8d03cb000bdc73d97"
+              },
+              "authority": "standalonePackageResolver"
+            },
+            "motionGlobalConfig": null,
+            "motionGlobalConfigSummary": null
+          }
+        ]
+      },
+      "coverageBefore": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": false
+      },
+      "coverageAfter": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 2,
+        "rootCertified": true
+      },
+      "generationRefusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @solid-primitives/utils has no exact runtime binding for export json"
+        },
+        {
+          "entrypoint": "./worker-handler",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-verified: emit package contract: entry file <package-root>/dist/worker-handler.js has no runtime ESM exports"
+        }
+      ],
+      "recovery": {
+        "entrypointRecovery": {
+          "cases": [
+            {
+              "entrypoint": "./worker",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": ".",
+              "conditions": [
+                "import"
+              ]
+            }
+          ],
+          "retainedCases": [
+            {
+              "entrypoint": "./worker",
+              "conditions": [
+                "import"
+              ]
+            }
+          ],
+          "remainingRefusals": [
+            {
+              "entrypoint": "./worker-handler",
+              "conditions": [],
+              "stage": "artifact-case",
+              "class": "published-artifact",
+              "applicability": "runtime-module",
+              "reason": "solid-checker-verified: emit package contract: entry file <package-root>/dist/worker-handler.js has no runtime ESM exports"
+            }
+          ]
+        },
+        "rootCases": 2,
+        "canonicalNodes": 8,
+        "acquiredPublishedArtifacts": 4,
+        "acquisitionUnits": 7,
+        "graphAcquisitionDurationMs": 1.78,
+        "resolutionSession": {
+          "requests": 0,
+          "semanticAcquisitions": 0,
+          "semanticCacheHits": 0,
+          "semanticCacheInvalidations": 0,
+          "moduleDescriptionsParsed": 29,
+          "typeScriptProgramsCreated": 0
+        },
+        "compilerSourceClosureCensus": 2,
+        "proposalGenerations": 8,
+        "proposalGenerationsShared": 3,
+        "proposalFrontiers": [
+          {
+            "nodes": 3,
+            "durationMs": 636.21
+          },
+          {
+            "nodes": 2,
+            "durationMs": 307.23
+          },
+          {
+            "nodes": 1,
+            "durationMs": 116.43
+          },
+          {
+            "nodes": 2,
+            "durationMs": 95.91
+          }
+        ],
+        "graphNodeReferences": 14,
+        "nativeCertificationTransactions": 1,
+        "typeFactsCaseSetBatches": 1,
+        "partialProposalFrontier": true,
+        "reusedProposalForRecovery": true
+      }
+    },
+    {
+      "probeId": "@solid-primitives/sse@1.0.0-next.2|solid2|floor",
+      "before": {
+        "catalogRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-5pgbaA/@solid-primitives__sse@1.0.0-next.2--solid2--floor.json.accepted-catalog",
+        "pointer": null,
+        "cases": [
+          {
+            "entrypoint": "./worker",
+            "selection": {
+              "artifact": {
+                "closureSha256": "92590b6a7e743bdc904fdbca31b6f3e5585f218069f4ea76bd5f713cd7ad0c7b",
+                "path": "./dist/worker.js",
+                "sha256": "cc0f47f03a7aec5aac465eb8dcbe765e534dd17e049bd8a0d44221be089bd13e"
+              },
+              "declarations": {
+                "path": "./dist/worker.d.ts",
+                "sha256": "3265ff5a14e2cf70bcc1cc868181d5c95a8e93bf7d89c9a769eec82f8a4f443f"
+              },
+              "resolution": {
+                "runtimeBranch": "/exports/.~1worker/import/default",
+                "typesBranch": "/exports/.~1worker/import/types"
+              }
+            },
+            "coordinate": null,
+            "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-5pgbaA/@solid-primitives__sse@1.0.0-next.2--solid2--floor.json.accepted-catalog/accepted-contracts.json",
+            "documentDigest": "sha256:aa0b62ff9d592e5ced76ac274f07c1310d524d1927c99983f405b05a528a39c7",
+            "receiptDigest": "sha256:6023debac710a338a052a4489fb0c9b92ba6ffbcb7f35236dd5aa6c6e275efa1",
+            "receiptPayload": {
+              "semanticModelVersion": 1,
+              "proofVersion": 2,
+              "proofPolicy": 2,
+              "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+              "mainDigest": "sha256:aa0b62ff9d592e5ced76ac274f07c1310d524d1927c99983f405b05a528a39c7",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-WCgRSz/node_modules/@solid-primitives/.solid-checker-certification-d7d142f7791d06ba5856066e0cbad5ab84e1e0cdad82b918044dba0c18e814cf.mjs",
+              "specifier": "@solid-primitives/sse/worker",
+              "resolvedImportRoot": "sha256:6a8a92012c80596919462fbfddac2d5775f2713e330d3bd8d737e8e69781fff1",
+              "semanticDigest": "sha256:b96a3a7d7e2f43f9bd9b04d67cccf1275e1f3441e9ddbb25365166b24bca7e32",
+              "artifactProvenanceRoot": "sha256:1750de8704f15070eba8ef66faad33de5d8f4b6d6ae249ddefdcac26b26f6a6a",
+              "snapshotRoot": "sha256:3aa6e043989ecaaade85c78e706e20861e4c565db263ff964b4f87c28c1de87c",
+              "packageRoot": "sha256:4f8614161df16f968c210513684c2789d2f7838ce63cf708f5532c170e4d3f08",
+              "manifestRoot": "sha256:026ffb087f995c792fdd99bc11d83f173d621deda15d3b212eaa250be82b6cc7",
+              "artifactsRoot": "sha256:0b29e56263bed06ea82c70be936728b75d1a5c51eeb5cfde300b6502c4a485a5",
+              "declarationsRoot": "sha256:af423de21ba45da04e5385907038e0769a50ac1a3634d74eeadc758f2e0cbbf3",
+              "transformRoot": "sha256:bd8bec6559e60f8d686fd3212641496e8ac9083b3f355468fe4babe2705d30ab",
+              "exportsRoot": "sha256:f2d4725cff9d634dcbde61503bf636cc34d56a8e2fac44ed0e3962d2570c98d1",
+              "closureRoot": "sha256:d54d732ec2dfb232ba5db98ffdf72b0d14b99905ba6d89a2e6d404bff8b420c2",
+              "demandGraphRoot": "sha256:faa87644a9affed6337f3c1d32587aee6a49b6c61ed8ebba9212aa82c422baae",
+              "verifiedPositiveRoot": "sha256:6c036a1b2df61845c4758a5e07d72a005ae2d72c21de9d62c3755b81c251a76a",
+              "witnessRoots": {
+                "accepted-dependency-composition": "sha256:6495416f312cf1ae7e6a7e2a84b82866681ce243b422ff99008dece83a13ef93",
+                "argument-binding": "sha256:96ffe8af6159f379677a43f0bb263a95a49fd4af5badaa806332d5a106d5d550",
+                "artifact-declarations": "sha256:af423de21ba45da04e5385907038e0769a50ac1a3634d74eeadc758f2e0cbbf3",
+                "callable-path": "sha256:19b9cefed55edefb22c3f2441b1f3e20b580534972e9a55fc985286b11679af8",
+                "compiler-reconciliation": "sha256:1dd3b9b2c4bca6d306884bdf9ae2da07adbe7647e1ce54c6a350f5770bf6fcc5",
+                "domain-exhaustiveness": "sha256:7c812f97f9bb318ba5b11e1b296fa1fffc5936ebb4e0159306fed88e54810862",
+                "export-identity": "sha256:f2d4725cff9d634dcbde61503bf636cc34d56a8e2fac44ed0e3962d2570c98d1",
+                "export-resolution": "sha256:0b29e56263bed06ea82c70be936728b75d1a5c51eeb5cfde300b6502c4a485a5",
+                "guard-partition": "sha256:a2e29fb81f544f9bb609806912f0a6771fdc57120b5d6a4c5b00d4cdfc771ce8",
+                "manifest-entrypoint": "sha256:026ffb087f995c792fdd99bc11d83f173d621deda15d3b212eaa250be82b6cc7",
+                "module-closure": "sha256:d54d732ec2dfb232ba5db98ffdf72b0d14b99905ba6d89a2e6d404bff8b420c2",
+                "operation-cardinality": "sha256:67a1b7f4c6080b0e919798706bbc6c02dceb0baea0dbc54fb5e7a69347529e26",
+                "operation-reachability": "sha256:e8442118cfc78565d7925edfc3b7b5b216558882324440b23c06f6e08c86d45a",
+                "package-identity": "sha256:4f8614161df16f968c210513684c2789d2f7838ce63cf708f5532c170e4d3f08",
+                "recursive-value-shape": "sha256:fc4360fbf9b1225bc97714524884d7f0c2ea719aacfb056127b8464b2bdc7eb3",
+                "rest-spread-coverage": "sha256:8a5e70db42051630b080b75bc278f860cb8beba12bfe1138cbc7d1dc8eb08a2c",
+                "selected-signature": "sha256:95131cd431e34dbbe5b40b080cbffb1a7bdb38cc0ddb3eec7c79eaea46bb7b13"
+              },
+              "producerSessionsRoot": "sha256:d7de17a11ff165503679175bcb013d22982b483bf7f07bf4a5ebcaa518b6455b",
+              "dependencyReceiptsRoot": "sha256:408c3b2e5caebeba6d286fa3da16eed53b16f2d05f3644d2e4a33d38300e0c06",
+              "dependencyTrustRoot": "sha256:8abcd06a726ae63855160a58b6ca32ddf2c02802fd2631c3386b8543a2a2226f",
+              "probeGateRoot": "sha256:80a479c43a765cf04e3eca181fa0b4a1ce4ab3b2c858bde4681d23b3957bc7c1",
+              "closedClaimsRoot": "sha256:a49f7c493aab8f2700ea32341b5eae6cccca9f7111db394b10523f82559eea71",
+              "verifierSourceDigest": "sha256:fc64b350efc4f2d1e9945acf01d6bc0f34d6f974eb4c22f22a39ee67ccb33331",
+              "verifierBuildDigest": "sha256:b13a1cece363b8d4314cb1a03a2dd7833ad490b0fb739a882259123e69a2daa1",
+              "issuerKind": "persistent-local",
+              "issuerScope": "ecosystem-benchmark:272fc6a5a5c975da32ffb67768aa2269d63ae48c615e8f5be63787697711c45a",
+              "keyId": "ed25519:sha256:2a116105fba8a63fb93947c13b2e72304a48c19bffcfb1b7d1d0fb1cd8b281cb",
+              "signatureAlgorithm": "ed25519"
+            },
+            "resolution": {
+              "specifier": "@solid-primitives/sse/worker",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-WCgRSz/node_modules/@solid-primitives/.solid-checker-certification-d7d142f7791d06ba5856066e0cbad5ab84e1e0cdad82b918044dba0c18e814cf.mjs",
+              "requestedEntrypoint": "./worker",
+              "packageName": "@solid-primitives/sse",
+              "packageVersion": "1.0.0-next.2",
+              "packageIntegrity": "sha512-pHQWMTpuWuI8OUCuE61e65rVVk3nx5/xOeMU5m+LRSlBGcnZVP161DMjmPBr4fCOqWkYWWTW6fJGTC8/Cx+tww==",
+              "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-WCgRSz/node_modules/@solid-primitives/sse",
+              "packageManifest": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-WCgRSz/node_modules/@solid-primitives/sse/package.json",
+                "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+              },
+              "runtime": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-WCgRSz/node_modules/@solid-primitives/sse/dist/worker.js",
+                "digest": "sha256:cc0f47f03a7aec5aac465eb8dcbe765e534dd17e049bd8a0d44221be089bd13e"
+              },
+              "declarations": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-WCgRSz/node_modules/@solid-primitives/sse/dist/worker.d.ts",
+                "digest": "sha256:3265ff5a14e2cf70bcc1cc868181d5c95a8e93bf7d89c9a769eec82f8a4f443f"
+              },
+              "runtimeTrace": {
+                "branch": "/exports/.~1worker/import/default",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./worker"
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/.~1worker"
+                  },
+                  {
+                    "condition": "default",
+                    "target": "/exports/.~1worker/import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/worker.js"
+                  }
+                ]
+              },
+              "declarationTrace": {
+                "branch": "/exports/.~1worker/import/types",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./worker"
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/.~1worker"
+                  },
+                  {
+                    "condition": "types",
+                    "target": "/exports/.~1worker/import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/worker.d.ts"
+                  }
+                ]
+              },
+              "closure": {
+                "entries": [
+                  {
+                    "role": "runtime",
+                    "path": "./dist/sse.js",
+                    "digest": "sha256:9d17522db5691ae543ac53f32a2392d10b10f546ca46215740da749dbf57633a"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/worker.js",
+                    "digest": "sha256:cc0f47f03a7aec5aac465eb8dcbe765e534dd17e049bd8a0d44221be089bd13e"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/sse.d.ts",
+                    "digest": "sha256:bf0e80a2de8e0a22c0f36bee487617379e42cba876804d2d27736c2ee9bc7506"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/worker.d.ts",
+                    "digest": "sha256:3265ff5a14e2cf70bcc1cc868181d5c95a8e93bf7d89c9a769eec82f8a4f443f"
+                  },
+                  {
+                    "role": "manifest",
+                    "path": "./package.json",
+                    "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+                  },
+                  {
+                    "role": "resolution-input",
+                    "path": "./package.json",
+                    "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+                  }
+                ],
+                "hazards": [
+                  {
+                    "kind": "unaccepted-external-dependency",
+                    "source": "./dist/sse.js:@solid-primitives/utils",
+                    "affectedDomains": [
+                      "callbacks",
+                      "reads",
+                      "writes",
+                      "creates",
+                      "invalidates",
+                      "throws",
+                      "returns",
+                      "cleanups",
+                      "disposals"
+                    ]
+                  },
+                  {
+                    "kind": "unaccepted-external-dependency",
+                    "source": "./dist/sse.js:@solidjs/web",
+                    "affectedDomains": [
+                      "callbacks",
+                      "reads",
+                      "writes",
+                      "creates",
+                      "invalidates",
+                      "throws",
+                      "returns",
+                      "cleanups",
+                      "disposals"
+                    ]
+                  },
+                  {
+                    "kind": "unaccepted-external-dependency",
+                    "source": "./dist/sse.js:solid-js",
+                    "affectedDomains": [
+                      "callbacks",
+                      "reads",
+                      "writes",
+                      "creates",
+                      "invalidates",
+                      "throws",
+                      "returns",
+                      "cleanups",
+                      "disposals"
+                    ]
+                  }
+                ],
+                "digest": "sha256:92590b6a7e743bdc904fdbca31b6f3e5585f218069f4ea76bd5f713cd7ad0c7b"
+              },
+              "authority": "standalonePackageResolver"
+            },
+            "motionGlobalConfig": null,
+            "motionGlobalConfigSummary": null
+          }
+        ]
+      },
+      "after": {
+        "catalogRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-cAitZc/@solid-primitives__sse@1.0.0-next.2--solid2--floor.json.accepted-catalog",
+        "pointer": {
+          "format": "solid-checker-accepted-contract-case-set-pointer",
+          "caseSetVersion": 1,
+          "document": "case-sets/84cb530fd1666509dc1632ebf2f9529b5be6ff7545954f17eceffc0ea323ca23/accepted-contract-case-set.json",
+          "documentDigest": "sha256:84cb530fd1666509dc1632ebf2f9529b5be6ff7545954f17eceffc0ea323ca23"
+        },
+        "cases": [
+          {
+            "entrypoint": ".",
+            "selection": {
+              "artifact": {
+                "closureSha256": "be1ab00df9b77826b3ada8291af1d2f76e1d847bfbc4b009c3cf06395750a564",
+                "path": "./dist/index.js",
+                "sha256": "f304a213f47ca499699722e8e982153f3d59bc101821ee7793accd7a9d420552"
+              },
+              "declarations": {
+                "path": "./dist/index.d.ts",
+                "sha256": "86413dcf03944a0ca57d6a46a6a657cec5babfa5c8780f0faede4993326347bb"
+              },
+              "resolution": {
+                "runtimeBranch": "/exports/./import/default",
+                "typesBranch": "/exports/./import/types"
+              }
+            },
+            "coordinate": {
+              "artifactCaseId": "artifact-case:c7061ee4feedad3ab922306e4a24120e5a69d7b9738b6a9abe0f36d29da79630",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-zJEvAO/node_modules/@solid-primitives/.solid-checker-certification-c2edf572f7c07b01c8a6dde75de5089f5a7089d78b67411a0da80a56f70b2e7b.mjs",
+              "specifier": "@solid-primitives/sse",
+              "resolvedImportRoot": "sha256:70fb887ec1e1a8b145ae65aaf0331e6286677769d0e484e1966786da99dd5fcd",
+              "semanticDigest": "sha256:04340027dff1a51dbfd9a712d1883c8de83ba88271b6c4991abe9120879d6c09",
+              "receiptDigest": "sha256:f730c5fe8be9b51e5ceb965623c92ed6116017b9b3992231910f48ac4afaa24b",
+              "catalog": "cases/70fb887ec1e1a8b145ae65aaf0331e6286677769d0e484e1966786da99dd5fcd/accepted-contracts.json",
+              "catalogDigest": "sha256:9889be6311365d961966a5fe7400f2d13097408f22547d8048de45757b3409fe"
+            },
+            "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-cAitZc/@solid-primitives__sse@1.0.0-next.2--solid2--floor.json.accepted-catalog/case-sets/84cb530fd1666509dc1632ebf2f9529b5be6ff7545954f17eceffc0ea323ca23/cases/70fb887ec1e1a8b145ae65aaf0331e6286677769d0e484e1966786da99dd5fcd/accepted-contracts.json",
+            "documentDigest": "sha256:24505440db7a61e056a8bfacbded5e1442ca64d0e52accef0d96f28a420fa99d",
+            "receiptDigest": "sha256:f730c5fe8be9b51e5ceb965623c92ed6116017b9b3992231910f48ac4afaa24b",
+            "receiptPayload": {
+              "semanticModelVersion": 1,
+              "proofVersion": 2,
+              "proofPolicy": 2,
+              "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+              "mainDigest": "sha256:24505440db7a61e056a8bfacbded5e1442ca64d0e52accef0d96f28a420fa99d",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-zJEvAO/node_modules/@solid-primitives/.solid-checker-certification-c2edf572f7c07b01c8a6dde75de5089f5a7089d78b67411a0da80a56f70b2e7b.mjs",
+              "specifier": "@solid-primitives/sse",
+              "resolvedImportRoot": "sha256:70fb887ec1e1a8b145ae65aaf0331e6286677769d0e484e1966786da99dd5fcd",
+              "semanticDigest": "sha256:04340027dff1a51dbfd9a712d1883c8de83ba88271b6c4991abe9120879d6c09",
+              "artifactProvenanceRoot": "sha256:1750de8704f15070eba8ef66faad33de5d8f4b6d6ae249ddefdcac26b26f6a6a",
+              "snapshotRoot": "sha256:3aa6e043989ecaaade85c78e706e20861e4c565db263ff964b4f87c28c1de87c",
+              "packageRoot": "sha256:b48652d80830edc58400504da6f1567213de05d86b3796866d15467f7b721970",
+              "manifestRoot": "sha256:28c58e4e3512e7e48befb257b321effe3b484c4644f574cb41b204862689c01d",
+              "artifactsRoot": "sha256:c55248eafa2b8290b5058e02bd5041497558b43db1ae5c46aa907b7cf1aa3afc",
+              "declarationsRoot": "sha256:bed3d0ce5532192badbacebea034f61df94fadf31455840d4b86e55a3d464739",
+              "transformRoot": "sha256:11fdb79e599fb382a5f49a8af0d8d26f36852c63141293b3e4f0858d3198d4dc",
+              "exportsRoot": "sha256:00d177fe64259fdddac94bd5a3a3dc622724b6ace4aabcecd40b4353337687aa",
+              "closureRoot": "sha256:f0a95c7b6ea3d43760c108ddc6897ece6df382dc0b735bdc6c23efaa44d44b8a",
+              "demandGraphRoot": "sha256:285df97f8ee6504068d234a2b292edb96dadaa64d4779625bfe97cb1c0ed3c68",
+              "verifiedPositiveRoot": "sha256:dcd235c4fefecfea1ab471618ff7afa2f38dfb3b819b686e7a3a3c3865be93f3",
+              "witnessRoots": {
+                "accepted-dependency-composition": "sha256:761265fae55e042a6234ebe615bc1bfb1db0caed08d25e2799725260a30e4cae",
+                "argument-binding": "sha256:3bca9f9494a54dfedeb644be98f76dfec8960cc34a0950740f0f248cb99f001d",
+                "artifact-declarations": "sha256:bed3d0ce5532192badbacebea034f61df94fadf31455840d4b86e55a3d464739",
+                "callable-path": "sha256:53e3544c0e7b1f0d08c30a6e2d9236263da494dc497253fbe7b81c9548b48e7e",
+                "compiler-reconciliation": "sha256:4423018e8771ac0219e6940aa32ec31cc9eeb81f8d164f9b782c766afeb7c182",
+                "domain-exhaustiveness": "sha256:198b2a8209e7b9ee5d9c923eed8cb18b00aeff8897762a34696580f34fd179ea",
+                "export-identity": "sha256:00d177fe64259fdddac94bd5a3a3dc622724b6ace4aabcecd40b4353337687aa",
+                "export-resolution": "sha256:c55248eafa2b8290b5058e02bd5041497558b43db1ae5c46aa907b7cf1aa3afc",
+                "guard-partition": "sha256:242d4ece1f6ed510a91f4c8e057523ecf55cb2006f08407e09b32bdb777a560c",
+                "manifest-entrypoint": "sha256:28c58e4e3512e7e48befb257b321effe3b484c4644f574cb41b204862689c01d",
+                "module-closure": "sha256:f0a95c7b6ea3d43760c108ddc6897ece6df382dc0b735bdc6c23efaa44d44b8a",
+                "operation-cardinality": "sha256:3b2697b2cb53d131637814004ecbd62139502c458f4e462e4e0f3f76fcb072c4",
+                "operation-reachability": "sha256:94ef746afe932f0f8ecea57220181c2370ec07f63c93e1dfb6b0d0e964ee1735",
+                "package-identity": "sha256:b48652d80830edc58400504da6f1567213de05d86b3796866d15467f7b721970",
+                "recursive-value-shape": "sha256:781a3e50622b21050c9aec67ca5a3d04641c6a75fa901e3a8d1e9d9b208cc2c2",
+                "rest-spread-coverage": "sha256:6d17ab7867338a68bface692c966ea055c37ab532d89da83cb52573300d378f2",
+                "selected-signature": "sha256:83b44a5d0ec039b2fd560a2b7a6bf530bf9a9b25dac89c96c578cc4d711551dd"
+              },
+              "producerSessionsRoot": "sha256:62f180cf5cc18220cc52cd5f784986df6140822f72de0bf8229e456f26e29848",
+              "dependencyReceiptsRoot": "sha256:b7857bcdd3dc9954ca9e2552173e18088173c25f0d5ccd1f3c5bf5c5d42e654f",
+              "dependencyTrustRoot": "sha256:2d16ba5e503b40c7ea6976664a9bf4fc822e61bb2c5e5c01a83a2448afc355c1",
+              "probeGateRoot": "sha256:157301798745f50f1d7a566bed1ccf99096881baa800ecbb89db0ce95bcf7a94",
+              "closedClaimsRoot": "sha256:8f289e1077ffd97eb66cc629c0ff98939e3e58f764b12ef103c832acd5b66258",
+              "verifierSourceDigest": "sha256:fc64b350efc4f2d1e9945acf01d6bc0f34d6f974eb4c22f22a39ee67ccb33331",
+              "verifierBuildDigest": "sha256:b13a1cece363b8d4314cb1a03a2dd7833ad490b0fb739a882259123e69a2daa1",
+              "issuerKind": "persistent-local",
+              "issuerScope": "ecosystem-benchmark:6e4b63bb669b74f1b8964c8ce4ac159e555aa3120815da4a88b12cec4bbe5052",
+              "keyId": "ed25519:sha256:e3a387e09f1e7d4758b552e5e94d9e3e71f57e3f8537750bab9b85e49fd93eaa",
+              "signatureAlgorithm": "ed25519"
+            },
+            "resolution": {
+              "specifier": "@solid-primitives/sse",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-zJEvAO/node_modules/@solid-primitives/.solid-checker-certification-c2edf572f7c07b01c8a6dde75de5089f5a7089d78b67411a0da80a56f70b2e7b.mjs",
+              "requestedEntrypoint": ".",
+              "packageName": "@solid-primitives/sse",
+              "packageVersion": "1.0.0-next.2",
+              "packageIntegrity": "sha512-pHQWMTpuWuI8OUCuE61e65rVVk3nx5/xOeMU5m+LRSlBGcnZVP161DMjmPBr4fCOqWkYWWTW6fJGTC8/Cx+tww==",
+              "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-zJEvAO/node_modules/@solid-primitives/sse",
+              "packageManifest": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-zJEvAO/node_modules/@solid-primitives/sse/package.json",
+                "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+              },
+              "runtime": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-zJEvAO/node_modules/@solid-primitives/sse/dist/index.js",
+                "digest": "sha256:f304a213f47ca499699722e8e982153f3d59bc101821ee7793accd7a9d420552"
+              },
+              "declarations": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-zJEvAO/node_modules/@solid-primitives/sse/dist/index.d.ts",
+                "digest": "sha256:86413dcf03944a0ca57d6a46a6a657cec5babfa5c8780f0faede4993326347bb"
+              },
+              "runtimeTrace": {
+                "branch": "/exports/./import/default",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "."
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/."
+                  },
+                  {
+                    "condition": "default",
+                    "target": "/exports/./import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/index.js"
+                  }
+                ]
+              },
+              "declarationTrace": {
+                "branch": "/exports/./import/types",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "."
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/."
+                  },
+                  {
+                    "condition": "types",
+                    "target": "/exports/./import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/index.d.ts"
+                  }
+                ]
+              },
+              "closure": {
+                "entries": [
+                  {
+                    "role": "runtime",
+                    "path": "./dist/index.js",
+                    "digest": "sha256:f304a213f47ca499699722e8e982153f3d59bc101821ee7793accd7a9d420552"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/sse.js",
+                    "digest": "sha256:9d17522db5691ae543ac53f32a2392d10b10f546ca46215740da749dbf57633a"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/transform.js",
+                    "digest": "sha256:684b8448bf5b9debbcf37881fd3f7b87e855932b2ed25e4837cb030d81b5ada8"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/index.d.ts",
+                    "digest": "sha256:86413dcf03944a0ca57d6a46a6a657cec5babfa5c8780f0faede4993326347bb"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/sse.d.ts",
+                    "digest": "sha256:bf0e80a2de8e0a22c0f36bee487617379e42cba876804d2d27736c2ee9bc7506"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/transform.d.ts",
+                    "digest": "sha256:a7560416ffa4c2a72264b996bc66fbb4ccbce110f9a122a59f895c85fd5163ec"
+                  },
+                  {
+                    "role": "manifest",
+                    "path": "./package.json",
+                    "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+                  },
+                  {
+                    "role": "resolution-input",
+                    "path": "./package.json",
+                    "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+                  }
+                ],
+                "dependencies": [
+                  {
+                    "specifier": "@solid-primitives/utils",
+                    "packageName": "@solid-primitives/utils",
+                    "artifactCase": "artifact-case:96257f1d0338918233cb6a14515ceb0f244bbab2014e3c8e39b0168a08f4ef69",
+                    "acceptedContractDigest": "sha256:f0cfb3a878b88b1c6e0db20a76b8fcf5fcbe14e1967857a58c93506a5ccdbc37"
+                  },
+                  {
+                    "specifier": "@solidjs/web",
+                    "packageName": "@solidjs/web",
+                    "artifactCase": "artifact-case:078303119b5e0b36f82d6f6c2be232000f63d78ff4b6d84cc52b0c2267a1e139",
+                    "acceptedContractDigest": "sha256:b2f8f8e93b59524479c6b692b16c623af298ded643955e34916602daa2feb993"
+                  },
+                  {
+                    "specifier": "solid-js",
+                    "packageName": "solid-js",
+                    "artifactCase": "artifact-case:84812be50e61d9bf9161fa727fa1bdee948fa4bf2f43de31c6b5bf2fd530e076",
+                    "acceptedContractDigest": "sha256:859bfda348abfd5ee2a01dbe80e6d213404879f74e0a2fb40f4aed2af8096fa5"
+                  }
+                ],
+                "digest": "sha256:be1ab00df9b77826b3ada8291af1d2f76e1d847bfbc4b009c3cf06395750a564"
+              },
+              "authority": "standalonePackageResolver"
+            },
+            "motionGlobalConfig": null,
+            "motionGlobalConfigSummary": null
+          },
+          {
+            "entrypoint": "./worker",
+            "selection": {
+              "artifact": {
+                "closureSha256": "0823cde16347afe0e7c8a232e7d199ef9fb679c6797c078e205769f6a9943dec",
+                "path": "./dist/worker.js",
+                "sha256": "cc0f47f03a7aec5aac465eb8dcbe765e534dd17e049bd8a0d44221be089bd13e"
+              },
+              "declarations": {
+                "path": "./dist/worker.d.ts",
+                "sha256": "3265ff5a14e2cf70bcc1cc868181d5c95a8e93bf7d89c9a769eec82f8a4f443f"
+              },
+              "resolution": {
+                "runtimeBranch": "/exports/.~1worker/import/default",
+                "typesBranch": "/exports/.~1worker/import/types"
+              }
+            },
+            "coordinate": {
+              "artifactCaseId": "artifact-case:4831e24b40eb2e30e0810cbdbcbe36975e89796752bd0d6eb0c00f812dfc5ade",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-zJEvAO/node_modules/@solid-primitives/.solid-checker-certification-c2edf572f7c07b01c8a6dde75de5089f5a7089d78b67411a0da80a56f70b2e7b.mjs",
+              "specifier": "@solid-primitives/sse/worker",
+              "resolvedImportRoot": "sha256:5641be661c847e1176136962eed6072ed2fb18b45987353b7f1600d3ea63527e",
+              "semanticDigest": "sha256:404db0304fcfdaca94686ca5766026ebe6b376e318ce73f728a5d948b9c3ad05",
+              "receiptDigest": "sha256:31c7e9a6de1de6504ce83d8af733fda0339671b6baed711ac9d7c3d857ec290c",
+              "catalog": "cases/5641be661c847e1176136962eed6072ed2fb18b45987353b7f1600d3ea63527e/accepted-contracts.json",
+              "catalogDigest": "sha256:a1d075c778084380ffe4bd629f82d842f075402ea261ac7ce7cc027c0b129222"
+            },
+            "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-cAitZc/@solid-primitives__sse@1.0.0-next.2--solid2--floor.json.accepted-catalog/case-sets/84cb530fd1666509dc1632ebf2f9529b5be6ff7545954f17eceffc0ea323ca23/cases/5641be661c847e1176136962eed6072ed2fb18b45987353b7f1600d3ea63527e/accepted-contracts.json",
+            "documentDigest": "sha256:3a00abfefebf1a3a5342cef1636c49b3540b4c008ece486112b228428b5f0674",
+            "receiptDigest": "sha256:31c7e9a6de1de6504ce83d8af733fda0339671b6baed711ac9d7c3d857ec290c",
+            "receiptPayload": {
+              "semanticModelVersion": 1,
+              "proofVersion": 2,
+              "proofPolicy": 2,
+              "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+              "mainDigest": "sha256:3a00abfefebf1a3a5342cef1636c49b3540b4c008ece486112b228428b5f0674",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-zJEvAO/node_modules/@solid-primitives/.solid-checker-certification-c2edf572f7c07b01c8a6dde75de5089f5a7089d78b67411a0da80a56f70b2e7b.mjs",
+              "specifier": "@solid-primitives/sse/worker",
+              "resolvedImportRoot": "sha256:5641be661c847e1176136962eed6072ed2fb18b45987353b7f1600d3ea63527e",
+              "semanticDigest": "sha256:404db0304fcfdaca94686ca5766026ebe6b376e318ce73f728a5d948b9c3ad05",
+              "artifactProvenanceRoot": "sha256:1750de8704f15070eba8ef66faad33de5d8f4b6d6ae249ddefdcac26b26f6a6a",
+              "snapshotRoot": "sha256:3aa6e043989ecaaade85c78e706e20861e4c565db263ff964b4f87c28c1de87c",
+              "packageRoot": "sha256:7d89e319ed4a84f3089bffc5d6fea75f4c68f36184a5a7c2ad62ab0e5bf5cd90",
+              "manifestRoot": "sha256:c79d3ccdf64f1f04edcc86766639391ae98f8e3230055b1b87136ca6ac37a504",
+              "artifactsRoot": "sha256:9cffc717a6f8d408a1231fada4612b8b8fa975b3a3caaf2619fce65918c4430b",
+              "declarationsRoot": "sha256:c87db73b23ad24fe80cac2fcb49a0c5bf74f1d860c4f980127893c9e5502618c",
+              "transformRoot": "sha256:7c8c75fca4f4d196718aaf864cac47776ff7f76eab319ce0209b8cf06893c1e7",
+              "exportsRoot": "sha256:7083f1a1872955d51099d7f985e0f2290d24df4cbd21e40714159b8725a2e773",
+              "closureRoot": "sha256:0de1ed076ac6343b2fbddabcaed2b09d54e2d792455017a9303b761150d35364",
+              "demandGraphRoot": "sha256:d02ead83402dade0b0f38f3dbdd3c97c4b54bf54141b31f8df1719ea5c34e288",
+              "verifiedPositiveRoot": "sha256:6c999ff4f15467449d59770de53406225c03e560aabc59d239ee7c7f3ec7931a",
+              "witnessRoots": {
+                "accepted-dependency-composition": "sha256:9d6197b8665b323c92da7616b3cacf8c3dc2f571dc6a719c26e5f1defcc78dd8",
+                "argument-binding": "sha256:cf4653c451d6f7fb07c073764b183a963d9258b2ca853aafe359dcc12138c9fb",
+                "artifact-declarations": "sha256:c87db73b23ad24fe80cac2fcb49a0c5bf74f1d860c4f980127893c9e5502618c",
+                "callable-path": "sha256:181f4e518fc40cf789db83c6fab37480832a4ccc5a8a7716447a00fe2099b7f0",
+                "compiler-reconciliation": "sha256:ae7883d4955a84a4a6dc16b3166b5158ddb7bbacdbcdf779f56ac7c0e09f778f",
+                "domain-exhaustiveness": "sha256:1fb0c17704becc118c99b265876a03aec9597a906ed30270bf2c635dcaf155d0",
+                "export-identity": "sha256:7083f1a1872955d51099d7f985e0f2290d24df4cbd21e40714159b8725a2e773",
+                "export-resolution": "sha256:9cffc717a6f8d408a1231fada4612b8b8fa975b3a3caaf2619fce65918c4430b",
+                "guard-partition": "sha256:b97e1fd81d2d7602c1d67751a12831796ac359eaa90b7baf4119b3c28a1ecf1d",
+                "manifest-entrypoint": "sha256:c79d3ccdf64f1f04edcc86766639391ae98f8e3230055b1b87136ca6ac37a504",
+                "module-closure": "sha256:0de1ed076ac6343b2fbddabcaed2b09d54e2d792455017a9303b761150d35364",
+                "operation-cardinality": "sha256:21f8ec9fa0fa5ca8e5f2a0d2d79cd1d69993b4a61a2ca05f0d459ca2207c1e18",
+                "operation-reachability": "sha256:a887e238e21b1a8f4b053f75ebb277ce6f18f44680eae5ce5957162fd468a523",
+                "package-identity": "sha256:7d89e319ed4a84f3089bffc5d6fea75f4c68f36184a5a7c2ad62ab0e5bf5cd90",
+                "recursive-value-shape": "sha256:376b1226a1c43e680851f0e4f34b20d7152d28be0a5976db4974ab8fc23430d7",
+                "rest-spread-coverage": "sha256:958ff1251ab9665d51cccd74acf10dffc93659628970f05f65adb0672a25cd2f",
+                "selected-signature": "sha256:a014e10c82219f25fbf8b2bf60f4b79749228bf69ad488682ec7009defbede4f"
+              },
+              "producerSessionsRoot": "sha256:c720bc8bf8d4b5d00397ed329df7a4f7af5ff7de64bc239dc59975d2f69a99a9",
+              "dependencyReceiptsRoot": "sha256:c6bf6f54d82609a48c404011d7c86fe4c5910b8d5b60df97abf82ed9da513d94",
+              "dependencyTrustRoot": "sha256:b7b1ff63c4cb213f4a45d05ee3d28f66c9e7f3e39c117289bd896aad10942e5a",
+              "probeGateRoot": "sha256:15cddce2a0602883c1d15e7f5e06fd4fd937ff906106612771a4411ab30eca9f",
+              "closedClaimsRoot": "sha256:ecc7009ba1fa6926c9c4043a750e34eedd012a6032acb1c722dff9050cd10424",
+              "verifierSourceDigest": "sha256:fc64b350efc4f2d1e9945acf01d6bc0f34d6f974eb4c22f22a39ee67ccb33331",
+              "verifierBuildDigest": "sha256:b13a1cece363b8d4314cb1a03a2dd7833ad490b0fb739a882259123e69a2daa1",
+              "issuerKind": "persistent-local",
+              "issuerScope": "ecosystem-benchmark:6e4b63bb669b74f1b8964c8ce4ac159e555aa3120815da4a88b12cec4bbe5052",
+              "keyId": "ed25519:sha256:e3a387e09f1e7d4758b552e5e94d9e3e71f57e3f8537750bab9b85e49fd93eaa",
+              "signatureAlgorithm": "ed25519"
+            },
+            "resolution": {
+              "specifier": "@solid-primitives/sse/worker",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-zJEvAO/node_modules/@solid-primitives/.solid-checker-certification-c2edf572f7c07b01c8a6dde75de5089f5a7089d78b67411a0da80a56f70b2e7b.mjs",
+              "requestedEntrypoint": "./worker",
+              "packageName": "@solid-primitives/sse",
+              "packageVersion": "1.0.0-next.2",
+              "packageIntegrity": "sha512-pHQWMTpuWuI8OUCuE61e65rVVk3nx5/xOeMU5m+LRSlBGcnZVP161DMjmPBr4fCOqWkYWWTW6fJGTC8/Cx+tww==",
+              "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-zJEvAO/node_modules/@solid-primitives/sse",
+              "packageManifest": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-zJEvAO/node_modules/@solid-primitives/sse/package.json",
+                "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+              },
+              "runtime": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-zJEvAO/node_modules/@solid-primitives/sse/dist/worker.js",
+                "digest": "sha256:cc0f47f03a7aec5aac465eb8dcbe765e534dd17e049bd8a0d44221be089bd13e"
+              },
+              "declarations": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-zJEvAO/node_modules/@solid-primitives/sse/dist/worker.d.ts",
+                "digest": "sha256:3265ff5a14e2cf70bcc1cc868181d5c95a8e93bf7d89c9a769eec82f8a4f443f"
+              },
+              "runtimeTrace": {
+                "branch": "/exports/.~1worker/import/default",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./worker"
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/.~1worker"
+                  },
+                  {
+                    "condition": "default",
+                    "target": "/exports/.~1worker/import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/worker.js"
+                  }
+                ]
+              },
+              "declarationTrace": {
+                "branch": "/exports/.~1worker/import/types",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./worker"
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/.~1worker"
+                  },
+                  {
+                    "condition": "types",
+                    "target": "/exports/.~1worker/import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/worker.d.ts"
+                  }
+                ]
+              },
+              "closure": {
+                "entries": [
+                  {
+                    "role": "runtime",
+                    "path": "./dist/sse.js",
+                    "digest": "sha256:9d17522db5691ae543ac53f32a2392d10b10f546ca46215740da749dbf57633a"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/worker.js",
+                    "digest": "sha256:cc0f47f03a7aec5aac465eb8dcbe765e534dd17e049bd8a0d44221be089bd13e"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/sse.d.ts",
+                    "digest": "sha256:bf0e80a2de8e0a22c0f36bee487617379e42cba876804d2d27736c2ee9bc7506"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/worker.d.ts",
+                    "digest": "sha256:3265ff5a14e2cf70bcc1cc868181d5c95a8e93bf7d89c9a769eec82f8a4f443f"
+                  },
+                  {
+                    "role": "manifest",
+                    "path": "./package.json",
+                    "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+                  },
+                  {
+                    "role": "resolution-input",
+                    "path": "./package.json",
+                    "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+                  }
+                ],
+                "dependencies": [
+                  {
+                    "specifier": "@solid-primitives/utils",
+                    "packageName": "@solid-primitives/utils",
+                    "artifactCase": "artifact-case:96257f1d0338918233cb6a14515ceb0f244bbab2014e3c8e39b0168a08f4ef69",
+                    "acceptedContractDigest": "sha256:f0cfb3a878b88b1c6e0db20a76b8fcf5fcbe14e1967857a58c93506a5ccdbc37"
+                  },
+                  {
+                    "specifier": "@solidjs/web",
+                    "packageName": "@solidjs/web",
+                    "artifactCase": "artifact-case:078303119b5e0b36f82d6f6c2be232000f63d78ff4b6d84cc52b0c2267a1e139",
+                    "acceptedContractDigest": "sha256:b2f8f8e93b59524479c6b692b16c623af298ded643955e34916602daa2feb993"
+                  },
+                  {
+                    "specifier": "solid-js",
+                    "packageName": "solid-js",
+                    "artifactCase": "artifact-case:84812be50e61d9bf9161fa727fa1bdee948fa4bf2f43de31c6b5bf2fd530e076",
+                    "acceptedContractDigest": "sha256:859bfda348abfd5ee2a01dbe80e6d213404879f74e0a2fb40f4aed2af8096fa5"
+                  }
+                ],
+                "digest": "sha256:0823cde16347afe0e7c8a232e7d199ef9fb679c6797c078e205769f6a9943dec"
+              },
+              "authority": "standalonePackageResolver"
+            },
+            "motionGlobalConfig": null,
+            "motionGlobalConfigSummary": null
+          }
+        ]
+      },
+      "coverageBefore": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": false
+      },
+      "coverageAfter": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 2,
+        "rootCertified": true
+      },
+      "generationRefusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency solid-js has no exact runtime binding for export NotReadyError"
+        },
+        {
+          "entrypoint": "./worker-handler",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-verified: emit package contract: entry file <package-root>/dist/worker-handler.js has no runtime ESM exports"
+        }
+      ],
+      "recovery": {
+        "entrypointRecovery": {
+          "cases": [
+            {
+              "entrypoint": "./worker",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": ".",
+              "conditions": [
+                "import"
+              ]
+            }
+          ],
+          "retainedCases": [
+            {
+              "entrypoint": "./worker",
+              "conditions": [
+                "import"
+              ]
+            }
+          ],
+          "remainingRefusals": [
+            {
+              "entrypoint": "./worker-handler",
+              "conditions": [],
+              "stage": "artifact-case",
+              "class": "published-artifact",
+              "applicability": "runtime-module",
+              "reason": "solid-checker-verified: emit package contract: entry file <package-root>/dist/worker-handler.js has no runtime ESM exports"
+            }
+          ]
+        },
+        "rootCases": 2,
+        "canonicalNodes": 9,
+        "acquiredPublishedArtifacts": 6,
+        "acquisitionUnits": 8,
+        "graphAcquisitionDurationMs": 2.87,
+        "resolutionSession": {
+          "requests": 0,
+          "semanticAcquisitions": 0,
+          "semanticCacheHits": 0,
+          "semanticCacheInvalidations": 0,
+          "moduleDescriptionsParsed": 85,
+          "typeScriptProgramsCreated": 0
+        },
+        "compilerSourceClosureCensus": 1,
+        "proposalGenerations": 9,
+        "proposalGenerationsShared": 3,
+        "proposalFrontiers": [
+          {
+            "nodes": 1,
+            "durationMs": 780.82
+          },
+          {
+            "nodes": 4,
+            "durationMs": 349.16
+          },
+          {
+            "nodes": 2,
+            "durationMs": 825.48
+          },
+          {
+            "nodes": 2,
+            "durationMs": 127.06
+          }
+        ],
+        "graphNodeReferences": 14,
+        "nativeCertificationTransactions": 1,
+        "typeFactsCaseSetBatches": 1,
+        "partialProposalFrontier": true,
+        "reusedProposalForRecovery": true
+      }
+    },
+    {
+      "probeId": "@solid-primitives/sse@1.0.0-next.2|solid2|head",
+      "before": {
+        "catalogRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-odU3Kr/@solid-primitives__sse@1.0.0-next.2--solid2--head.json.accepted-catalog",
+        "pointer": null,
+        "cases": [
+          {
+            "entrypoint": "./worker",
+            "selection": {
+              "artifact": {
+                "closureSha256": "92590b6a7e743bdc904fdbca31b6f3e5585f218069f4ea76bd5f713cd7ad0c7b",
+                "path": "./dist/worker.js",
+                "sha256": "cc0f47f03a7aec5aac465eb8dcbe765e534dd17e049bd8a0d44221be089bd13e"
+              },
+              "declarations": {
+                "path": "./dist/worker.d.ts",
+                "sha256": "3265ff5a14e2cf70bcc1cc868181d5c95a8e93bf7d89c9a769eec82f8a4f443f"
+              },
+              "resolution": {
+                "runtimeBranch": "/exports/.~1worker/import/default",
+                "typesBranch": "/exports/.~1worker/import/types"
+              }
+            },
+            "coordinate": null,
+            "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-odU3Kr/@solid-primitives__sse@1.0.0-next.2--solid2--head.json.accepted-catalog/accepted-contracts.json",
+            "documentDigest": "sha256:aa0b62ff9d592e5ced76ac274f07c1310d524d1927c99983f405b05a528a39c7",
+            "receiptDigest": "sha256:625a4e1ae1da1036796c8141cb8123f6b5f50e97633e98d77a7798c5c021a70b",
+            "receiptPayload": {
+              "semanticModelVersion": 1,
+              "proofVersion": 2,
+              "proofPolicy": 2,
+              "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+              "mainDigest": "sha256:aa0b62ff9d592e5ced76ac274f07c1310d524d1927c99983f405b05a528a39c7",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-EwnltY/node_modules/@solid-primitives/.solid-checker-certification-2c83419b8655c524b122a834b67f5aefcd6b75889b29df8f67fd04863f6c2375.mjs",
+              "specifier": "@solid-primitives/sse/worker",
+              "resolvedImportRoot": "sha256:95ff4951a515ec8c15c4d57d95a8130a226483e3ce6dd60c512e15e1e2bc9628",
+              "semanticDigest": "sha256:b96a3a7d7e2f43f9bd9b04d67cccf1275e1f3441e9ddbb25365166b24bca7e32",
+              "artifactProvenanceRoot": "sha256:1750de8704f15070eba8ef66faad33de5d8f4b6d6ae249ddefdcac26b26f6a6a",
+              "snapshotRoot": "sha256:3aa6e043989ecaaade85c78e706e20861e4c565db263ff964b4f87c28c1de87c",
+              "packageRoot": "sha256:4f8614161df16f968c210513684c2789d2f7838ce63cf708f5532c170e4d3f08",
+              "manifestRoot": "sha256:026ffb087f995c792fdd99bc11d83f173d621deda15d3b212eaa250be82b6cc7",
+              "artifactsRoot": "sha256:0b29e56263bed06ea82c70be936728b75d1a5c51eeb5cfde300b6502c4a485a5",
+              "declarationsRoot": "sha256:af423de21ba45da04e5385907038e0769a50ac1a3634d74eeadc758f2e0cbbf3",
+              "transformRoot": "sha256:bd8bec6559e60f8d686fd3212641496e8ac9083b3f355468fe4babe2705d30ab",
+              "exportsRoot": "sha256:f2d4725cff9d634dcbde61503bf636cc34d56a8e2fac44ed0e3962d2570c98d1",
+              "closureRoot": "sha256:d54d732ec2dfb232ba5db98ffdf72b0d14b99905ba6d89a2e6d404bff8b420c2",
+              "demandGraphRoot": "sha256:faa87644a9affed6337f3c1d32587aee6a49b6c61ed8ebba9212aa82c422baae",
+              "verifiedPositiveRoot": "sha256:7f3caabbac1eb93da87a0b51944ed5d7a2df680e00de3ae53a2a93810e4dc6c7",
+              "witnessRoots": {
+                "accepted-dependency-composition": "sha256:6495416f312cf1ae7e6a7e2a84b82866681ce243b422ff99008dece83a13ef93",
+                "argument-binding": "sha256:96ffe8af6159f379677a43f0bb263a95a49fd4af5badaa806332d5a106d5d550",
+                "artifact-declarations": "sha256:af423de21ba45da04e5385907038e0769a50ac1a3634d74eeadc758f2e0cbbf3",
+                "callable-path": "sha256:c9ba549193ccdb93cb0cc09246c5c7643b211315f04709581f84feb1bee539aa",
+                "compiler-reconciliation": "sha256:1dd3b9b2c4bca6d306884bdf9ae2da07adbe7647e1ce54c6a350f5770bf6fcc5",
+                "domain-exhaustiveness": "sha256:7c812f97f9bb318ba5b11e1b296fa1fffc5936ebb4e0159306fed88e54810862",
+                "export-identity": "sha256:f2d4725cff9d634dcbde61503bf636cc34d56a8e2fac44ed0e3962d2570c98d1",
+                "export-resolution": "sha256:0b29e56263bed06ea82c70be936728b75d1a5c51eeb5cfde300b6502c4a485a5",
+                "guard-partition": "sha256:a2e29fb81f544f9bb609806912f0a6771fdc57120b5d6a4c5b00d4cdfc771ce8",
+                "manifest-entrypoint": "sha256:026ffb087f995c792fdd99bc11d83f173d621deda15d3b212eaa250be82b6cc7",
+                "module-closure": "sha256:d54d732ec2dfb232ba5db98ffdf72b0d14b99905ba6d89a2e6d404bff8b420c2",
+                "operation-cardinality": "sha256:67a1b7f4c6080b0e919798706bbc6c02dceb0baea0dbc54fb5e7a69347529e26",
+                "operation-reachability": "sha256:e8442118cfc78565d7925edfc3b7b5b216558882324440b23c06f6e08c86d45a",
+                "package-identity": "sha256:4f8614161df16f968c210513684c2789d2f7838ce63cf708f5532c170e4d3f08",
+                "recursive-value-shape": "sha256:3e49d2d3941bdc2a0286881080836555f85c1fd7f500a7595495602f037cf3bf",
+                "rest-spread-coverage": "sha256:8a5e70db42051630b080b75bc278f860cb8beba12bfe1138cbc7d1dc8eb08a2c",
+                "selected-signature": "sha256:95131cd431e34dbbe5b40b080cbffb1a7bdb38cc0ddb3eec7c79eaea46bb7b13"
+              },
+              "producerSessionsRoot": "sha256:bb9a5ed86e067829efa52a78253c8e559f009580f9dba3f317a52afab3ef8b4c",
+              "dependencyReceiptsRoot": "sha256:408c3b2e5caebeba6d286fa3da16eed53b16f2d05f3644d2e4a33d38300e0c06",
+              "dependencyTrustRoot": "sha256:8abcd06a726ae63855160a58b6ca32ddf2c02802fd2631c3386b8543a2a2226f",
+              "probeGateRoot": "sha256:80a479c43a765cf04e3eca181fa0b4a1ce4ab3b2c858bde4681d23b3957bc7c1",
+              "closedClaimsRoot": "sha256:a49f7c493aab8f2700ea32341b5eae6cccca9f7111db394b10523f82559eea71",
+              "verifierSourceDigest": "sha256:fc64b350efc4f2d1e9945acf01d6bc0f34d6f974eb4c22f22a39ee67ccb33331",
+              "verifierBuildDigest": "sha256:b13a1cece363b8d4314cb1a03a2dd7833ad490b0fb739a882259123e69a2daa1",
+              "issuerKind": "persistent-local",
+              "issuerScope": "ecosystem-benchmark:8d324868ff300e904797ada55f0e0ccb9a41c014cd1a266e706533ad2d0272c8",
+              "keyId": "ed25519:sha256:e5c9253866c2692a6c530473947bae54eb3ec138a537eeb9b38866fca3083b6b",
+              "signatureAlgorithm": "ed25519"
+            },
+            "resolution": {
+              "specifier": "@solid-primitives/sse/worker",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-EwnltY/node_modules/@solid-primitives/.solid-checker-certification-2c83419b8655c524b122a834b67f5aefcd6b75889b29df8f67fd04863f6c2375.mjs",
+              "requestedEntrypoint": "./worker",
+              "packageName": "@solid-primitives/sse",
+              "packageVersion": "1.0.0-next.2",
+              "packageIntegrity": "sha512-pHQWMTpuWuI8OUCuE61e65rVVk3nx5/xOeMU5m+LRSlBGcnZVP161DMjmPBr4fCOqWkYWWTW6fJGTC8/Cx+tww==",
+              "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-EwnltY/node_modules/@solid-primitives/sse",
+              "packageManifest": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-EwnltY/node_modules/@solid-primitives/sse/package.json",
+                "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+              },
+              "runtime": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-EwnltY/node_modules/@solid-primitives/sse/dist/worker.js",
+                "digest": "sha256:cc0f47f03a7aec5aac465eb8dcbe765e534dd17e049bd8a0d44221be089bd13e"
+              },
+              "declarations": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-EwnltY/node_modules/@solid-primitives/sse/dist/worker.d.ts",
+                "digest": "sha256:3265ff5a14e2cf70bcc1cc868181d5c95a8e93bf7d89c9a769eec82f8a4f443f"
+              },
+              "runtimeTrace": {
+                "branch": "/exports/.~1worker/import/default",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./worker"
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/.~1worker"
+                  },
+                  {
+                    "condition": "default",
+                    "target": "/exports/.~1worker/import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/worker.js"
+                  }
+                ]
+              },
+              "declarationTrace": {
+                "branch": "/exports/.~1worker/import/types",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./worker"
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/.~1worker"
+                  },
+                  {
+                    "condition": "types",
+                    "target": "/exports/.~1worker/import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/worker.d.ts"
+                  }
+                ]
+              },
+              "closure": {
+                "entries": [
+                  {
+                    "role": "runtime",
+                    "path": "./dist/sse.js",
+                    "digest": "sha256:9d17522db5691ae543ac53f32a2392d10b10f546ca46215740da749dbf57633a"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/worker.js",
+                    "digest": "sha256:cc0f47f03a7aec5aac465eb8dcbe765e534dd17e049bd8a0d44221be089bd13e"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/sse.d.ts",
+                    "digest": "sha256:bf0e80a2de8e0a22c0f36bee487617379e42cba876804d2d27736c2ee9bc7506"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/worker.d.ts",
+                    "digest": "sha256:3265ff5a14e2cf70bcc1cc868181d5c95a8e93bf7d89c9a769eec82f8a4f443f"
+                  },
+                  {
+                    "role": "manifest",
+                    "path": "./package.json",
+                    "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+                  },
+                  {
+                    "role": "resolution-input",
+                    "path": "./package.json",
+                    "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+                  }
+                ],
+                "hazards": [
+                  {
+                    "kind": "unaccepted-external-dependency",
+                    "source": "./dist/sse.js:@solid-primitives/utils",
+                    "affectedDomains": [
+                      "callbacks",
+                      "reads",
+                      "writes",
+                      "creates",
+                      "invalidates",
+                      "throws",
+                      "returns",
+                      "cleanups",
+                      "disposals"
+                    ]
+                  },
+                  {
+                    "kind": "unaccepted-external-dependency",
+                    "source": "./dist/sse.js:@solidjs/web",
+                    "affectedDomains": [
+                      "callbacks",
+                      "reads",
+                      "writes",
+                      "creates",
+                      "invalidates",
+                      "throws",
+                      "returns",
+                      "cleanups",
+                      "disposals"
+                    ]
+                  },
+                  {
+                    "kind": "unaccepted-external-dependency",
+                    "source": "./dist/sse.js:solid-js",
+                    "affectedDomains": [
+                      "callbacks",
+                      "reads",
+                      "writes",
+                      "creates",
+                      "invalidates",
+                      "throws",
+                      "returns",
+                      "cleanups",
+                      "disposals"
+                    ]
+                  }
+                ],
+                "digest": "sha256:92590b6a7e743bdc904fdbca31b6f3e5585f218069f4ea76bd5f713cd7ad0c7b"
+              },
+              "authority": "standalonePackageResolver"
+            },
+            "motionGlobalConfig": null,
+            "motionGlobalConfigSummary": null
+          }
+        ]
+      },
+      "after": {
+        "catalogRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-QRXLBv/@solid-primitives__sse@1.0.0-next.2--solid2--head.json.accepted-catalog",
+        "pointer": {
+          "format": "solid-checker-accepted-contract-case-set-pointer",
+          "caseSetVersion": 1,
+          "document": "case-sets/d8100b5427f7a9a74affaa7282fccf125a2afa7414e57f924c27a87d70ffd121/accepted-contract-case-set.json",
+          "documentDigest": "sha256:d8100b5427f7a9a74affaa7282fccf125a2afa7414e57f924c27a87d70ffd121"
+        },
+        "cases": [
+          {
+            "entrypoint": ".",
+            "selection": {
+              "artifact": {
+                "closureSha256": "488835b262ef523c02070b07cd382dd05ff3c5bc037898360064c82bc411f48e",
+                "path": "./dist/index.js",
+                "sha256": "f304a213f47ca499699722e8e982153f3d59bc101821ee7793accd7a9d420552"
+              },
+              "declarations": {
+                "path": "./dist/index.d.ts",
+                "sha256": "86413dcf03944a0ca57d6a46a6a657cec5babfa5c8780f0faede4993326347bb"
+              },
+              "resolution": {
+                "runtimeBranch": "/exports/./import/default",
+                "typesBranch": "/exports/./import/types"
+              }
+            },
+            "coordinate": {
+              "artifactCaseId": "artifact-case:cf3be8d4f41116e11f18e481346465e31b40177d19ed9e6814ed30567bbb722a",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-NNDLU1/node_modules/@solid-primitives/.solid-checker-certification-abd0606b4eef792d38ee7ea3f71370dd907b3767bb1d1f0359bebf7983a2594b.mjs",
+              "specifier": "@solid-primitives/sse",
+              "resolvedImportRoot": "sha256:3776d58456ccae094dfa8af187d7dbf191bfeb70989bae0c54f3b344acd9fe47",
+              "semanticDigest": "sha256:8aee31c4515f82a3c6adfe33655e5afec80567dfe11e69a8a416974a7bf2598e",
+              "receiptDigest": "sha256:c74eb2150c962bc0418005ec1aafcc2ae9c6a5b37802dc9da1a6b4c50e6556b3",
+              "catalog": "cases/3776d58456ccae094dfa8af187d7dbf191bfeb70989bae0c54f3b344acd9fe47/accepted-contracts.json",
+              "catalogDigest": "sha256:a4a4cab3f17b984bc01d3f37dd233cb098804fc95cd6085f0896e5f2b969719f"
+            },
+            "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-QRXLBv/@solid-primitives__sse@1.0.0-next.2--solid2--head.json.accepted-catalog/case-sets/d8100b5427f7a9a74affaa7282fccf125a2afa7414e57f924c27a87d70ffd121/cases/3776d58456ccae094dfa8af187d7dbf191bfeb70989bae0c54f3b344acd9fe47/accepted-contracts.json",
+            "documentDigest": "sha256:7630e8ef42e92d50d9f810eab94b195feb351fd07d45f2588b4420ebf7f85014",
+            "receiptDigest": "sha256:c74eb2150c962bc0418005ec1aafcc2ae9c6a5b37802dc9da1a6b4c50e6556b3",
+            "receiptPayload": {
+              "semanticModelVersion": 1,
+              "proofVersion": 2,
+              "proofPolicy": 2,
+              "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+              "mainDigest": "sha256:7630e8ef42e92d50d9f810eab94b195feb351fd07d45f2588b4420ebf7f85014",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-NNDLU1/node_modules/@solid-primitives/.solid-checker-certification-abd0606b4eef792d38ee7ea3f71370dd907b3767bb1d1f0359bebf7983a2594b.mjs",
+              "specifier": "@solid-primitives/sse",
+              "resolvedImportRoot": "sha256:3776d58456ccae094dfa8af187d7dbf191bfeb70989bae0c54f3b344acd9fe47",
+              "semanticDigest": "sha256:8aee31c4515f82a3c6adfe33655e5afec80567dfe11e69a8a416974a7bf2598e",
+              "artifactProvenanceRoot": "sha256:1750de8704f15070eba8ef66faad33de5d8f4b6d6ae249ddefdcac26b26f6a6a",
+              "snapshotRoot": "sha256:3aa6e043989ecaaade85c78e706e20861e4c565db263ff964b4f87c28c1de87c",
+              "packageRoot": "sha256:4356369625b045eb5df3040c84a49631d530ab1dbafe875615ce03806fb9412a",
+              "manifestRoot": "sha256:9c0f78a6290d366a974bc062dbe9a2b93768fbec1ac720842835d1e23df5ce59",
+              "artifactsRoot": "sha256:5b76e4600c02b526cf1af72188e44e2c4b960f1cecad77f62dd5801d7f020f56",
+              "declarationsRoot": "sha256:cd7b392f44ab02e9347cdecacc0e08a6a0b775ef43e749d4a66f72e135e0d6c3",
+              "transformRoot": "sha256:f99b9bbb7ee40f1fc5001614b99469ffe2f86603ba140500e4621147303f2e0d",
+              "exportsRoot": "sha256:a739c235996691924285c444522a54d81212af3804cdee8b72edd98d7fe64e12",
+              "closureRoot": "sha256:9d9a8d4de71533055b22d57273214be591d9a17eb2befa0d50e7a3d06749c63f",
+              "demandGraphRoot": "sha256:ec80db88c92317c9da8c1e39a37850a2f4698fc7e70f06674b266d150fdc01bf",
+              "verifiedPositiveRoot": "sha256:66ff10962a48048195eee87eb008dedf62cacc6f72c578472f6a9975ddd5772c",
+              "witnessRoots": {
+                "accepted-dependency-composition": "sha256:c6ae9da3f1c74f68d8da45d8e01e3ec61c4499daccb854a44bc1b597bb7e0ecc",
+                "argument-binding": "sha256:395decd3b3c8d339dd1743315c437b2361a818fbb114d926ed80c22b8db9a7d8",
+                "artifact-declarations": "sha256:cd7b392f44ab02e9347cdecacc0e08a6a0b775ef43e749d4a66f72e135e0d6c3",
+                "callable-path": "sha256:1357fae14341be42c600478cc9a0f2275e74cb6401c7e8102a61bbd6231201f2",
+                "compiler-reconciliation": "sha256:0992a31778389d5daff49f5b56aeb290a9e1afb2a8a831b441e6e10bfe68fb32",
+                "domain-exhaustiveness": "sha256:4bdc2e3b00dbaa5cb1191e1628e6c2bbbfa19f16abbfdcee82e624df43936ed4",
+                "export-identity": "sha256:a739c235996691924285c444522a54d81212af3804cdee8b72edd98d7fe64e12",
+                "export-resolution": "sha256:5b76e4600c02b526cf1af72188e44e2c4b960f1cecad77f62dd5801d7f020f56",
+                "guard-partition": "sha256:730bf87677b9c2d99b2549c9b6ffd7856d9214439365466736adc394c25c934b",
+                "manifest-entrypoint": "sha256:9c0f78a6290d366a974bc062dbe9a2b93768fbec1ac720842835d1e23df5ce59",
+                "module-closure": "sha256:9d9a8d4de71533055b22d57273214be591d9a17eb2befa0d50e7a3d06749c63f",
+                "operation-cardinality": "sha256:43602914c611eee90ec0eabd0791745f83313c5262abcd367ab9a8d43c2e5de1",
+                "operation-reachability": "sha256:c80d8a9da34787f4c5b53e001416bf2c2fce359eec3207ef9a5ff0f508fd053a",
+                "package-identity": "sha256:4356369625b045eb5df3040c84a49631d530ab1dbafe875615ce03806fb9412a",
+                "recursive-value-shape": "sha256:851c6ec8178d3f5816d9a5e28de53b2d41b09be81b1bec18d62a747940975600",
+                "rest-spread-coverage": "sha256:4d601f0047d3766196ab9388c8c206462c551dc9689c25f5b10b7172e249c6a8",
+                "selected-signature": "sha256:b69d97fc30867cca5900fb10f3308d0a32fbcb42c91cf720d8b8502fdc069da1"
+              },
+              "producerSessionsRoot": "sha256:226ecc8149cd7956a283d23715fdbff29a21e3ff86c009d7b25589f3b1553739",
+              "dependencyReceiptsRoot": "sha256:78249757014ee2d90f00275229a4d9987870bbb3a647dce9bf76a6b16e022c82",
+              "dependencyTrustRoot": "sha256:7490fcb3d9876cab14a91e079c81aa8d46e49070903ba7d07a3224da2bcde30d",
+              "probeGateRoot": "sha256:8a18c4d38a9354b903dfea8b96af6b3cb79e606a6e69149ae9f0f609e905e04e",
+              "closedClaimsRoot": "sha256:0cfa975a87f1cd3fc8a2808c2df24531e0a4eea46f0ffdd37f9e12724418c3e8",
+              "verifierSourceDigest": "sha256:fc64b350efc4f2d1e9945acf01d6bc0f34d6f974eb4c22f22a39ee67ccb33331",
+              "verifierBuildDigest": "sha256:b13a1cece363b8d4314cb1a03a2dd7833ad490b0fb739a882259123e69a2daa1",
+              "issuerKind": "persistent-local",
+              "issuerScope": "ecosystem-benchmark:d706dd9d1322045b2c9f14fd514324a30597971dbc54834dab8a6d2b443aec07",
+              "keyId": "ed25519:sha256:d75743077c592340798e4eb77a36f4c5fa170d2387bf26c6e595e8616eeb4960",
+              "signatureAlgorithm": "ed25519"
+            },
+            "resolution": {
+              "specifier": "@solid-primitives/sse",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-NNDLU1/node_modules/@solid-primitives/.solid-checker-certification-abd0606b4eef792d38ee7ea3f71370dd907b3767bb1d1f0359bebf7983a2594b.mjs",
+              "requestedEntrypoint": ".",
+              "packageName": "@solid-primitives/sse",
+              "packageVersion": "1.0.0-next.2",
+              "packageIntegrity": "sha512-pHQWMTpuWuI8OUCuE61e65rVVk3nx5/xOeMU5m+LRSlBGcnZVP161DMjmPBr4fCOqWkYWWTW6fJGTC8/Cx+tww==",
+              "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-NNDLU1/node_modules/@solid-primitives/sse",
+              "packageManifest": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-NNDLU1/node_modules/@solid-primitives/sse/package.json",
+                "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+              },
+              "runtime": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-NNDLU1/node_modules/@solid-primitives/sse/dist/index.js",
+                "digest": "sha256:f304a213f47ca499699722e8e982153f3d59bc101821ee7793accd7a9d420552"
+              },
+              "declarations": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-NNDLU1/node_modules/@solid-primitives/sse/dist/index.d.ts",
+                "digest": "sha256:86413dcf03944a0ca57d6a46a6a657cec5babfa5c8780f0faede4993326347bb"
+              },
+              "runtimeTrace": {
+                "branch": "/exports/./import/default",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "."
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/."
+                  },
+                  {
+                    "condition": "default",
+                    "target": "/exports/./import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/index.js"
+                  }
+                ]
+              },
+              "declarationTrace": {
+                "branch": "/exports/./import/types",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "."
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/."
+                  },
+                  {
+                    "condition": "types",
+                    "target": "/exports/./import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/index.d.ts"
+                  }
+                ]
+              },
+              "closure": {
+                "entries": [
+                  {
+                    "role": "runtime",
+                    "path": "./dist/index.js",
+                    "digest": "sha256:f304a213f47ca499699722e8e982153f3d59bc101821ee7793accd7a9d420552"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/sse.js",
+                    "digest": "sha256:9d17522db5691ae543ac53f32a2392d10b10f546ca46215740da749dbf57633a"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/transform.js",
+                    "digest": "sha256:684b8448bf5b9debbcf37881fd3f7b87e855932b2ed25e4837cb030d81b5ada8"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/index.d.ts",
+                    "digest": "sha256:86413dcf03944a0ca57d6a46a6a657cec5babfa5c8780f0faede4993326347bb"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/sse.d.ts",
+                    "digest": "sha256:bf0e80a2de8e0a22c0f36bee487617379e42cba876804d2d27736c2ee9bc7506"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/transform.d.ts",
+                    "digest": "sha256:a7560416ffa4c2a72264b996bc66fbb4ccbce110f9a122a59f895c85fd5163ec"
+                  },
+                  {
+                    "role": "manifest",
+                    "path": "./package.json",
+                    "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+                  },
+                  {
+                    "role": "resolution-input",
+                    "path": "./package.json",
+                    "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+                  }
+                ],
+                "dependencies": [
+                  {
+                    "specifier": "@solid-primitives/utils",
+                    "packageName": "@solid-primitives/utils",
+                    "artifactCase": "artifact-case:a2c3538375f8b7da6eb6b52f05935f331dbbfc2685982a1396c9b74915b400a4",
+                    "acceptedContractDigest": "sha256:13be26ea36f2b7cd45a20068113bcb50da185c58858504ad45ee61e43eb3b4ca"
+                  },
+                  {
+                    "specifier": "@solidjs/web",
+                    "packageName": "@solidjs/web",
+                    "artifactCase": "artifact-case:583e4eb56f54288a7f4aa46d0f96d4cdc238c6680ae49a87ebab24757918bb98",
+                    "acceptedContractDigest": "sha256:ae96e38e0efdd4d58025161855eea02fecc95226b6fa54228334ecf2eadf364f"
+                  },
+                  {
+                    "specifier": "solid-js",
+                    "packageName": "solid-js",
+                    "artifactCase": "artifact-case:b437294a69ba84bb22bfe46e8e8fed6fbbf5762756d635c68b7c58d73a0efa6c",
+                    "acceptedContractDigest": "sha256:5110bc073766269d93f84ca9d9883b11563857060e4d489f2359af458077bf39"
+                  }
+                ],
+                "digest": "sha256:488835b262ef523c02070b07cd382dd05ff3c5bc037898360064c82bc411f48e"
+              },
+              "authority": "standalonePackageResolver"
+            },
+            "motionGlobalConfig": null,
+            "motionGlobalConfigSummary": null
+          },
+          {
+            "entrypoint": "./worker",
+            "selection": {
+              "artifact": {
+                "closureSha256": "42deb66eb8a0a2479ec459a603eee2dbca28882c5eea62e3ee59e38f680b00aa",
+                "path": "./dist/worker.js",
+                "sha256": "cc0f47f03a7aec5aac465eb8dcbe765e534dd17e049bd8a0d44221be089bd13e"
+              },
+              "declarations": {
+                "path": "./dist/worker.d.ts",
+                "sha256": "3265ff5a14e2cf70bcc1cc868181d5c95a8e93bf7d89c9a769eec82f8a4f443f"
+              },
+              "resolution": {
+                "runtimeBranch": "/exports/.~1worker/import/default",
+                "typesBranch": "/exports/.~1worker/import/types"
+              }
+            },
+            "coordinate": {
+              "artifactCaseId": "artifact-case:13a02edb76d1e88d8b67758e2868864fb62d3ef2aa23e229839c3f3510c68f80",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-NNDLU1/node_modules/@solid-primitives/.solid-checker-certification-abd0606b4eef792d38ee7ea3f71370dd907b3767bb1d1f0359bebf7983a2594b.mjs",
+              "specifier": "@solid-primitives/sse/worker",
+              "resolvedImportRoot": "sha256:d65d3b4bbfb7bdb8b178b2acd4c718ee31af3e48f094d9f849a42f055b7c6ff3",
+              "semanticDigest": "sha256:e06e5218a4a6fc11b6bc65b95f47ac4a5efcdccbf5f00f37f59771ec704dc876",
+              "receiptDigest": "sha256:9f3fad4538b5b07988d0653eca55b8e5644dc705826377d24f8c2e9194ed1bb2",
+              "catalog": "cases/d65d3b4bbfb7bdb8b178b2acd4c718ee31af3e48f094d9f849a42f055b7c6ff3/accepted-contracts.json",
+              "catalogDigest": "sha256:08dd5791a08238d531846648268ca62a319a71a59b959a5ae34a92170e849561"
+            },
+            "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-QRXLBv/@solid-primitives__sse@1.0.0-next.2--solid2--head.json.accepted-catalog/case-sets/d8100b5427f7a9a74affaa7282fccf125a2afa7414e57f924c27a87d70ffd121/cases/d65d3b4bbfb7bdb8b178b2acd4c718ee31af3e48f094d9f849a42f055b7c6ff3/accepted-contracts.json",
+            "documentDigest": "sha256:fcb228670726ab5feace061c714b53e3e7af6428a27146c5e8d4b20111b14a87",
+            "receiptDigest": "sha256:9f3fad4538b5b07988d0653eca55b8e5644dc705826377d24f8c2e9194ed1bb2",
+            "receiptPayload": {
+              "semanticModelVersion": 1,
+              "proofVersion": 2,
+              "proofPolicy": 2,
+              "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+              "mainDigest": "sha256:fcb228670726ab5feace061c714b53e3e7af6428a27146c5e8d4b20111b14a87",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-NNDLU1/node_modules/@solid-primitives/.solid-checker-certification-abd0606b4eef792d38ee7ea3f71370dd907b3767bb1d1f0359bebf7983a2594b.mjs",
+              "specifier": "@solid-primitives/sse/worker",
+              "resolvedImportRoot": "sha256:d65d3b4bbfb7bdb8b178b2acd4c718ee31af3e48f094d9f849a42f055b7c6ff3",
+              "semanticDigest": "sha256:e06e5218a4a6fc11b6bc65b95f47ac4a5efcdccbf5f00f37f59771ec704dc876",
+              "artifactProvenanceRoot": "sha256:1750de8704f15070eba8ef66faad33de5d8f4b6d6ae249ddefdcac26b26f6a6a",
+              "snapshotRoot": "sha256:3aa6e043989ecaaade85c78e706e20861e4c565db263ff964b4f87c28c1de87c",
+              "packageRoot": "sha256:7938684d13fd560a7767299a907b6f8ff5e7b41cc6f801113c4478069b7e7f8d",
+              "manifestRoot": "sha256:75af2e70895ad0fc62117e9eacc27da64ef1af6a6c5eff2196211f3d2cafc907",
+              "artifactsRoot": "sha256:2b1e824d4c6cd6043c22ff8aa1c84e9e621284eb571b168f54ccc8b0f18250cb",
+              "declarationsRoot": "sha256:96f611fb30ed80e4fc3a0b181373b8a13f798ef5586a5f99cbe64837fbd145e4",
+              "transformRoot": "sha256:29d40ac7080c5359753a5d4cabc3ba958e5f056c62e8f72ed72b6ad3f9b80a4a",
+              "exportsRoot": "sha256:1b826fdffe04fdaa058768fbd5ec6aac7f12cc75c668b17573f6be48374af7f1",
+              "closureRoot": "sha256:2d0aa8eadf7a83112c640cc81c399995d0a351b0d5c8c44d8ea04545f381df3a",
+              "demandGraphRoot": "sha256:43e7d355c28a71adce385494a5655be256b3dd21167b999d54c5131fc3dbede8",
+              "verifiedPositiveRoot": "sha256:6ed4177de699bd1b9813fa67fd72e84487cd54fe6cf0cd194f07bb57c4f60f19",
+              "witnessRoots": {
+                "accepted-dependency-composition": "sha256:6cef5baea54d57ceed83596f7a58699dcb205f4dd5ef9cf6cf69860adf47dbb3",
+                "argument-binding": "sha256:93fe6f04b68ed2f5fd2e5a1edaf8dc9d7aa27c021c5a09037df3b2ba5e0215c2",
+                "artifact-declarations": "sha256:96f611fb30ed80e4fc3a0b181373b8a13f798ef5586a5f99cbe64837fbd145e4",
+                "callable-path": "sha256:c01480dec1600e6d5480ffe09a5e01aeec7e62a2f9f91b1b2cbe963778eefc92",
+                "compiler-reconciliation": "sha256:2d53588a0b214d8834230e8125ec59b0c444deac3bef10f4ed8922896174213b",
+                "domain-exhaustiveness": "sha256:bdb03dd674e2ff4ac28dc61dc1f4f2b0a49bd82916d64252418459e45a4ecbcf",
+                "export-identity": "sha256:1b826fdffe04fdaa058768fbd5ec6aac7f12cc75c668b17573f6be48374af7f1",
+                "export-resolution": "sha256:2b1e824d4c6cd6043c22ff8aa1c84e9e621284eb571b168f54ccc8b0f18250cb",
+                "guard-partition": "sha256:e1a57dc468f1d810765a3d857fc7f5aca84c5791985260e2c10dedc3ecc4b5cd",
+                "manifest-entrypoint": "sha256:75af2e70895ad0fc62117e9eacc27da64ef1af6a6c5eff2196211f3d2cafc907",
+                "module-closure": "sha256:2d0aa8eadf7a83112c640cc81c399995d0a351b0d5c8c44d8ea04545f381df3a",
+                "operation-cardinality": "sha256:68fce6d6ea07d7bc1a499286fcea876f801270f047d09c39612fde4f441649e4",
+                "operation-reachability": "sha256:e7d533882fe165031691e26b3587f4fdd47102c1bb6624f6f93794d9e641c1e2",
+                "package-identity": "sha256:7938684d13fd560a7767299a907b6f8ff5e7b41cc6f801113c4478069b7e7f8d",
+                "recursive-value-shape": "sha256:813aef6c724dea1a0aacedaf11462ad0ce9f6158852dea54d7bb78c4cbe9a66c",
+                "rest-spread-coverage": "sha256:22ba908e1ba762bda22bfbcff2a4df0e5d54ad173fa98c38cee0bef9f13a9967",
+                "selected-signature": "sha256:f1c401924b94ca167540b45a95d56a57536a6233c6b9629523e0548a7a80ec51"
+              },
+              "producerSessionsRoot": "sha256:4d117ebcb6faef9f656af730885ad6b5a146cd225c050633d5e562cb449e2701",
+              "dependencyReceiptsRoot": "sha256:0169cd9a37161e748d58ae7e1c6196b4bd84ded80bc5720cede421bfe17532f9",
+              "dependencyTrustRoot": "sha256:b50e43571ded105a7b460225da9cf6f8ac708c6a85e24726f0528ac6c7a14ba9",
+              "probeGateRoot": "sha256:b5b36123f7ccb135d3f15d80adda4c3e278878eef45aa1fb529114cdff7ae7c7",
+              "closedClaimsRoot": "sha256:36b9fabc24bf6660b33fd8a516b3f167d8367d9bcc8a11aa293a9164006da0d2",
+              "verifierSourceDigest": "sha256:fc64b350efc4f2d1e9945acf01d6bc0f34d6f974eb4c22f22a39ee67ccb33331",
+              "verifierBuildDigest": "sha256:b13a1cece363b8d4314cb1a03a2dd7833ad490b0fb739a882259123e69a2daa1",
+              "issuerKind": "persistent-local",
+              "issuerScope": "ecosystem-benchmark:d706dd9d1322045b2c9f14fd514324a30597971dbc54834dab8a6d2b443aec07",
+              "keyId": "ed25519:sha256:d75743077c592340798e4eb77a36f4c5fa170d2387bf26c6e595e8616eeb4960",
+              "signatureAlgorithm": "ed25519"
+            },
+            "resolution": {
+              "specifier": "@solid-primitives/sse/worker",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-NNDLU1/node_modules/@solid-primitives/.solid-checker-certification-abd0606b4eef792d38ee7ea3f71370dd907b3767bb1d1f0359bebf7983a2594b.mjs",
+              "requestedEntrypoint": "./worker",
+              "packageName": "@solid-primitives/sse",
+              "packageVersion": "1.0.0-next.2",
+              "packageIntegrity": "sha512-pHQWMTpuWuI8OUCuE61e65rVVk3nx5/xOeMU5m+LRSlBGcnZVP161DMjmPBr4fCOqWkYWWTW6fJGTC8/Cx+tww==",
+              "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-NNDLU1/node_modules/@solid-primitives/sse",
+              "packageManifest": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-NNDLU1/node_modules/@solid-primitives/sse/package.json",
+                "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+              },
+              "runtime": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-NNDLU1/node_modules/@solid-primitives/sse/dist/worker.js",
+                "digest": "sha256:cc0f47f03a7aec5aac465eb8dcbe765e534dd17e049bd8a0d44221be089bd13e"
+              },
+              "declarations": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-NNDLU1/node_modules/@solid-primitives/sse/dist/worker.d.ts",
+                "digest": "sha256:3265ff5a14e2cf70bcc1cc868181d5c95a8e93bf7d89c9a769eec82f8a4f443f"
+              },
+              "runtimeTrace": {
+                "branch": "/exports/.~1worker/import/default",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./worker"
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/.~1worker"
+                  },
+                  {
+                    "condition": "default",
+                    "target": "/exports/.~1worker/import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/worker.js"
+                  }
+                ]
+              },
+              "declarationTrace": {
+                "branch": "/exports/.~1worker/import/types",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./worker"
+                  },
+                  {
+                    "condition": "import",
+                    "target": "/exports/.~1worker"
+                  },
+                  {
+                    "condition": "types",
+                    "target": "/exports/.~1worker/import"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/worker.d.ts"
+                  }
+                ]
+              },
+              "closure": {
+                "entries": [
+                  {
+                    "role": "runtime",
+                    "path": "./dist/sse.js",
+                    "digest": "sha256:9d17522db5691ae543ac53f32a2392d10b10f546ca46215740da749dbf57633a"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/worker.js",
+                    "digest": "sha256:cc0f47f03a7aec5aac465eb8dcbe765e534dd17e049bd8a0d44221be089bd13e"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/sse.d.ts",
+                    "digest": "sha256:bf0e80a2de8e0a22c0f36bee487617379e42cba876804d2d27736c2ee9bc7506"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/worker.d.ts",
+                    "digest": "sha256:3265ff5a14e2cf70bcc1cc868181d5c95a8e93bf7d89c9a769eec82f8a4f443f"
+                  },
+                  {
+                    "role": "manifest",
+                    "path": "./package.json",
+                    "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+                  },
+                  {
+                    "role": "resolution-input",
+                    "path": "./package.json",
+                    "digest": "sha256:a250b7cb52b3815f6238cbb26ef6ae22d2dfd205486e4b2dffb674ff15b1552b"
+                  }
+                ],
+                "dependencies": [
+                  {
+                    "specifier": "@solid-primitives/utils",
+                    "packageName": "@solid-primitives/utils",
+                    "artifactCase": "artifact-case:a2c3538375f8b7da6eb6b52f05935f331dbbfc2685982a1396c9b74915b400a4",
+                    "acceptedContractDigest": "sha256:13be26ea36f2b7cd45a20068113bcb50da185c58858504ad45ee61e43eb3b4ca"
+                  },
+                  {
+                    "specifier": "@solidjs/web",
+                    "packageName": "@solidjs/web",
+                    "artifactCase": "artifact-case:583e4eb56f54288a7f4aa46d0f96d4cdc238c6680ae49a87ebab24757918bb98",
+                    "acceptedContractDigest": "sha256:ae96e38e0efdd4d58025161855eea02fecc95226b6fa54228334ecf2eadf364f"
+                  },
+                  {
+                    "specifier": "solid-js",
+                    "packageName": "solid-js",
+                    "artifactCase": "artifact-case:b437294a69ba84bb22bfe46e8e8fed6fbbf5762756d635c68b7c58d73a0efa6c",
+                    "acceptedContractDigest": "sha256:5110bc073766269d93f84ca9d9883b11563857060e4d489f2359af458077bf39"
+                  }
+                ],
+                "digest": "sha256:42deb66eb8a0a2479ec459a603eee2dbca28882c5eea62e3ee59e38f680b00aa"
+              },
+              "authority": "standalonePackageResolver"
+            },
+            "motionGlobalConfig": null,
+            "motionGlobalConfigSummary": null
+          }
+        ]
+      },
+      "coverageBefore": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 1,
+        "rootCertified": false
+      },
+      "coverageAfter": {
+        "declaredEntrypoints": 3,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 2,
+        "rootCertified": true
+      },
+      "generationRefusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency solid-js has no exact runtime binding for export NotReadyError"
+        },
+        {
+          "entrypoint": "./worker-handler",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-verified: emit package contract: entry file <package-root>/dist/worker-handler.js has no runtime ESM exports"
+        }
+      ],
+      "recovery": {
+        "entrypointRecovery": {
+          "cases": [
+            {
+              "entrypoint": "./worker",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": ".",
+              "conditions": [
+                "import"
+              ]
+            }
+          ],
+          "retainedCases": [
+            {
+              "entrypoint": "./worker",
+              "conditions": [
+                "import"
+              ]
+            }
+          ],
+          "remainingRefusals": [
+            {
+              "entrypoint": "./worker-handler",
+              "conditions": [],
+              "stage": "artifact-case",
+              "class": "published-artifact",
+              "applicability": "runtime-module",
+              "reason": "solid-checker-verified: emit package contract: entry file <package-root>/dist/worker-handler.js has no runtime ESM exports"
+            }
+          ]
+        },
+        "rootCases": 2,
+        "canonicalNodes": 9,
+        "acquiredPublishedArtifacts": 6,
+        "acquisitionUnits": 8,
+        "graphAcquisitionDurationMs": 2.86,
+        "resolutionSession": {
+          "requests": 0,
+          "semanticAcquisitions": 0,
+          "semanticCacheHits": 0,
+          "semanticCacheInvalidations": 0,
+          "moduleDescriptionsParsed": 96,
+          "typeScriptProgramsCreated": 0
+        },
+        "compilerSourceClosureCensus": 1,
+        "proposalGenerations": 9,
+        "proposalGenerationsShared": 3,
+        "proposalFrontiers": [
+          {
+            "nodes": 1,
+            "durationMs": 1043.7
+          },
+          {
+            "nodes": 4,
+            "durationMs": 390.46
+          },
+          {
+            "nodes": 2,
+            "durationMs": 862.01
+          },
+          {
+            "nodes": 2,
+            "durationMs": 124.3
+          }
+        ],
+        "graphNodeReferences": 14,
+        "nativeCertificationTransactions": 1,
+        "typeFactsCaseSetBatches": 1,
+        "partialProposalFrontier": true,
+        "reusedProposalForRecovery": true
+      }
+    }
+  ],
+  "metricChanged": false,
+  "existingEntrypointSelectionsPreserved": true
+}

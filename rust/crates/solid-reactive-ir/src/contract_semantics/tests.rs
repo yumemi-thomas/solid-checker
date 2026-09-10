@@ -140,6 +140,7 @@ fn export(
 
 fn artifact_case(id: &str) -> ArtifactCase {
     ArtifactCase {
+        initialization: None,
         id: id.into(),
         entrypoint: ".".into(),
         resolution_trace: vec![ResolutionStep {
@@ -1153,9 +1154,11 @@ fn a_proposed_closure_is_refused_over_an_open_domain_and_over_an_undecidable_one
         "{open}"
     );
 
+    // `writes`, not `reads`: `reads` gained a closure proof mode on
+    // 2026-09-10 and this row needs a domain that still has none.
     let undecidable = proposal_with(
         ValueShape::Plain,
-        call(vec![], vec![]).with_proposed_closures([ClaimDomain::Reads]),
+        call(vec![], vec![]).with_proposed_closures([ClaimDomain::Writes]),
     )
     .normalize()
     .expect_err("a domain with no closure proof mode cannot be proposed");
@@ -1163,16 +1166,21 @@ fn a_proposed_closure_is_refused_over_an_open_domain_and_over_an_undecidable_one
         matches!(
             &undecidable,
             ModelError::InvalidKnowledge { reason, .. }
-                if reason.contains("reads") && reason.contains("no closure proof mode")
+                if reason.contains("writes") && reason.contains("no closure proof mode")
         ),
         "{undecidable}"
     );
     assert!(ClaimDomain::Creates.is_proposable());
     assert!(ClaimDomain::Returns.is_proposable());
-    assert!(!ClaimDomain::Reads.is_proposable());
+    assert!(ClaimDomain::Reads.is_proposable());
+    assert!(!ClaimDomain::Writes.is_proposable());
     assert_eq!(
         ClaimDomain::PROPOSABLE,
-        [ClaimDomain::Creates, ClaimDomain::Returns]
+        [
+            ClaimDomain::Creates,
+            ClaimDomain::Returns,
+            ClaimDomain::Reads
+        ]
     );
 }
 

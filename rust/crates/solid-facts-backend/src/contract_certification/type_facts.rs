@@ -35,6 +35,12 @@ use typefacts::{
 
 use super::CertificationPlan;
 
+#[path = "factory_exports.rs"]
+mod factory_exports;
+pub(super) use factory_exports::FactoryReturnDependencyClaim;
+#[path = "graph_contexts.rs"]
+mod graph_contexts;
+
 static EXECUTION_IMAGE_COUNTER: AtomicU64 = AtomicU64::new(1);
 static PRIVATE_PROJECT_COUNTER: AtomicU64 = AtomicU64::new(1);
 /// How many leftover `(pid, counter)` directories a process skips past before
@@ -408,14 +414,93 @@ pub struct VerifiedTypeFactsEvidence {
 }
 
 impl VerifiedTypeFactsEvidence {
-    /// A completed creates census proves this parent claim without consulting
-    /// dependency semantic claims. Only this live-verified token can expose
-    /// the premise; a wire WitnessBinding alone has no such authority.
-    pub(super) fn independent_creates_census(
+    pub(super) fn factory_return_claims(&self) -> Vec<(String, FactoryReturnDependencyClaim)> {
+        self.bindings
+            .iter()
+            .flat_map(|binding| {
+                binding.site_ids().iter().filter_map(|site| {
+                    site.strip_prefix(factory_exports::DEPENDENCY_PREFIX)
+                        .map(|json| {
+                            (
+                                binding.demand_id().to_owned(),
+                                serde_json::from_str(json).expect("native factory claim encoding"),
+                            )
+                        })
+                })
+            })
+            .collect()
+    }
+
+    pub(super) fn factory_requirements_root(&self) -> Option<String> {
+        let mut rows = self
+            .bindings
+            .iter()
+            .flat_map(|binding| {
+                binding
+                    .site_ids()
+                    .iter()
+                    .filter(|site| site.starts_with(factory_exports::DEPENDENCY_PREFIX))
+                    .map(|site| format!("{}:{site}", binding.demand_id()))
+            })
+            .collect::<Vec<_>>();
+        rows.sort();
+        rows.dedup();
+        (!rows.is_empty()).then(|| {
+            super::certification_evidence_root(
+                "factory-return-dependency-requirements",
+                rows.iter().map(String::as_str),
+            )
+        })
+    }
+
+    pub(super) fn dependency_creates_claims(
         &self,
         plan: &CertificationPlan,
         claim_id: &str,
-    ) -> Option<&str> {
+    ) -> Vec<CensusDependencyClaim> {
+        let Some(demand) = plan.demand_graph().demands().iter().find(|demand| {
+            demand.family() == ProofFamily::DomainExhaustiveness
+                && matches!(demand.subject(), ProofDemandSubject::DomainClosure {
+                    semantic_claim_id, ..
+                } if semantic_claim_id == claim_id)
+        }) else {
+            return Vec::new();
+        };
+        self.bindings
+            .iter()
+            .filter(|binding| binding.demand_id() == demand.id().as_str())
+            .flat_map(|binding| binding.site_ids())
+            .filter_map(|site| site.strip_prefix(CENSUS_DEPENDENCY_CLAIM_PREFIX))
+            .map(|json| serde_json::from_str(json).expect("native census claim encoding"))
+            .collect()
+    }
+
+    /// A finalizer using conditional census evidence must bind the same
+    /// dependency requirements that its receipt authenticator discharged.
+    pub(super) fn dependency_census_root(&self) -> Option<String> {
+        let rows = self
+            .bindings
+            .iter()
+            .flat_map(|binding| {
+                binding
+                    .site_ids()
+                    .iter()
+                    .filter(|site| site.starts_with(CENSUS_DEPENDENCY_CLAIM_PREFIX))
+                    .map(|site| format!("{}:{site}", binding.demand_id()))
+            })
+            .collect::<Vec<_>>();
+        (!rows.is_empty()).then(|| {
+            super::certification_evidence_root(
+                "creates-dependency-requirements",
+                rows.iter().map(String::as_str),
+            )
+        })
+    }
+
+    /// The native census evidence for this parent claim. Dependency callers
+    /// must also discharge `dependency_creates_claims` before using this root;
+    /// finalization binds that discharge through `dependency_census_root`.
+    pub(super) fn creates_census(&self, plan: &CertificationPlan, claim_id: &str) -> Option<&str> {
         let demand = plan.demand_graph().demands().iter().find(|demand| {
             demand.family() == ProofFamily::DomainExhaustiveness
                 && matches!(demand.subject(), ProofDemandSubject::DomainClosure {
@@ -598,6 +683,7 @@ fn acquire_census_local_transcripts(
     schedule: &TypeFactsCertificationSchedule,
     live: &LiveExportValueAnswer,
     roots: &[SnapshotSourceRoot<'_>],
+    dependencies: &[&CertificationPlan],
 ) -> Result<Vec<LocalDeclarationTranscript>, TypeFactsCertificationError> {
     let mut locals = Vec::<LocalDeclarationTranscript>::new();
     for _round in 0..=MAX_COMPOSITION_DEPTH {
@@ -638,6 +724,7 @@ fn acquire_census_local_transcripts(
                 let evidence = CensusEvidence {
                     roots,
                     locals: &locals,
+                    dependencies,
                 };
                 if let Ok((CensusOutcome::NeedsTranscripts, _, wanted)) =
                     census_creates_domain(plan, proof, export, transcript, implementation, evidence)
@@ -916,9 +1003,15 @@ fn acquire_and_verify_export_values_batch_with_dependencies(
             let roots =
                 snapshot_source_roots(plan, dependencies, sources, Some(&project), &package_marker)
                     .map_err(|error| error.at_stage("census source-root derivation"))?;
-            let locals =
-                acquire_census_local_transcripts(&mut session, plan, schedule, &live, &roots)
-                    .map_err(|error| error.at_stage("census local-declaration acquisition"))?;
+            let locals = acquire_census_local_transcripts(
+                &mut session,
+                plan,
+                schedule,
+                &live,
+                &roots,
+                dependencies,
+            )
+            .map_err(|error| error.at_stage("census local-declaration acquisition"))?;
             verify_live_export_value_answer_with_dependencies(
                 plan,
                 schedule,
@@ -955,8 +1048,9 @@ pub(super) struct GraphExportValueRequest<'a> {
     pub(super) acquire: bool,
 }
 
-/// Acquires all exported-value answers for one opaque graph through one pinned
-/// producer session. The private project contains the authenticated union of
+/// Acquires exported-value answers through a shared pinned session, with a
+/// bounded isolated retry for locally open duplicate installations. Each
+/// private project contains the authenticated union of
 /// graph bytes, while verification still receives only each node's reachable
 /// dependencies and source packages; run-wide batching therefore does not
 /// widen any node's authority.
@@ -964,6 +1058,32 @@ pub(super) fn acquire_and_verify_graph_export_values(
     project_root: &CertificationPlan,
     requests: &[GraphExportValueRequest<'_>],
     pin: &TypeFactsProducerPin,
+) -> Result<Vec<Option<VerifiedTypeFactsEvidence>>, TypeFactsCertificationError> {
+    acquire_graph_export_values_in_contexts(project_root, requests, pin, true)
+}
+
+#[cfg(test)]
+pub(super) fn shared_graph_export_values_for_test(
+    plans: &[&CertificationPlan],
+    pin: &TypeFactsProducerPin,
+) -> Result<Vec<Option<VerifiedTypeFactsEvidence>>, TypeFactsCertificationError> {
+    let requests = plans
+        .iter()
+        .map(|plan| GraphExportValueRequest {
+            plan,
+            dependencies: vec![],
+            sources: &[],
+            acquire: true,
+        })
+        .collect::<Vec<_>>();
+    acquire_graph_export_values_in_contexts(plans[0], &requests, pin, false)
+}
+
+fn acquire_graph_export_values_in_contexts(
+    project_root: &CertificationPlan,
+    requests: &[GraphExportValueRequest<'_>],
+    pin: &TypeFactsProducerPin,
+    isolate_contexts: bool,
 ) -> Result<Vec<Option<VerifiedTypeFactsEvidence>>, TypeFactsCertificationError> {
     if requests.is_empty() {
         return Ok(Vec::new());
@@ -1078,46 +1198,33 @@ pub(super) fn acquire_and_verify_graph_export_values(
             if !group_acquire[position] {
                 return Ok(None);
             }
-            let live = session
-                .acquire_export_values(request.plan, schedule)
-                .map_err(|error| {
-                    error.at_graph_node(request.plan, "live graph export-value acquisition")
-                })?;
-            let package_marker = snapshot_package_marker(request.plan);
-            let roots = snapshot_source_roots(
-                request.plan,
-                &census_dependencies,
-                &sources,
-                Some(&project),
-                &package_marker,
-            )
-            .map_err(|error| {
-                error.at_graph_node(request.plan, "graph census source-root derivation")
-            })?;
-            let locals = acquire_census_local_transcripts(
+            let shared = graph_contexts::acquire_in_session(
+                request,
+                schedule,
                 &mut session,
-                request.plan,
-                schedule,
-                &live,
-                &roots,
-            )
-            .map_err(|error| {
-                error.at_graph_node(request.plan, "graph census local-declaration acquisition")
-            })?;
-            verify_live_export_value_answer_with_project_census(
-                request.plan,
-                schedule,
-                &live,
-                &request.dependencies,
+                &project,
                 &census_dependencies,
                 &sources,
-                Some(&project),
-                &locals,
-            )
-            .map_err(|error| {
-                error.at_graph_node(request.plan, "live graph export-value verification")
-            })
-            .map(Some)
+            );
+            if isolate_contexts
+                && shared.as_ref().is_err_and(graph_contexts::is_family_open)
+                && graph_contexts::has_duplicate_installation(
+                    request.plan,
+                    &census_dependencies,
+                    &sources,
+                )
+            {
+                return graph_contexts::acquire_isolated(
+                    project_root,
+                    request,
+                    &dependencies,
+                    &census_dependencies,
+                    &sources,
+                    pin,
+                )
+                .map(Some);
+            }
+            shared.map(Some)
         })
         .collect::<Vec<Result<_, _>>>();
     let evidence = merge_graph_census_refusals(evidence);
@@ -1248,6 +1355,18 @@ impl PrivateTypeFactsProject {
         program_plans: &[&CertificationPlan],
         sources: &[&super::dependencies::VerifiedGraphSourcePackage],
     ) -> Result<Self, TypeFactsCertificationError> {
+        Self::materialize_with_program_roots(plan, dependencies, program_plans, sources, false)
+    }
+
+    /// Isolated acquisition changes only compiler roots. All authenticated
+    /// installations remain materialized at their original relative positions.
+    fn materialize_with_program_roots(
+        plan: &CertificationPlan,
+        dependencies: &[&CertificationPlan],
+        program_plans: &[&CertificationPlan],
+        sources: &[&super::dependencies::VerifiedGraphSourcePackage],
+        isolated: bool,
+    ) -> Result<Self, TypeFactsCertificationError> {
         // The name is (pid, counter), and a pid is reused: a certification the
         // runner killed on its timeout never dropped its project, so its
         // directory is still there when a later process draws the same pid and
@@ -1348,6 +1467,7 @@ impl PrivateTypeFactsProject {
         let mut files = vec![harness.to_string_lossy().into_owned()];
         for candidate in std::iter::once(plan)
             .chain(dependencies.iter().copied())
+            .filter(|_| !isolated)
             .chain(program_plans.iter().copied())
         {
             let candidate_root = package_roots
@@ -2002,6 +2122,15 @@ fn derive_export_value_schedules(
     project: &PrivateTypeFactsProject,
     force_exact_subjects: bool,
 ) -> Result<Vec<TypeFactsCertificationSchedule>, TypeFactsCertificationError> {
+    derive_export_value_schedules_with_owners(plans, plans, project, force_exact_subjects)
+}
+
+fn derive_export_value_schedules_with_owners(
+    plans: &[&CertificationPlan],
+    owners: &[&CertificationPlan],
+    project: &PrivateTypeFactsProject,
+    force_exact_subjects: bool,
+) -> Result<Vec<TypeFactsCertificationSchedule>, TypeFactsCertificationError> {
     let resolution_variants = export_resolution_variants(plans)?;
     let mut subjects = std::collections::BTreeMap::<(String, String), String>::new();
     for plan in plans {
@@ -2114,7 +2243,7 @@ fn derive_export_value_schedules(
                                 end_byte: u64::try_from(*end).unwrap_or(u64::MAX),
                             },
                             implementation_location: export_implementation_location(
-                                plans,
+                                owners,
                                 project,
                                 plan,
                                 export,
@@ -2260,23 +2389,21 @@ fn export_implementation_location(
             reason: "runtime export binding belongs to an unplanned snapshot".into(),
         });
     }
-    // `snapshot_root` is a content hash over the package name, version, and
-    // every file's bytes, so every plan matching it materializes byte-identical
-    // sources. The implementation location (path + span) therefore resolves to
-    // the same bytes regardless of which matching owner is selected, and the
-    // producer's transcript over that span is identical. A batch or graph that
-    // legitimately carries the same installation as several plans — a package's
-    // alternative artifact cases (all share one snapshot_root by construction),
-    // or a dependency reached through multiple graph edges — is not an
-    // ambiguity. Select the first matching owner the project actually
-    // materialized; refusing on multiplicity was spurious.
-    let package_root = owners
-        .filter_map(|owner| project.package_root(owner).ok())
-        .next()
-        .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
-            demand: demand.to_owned(),
-            reason: "runtime export binding snapshot is not materialized in the project".into(),
-        })?;
+    // A package's own implementation belongs to this plan's exact installation.
+    // Matching snapshot bytes at another installation do not give it the same
+    // dependency resolution context or the same program roots. Alternative
+    // artifact cases of this installation remain valid repeated owners.
+    let package_root = if plan.snapshot_root() == snapshot_root {
+        project.package_root(plan)?
+    } else {
+        owners
+            .filter_map(|owner| project.package_root(owner).ok())
+            .next()
+            .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+                demand: demand.to_owned(),
+                reason: "runtime export binding snapshot is not materialized in the project".into(),
+            })?
+    };
     let path = package_root.join(runtime_path);
     Ok(Some(typefacts::Location {
         path: path.to_string_lossy().into_owned().into(),
@@ -2321,7 +2448,12 @@ pub(super) fn export_implementation_location_for_test(
     owner: &CertificationPlan,
     export: &str,
 ) -> Result<Option<typefacts::Location>, TypeFactsCertificationError> {
-    let project = PrivateTypeFactsProject::materialize(owner, &[], plans, &[])?;
+    let dependencies = plans
+        .iter()
+        .copied()
+        .filter(|plan| private_project_plan_key(plan) != private_project_plan_key(owner))
+        .collect::<Vec<_>>();
+    let project = PrivateTypeFactsProject::materialize(owner, &dependencies, plans, &[])?;
     export_implementation_location(plans, &project, owner, export, "test-demand")
 }
 
@@ -2382,7 +2514,18 @@ fn export_value_harness_subject(
             .root
             .join("node_modules")
             .join(plan.snapshot.package_name());
-    if (!force_exact_subjects || publicly_addressable)
+    // The private program uses bundler/import resolution with no custom
+    // conditions. Even a singleton case can select a different declaration
+    // under node, browser, solid, require, or a package-defined condition.
+    // Its snapshot replay already authenticated the exact target; do not ask
+    // the host's default condition set to choose that target again.
+    let needs_exact_conditions = plan
+        .import_request
+        .export_conditions
+        .iter()
+        .any(|condition| !matches!(condition.as_str(), "import" | "types" | "default"));
+    if !needs_exact_conditions
+        && (!force_exact_subjects || publicly_addressable)
         && resolution_variants
             .get(&public_subject)
             .is_some_and(|variants| variants.len() == 1)
@@ -2942,6 +3085,7 @@ fn verify_live_export_value_answer_with_project_census(
     let census = CensusEvidence {
         roots: &source_roots,
         locals,
+        dependencies,
     };
     let certification_sources_root = plan.certification_sources_root();
     let mut bindings = Vec::with_capacity(expected_ids.len());
@@ -3197,6 +3341,17 @@ fn verify_export_value_subject(
     } else {
         &declaration.name
     };
+    if declaration_export == "*"
+        && authenticated_namespace_declaration_target(
+            plan,
+            dependencies,
+            export,
+            actual_name,
+            &actual_path,
+        )
+    {
+        return Ok(());
+    }
     if !actual_path.ends_with(&marker)
         && !authenticated_dependency_declaration_target(
             plan,
@@ -3275,6 +3430,43 @@ fn namespace_declaration_name_matches_path(name: &str, path: &str) -> bool {
     .is_some_and(|stem| stem == normalized_name)
 }
 
+pub(super) fn authenticated_namespace_declaration_target(
+    parent: &CertificationPlan,
+    dependencies: &[&CertificationPlan],
+    export: &str,
+    declaration_name: &str,
+    declaration_path: &str,
+) -> bool {
+    let Some((path, "*", "*")) = parent.verified_exports.declaration_binding(export) else {
+        return false;
+    };
+    let Some(owner) = parent
+        .verified_exports
+        .declaration_binding_snapshot_root(export)
+    else {
+        return false;
+    };
+    // The namespace name denotes a module, not an exported identifier. Bind
+    // the replayed owning snapshot before comparing that module's identity;
+    // another dependency exporting a same-named file is not a substitute.
+    namespace_declaration_name_matches_path(declaration_name, declaration_path)
+        && dependencies.iter().any(|dependency| {
+            dependency.snapshot.root() == owner
+                && dependency
+                    .verified_exports
+                    .has_declaration_target(path, "*")
+                && declaration_path.ends_with(&format!(
+                    "{}{}",
+                    private_project_package_marker(
+                        parent,
+                        &dependency.resolved_import.package_root,
+                        dependency.snapshot.package_name()
+                    ),
+                    path.trim_start_matches("./")
+                ))
+        })
+}
+
 fn authenticated_dependency_declaration_target(
     parent: &CertificationPlan,
     dependencies: &[&CertificationPlan],
@@ -3338,7 +3530,9 @@ fn verify_export_value_family(
             ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
                 root: ValueRoot::Export,
                 ..
-            }) => require_export_recursive_subject(proof, transcript, &open, &mut sites)?,
+            }) => require_export_recursive_subject_with_factory(
+                plan, proof, transcript, census, &open, &mut sites,
+            )?,
             ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue { .. }) => {
                 require_operation_recursive_subject(
                     plan,
@@ -3446,7 +3640,9 @@ fn verify_export_value_family(
                     ..
                 })
             ) {
-                require_export_recursive_subject(proof, transcript, &open, &mut sites)?;
+                require_export_recursive_subject_with_factory(
+                    plan, proof, transcript, census, &open, &mut sites,
+                )?;
             } else {
                 require_operation_recursive_subject(
                     plan,
@@ -3510,6 +3706,29 @@ fn verify_export_value_family(
                     });
                 }
                 sites.extend(census_sites);
+            } else if matches!(
+                &subject.path,
+                SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Reads))
+            ) {
+                // The same implementation transcript read for its uncensused
+                // invoking forms alone. A candidate whose closure installs an
+                // accessor at run time never arrives here: the closure hazard
+                // opened `reads` for every export of the case before any
+                // candidate was planned.
+                let (export, implementation) =
+                    require_export_implementation(plan, proof, transcript, &open)?;
+                require_census_decides_closure(
+                    proof,
+                    &subject.path,
+                    ClosureCensus::Implementation,
+                )?;
+                sites.extend(census_reads_domain(
+                    plan,
+                    proof,
+                    export,
+                    implementation,
+                    census,
+                )?);
             } else if matches!(
                 &subject.path,
                 SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Returns))
@@ -4905,6 +5124,9 @@ fn require_parameter_read_evidence(
     open: &impl Fn(&str) -> TypeFactsCertificationError,
     sites: &mut Vec<String>,
 ) -> Result<(), TypeFactsCertificationError> {
+    if original_helper_member_identity(source, implementation, sites, floor) {
+        return Ok(());
+    }
     let mut found = require_parameter_read_call(implementation, source, floor, open, sites).is_ok();
     for use_site in &implementation.parameter_uses {
         if !floor.admits(use_site.reach)
@@ -5073,6 +5295,280 @@ enum RecursiveValueEvidence {
     /// The demand names an exact property path and asserts the value there is
     /// callable. The callback-flow census answers it.
     ShapeAsserted,
+}
+
+/// A whole input can name the caller's parameter without claiming its shape.
+/// A binding-use row alone is insufficient: reassignment can change the value
+/// held by that binding. Protocol 39 supplies the affirmative unwritten fact.
+fn unwritten_parameter_binding(
+    index: usize,
+    implementation: &typefacts::ExportImplementationTranscript,
+) -> Option<&typefacts::UnwrittenParameterBinding> {
+    if !matches!(
+        implementation.completion_form,
+        Some(
+            typefacts::ImplementationCompletionForm::Plain
+                | typefacts::ImplementationCompletionForm::Async
+        )
+    ) {
+        return None;
+    }
+    let matching = implementation
+        .unwritten_parameters
+        .iter()
+        .filter(|binding| binding.parameter_index == index)
+        .collect::<Vec<_>>();
+    let [binding] = matching.as_slice() else {
+        return None;
+    };
+    let parameter = implementation
+        .signature
+        .as_ref()
+        .and_then(|signature| signature.parameters.get(index))?;
+    if parameter.index != index
+        || parameter.rest
+        || parameter.defaulted
+        || binding.declaration.path != implementation.location.path
+        || binding.declaration.start_byte >= binding.declaration.end_byte
+        || parameter
+            .declaration
+            .as_ref()
+            .is_none_or(|declaration| declaration.location != binding.declaration)
+    {
+        return None;
+    }
+    Some(*binding)
+}
+
+fn unwritten_parameter_input_identity(
+    source: &ValueSource,
+    callable: DemandedCallability,
+    implementation: &typefacts::ExportImplementationTranscript,
+    sites: &mut Vec<String>,
+) -> bool {
+    let ValueSource::Parameter { index, path } = source else {
+        return false;
+    };
+    if !path.is_empty() || callable != DemandedCallability::Unknown {
+        return false;
+    }
+    let index = usize::from(*index);
+    let Some(binding) = unwritten_parameter_binding(index, implementation) else {
+        return false;
+    };
+    let Some(usage) = implementation.parameter_uses.iter().find(|usage| {
+        usage.parameter_index == index
+            && usage.binding_path.is_empty()
+            && usage.kind == ParameterUseKind::PropertyAccess
+            && usage.reach == Reachability::Reachable
+            && !usage.captured
+            && !usage.alias
+            && usage.location.path == binding.declaration.path
+            && usage.location.start_byte < usage.location.end_byte
+    }) else {
+        return false;
+    };
+    sites.push(format!(
+        "unwritten-parameter-input:{index}:{}:{}:{}:use:{}:{}",
+        binding.declaration.path,
+        binding.declaration.start_byte,
+        binding.declaration.end_byte,
+        usage.location.start_byte,
+        usage.location.end_byte
+    ));
+    true
+}
+
+// Protocol 40 states identity at one read, independently of later writes.
+// This supports only the whole root: it says nothing about a member's shape,
+// callability, aliases, composed inputs, or an unobserved later use.
+fn initial_parameter_input_identity(
+    index: usize,
+    implementation: &typefacts::ExportImplementationTranscript,
+    sites: &mut Vec<String>,
+) -> bool {
+    initial_parameter_input_at(index, implementation, sites, false, false, |_| true)
+}
+
+// Bind the original receiver to this exact callee path and occurrence. An
+// untyped JS method need not have a resolved target symbol: this proves only
+// receiver origin. Shape, callability and operation demands still run below.
+fn initial_parameter_member_identity(
+    source: &ValueSource,
+    index: usize,
+    implementation: &typefacts::ExportImplementationTranscript,
+    sites: &mut Vec<String>,
+    floor: ReachabilityFloor,
+) -> bool {
+    initial_parameter_input_at(
+        index,
+        implementation,
+        sites,
+        floor == ReachabilityFloor::MayExecute,
+        true,
+        |usage| {
+            implementation.calls.iter().any(|call| {
+                is_call_expression(call)
+                    && floor.admits(call.reach)
+                    && !call.captured
+                    && call.location.path == usage.path
+                    && call.location.start_byte == usage.start_byte
+                    && call.location.end_byte > usage.end_byte
+                    && call
+                        .callee_parameter
+                        .as_ref()
+                        .is_some_and(|actual| parameter_value_source_exact(actual, source))
+            })
+        },
+    )
+}
+
+fn original_helper_member_identity(
+    source: &ValueSource,
+    implementation: &typefacts::ExportImplementationTranscript,
+    sites: &mut Vec<String>,
+    floor: ReachabilityFloor,
+) -> bool {
+    if floor != ReachabilityFloor::MayExecute {
+        return false;
+    }
+    let ValueSource::Parameter { index, path } = source else {
+        return false;
+    };
+    if path.len() != 1 {
+        return false;
+    }
+    for read in &implementation.original_helper_reads {
+        if read.parameter_index != usize::from(*index)
+            || read.property.as_ref() != path[0]
+            || !read.binds_to(implementation)
+            || implementation
+                .original_helper_reads
+                .iter()
+                .filter(|other| {
+                    other.call == read.call
+                        && other.argument_index == read.argument_index
+                        && other.read == read.read
+                })
+                .count()
+                != 1
+        {
+            continue;
+        }
+        sites.push(format!("original-helper-read:{index}:{}:{}:{}:argument:{}:{}:{}:helper:{}:{}:parameter:{}:{}:read:{}:{}:property:{}",
+            read.call.path, read.call.start_byte, read.call.end_byte, read.argument_index,
+            read.argument.start_byte, read.argument.end_byte, read.helper.start_byte, read.helper.end_byte,
+            read.helper_parameter.start_byte, read.helper_parameter.end_byte, read.read.start_byte, read.read.end_byte, read.property));
+        return true;
+    }
+    false
+}
+
+fn initial_parameter_input_at(
+    index: usize,
+    implementation: &typefacts::ExportImplementationTranscript,
+    sites: &mut Vec<String>,
+    allow_first_iteration: bool,
+    // ADR 0069: a positional row is a claim about one exact use, so only a
+    // caller whose `matches_use` binds that use to the operation it is
+    // discharging may take it. The whole-root arm below accepts any read of the
+    // slot, which is why it does not.
+    allow_positional: bool,
+    matches_use: impl Fn(&typefacts::Location) -> bool,
+) -> bool {
+    if implementation.completion_form != Some(typefacts::ImplementationCompletionForm::Plain) {
+        return false;
+    }
+    let Some(parameter) = implementation
+        .signature
+        .as_ref()
+        .and_then(|signature| signature.parameters.get(index))
+    else {
+        return false;
+    };
+    if parameter.index != index || parameter.rest || parameter.defaulted {
+        return false;
+    }
+    for read in &implementation.initial_parameter_reads {
+        if read.first_iteration_only && !allow_first_iteration
+            || read.positional && !allow_positional
+            || read.first_iteration_only && read.positional
+            || read.undefined_default.as_ref().is_some_and(|default| {
+                !allow_first_iteration
+                    || !allow_positional
+                    || !default.binds_read(read)
+                    || implementation
+                        .initial_parameter_reads
+                        .iter()
+                        .filter(|candidate| {
+                            candidate.parameter_index == index
+                                && candidate.undefined_default.is_some()
+                        })
+                        .count()
+                        != 1
+            })
+            || read.parameter_index != index
+            || read.declaration.path != implementation.location.path
+            || read.declaration.start_byte >= read.declaration.end_byte
+            || read.r#use.path != read.declaration.path
+            || read.r#use.start_byte >= read.r#use.end_byte
+            || parameter
+                .declaration
+                .as_ref()
+                .is_none_or(|declaration| declaration.location != read.declaration)
+            || implementation
+                .initial_parameter_reads
+                .iter()
+                .filter(|candidate| candidate.r#use == read.r#use)
+                .count()
+                != 1
+        {
+            continue;
+        }
+        let uses = implementation
+            .parameter_uses
+            .iter()
+            .filter(|usage| {
+                usage.parameter_index == index
+                    && usage.location == read.r#use
+                    && usage.binding_path.is_empty()
+                    && usage.kind == ParameterUseKind::PropertyAccess
+                    && (usage.reach == Reachability::Reachable
+                        || read.first_iteration_only && usage.reach == Reachability::Unknown)
+                    && !usage.captured
+                    && !usage.alias
+            })
+            .count();
+        if uses == 1 && matches_use(&read.r#use) {
+            let premise = if let Some(default) = &read.undefined_default {
+                sites.push(format!(
+                    "undefined-default-guard:{}:{}:{}:assignment:{}:{}",
+                    default.guard.path,
+                    default.guard.start_byte,
+                    default.guard.end_byte,
+                    default.assignment.start_byte,
+                    default.assignment.end_byte
+                ));
+                "defined-parameter-input"
+            } else if read.first_iteration_only {
+                "first-iteration-parameter-input"
+            } else if read.positional {
+                "positional-parameter-input"
+            } else {
+                "initial-parameter-input"
+            };
+            sites.push(format!(
+                "{premise}:{index}:{}:{}:{}:use:{}:{}",
+                read.declaration.path,
+                read.declaration.start_byte,
+                read.declaration.end_byte,
+                read.r#use.start_byte,
+                read.r#use.end_byte
+            ));
+            return true;
+        }
+    }
+    false
 }
 
 /// Implementation evidence for a recursive value-shape demand rooted at an
@@ -5981,6 +6477,65 @@ fn require_operation_recursive_subject(
             .inputs
             .get(index)
             .ok_or_else(|| open("recursive input index is absent"))?;
+        // A type-correct member path and a use of the parameter's binding do
+        // not establish that the binding still holds the caller's value.
+        // Require positive original-input identity before either the direct
+        // or composed read path can consume that input. This does not prove
+        // any member shape, callability or execution claim below.
+        if operation.kind == OperationKind::Read
+            && let Some((parameter, input_path)) = parameter_root(input)
+        {
+            let (_, implementation) = require_export_implementation(plan, proof, transcript, open)?;
+            if input_path.is_empty()
+                && path.0.is_empty()
+                && *callable == DemandedCallability::Unknown
+                && operation.composed_from.is_none()
+                && initial_parameter_input_identity(usize::from(parameter), implementation, sites)
+            {
+                return Ok(());
+            }
+            let initial_member = !input_path.is_empty()
+                && operation.composed_from.is_none()
+                && (initial_parameter_member_identity(
+                    &ValueSource::Parameter {
+                        index: parameter,
+                        path: input_path.to_vec(),
+                    },
+                    usize::from(parameter),
+                    implementation,
+                    sites,
+                    operation_reachability_floor(operation),
+                ) || original_helper_member_identity(
+                    &ValueSource::Parameter {
+                        index: parameter,
+                        path: input_path.to_vec(),
+                    },
+                    implementation,
+                    sites,
+                    operation_reachability_floor(operation),
+                ));
+            // This exact callee occurrence and its positive caller origin
+            // answer an unasserted input root without claiming a declared
+            // member shape. In particular an undefined default has local
+            // origin on its fallback branch; it must not require an
+            // unconditional member on the optional caller argument. A shape
+            // or callability assertion still follows the independent path.
+            if initial_member && path.0.is_empty() && *callable == DemandedCallability::Unknown {
+                return Ok(());
+            }
+            if !initial_member {
+                let binding = unwritten_parameter_binding(usize::from(parameter), implementation)
+                    .ok_or_else(|| {
+                    open("parameter-rooted read lacks positive original-input identity")
+                })?;
+                sites.push(format!(
+                    "original-parameter-read:{parameter}:{}:{}:{}",
+                    binding.declaration.path,
+                    binding.declaration.start_byte,
+                    binding.declaration.end_byte
+                ));
+            }
+        }
         // The reactive-input arm is answered *before* the parameter root is
         // required, because this input is deliberately not parameter-rooted:
         // the IR knows the value is a dialect accessor the export created
@@ -6050,6 +6605,15 @@ fn require_operation_recursive_subject(
             index: parameter,
             path: source_path,
         };
+        if operation.kind == OperationKind::Read
+            && path.0.is_empty()
+            && *callable == DemandedCallability::Unknown
+        {
+            let (_, implementation) = require_export_implementation(plan, proof, transcript, open)?;
+            if unwritten_parameter_input_identity(&source, *callable, implementation, sites) {
+                return Ok(());
+            }
+        }
         // A root path appends nothing above, so `source` is the same value the
         // unasserted arm has always read.
         let evidence = if path.0.is_empty() && !callable.asserts_callable() {
@@ -6370,6 +6934,92 @@ fn require_export_callable_paths_closed(
         }
     }
     Ok(())
+}
+
+fn require_export_recursive_subject_with_factory(
+    plan: &CertificationPlan,
+    proof: &ScheduledProofDemand,
+    transcript: &ExportValueTranscript,
+    evidence: CensusEvidence<'_>,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    match require_export_recursive_subject(proof, transcript, open, sites) {
+        Ok(()) => Ok(()),
+        Err(original) => {
+            if require_object_export_root(plan, proof, evidence, sites) {
+                return Ok(());
+            }
+            if factory_exports::require(plan, proof, transcript, evidence, open, sites)? {
+                Ok(())
+            } else {
+                Err(original)
+            }
+        }
+    }
+}
+
+/// A local object initializer can establish the root's non-callability without
+/// inventing a declaration-side type. The export resolver supplies the exact
+/// authenticated owner and binding span; this grants no member or effect claim.
+fn require_object_export_root(
+    plan: &CertificationPlan,
+    proof: &ScheduledProofDemand,
+    evidence: CensusEvidence<'_>,
+    sites: &mut Vec<String>,
+) -> bool {
+    let ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+        root: ValueRoot::Export,
+        path,
+        callable: DemandedCallability::NonCallable,
+        ..
+    }) = &proof.subject
+    else {
+        return false;
+    };
+    if !path.0.is_empty() || plan.resolved_import.transform.is_some() {
+        return false;
+    }
+    let (_, export) = proof_artifact_export(&proof.subject);
+    let Some((runtime_path, _, span, owner)) = plan.verified_exports.runtime_binding(export) else {
+        return false;
+    };
+    if owner != plan.snapshot.root() {
+        return false;
+    }
+    if !runtime_path.ends_with(".js") && !runtime_path.ends_with(".mjs") {
+        return false;
+    }
+    let Some(root) = evidence
+        .roots
+        .iter()
+        .find(|root| root.snapshot.root() == owner)
+    else {
+        return false;
+    };
+    let Some(bytes) = root.snapshot.read(runtime_path) else {
+        return false;
+    };
+    let Ok(source) = std::str::from_utf8(bytes) else {
+        return false;
+    };
+    let Ok(facts) = solid_facts::ast::extract(runtime_path.to_owned(), source) else {
+        return false;
+    };
+    // Export lists carry a reference span; direct declarations carry the name
+    // span itself. Only an exact binder edge may connect the former to a local.
+    let declaration = facts.reference_declaration(span).unwrap_or(span);
+    let Some(fact) = solid_facts::ast::unwritten_object_binding(source, declaration) else {
+        return false;
+    };
+    if !fact.matches(source, declaration) {
+        return false;
+    }
+    sites.push(format!(
+        "recursive-export-object-binding:v1:{owner}:{runtime_path}:{}:{}:{}:{}",
+        span.start, span.end, declaration.start, declaration.end
+    ));
+    true
 }
 
 fn require_export_recursive_subject(
@@ -7583,9 +8233,33 @@ fn require_census_decides_closure(
         // `returns` (ADR 0035), decided by the implementation census and
         // nothing else. Every other call domain keeps refusing by name below,
         // including under this census, because no census of *it* exists yet.
+        //
+        // `reads` (2026-09-10) joins them, but only because the premise it
+        // needs now exists *outside* this census.
+        //
+        // It was admitted here once before and withdrawn the same day. That
+        // admission assumed the form machinery would refuse an access on a
+        // proxy the export owns, since such a subject is neither
+        // parameter-rooted nor an own literal. It does not: TypeScript types a
+        // `Proxy` as its target, so the member resolves to a data property and
+        // the producer records **no form at all** — pinned by the producer's
+        // `TestRuntimeInstalledAccessorReadsAreInvisibleToTheProducer`, which
+        // measures nine such shapes, and stated in `invocation.go`'s own
+        // header: a trap "is out of the producer's reach entirely", and "a
+        // consumer whose claim requires that no trap ran must obtain that
+        // premise elsewhere".
+        //
+        // Elsewhere is the closure. `ModuleHazardKind::RuntimeAccessorInstallation`
+        // records every syntactic way to install an accessor at run time, and
+        // `open_domains` turns it into an open `reads` for every export of the
+        // case — so a candidate that could hide such a read is never planned,
+        // and what reaches this census is a closure where a read that runs
+        // code has to leave a form behind.
         (
             ClosureCensus::Implementation,
-            SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates | ClaimDomain::Returns)),
+            SemanticClaimPath::Domain(ClaimPath::Call(
+                ClaimDomain::Creates | ClaimDomain::Returns | ClaimDomain::Reads,
+            )),
         ) => Ok(()),
         (_, SemanticClaimPath::Domain(ClaimPath::Value { root, domain, .. })) => {
             Err(unsupported(format!(
@@ -7604,8 +8278,8 @@ fn require_census_decides_closure(
         (ClosureCensus::Implementation, SemanticClaimPath::Domain(ClaimPath::Call(domain))) => {
             Err(unsupported(format!(
                 "implementation-census premise required: the implementation census decides the \
-                 creates and returns call domains only; closing the {} call domain needs its own \
-                 census of every invoking form that reaches it, which does not exist yet",
+                 creates, returns and reads call domains only; closing the {} call domain needs \
+                 its own census of every invoking form that reaches it, which does not exist yet",
                 call_claim_domain_name(*domain)
             )))
         }
@@ -7717,6 +8391,8 @@ enum CensusDisposition {
     ParameterRootedElement,
     OwnLiteralAccessor,
     OwnLiteralAccessorWrite,
+    LocalLiteralResultAccessor,
+    LocalLiteralResultAccessorWrite,
     OwnLiteralIterable,
     PrimitiveCoercion,
     ParameterRootedHasInstance,
@@ -7724,6 +8400,7 @@ enum CensusDisposition {
     OwnClassHasInstance,
     StandardLibrary,
     DialectAxiom,
+    DependencyClaim,
     LocalRecursion,
     LocalRecursionBackedge,
 }
@@ -7739,6 +8416,8 @@ impl CensusDisposition {
             Self::ParameterRootedElement => "parameter-rooted-element",
             Self::OwnLiteralAccessor => "own-literal-accessor",
             Self::OwnLiteralAccessorWrite => "own-literal-accessor-write",
+            Self::LocalLiteralResultAccessor => "local-literal-result-accessor",
+            Self::LocalLiteralResultAccessorWrite => "local-literal-result-accessor-write",
             Self::OwnLiteralIterable => "own-literal-iterable",
             Self::PrimitiveCoercion => "primitive-coercion",
             Self::ParameterRootedHasInstance => "parameter-rooted-has-instance",
@@ -7746,6 +8425,7 @@ impl CensusDisposition {
             Self::OwnClassHasInstance => "own-class-has-instance",
             Self::StandardLibrary => "standard-library",
             Self::DialectAxiom => "dialect-axiom",
+            Self::DependencyClaim => "dependency-claim",
             Self::LocalRecursion => "local-recursion",
             Self::LocalRecursionBackedge => "local-recursion-backedge",
         }
@@ -7846,6 +8526,10 @@ const CENSUS_HAS_INSTANCE_SUBJECT_PROTOCOL: u64 = 31;
 
 const CENSUS_PRIMITIVE_COMPLETION_PROTOCOL: u64 = 29;
 
+/// ADR 0051: an explicit bottom type proves no object-valued completion;
+/// an empty or missing type observation alone continues to prove nothing.
+const CENSUS_BOTTOM_TYPE_PROTOCOL: u64 = 35;
+
 const CENSUS_OWN_LITERAL_SUBJECT_PROTOCOL: u64 = 28;
 
 const CENSUS_SUBJECT_ROOT_DERIVATION_PROTOCOL: u64 = 27;
@@ -7927,6 +8611,7 @@ impl CensusDeclarationIdentity {
 struct CensusEvidence<'a> {
     roots: &'a [SnapshotSourceRoot<'a>],
     locals: &'a [LocalDeclarationTranscript],
+    dependencies: &'a [&'a CertificationPlan],
 }
 
 impl CensusEvidence<'_> {
@@ -7983,6 +8668,7 @@ struct CensusRun<'a> {
     /// refuses to answer *about*. A snapshot rather than the whole plan so the
     /// dispositions are testable against a synthesized archive.
     certified: &'a super::ArtifactSnapshot,
+    plan: Option<&'a CertificationPlan>,
     evidence: CensusEvidence<'a>,
     runtime_sources: std::collections::BTreeSet<String>,
     visited: Vec<CensusDeclarationIdentity>,
@@ -8179,6 +8865,14 @@ fn census_creates_domain(
             typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
         )));
     }
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_BOTTOM_TYPE_PROTOCOL {
+        return Err(refuse(format!(
+            "implementation-census premise required: explicit bottom-type coercion and completion \
+             facts arrived at handshake protocol {CENSUS_BOTTOM_TYPE_PROTOCOL} and this build \
+             speaks {}",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
     if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_PRIMITIVE_COMPLETION_PROTOCOL {
         return Err(refuse(format!(
             "implementation-census premise required: a coercion's operand calls and a transcript's \
@@ -8266,6 +8960,7 @@ fn census_creates_domain(
     }
     let mut run = CensusRun {
         certified: &plan.snapshot,
+        plan: Some(plan),
         evidence,
         runtime_sources: certified_runtime_sources(plan),
         visited: Vec::new(),
@@ -8320,14 +9015,105 @@ fn census_creates_domain(
 /// export's own implementation completes without yielding a value on every
 /// path at the `MayExecute` floor.
 ///
-/// Decides the **empty** closure only. A `returns` proposal that enumerates
-/// operations is refused exactly as a nonempty `creates` enumeration is: this
-/// census derives no return shapes to compare it against, and admitting it
-/// would certify the proposal's own word (objection 5 of ADR 0006).
+/// Decides empty completion and one whole-parameter return identity. The latter
+/// requires the positive original-parameter premise at every possible return.
+/// Other nonempty enumerations remain unsupported: the census does not derive
+/// their shapes, so admitting them would certify the proposal's own word.
 ///
 /// No callee is dispositioned. A helper's return value reaches this export's
 /// caller only through a return site of this export's own, and a return site
-/// carrying an expression refuses whatever the expression is.
+/// carrying an expression must prove the one supported identity or refuse.
+/// The `reads` implementation census: every uncensused invoking form this
+/// export reaches has to be dispositioned, and no operation may be proposed.
+///
+/// This is the *form* half of the `creates` census and none of its callee
+/// walk. A `creates` claim is about what the export's reachable callees do, so
+/// it follows calls; a `reads` claim is about accesses in the export's own
+/// body, and `census_form_disposition` already decides whose value each
+/// subject is — `parameter`-rooted roots are the caller's read (ADR 0034), an
+/// own literal's members are data properties (ADR 0044), and an unreviewed
+/// root refuses.
+///
+/// **What this census cannot see, and does not try to.** A read through an
+/// accessor installed at run time records no form at all, so nothing here
+/// would refuse it. That premise is obtained before the census runs, from the
+/// closure: a `runtime-accessor-installation` hazard opens `reads` for every
+/// export of the case, so a candidate carrying one never reaches this
+/// function. Refusing here on a form that does not exist is impossible, which
+/// is exactly the mistake the first admission of this domain made
+/// (`docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
+/// § 6).
+fn census_reads_domain(
+    plan: &CertificationPlan,
+    proof: &ScheduledProofDemand,
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    implementation: &typefacts::ExportImplementationTranscript,
+    evidence: CensusEvidence<'_>,
+) -> Result<Vec<String>, TypeFactsCertificationError> {
+    let refuse = |reason: String| TypeFactsCertificationError::UnsupportedDemand {
+        demand: proof.id.clone(),
+        reason,
+    };
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_UNCENSUSED_FORMS_PROTOCOL {
+        return Err(refuse(format!(
+            "reads-census premise required: the uncensused-invoking-form census arrived at \
+             handshake protocol {CENSUS_UNCENSUSED_FORMS_PROTOCOL} and this build speaks {}, so \
+             an empty form list would be an absence read as a proof",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
+    let proposed = export
+        .operation_claim(ClaimDomain::Reads)
+        .ok_or_else(|| refuse("reads is not an operation domain of this export".into()))?;
+    if !proposed.items().is_empty() {
+        return Err(refuse(format!(
+            "a reads closure candidate must enumerate no operation, but the proposal names {}",
+            proposed.items().len()
+        )));
+    }
+    let run = CensusRun {
+        certified: &plan.snapshot,
+        plan: Some(plan),
+        evidence,
+        runtime_sources: certified_runtime_sources(plan),
+        visited: Vec::new(),
+        requested: Vec::new(),
+        sites: Vec::new(),
+        calls: 0,
+        deepest: 0,
+        sources: std::collections::BTreeMap::new(),
+        frame: None,
+    };
+    let mut sites = Vec::new();
+    for form in &implementation.uncensused_invoking_forms {
+        if form.reach == Reachability::Unreachable {
+            continue;
+        }
+        // No deferral. The `creates` census holds a coercion or a local
+        // literal result back until its call walk has demanded the callees'
+        // transcripts; this census has no call walk, so a form it cannot
+        // decide here it cannot decide at all.
+        let Some(disposition) = census_form_disposition(&run, form) else {
+            return Err(refuse(format!(
+                "reads-census premise required: the {} form ({}) at {}:{}..{} ({}) states no \
+                 reviewed subject root, so whose value it reads is undecided",
+                uncensused_invoking_form_kind_name(form.kind),
+                form.node_kind,
+                form.location.path,
+                form.location.start_byte,
+                form.location.end_byte,
+                reachability_name(form.reach)
+            )));
+        };
+        sites.push(census_form_site(form, disposition));
+    }
+    sites.push(format!(
+        "typefacts-implementation-census:reads:forms:{}",
+        sites.len()
+    ));
+    Ok(sites)
+}
+
 fn census_returns_domain(
     proof: &ScheduledProofDemand,
     export: &solid_reactive_ir::contract_semantics::ExportSemantics,
@@ -8355,13 +9141,59 @@ fn census_returns_domain(
     let proposed = export
         .operation_claim(ClaimDomain::Returns)
         .ok_or_else(|| refuse("returns is not an operation domain of this export".into()))?;
+    if let [operation] = proposed.items()
+        && let Some(operation) = export.operation(&operation.0)
+        && operation.kind == OperationKind::Return
+        && let Some(ValueShape::Parameter { index, path }) = &operation.output
+        && path.is_empty()
+    {
+        return census_parameter_returns_transcript(implementation, *index).map_err(refuse);
+    }
     if !proposed.items().is_empty() {
         return Err(refuse(format!(
-            "a returns closure candidate must enumerate no operation, but the proposal names {}",
+            "a returns closure candidate must enumerate no operation or one whole-parameter return, but the proposal names {} unsupported operation(s)",
             proposed.items().len()
         )));
     }
     census_returns_transcript(implementation).map_err(refuse)
+}
+
+fn census_parameter_returns_transcript(
+    implementation: &typefacts::ExportImplementationTranscript,
+    index: u16,
+) -> Result<Vec<String>, String> {
+    if implementation.completion_form != Some(typefacts::ImplementationCompletionForm::Plain) {
+        return Err("parameter returns census requires an explicit plain completion form".into());
+    }
+    let flow = implementation.control_flow.as_ref().ok_or_else(|| {
+        "parameter returns census requires an explicit control-flow census".to_owned()
+    })?;
+    if flow
+        .unsupported
+        .iter()
+        .any(|marker| !flow.incompleteness.iter().any(|row| row.marker == *marker))
+    {
+        return Err("parameter returns census contains an unclassified flow marker".into());
+    }
+    if flow
+        .returns
+        .iter()
+        .any(|site| site.reach != Reachability::Unreachable && site.value.is_none())
+    {
+        return Err("parameter returns census requires a value at every possible return".into());
+    }
+    let mut sites = Vec::new();
+    let open = |reason: &str| TypeFactsCertificationError::UnsupportedDemand {
+        demand: "parameter-returns-census".into(),
+        reason: reason.into(),
+    };
+    require_returned_parameter_identity(implementation, index, &open, &mut sites)
+        .map_err(|error| error.to_string())?;
+    sites.push(format!(
+        "census-returns-parameter-total:{index}:{}",
+        flow.returns.len()
+    ));
+    Ok(sites)
 }
 
 /// The per-transcript half of [`census_returns_domain`]: the premises read off
@@ -8644,7 +9476,22 @@ fn census_transcript(
     let previous_frame = run.frame.replace(frame);
     let step = census_transcript_calls(run, implementation, depth);
     run.frame = previous_frame;
-    step
+    // Diagnostic only: decorate an existing refusal, never use a producer's
+    // explanation (or its absence) to decide a census. Keeping this at the
+    // transcript boundary also preserves the helper declaration that refused.
+    step.map_err(|reason| {
+        if implementation.parameter_premise_refusal.is_empty() {
+            reason
+        } else {
+            format!(
+                "{reason}; parameterPremiseRefusal at {}:{}..{} (depth {depth}): {}",
+                implementation.location.path,
+                implementation.location.start_byte,
+                implementation.location.end_byte,
+                implementation.parameter_premise_refusal
+            )
+        }
+    })
 }
 
 /// The per-call half of [`census_transcript`], run with `run.frame` set to the
@@ -8692,6 +9539,10 @@ fn census_transcript_calls(
             deferred.push(form);
             continue;
         }
+        if form.local_literal_result.is_some() {
+            deferred.push(form);
+            continue;
+        }
         return Err(refuse_form(form));
     }
     let mut step = CensusStep::Decided;
@@ -8722,6 +9573,20 @@ fn census_transcript_calls(
         return Ok(step);
     }
     for form in deferred {
+        if form.local_literal_result.is_some() {
+            if !census_local_literal_result_is_bound(run, implementation, form)? {
+                return Err(refuse_form(form));
+            }
+            run.sites.push(census_form_site(
+                form,
+                if form.subject_write {
+                    CensusDisposition::LocalLiteralResultAccessorWrite
+                } else {
+                    CensusDisposition::LocalLiteralResultAccessor
+                },
+            ));
+            continue;
+        }
         if !census_coercion_rests_on_primitive_calls(run, implementation, form)? {
             return Err(refuse_form(form));
         }
@@ -8729,6 +9594,79 @@ fn census_transcript_calls(
             .push(census_form_site(form, CensusDisposition::PrimitiveCoercion));
     }
     Ok(step)
+}
+
+/// Bind the producer's complete return identity to the very call and local
+/// transcript this census already executed. The source allocation and return
+/// set belong to that callee, not a type declaration or another invocation.
+fn census_local_literal_result_is_bound(
+    run: &mut CensusRun<'_>,
+    implementation: &typefacts::ExportImplementationTranscript,
+    form: &typefacts::UncensusedInvokingForm,
+) -> Result<bool, String> {
+    let Some(premise) = &form.local_literal_result else {
+        return Ok(false);
+    };
+    if !form.subject_root.is_empty()
+        || form.subject_parameter.is_some()
+        || form.subject_declaration.is_some()
+        || form.coercion_premise.is_some()
+        || !census_form_shape_reads_the_subject(form)
+        || !matches!(
+            form.kind,
+            typefacts::UncensusedInvokingFormKind::GetAccessor
+                | typefacts::UncensusedInvokingFormKind::SetAccessor
+                | typefacts::UncensusedInvokingFormKind::PropertyAccessUnknownAccessor
+        )
+        || premise.returns.is_empty()
+    {
+        return Ok(false);
+    }
+    let mut calls = implementation
+        .calls
+        .iter()
+        .filter(|call| call.location == premise.call);
+    let Some(call) = calls.next() else {
+        return Ok(false);
+    };
+    if calls.next().is_some() || call.kind != CallKind::Call {
+        return Ok(false);
+    }
+    let Some(declaration) = &call.declaration else {
+        return Ok(false);
+    };
+    let Some((_, relative)) = census_local_declaration_identity(run, declaration) else {
+        return Ok(false);
+    };
+    let Ok(node) = census_local_declaration_node(run, &relative, declaration) else {
+        return Ok(false);
+    };
+    if census_local_binding_is_stable(run, &relative, &node, declaration).is_err() {
+        return Ok(false);
+    }
+    let Some(transcript) = run
+        .evidence
+        .local(&node, census_call_premises(implementation, call))
+    else {
+        return Ok(false);
+    };
+    if transcript.location != premise.callee {
+        return Ok(false);
+    }
+    let inside = |location: &typefacts::Location| {
+        location.path == premise.callee.path
+            && location.start_byte < location.end_byte
+            && location.start_byte >= premise.callee.start_byte
+            && location.end_byte <= premise.callee.end_byte
+    };
+    if !inside(&premise.allocation) || !premise.returns.iter().all(inside) {
+        return Ok(false);
+    }
+    run.sites.push(format!(
+        "census-local-literal-result:{}",
+        serde_json::to_string(premise).expect("native literal result encoding")
+    ));
+    Ok(true)
 }
 
 /// Whether every call a `coercion` form's premise names hands back a value the
@@ -9291,6 +10229,16 @@ fn census_call_disposition(
         ));
     };
     let Some((identity, relative)) = census_local_declaration_identity(run, declaration) else {
+        if let Some(claim) = census_dependency_claim(run, call)? {
+            run.sites.push(format!(
+                "{CENSUS_DEPENDENCY_CLAIM_PREFIX}{}",
+                serde_json::to_string(&claim).expect("native census claim encoding")
+            ));
+            return Ok(Some((
+                CensusDisposition::DependencyClaim,
+                census_call_site(call, CensusDisposition::DependencyClaim),
+            )));
+        }
         return Err(format!(
             "creates census refuses a resolved callee that is neither a default-library member, a \
              dialect primitive under the negative authority, nor a declaration in this artifact's \
@@ -9352,6 +10300,131 @@ fn census_call_disposition(
     )))
 }
 
+const CENSUS_DEPENDENCY_CLAIM_PREFIX: &str = "census-dependency-creates:";
+
+/// A conditional census obligation, never receipt authority on its own.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub(super) struct CensusDependencyClaim {
+    pub package: String,
+    pub artifact_case: String,
+    pub accepted_contract_digest: String,
+    pub export: String,
+    pub semantic_claim_id: String,
+}
+
+fn census_dependency_claim(
+    run: &CensusRun<'_>,
+    call: &typefacts::ImplementationCall,
+) -> Result<Option<CensusDependencyClaim>, String> {
+    // Empty creates is a call-domain claim, not a construction claim.
+    if call.kind != CallKind::Call {
+        return Ok(None);
+    }
+    let Some(parent) = run.plan else {
+        return Ok(None);
+    };
+    let Some(declaration) = call.declaration.as_ref().filter(|d| !d.symbol.is_empty()) else {
+        return Ok(None);
+    };
+    let paths = run
+        .evidence
+        .roots
+        .iter()
+        .map(|r| r.path.clone())
+        .collect::<Vec<_>>();
+    let normalized = declaration.location.path.replace('\\', "/");
+    let Some((index, relative)) = strip_materialized_source_root(&normalized, &paths) else {
+        return Ok(None);
+    };
+    let root = &run.evidence.roots[index];
+    if !root.dependency {
+        return Ok(None);
+    }
+    let Some(bytes) = root.snapshot.read(relative) else {
+        return Ok(None);
+    };
+    let Ok(source) = std::str::from_utf8(bytes) else {
+        return Ok(None);
+    };
+    let source = source.strip_prefix('\u{feff}').unwrap_or(source);
+    let Ok(facts) = solid_facts::ast::extract(relative.to_owned(), source) else {
+        return Ok(None);
+    };
+    let mut matches = Vec::new();
+    for dependency in
+        parent
+            .demand_graph()
+            .demands()
+            .iter()
+            .filter_map(|demand| match demand.subject() {
+                ProofDemandSubject::DependencyArtifact { dependency } => Some(dependency),
+                _ => None,
+            })
+    {
+        for child in run.evidence.dependencies {
+            if child.snapshot.package_name() != dependency.package {
+                continue;
+            }
+            let Some(case) = child
+                .candidates
+                .proposal()
+                .artifact_case(&dependency.artifact_case)
+            else {
+                continue;
+            };
+            for (export_name, export) in &case.exports {
+                let Some((path, name, reference, owner)) =
+                    child.verified_exports.declaration_reference(export_name)
+                else {
+                    continue;
+                };
+                if owner != root.snapshot.root()
+                    || path.trim_start_matches("./") != relative.trim_start_matches("./")
+                    || name != declaration.name.as_ref()
+                {
+                    continue;
+                }
+                let target = facts.reference_declaration(reference).unwrap_or(reference);
+                if u64::from(target.start) != declaration.location.start_byte
+                    || u64::from(target.end) != declaration.location.end_byte
+                {
+                    continue;
+                }
+                let Some(creates) = export.operation_claim(ClaimDomain::Creates) else {
+                    continue;
+                };
+                if !creates.items().is_empty() {
+                    continue;
+                }
+                let subject = solid_reactive_ir::contract_semantics::SemanticClaimSubject {
+                    artifact_case: case.id.clone(),
+                    export: export_name.clone(),
+                    path: SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates)),
+                };
+                if !creates.is_closed() && !child.candidates.closure_candidates().contains(&subject)
+                {
+                    continue;
+                }
+                let Ok(claim_id) = child.candidates.proposal().claim_id(&subject) else {
+                    continue;
+                };
+                matches.push(CensusDependencyClaim {
+                    package: dependency.package.clone(),
+                    artifact_case: dependency.artifact_case.clone(),
+                    accepted_contract_digest: dependency.accepted_contract_digest.clone(),
+                    export: export_name.clone(),
+                    semantic_claim_id: claim_id.as_str().to_owned(),
+                });
+            }
+        }
+    }
+    match matches.len() {
+        0 => Ok(None),
+        1 => Ok(matches.pop()),
+        _ => Err("creates census cannot bind the callee to one exact dependency export and artifact case".into()),
+    }
+}
+
 /// The source text of a call the census refuses, read from the authenticated
 /// snapshot bytes at the call's own location, or `None` when the location is
 /// not inside the artifact under certification. Diagnostic only: it lets a
@@ -9411,6 +10484,10 @@ fn census_local_declaration_node(
     relative: &str,
     declaration: &typefacts::ResolvedDeclaration,
 ) -> Result<typefacts::Location, String> {
+    if let Some(identity) = census_literal_capture_factory(run, relative, declaration)? {
+        run.sites.push(identity.site.clone());
+        return Ok(identity.returned);
+    }
     let describe = || {
         format!(
             "{:?} declared at {}:{}..{}",
@@ -9501,6 +10578,164 @@ fn census_local_declaration_node(
             describe()
         )),
     }
+}
+
+struct CensusFactoryIdentity {
+    returned: typefacts::Location,
+    factory: typefacts::Location,
+    binding: solid_facts::core::Span,
+    site: String,
+}
+
+/// One expression-bodied local factory returns exactly one arrow/function
+/// literal. Every parameter is supplied a stated primitive value, and no
+/// write can replace a captured parameter. Other captured values remain
+/// subject to the returned body's ordinary census; this grants no callback
+/// or accessor exemption to them.
+fn census_literal_capture_factory(
+    run: &mut CensusRun<'_>,
+    relative: &str,
+    declaration: &typefacts::ResolvedDeclaration,
+) -> Result<Option<CensusFactoryIdentity>, String> {
+    use solid_facts::ast::{ReturnValueKind, RuntimeValueKind};
+    let source = census_source(run, relative)?;
+    let Some(binding) = u32::try_from(declaration.location.start_byte)
+        .ok()
+        .zip(u32::try_from(declaration.location.end_byte).ok())
+        .and_then(|span| census_plain_binding_named_at(&source.facts, span))
+    else {
+        return Ok(None);
+    };
+    let Some(initializer) = binding.call_initializer else {
+        return Ok(None);
+    };
+    let Some(call) = source
+        .facts
+        .calls
+        .iter()
+        .find(|call| call.span == initializer && call.direct_callee)
+    else {
+        return Ok(None);
+    };
+    let Some(target) = source.facts.reference_declaration(call.callee) else {
+        return Ok(None);
+    };
+    let Some(factory_binding) =
+        census_plain_binding_named_at(&source.facts, (target.start, target.end))
+    else {
+        return Ok(None);
+    };
+    let Some(factory_span) = factory_binding
+        .initializer
+        .filter(|_| factory_binding.initializer_function)
+    else {
+        return Ok(None);
+    };
+    let Some(factory) = source
+        .facts
+        .functions
+        .iter()
+        .find(|function| function.span == factory_span)
+    else {
+        return Ok(None);
+    };
+    if factory.r#async
+        || factory.generator
+        || !factory.expression_body
+        || factory.rest_parameter
+        || factory.parameters.len() != call.arguments.len()
+        || factory.parameters.iter().any(|parameter| {
+            parameter.names.len() != 1
+                || parameter.initializer.is_some()
+                || !parameter.array_slots.is_empty()
+                || !parameter.object_slots.is_empty()
+        })
+        || call.arguments.iter().any(|argument| {
+            argument.spread
+                || !matches!(
+                    argument.runtime_value_kind,
+                    RuntimeValueKind::Primitive | RuntimeValueKind::Nullish
+                )
+        })
+    {
+        return Ok(None);
+    }
+    let Some(returned) = factory
+        .expression_return
+        .as_ref()
+        .filter(|returned| returned.value == ReturnValueKind::Function)
+        .and_then(|returned| returned.argument)
+        .and_then(|span| {
+            source
+                .facts
+                .functions
+                .iter()
+                .find(|function| function.span == span)
+        })
+    else {
+        return Ok(None);
+    };
+    // A later write in the closure can replace a primitive with arbitrary
+    // caller data; the initializer alone would then cease to describe it.
+    for parameter in &factory.parameters {
+        let name = parameter.names[0].span;
+        if source
+            .facts
+            .reference_declarations
+            .iter()
+            .any(|(reference, target)| {
+                *target == name
+                    && source
+                        .facts
+                        .assignments
+                        .iter()
+                        .map(|assignment| assignment.target)
+                        .chain(source.facts.iteration_targets.iter().copied())
+                        .any(|write| write.contains(*reference))
+            })
+        {
+            return Ok(None);
+        }
+    }
+    let location = |span: solid_facts::core::Span| typefacts::Location {
+        path: declaration.location.path.clone(),
+        start_byte: u64::from(span.start),
+        end_byte: u64::from(span.end),
+    };
+    let captures = factory
+        .parameters
+        .iter()
+        .zip(&call.arguments)
+        .enumerate()
+        .map(|(index, (parameter, argument))| {
+            format!(
+                "{index}:{}..{}={}..{}:{:?}",
+                parameter.names[0].span.start,
+                parameter.names[0].span.end,
+                argument.span.start,
+                argument.span.end,
+                argument.runtime_value_kind
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    Ok(Some(CensusFactoryIdentity {
+        returned: location(returned.span),
+        factory: location(factory.span),
+        binding: binding.names[0].span,
+        site: format!(
+            "census-factory-return:{}:binding:{}..{}:call:{}..{}:factory:{}..{}:returned:{}..{}:captures[{captures}]",
+            declaration.location.path,
+            binding.names[0].span.start,
+            binding.names[0].span.end,
+            call.span.start,
+            call.span.end,
+            factory.span.start,
+            factory.span.end,
+            returned.span.start,
+            returned.span.end
+        ),
+    }))
 }
 
 /// The variable declarator binding exactly one plain identifier at `name`, if
@@ -9834,6 +11069,11 @@ fn census_local_binding_is_stable(
     node: &typefacts::Location,
     declaration: &typefacts::ResolvedDeclaration,
 ) -> Result<(), String> {
+    let factory_identity = census_literal_capture_factory(run, relative, declaration)?
+        .filter(|identity| identity.returned == *node);
+    if let Some(identity) = &factory_identity {
+        census_local_binding_is_stable(run, relative, &identity.factory, declaration)?;
+    }
     let describe = || {
         format!(
             "{:?} declared at {}:{}..{}",
@@ -9867,7 +11107,11 @@ fn census_local_binding_is_stable(
     // that is not such an initializer — an argument, an element, an operand —
     // still refuses: it runs through whatever holds it, which the census does
     // not trace.
-    let name_span = match function.name {
+    let name_span = match factory_identity
+        .as_ref()
+        .map(|identity| identity.binding)
+        .or(function.name)
+    {
         Some(span) => span,
         None => match census_plain_binding_initialized_by(facts, function.span) {
             Some(binding) => binding.names[0].span,
@@ -9993,6 +11237,9 @@ fn census_form_disposition(
     run: &CensusRun<'_>,
     form: &typefacts::UncensusedInvokingForm,
 ) -> Option<CensusDisposition> {
+    if form.local_literal_result.is_some() {
+        return None;
+    }
     // ADR 0043: which premise rooted the subject. An unreviewed spelling
     // refuses, so a derivation a later producer adds arrives here as a refusal
     // rather than as the weaker claim — and so does an **absent** one, which is
@@ -11956,6 +13203,455 @@ mod tests {
     // asserts what a position *is*, not how often the implementation reaches it.
     // Pinned here because nothing else exercises that decision — the mutation
     // that relaxes it passed the whole suite before this test existed.
+    #[test]
+    fn original_helper_read_binds_exact_transfer_and_only_possible_read() {
+        let loc = |start, end| json!({"path":"/project/index.js","startByte":start,"endByte":end});
+        let mut signature = transcript().selected_signature.unwrap();
+        signature.parameters[0].declaration = Some(
+            serde_json::from_value(
+                json!({"name":"value","kind":"declaration","location":loc(8,13)}),
+            )
+            .unwrap(),
+        );
+        let mut implementation: typefacts::ExportImplementationTranscript = serde_json::from_value(json!({
+            "location":loc(0,4), "completionForm":"plain",
+            "parameterUses":[{"parameterIndex":0,"kind":"argumentKnown","reach":"reachable","location":loc(35,40)}],
+            "calls":[{"location":loc(30,42),"kind":"call","reach":"reachable","target":"helper",
+                "declaration":{"name":"helper","kind":"declaration","location":loc(100,200)},
+                "argumentParameters":[{"parameterIndex":0}]}],
+            "originalHelperReads":[{"parameterIndex":0,"declaration":loc(8,13),"call":loc(30,42),"argumentIndex":0,
+                "argument":loc(35,40),"helper":loc(100,200),"helperImplementation":loc(100,200),"helperParameter":loc(110,115),"read":loc(140,155),"property":"slice"}]
+        })).unwrap();
+        implementation.signature = Some(signature);
+        let source = parameter_source_at(0, &["slice"]);
+        assert!(original_helper_member_identity(
+            &source,
+            &implementation,
+            &mut Vec::new(),
+            ReachabilityFloor::MayExecute
+        ));
+        assert!(!original_helper_member_identity(
+            &source,
+            &implementation,
+            &mut Vec::new(),
+            ReachabilityFloor::Reachable
+        ));
+        assert!(!original_helper_member_identity(
+            &parameter_source_at(0, &["trim"]),
+            &implementation,
+            &mut Vec::new(),
+            ReachabilityFloor::MayExecute
+        ));
+        for invalid in [
+            "missing",
+            "duplicate",
+            "slot",
+            "argument",
+            "helper",
+            "read",
+            "captured",
+            "unreachable",
+            "missing-use",
+            "default",
+        ] {
+            let mut changed = implementation.clone();
+            match invalid {
+                "missing" => changed.original_helper_reads.clear(),
+                "duplicate" => changed
+                    .original_helper_reads
+                    .push(changed.original_helper_reads[0].clone()),
+                "slot" => changed.original_helper_reads[0].argument_index = 1,
+                "argument" => changed.original_helper_reads[0].argument.start_byte += 1,
+                "helper" => changed.original_helper_reads[0].helper.start_byte += 1,
+                "read" => changed.original_helper_reads[0].read.end_byte = 201,
+                "captured" => changed.calls[0].captured = true,
+                "unreachable" => changed.calls[0].reach = Reachability::Unreachable,
+                "missing-use" => changed.parameter_uses.clear(),
+                "default" => changed.signature.as_mut().unwrap().parameters[0].defaulted = true,
+                _ => unreachable!(),
+            }
+            assert!(
+                !original_helper_member_identity(
+                    &source,
+                    &changed,
+                    &mut Vec::new(),
+                    ReachabilityFloor::MayExecute
+                ),
+                "{invalid}"
+            );
+        }
+    }
+
+    #[test]
+    fn unwritten_parameter_identity_needs_explicit_binding_and_exact_use() {
+        let mut signature = transcript().selected_signature.unwrap();
+        signature.parameters[0].declaration = Some(
+            serde_json::from_value(json!({
+                "name": "value", "kind": "declaration",
+                "location": {"path": "/project/index.js", "startByte": 8, "endByte": 13}
+            }))
+            .unwrap(),
+        );
+        let mut implementation: typefacts::ExportImplementationTranscript = serde_json::from_value(json!({
+            "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+            "completionForm": "plain",
+            "unwrittenParameters": [{"parameterIndex": 0, "declaration": {"path": "/project/index.js", "startByte": 8, "endByte": 13}}],
+            "parameterUses": [{"parameterIndex": 0, "kind": "propertyAccess", "reach": "reachable",
+                "location": {"path": "/project/index.js", "startByte": 30, "endByte": 35}}]
+        })).unwrap();
+        implementation.signature = Some(signature);
+        let source = parameter_source_at(0, &[]);
+        let mut sites = Vec::new();
+        assert!(unwritten_parameter_input_identity(
+            &source,
+            DemandedCallability::Unknown,
+            &implementation,
+            &mut sites
+        ));
+        assert_eq!(
+            sites,
+            ["unwritten-parameter-input:0:/project/index.js:8:13:use:30:35"]
+        );
+        implementation.completion_form = Some(typefacts::ImplementationCompletionForm::Async);
+        assert!(unwritten_parameter_input_identity(
+            &source,
+            DemandedCallability::Unknown,
+            &implementation,
+            &mut Vec::new()
+        ));
+        for invalid in [
+            "absent",
+            "duplicate",
+            "slot",
+            "declaration",
+            "rest",
+            "default",
+            "captured",
+            "alias",
+            "unknown-reach",
+            "storage",
+            "foreign-use",
+            "generator",
+        ] {
+            let mut changed = implementation.clone();
+            match invalid {
+                "absent" => changed.unwritten_parameters.clear(),
+                "duplicate" => changed
+                    .unwritten_parameters
+                    .push(changed.unwritten_parameters[0].clone()),
+                "slot" => changed.unwritten_parameters[0].parameter_index = 1,
+                "declaration" => changed.unwritten_parameters[0].declaration.start_byte += 1,
+                "rest" => changed.signature.as_mut().unwrap().parameters[0].rest = true,
+                "default" => changed.signature.as_mut().unwrap().parameters[0].defaulted = true,
+                "captured" => changed.parameter_uses[0].captured = true,
+                "alias" => changed.parameter_uses[0].alias = true,
+                "unknown-reach" => changed.parameter_uses[0].reach = Reachability::Unknown,
+                "storage" => changed.parameter_uses[0].kind = ParameterUseKind::Storage,
+                "foreign-use" => changed.parameter_uses[0].location.path = "/elsewhere.js".into(),
+                "generator" => {
+                    changed.completion_form =
+                        Some(typefacts::ImplementationCompletionForm::Generator)
+                }
+                _ => unreachable!(),
+            }
+            assert!(
+                !unwritten_parameter_input_identity(
+                    &source,
+                    DemandedCallability::Unknown,
+                    &changed,
+                    &mut Vec::new()
+                ),
+                "{invalid}"
+            );
+        }
+        for callable in [
+            DemandedCallability::Callable,
+            DemandedCallability::NonCallable,
+        ] {
+            assert!(!unwritten_parameter_input_identity(
+                &source,
+                callable,
+                &implementation,
+                &mut Vec::new()
+            ));
+        }
+        assert!(!unwritten_parameter_input_identity(
+            &parameter_source_at(0, &["member"]),
+            DemandedCallability::Unknown,
+            &implementation,
+            &mut Vec::new()
+        ));
+        implementation.completion_form = Some(typefacts::ImplementationCompletionForm::Plain);
+        implementation.unwritten_parameters.clear();
+        implementation
+            .initial_parameter_reads
+            .push(typefacts::InitialParameterRead {
+                parameter_index: 0,
+                declaration: implementation.signature.as_ref().unwrap().parameters[0]
+                    .declaration
+                    .as_ref()
+                    .unwrap()
+                    .location
+                    .clone(),
+                r#use: implementation.parameter_uses[0].location.clone(),
+                first_iteration_only: false,
+                positional: false,
+                undefined_default: None,
+            });
+        let mut sites = Vec::new();
+        assert!(initial_parameter_input_identity(
+            0,
+            &implementation,
+            &mut sites
+        ));
+        assert_eq!(
+            sites,
+            ["initial-parameter-input:0:/project/index.js:8:13:use:30:35"]
+        );
+        for invalid in [
+            "absent",
+            "duplicate",
+            "slot",
+            "declaration",
+            "use",
+            "missing-use",
+            "captured",
+            "alias",
+            "unknown-reach",
+            "storage",
+            "rest",
+            "default",
+            "async",
+            "positional",
+            "both-markers",
+        ] {
+            let mut changed = implementation.clone();
+            match invalid {
+                "absent" => changed.initial_parameter_reads.clear(),
+                "duplicate" => changed
+                    .initial_parameter_reads
+                    .push(changed.initial_parameter_reads[0].clone()),
+                "slot" => changed.initial_parameter_reads[0].parameter_index = 1,
+                "declaration" => changed.initial_parameter_reads[0].declaration.start_byte += 1,
+                "use" => changed.initial_parameter_reads[0].r#use.start_byte += 1,
+                "missing-use" => changed.parameter_uses.clear(),
+                "captured" => changed.parameter_uses[0].captured = true,
+                "alias" => changed.parameter_uses[0].alias = true,
+                "unknown-reach" => changed.parameter_uses[0].reach = Reachability::Unknown,
+                "storage" => changed.parameter_uses[0].kind = ParameterUseKind::Storage,
+                "rest" => changed.signature.as_mut().unwrap().parameters[0].rest = true,
+                "default" => changed.signature.as_mut().unwrap().parameters[0].defaulted = true,
+                "async" => {
+                    changed.completion_form = Some(typefacts::ImplementationCompletionForm::Async)
+                }
+                // ADR 0069: a positional row is a claim about one exact use, and
+                // this arm accepts any read of the slot. It must not take one.
+                "positional" => changed.initial_parameter_reads[0].positional = true,
+                "both-markers" => {
+                    changed.initial_parameter_reads[0].positional = true;
+                    changed.initial_parameter_reads[0].first_iteration_only = true;
+                }
+                _ => unreachable!(),
+            }
+            assert!(
+                !initial_parameter_input_identity(0, &changed, &mut Vec::new()),
+                "initial read: {invalid}"
+            );
+        }
+        implementation.calls = vec![serde_json::from_value(json!({
+            "location": {"path": "/project/index.js", "startByte": 30, "endByte": 42},
+            "kind": "call", "reach": "reachable", "target": "symbol:trim",
+            "calleeParameter": {"parameterIndex": 0, "path": [{"kind": "property", "property": "trim"}]}
+        })).unwrap()];
+        let member = parameter_source_at(0, &["trim"]);
+        assert!(initial_parameter_member_identity(
+            &member,
+            0,
+            &implementation,
+            &mut Vec::new(),
+            ReachabilityFloor::Reachable,
+        ));
+        // ADR 0069: the member arm binds the use to the operation's own call, so
+        // it is the one arm a positional row answers — and it still refuses a
+        // row claiming both markers, which no producer rule can establish.
+        {
+            let mut positional = implementation.clone();
+            positional.initial_parameter_reads[0].positional = true;
+            let mut sites = Vec::new();
+            assert!(initial_parameter_member_identity(
+                &member,
+                0,
+                &positional,
+                &mut sites,
+                ReachabilityFloor::Reachable,
+            ));
+            assert_eq!(
+                sites,
+                ["positional-parameter-input:0:/project/index.js:8:13:use:30:35"]
+            );
+            positional.initial_parameter_reads[0].first_iteration_only = true;
+            assert!(!initial_parameter_member_identity(
+                &member,
+                0,
+                &positional,
+                &mut Vec::new(),
+                ReachabilityFloor::Reachable,
+            ));
+        }
+        for invalid in [
+            "later-call",
+            "argument-use",
+            "foreign-call",
+            "short-call",
+            "other-member",
+            "other-slot",
+            "missing-callee",
+            "captured-call",
+            "unknown-call",
+            "construct",
+            "missing-read",
+        ] {
+            let mut changed = implementation.clone();
+            let call = &mut changed.calls[0];
+            match invalid {
+                "later-call" => call.location.start_byte = 36,
+                "argument-use" => call.location.start_byte = 20,
+                "foreign-call" => call.location.path = "/elsewhere.js".into(),
+                "short-call" => call.location.end_byte = 35,
+                "other-member" => {
+                    call.callee_parameter.as_mut().unwrap().path[0].property = "other".into()
+                }
+                "other-slot" => call.callee_parameter.as_mut().unwrap().parameter_index = 1,
+                "missing-callee" => call.callee_parameter = None,
+                "captured-call" => call.captured = true,
+                "unknown-call" => call.reach = Reachability::Unknown,
+                "construct" => call.kind = typefacts::CallKind::Construct,
+                "missing-read" => changed.initial_parameter_reads.clear(),
+                _ => unreachable!(),
+            }
+            assert!(
+                !initial_parameter_member_identity(
+                    &member,
+                    0,
+                    &changed,
+                    &mut Vec::new(),
+                    ReachabilityFloor::Reachable
+                ),
+                "initial member: {invalid}"
+            );
+        }
+        {
+            let mut defaulted = implementation.clone();
+            defaulted.initial_parameter_reads[0].undefined_default =
+                Some(typefacts::UndefinedParameterDefault {
+                    guard: typefacts::Location {
+                        path: "/project/index.js".into(),
+                        start_byte: 14,
+                        end_byte: 28,
+                    },
+                    assignment: typefacts::Location {
+                        path: "/project/index.js".into(),
+                        start_byte: 20,
+                        end_byte: 25,
+                    },
+                });
+            let mut sites = Vec::new();
+            assert!(initial_parameter_member_identity(
+                &member,
+                0,
+                &defaulted,
+                &mut sites,
+                ReachabilityFloor::MayExecute
+            ));
+            assert!(
+                sites
+                    .iter()
+                    .any(|site| site.starts_with("undefined-default-guard:"))
+            );
+            assert!(!initial_parameter_member_identity(
+                &member,
+                0,
+                &defaulted,
+                &mut Vec::new(),
+                ReachabilityFloor::Reachable
+            ));
+            assert!(!initial_parameter_input_identity(
+                0,
+                &defaulted,
+                &mut Vec::new()
+            ));
+            for invalid in [
+                "guard-after-read",
+                "foreign-store",
+                "store-outside-guard",
+                "positional",
+                "first-iteration",
+            ] {
+                let mut changed = defaulted.clone();
+                let read = &mut changed.initial_parameter_reads[0];
+                match invalid {
+                    "guard-after-read" => {
+                        read.undefined_default.as_mut().unwrap().guard.end_byte = 40
+                    }
+                    "foreign-store" => {
+                        read.undefined_default.as_mut().unwrap().assignment.path =
+                            "/other.js".into()
+                    }
+                    "store-outside-guard" => {
+                        read.undefined_default
+                            .as_mut()
+                            .unwrap()
+                            .assignment
+                            .start_byte = 10
+                    }
+                    "positional" => read.positional = true,
+                    "first-iteration" => read.first_iteration_only = true,
+                    _ => unreachable!(),
+                }
+                assert!(
+                    !initial_parameter_member_identity(
+                        &member,
+                        0,
+                        &changed,
+                        &mut Vec::new(),
+                        ReachabilityFloor::MayExecute
+                    ),
+                    "{invalid}"
+                );
+            }
+        }
+        implementation.initial_parameter_reads[0].first_iteration_only = true;
+        implementation.parameter_uses[0].reach = Reachability::Unknown;
+        implementation.calls[0].reach = Reachability::Unknown;
+        assert!(initial_parameter_member_identity(
+            &member,
+            0,
+            &implementation,
+            &mut Vec::new(),
+            ReachabilityFloor::MayExecute
+        ));
+        assert!(!initial_parameter_member_identity(
+            &member,
+            0,
+            &implementation,
+            &mut Vec::new(),
+            ReachabilityFloor::Reachable
+        ));
+        assert!(!initial_parameter_input_identity(
+            0,
+            &implementation,
+            &mut Vec::new()
+        ));
+        implementation.calls[0].reach = Reachability::Unreachable;
+        assert!(!initial_parameter_member_identity(
+            &member,
+            0,
+            &implementation,
+            &mut Vec::new(),
+            ReachabilityFloor::MayExecute
+        ));
+    }
+
     #[test]
     fn recursive_value_shape_evidence_keeps_the_strict_floor() {
         let implementation: typefacts::ExportImplementationTranscript =
@@ -14784,6 +16480,85 @@ mod tests {
             verify_bound_recursive(&operation_output, &transcript(), "invoke"),
             Err(TypeFactsCertificationError::SubjectMismatch { .. })
         ));
+    }
+
+    #[test]
+    fn operation_path_requires_exact_member_not_only_closed_prefix() {
+        let mut operation = operation(
+            "invoke",
+            OperationKind::Invoke,
+            per_call_cardinality(Some(0)),
+        );
+        operation.inputs.push(ValueShape::Parameter {
+            index: 0,
+            path: vec!["column".into(), "table".into(), "atoms".into()],
+        });
+        let exported = export_semantics(Vec::new(), vec![operation]);
+        let root = ValueRoot::OperationInput {
+            operation: solid_reactive_ir::contract_semantics::OperationId("invoke".into()),
+            index: 0,
+        };
+        let path = solid_reactive_ir::contract_semantics::ValuePath(vec![
+            ValuePathSegment::ObjectProperty("grouping".into()),
+            ValuePathSegment::ObjectProperty("get".into()),
+        ]);
+        let proof = proof(
+            ProofFamily::RecursiveValueShape,
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+                artifact_case: "browser".into(),
+                export: "run".into(),
+                root: root.clone(),
+                path: path.clone(),
+                callable: DemandedCallability::Callable,
+            }),
+        );
+        let export_transcript = export_value_transcript(json!({}));
+        let mut signature = transcript().selected_signature.unwrap();
+        let segment = |name: &str| typefacts::PathSegment {
+            kind: PathSegmentKind::Property,
+            property: name.into(),
+            index: None,
+        };
+        let mut prefix = signature.parameters[0].callable_paths[0].clone();
+        prefix.path = ["column", "table", "atoms"].map(segment).to_vec();
+        prefix.callability = Callability::NonCallable;
+        prefix.complete = true;
+        prefix.subtree_enumerated = true;
+        prefix.open_reasons.clear();
+        signature.parameters[0].callable_paths = vec![prefix.clone()];
+        let check = |signature: &typefacts::SelectedSignature| {
+            require_operation_recursive_signature(
+                &proof,
+                &export_transcript,
+                &exported,
+                &root,
+                &path,
+                DemandedCallability::Callable,
+                signature,
+                &|reason| TypeFactsCertificationError::FamilyOpen {
+                    demand: proof.id.clone(),
+                    reason: reason.into(),
+                },
+                &mut Vec::new(),
+            )
+        };
+        assert!(
+            matches!(check(&signature), Err(TypeFactsCertificationError::FamilyOpen { reason, .. })
+            if reason.contains("operation value path is absent"))
+        );
+        let mut exact = prefix;
+        exact.path.extend(["grouping", "get"].map(segment));
+        exact.callability = Callability::Callable;
+        signature.parameters[0].callable_paths.push(exact);
+        assert!(
+            check(&signature).is_ok(),
+            "the exact callable member is a positive premise"
+        );
+        signature.parameters[0].callable_paths[1].presence = PathPresence::Unknown;
+        assert!(
+            check(&signature).is_err(),
+            "an unknown member cannot inherit the prefix's closure"
+        );
     }
 
     #[test]
@@ -18235,13 +20010,47 @@ mod tests {
         transcript
     }
 
+    #[test]
+    fn census_parameter_premise_refusal_is_diagnostic_only() {
+        let certified = consumer_snapshot();
+        let roots = vec![consumer_root(&certified)];
+        let mut transcript = census_transcript_with(
+            vec![],
+            json!([{
+                "kind": "tagged-template",
+                "nodeKind": "TaggedTemplateExpression",
+                "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 300, "endByte": 320},
+                "reach": "unknown"
+            }]),
+        );
+        let original = census_transcript(&mut census_run(&certified, &roots), &transcript, 0, &[])
+            .expect_err("an uncensused form refuses without diagnostic text");
+        assert!(!original.contains("parameterPremiseRefusal"));
+        transcript.parameter_premise_refusal = "declared type cannot be resolved".into();
+        let explained = census_transcript(&mut census_run(&certified, &roots), &transcript, 0, &[])
+            .expect_err("diagnostic text cannot clear the refusal");
+        assert!(explained.starts_with(&original));
+        assert!(explained.contains("parameterPremiseRefusal at /project/node_modules/consumer/dist/index.js:0..400 (depth 0): declared type cannot be resolved"));
+        transcript.uncensused_invoking_forms.clear();
+        assert_eq!(
+            census_transcript(&mut census_run(&certified, &roots), &transcript, 0, &[]),
+            Ok(CensusStep::Decided),
+            "diagnostic text cannot introduce a refusal"
+        );
+    }
+
     fn census_run<'a>(
         certified: &'a super::super::ArtifactSnapshot,
         roots: &'a [SnapshotSourceRoot<'a>],
     ) -> CensusRun<'a> {
         CensusRun {
             certified,
-            evidence: CensusEvidence { roots, locals: &[] },
+            plan: None,
+            evidence: CensusEvidence {
+                roots,
+                locals: &[],
+                dependencies: &[],
+            },
             // The consumer's runtime module, which is where every synthesized
             // transcript below declares itself; a test that wants the
             // declaration-file refusal clears this.
@@ -18711,9 +20520,112 @@ mod tests {
     /// Neither half alone clears the form, and the caller's word alone never
     /// does.
     #[test]
+    fn creates_census_binds_every_local_literal_result_location() {
+        let path = "/project/node_modules/consumer/dist/index.js";
+        let source = "export function value(key) { return helper()[key]; }\nfunction helper() { const result = {}; return result; }";
+        let location = |needle: &str| {
+            let start = source.find(needle).unwrap() as u64;
+            typefacts::Location {
+                path: path.into(),
+                start_byte: start,
+                end_byte: start + needle.len() as u64,
+            }
+        };
+        let certified = super::super::ArtifactSnapshot {
+            package_name: "consumer".into(),
+            package_version: "1.0.0".into(),
+            package_integrity: "sha512-consumer".into(),
+            files: std::sync::Arc::new(
+                [(
+                    "dist/index.js".to_owned(),
+                    std::sync::Arc::<[u8]>::from(source.as_bytes()),
+                )]
+                .into_iter()
+                .collect(),
+            ),
+            directories: std::sync::Arc::new(std::collections::BTreeSet::new()),
+            root: "/snapshot/consumer".into(),
+            provenance_root: "/snapshot/consumer".into(),
+        };
+        let roots = vec![SnapshotSourceRoot {
+            path: "/project/node_modules/consumer/".into(),
+            evidence_prefix: "/node_modules/consumer/".into(),
+            snapshot: &certified,
+            dependency: false,
+        }];
+        let callee = location("function helper() { const result = {}; return result; }");
+        let declaration = json!({"symbol":"symbol:helper", "name":"helper", "kind":"FunctionDeclaration", "sourceFile":path,
+            "location":{"path":path,"startByte":callee.start_byte+9,"endByte":callee.start_byte+15}});
+        let call = signals_call(
+            "helper",
+            json!({"location": location("helper()"), "targetModule":"", "declaration": declaration}),
+        );
+        let implementation = census_transcript_with(vec![call], json!([]));
+        let mut helper = census_transcript_with(vec![], json!([]));
+        helper.location = callee.clone();
+        helper.declaration = Some(serde_json::from_value(declaration).unwrap());
+        helper.query_name = "helper".into();
+        let locals = vec![LocalDeclarationTranscript {
+            location: callee.clone(),
+            premises: vec![],
+            transcript: helper,
+        }];
+        let original: typefacts::UncensusedInvokingForm = serde_json::from_value(json!({
+            "kind":"property-access-unknown-accessor", "nodeKind":"ElementAccessExpression", "location":location("helper()[key]"), "reach":"reachable",
+            "localLiteralResult":{"call":location("helper()"),"callee":callee,"allocation":location("result = {}"),"returns":[location("return result;")]}
+        })).unwrap();
+        for variant in [
+            "exact",
+            "missing-call",
+            "different-callee",
+            "external-allocation",
+            "missing-returns",
+            "external-return",
+            "missing-transcript",
+            "parameter-root",
+        ] {
+            let mut form = original.clone();
+            let premise = form.local_literal_result.as_mut().unwrap();
+            match variant {
+                "missing-call" => premise.call.start_byte += 1,
+                "different-callee" => premise.callee.start_byte += 1,
+                "external-allocation" => premise.allocation.path = "/dependency/other.js".into(),
+                "missing-returns" => premise.returns.clear(),
+                "external-return" => premise.returns[0].start_byte = 0,
+                "parameter-root" => form.subject_root = "parameter".into(),
+                _ => {}
+            }
+            let mut run = census_run(&certified, &roots);
+            run.evidence = CensusEvidence {
+                roots: &roots,
+                locals: if variant == "missing-transcript" {
+                    &[]
+                } else {
+                    &locals
+                },
+                dependencies: &[],
+            };
+            assert_eq!(
+                census_local_literal_result_is_bound(&mut run, &implementation, &form).unwrap(),
+                variant == "exact",
+                "{variant}"
+            );
+            assert_eq!(
+                run.sites
+                    .iter()
+                    .any(|site| site.starts_with("census-local-literal-result:")),
+                variant == "exact",
+                "{variant}"
+            );
+        }
+    }
+
+    #[test]
     fn creates_census_grants_a_coercion_only_from_the_callees_own_completion() {
         assert_eq!(CENSUS_PRIMITIVE_COMPLETION_PROTOCOL, 29);
+        assert_eq!(CENSUS_BOTTOM_TYPE_PROTOCOL, 35);
         const {
+            assert!(typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL >= CENSUS_BOTTOM_TYPE_PROTOCOL);
             assert!(
                 typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
                     >= CENSUS_PRIMITIVE_COMPLETION_PROTOCOL
@@ -18845,6 +20757,7 @@ mod tests {
         run.evidence = CensusEvidence {
             roots: &roots,
             locals: &locals,
+            dependencies: &[],
         };
         let refusal = census_transcript(&mut run, &export(serde_json::Value::Null), 0, &[])
             .expect_err("an unstated premise grants nothing");
@@ -18863,6 +20776,7 @@ mod tests {
             run.evidence = CensusEvidence {
                 roots: &roots,
                 locals: &locals,
+                dependencies: &[],
             };
             assert!(
                 census_transcript(&mut run, &export(premise.clone()), 0, &[]).is_err(),
@@ -18877,6 +20791,7 @@ mod tests {
             run.evidence = CensusEvidence {
                 roots: &roots,
                 locals: &locals,
+                dependencies: &[],
             };
             let outcome = census_transcript(
                 &mut run,
@@ -19119,6 +21034,64 @@ mod tests {
             json!([]),
         );
         assert!(census_transcript(&mut run, &bare, 0, &[]).is_err());
+    }
+
+    #[test]
+    fn parameter_returns_census_requires_exhaustive_identity() {
+        let good = json!({
+            "location": {"path": "/project/index.js", "startByte": 0, "endByte": 40},
+            "completionForm": "plain",
+            "controlFlow": {"returns": [{
+                "location": {"path": "/project/index.js", "startByte": 20, "endByte": 30},
+                "reach": "reachable", "carryReach": "reachable",
+                "parameter": {"parameterIndex": 0},
+                "value": {"callability": "unknown", "constructability": "unknown", "primitive": {"unknown": true}}
+            }]}
+        });
+        let verify = |value: serde_json::Value| {
+            census_parameter_returns_transcript(&serde_json::from_value(value).unwrap(), 0)
+        };
+        assert!(verify(good.clone()).is_ok());
+        for form in [
+            json!(null),
+            json!("async"),
+            json!("generator"),
+            json!("async-generator"),
+            json!("unclassified"),
+        ] {
+            let mut changed = good.clone();
+            changed["completionForm"] = form;
+            assert!(verify(changed).is_err());
+        }
+        for replacement in [json!([]), json!(null)] {
+            let mut changed = good.clone();
+            changed["controlFlow"]["returns"] = replacement;
+            if changed["controlFlow"]["returns"].is_null() {
+                changed["controlFlow"] = json!(null);
+            }
+            assert!(verify(changed).is_err());
+        }
+        for (field, replacement) in [
+            ("parameter", json!(null)),
+            ("parameter", json!({"parameterIndex": 1})),
+            ("value", json!(null)),
+            ("reach", json!("unknown")),
+        ] {
+            let mut changed = good.clone();
+            changed["controlFlow"]["returns"][0][field] = replacement;
+            assert!(verify(changed).is_err());
+        }
+        let mut changed = good.clone();
+        let mut other = changed["controlFlow"]["returns"][0].clone();
+        other["parameter"] = json!({"parameterIndex": 1});
+        changed["controlFlow"]["returns"]
+            .as_array_mut()
+            .unwrap()
+            .push(other);
+        assert!(verify(changed).is_err());
+        let mut changed = good;
+        changed["controlFlow"]["unsupported"] = json!(["unclassified"]);
+        assert!(verify(changed).is_err());
     }
 
     /// ADR 0035: the `returns` census reads the implementation's completion
@@ -20030,6 +22003,7 @@ mod tests {
         run.evidence = CensusEvidence {
             roots: &roots,
             locals: &locals,
+            dependencies: &[],
         };
         // Seeded with the demanded export, as `census_creates_domain` does.
         run.visited
@@ -20064,6 +22038,7 @@ mod tests {
         run.evidence = CensusEvidence {
             roots: &roots,
             locals: &locals,
+            dependencies: &[],
         };
         run.visited
             .push(CensusDeclarationIdentity::of(export.declaration.as_ref().unwrap()).unwrap());
@@ -20096,6 +22071,7 @@ mod tests {
         run.evidence = CensusEvidence {
             roots: &roots,
             locals: &locals,
+            dependencies: &[],
         };
         assert_eq!(
             census_transcript(&mut run, &export, 0, &[]),
@@ -20252,6 +22228,7 @@ mod tests {
             run.evidence = CensusEvidence {
                 roots: &roots,
                 locals,
+                dependencies: &[],
             };
             census_transcript(&mut run, export, 0, &[])
         };
@@ -20412,6 +22389,7 @@ mod tests {
         run.evidence = CensusEvidence {
             roots: &roots,
             locals: &locals,
+            dependencies: &[],
         };
         assert_eq!(
             census_transcript(&mut run, &export, 0, &[]),

@@ -182,31 +182,55 @@ from `certified > declared`, because an expansion that happens to certify
 exactly as many entrypoints as the manifest declares is the same non-ratio and
 would otherwise have read as complete.
 
-### Choosing the lane, and why the runner does not route by default
+### Choosing the lane
 
-`--dependency-graph-lane` (on both `contract certify` and the runner) routes a
-*partial* proposal whose refusal census names an exact dependency-composition
-case through the published-graph lane instead of reusing the emitted proposal.
-It is off by default, and the reason is measured rather than assumed.
+A *partial* proposal whose refusal census names an exact dependency-composition
+case is routed to **entrypoint recovery** by default. Those cases refused for
+want of an accepted contract for a dependency, which is precisely what a
+composing lane supplies, and a row that needs one is a row that needs one
+wherever it appears in the corpus — so the request is a policy over the row's
+own census rather than a reviewed list of probe ids
+(`docs/adr/0072-composition-lane-by-refusal-census.md`). `--recover-probe <ID>`
+and `--recover-entrypoints` remain, and keep the job only they can do: forcing
+recovery for a row with *no* dependency frontier, where the lane answers a proof
+refusal instead.
 
-The two lanes cover **different** artifact-case sets. The graph lane certifies
-exactly the cases the plain lane refused; the reused proposal certifies exactly
-the ones it generated. Neither is a superset, so switching lanes trades one
-population of receipts for another. Measured on the 21 partial rows of the
-2026-09-03 corpus, that trade is a net loss: six rows that certify with a
-reused proposal (`@tanstack/solid-router` ×3, `@tanstack/solid-table`,
-`motion-solidjs` ×2) refuse outright through the graph lane, because their root
-cases — the ones the graph lane exists to reach — then refuse on
-`recursive-value-shape`; two rows (`@solid-primitives/sse@1.0.0-next.2` floor
-and head) gain a certified root they did not have. A refusal covers nothing, so
-the default keeps the receipts.
+Recovery prepares the union — the cases the proposal generated *and* the refused
+frontier — and publishes what proves, so it is the lane to want. What it must
+not do is publish less than the proposal would have: a retained case the graph
+cannot prepare abandons the graph outright, and the row publishes its proposal
+exactly as it would have without the lane
+(`docs/adr/0071-independent-graph-case-preparation.md`). Recovery also refuses a
+prepared set above 32 artifact cases before doing any work. That is a measured
+resource deadline, not a semantic ceiling: 24 cases over 113 nodes prepares and
+certifies, while `@kobalte/core@2.0.0-alpha.0`'s 59 exceeded the runner's
+4096 MiB process-tree ceiling and cost the row all 59 of its certified
+entrypoints.
 
-What would actually be better than either lane is certifying both case sets into
-one catalog — the plain proposal's cases *and* the graph lane's roots. That is a
-two-transaction change to case-set publication and is recorded in
-`docs/precision-backlog.md` rather than approximated here.
+`--dependency-graph-lane` (on both `contract certify` and the runner) still
+selects the **frontier-only** published-graph lane by name, and the policy never
+chooses it. The two lanes cover **different** artifact-case sets: the graph lane
+certifies exactly the cases the plain lane refused, the reused proposal exactly
+the ones it generated. Neither is a superset, so switching between them trades
+one population of receipts for another, and that trade was measured as a net
+loss on the 21 partial rows of the 2026-09-03 corpus — six rows that certify
+with a reused proposal (`@tanstack/solid-router` ×3, `@tanstack/solid-table`,
+`motion-solidjs` ×2) refused outright through the graph lane, against two
+(`@solid-primitives/sse@1.0.0-next.2` floor and head) that gained a certified
+root. Certifying both case sets into one catalog is what recovery now does, and
+it is why it, rather than the frontier-only lane, is the default.
 
 ## Discovery and execution
+
+An opt-in recovery request also handles a single generated artifact case whose
+ordinary certification refuses an exact callback-flow demand. It tries the
+ordinary proposal first and retries through graph preparation only in a fresh
+catalog, for `argument-binding` or `callable-path` refusals carrying a demand
+identity. Successful proposals, existing publications and multi-case proposals
+retain their previous behavior. The audit records the original unproved claim
+and the graph's actual demand plans. A graph certificate may leave that
+behavior open; entrypoint coverage does not imply every proposed operation was
+proved. See [ADR 0082](adr/0082-single-case-callback-graph-retry.md).
 
 Discovery is the only network-enabled step. It reads the live npm registry,
 selects rows and probes, and writes the manifest:

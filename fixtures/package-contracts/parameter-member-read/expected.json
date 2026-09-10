@@ -13,9 +13,9 @@
             "sha256": "162b4f2c69716687452b39cdf3a1076746b1fe05e98d0e264d136d089796cb51"
           },
           "exports": {
-            "drop": "summary-7df52cb7c27ef3ef6f9e19c566f74178bcb1109acfd51c90ada62f8be02a9251",
-            "readBodyLocal": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "readModuleLocal": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "drop": "summary-482d3b4e01fa58e8cd68c3b1eb7d895544bc7f1c9c95d4cd9f8a6a7e46c46188",
+            "readBodyLocal": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "readModuleLocal": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -39,9 +39,10 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-7df52cb7c27ef3ef6f9e19c566f74178bcb1109acfd51c90ada62f8be02a9251": {
+    "summary-482d3b4e01fa58e8cd68c3b1eb7d895544bc7f1c9c95d4cd9f8a6a7e46c46188": {
       "call": {
         "closed": [
+          "reads",
           "creates"
         ],
         "creates": [],
@@ -74,6 +75,7 @@
           }
         ],
         "proposedClosures": [
+          "reads",
           "creates"
         ],
         "reads": [
@@ -82,15 +84,18 @@
       },
       "shape": "callable"
     },
-    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
+    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
       "call": {
         "closed": [
+          "reads",
           "creates"
         ],
         "creates": [],
         "proposedClosures": [
+          "reads",
           "creates"
-        ]
+        ],
+        "reads": []
       },
       "shape": "callable"
     }

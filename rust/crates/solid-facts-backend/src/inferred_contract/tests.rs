@@ -540,16 +540,22 @@ fn a_cleared_creates_walk_reaches_the_certifiers_candidate_universe_through_the_
         KnowledgeState::CompleteNegative,
         "the candidate has to state the closure it offers"
     );
+    // `Reads` joins `Creates` here since 2026-09-10: this fixture's closure
+    // installs no accessor at run time, so the reads census may decide it and
+    // the generator proposes it. A fixture that did install one would carry a
+    // `runtime-accessor-installation` hazard and this set would be `{Creates}`
+    // again — that pair is what `implementation-census-reads` pins.
     assert_eq!(
         export.call.proposed_closures(),
-        &std::collections::BTreeSet::from([ClaimDomain::Creates]),
+        &std::collections::BTreeSet::from([ClaimDomain::Creates, ClaimDomain::Reads]),
         "labelled as proposed, so it stays distinguishable from a reviewed claim"
     );
     // Every other domain the walk cleared stays withdrawn: no census can
     // decide them, so publishing their closure would refuse the row.
     for domain in ClaimDomain::ALL {
         assert!(
-            domain == ClaimDomain::Creates || export.claim_state(domain).is_open(),
+            matches!(domain, ClaimDomain::Creates | ClaimDomain::Reads)
+                || export.claim_state(domain).is_open(),
             "{domain:?} must stay open"
         );
     }
@@ -565,11 +571,12 @@ fn a_cleared_creates_walk_reaches_the_certifiers_candidate_universe_through_the_
     .unwrap();
     let rendered = String::from_utf8_lossy(&bytes);
     assert!(
-        rendered.contains("\"closed\":[\"creates\"]") && rendered.contains("\"creates\":[]"),
+        rendered.contains("\"closed\":[\"reads\",\"creates\"]")
+            && rendered.contains("\"creates\":[]"),
         "the emitted document must state the closure: {rendered}"
     );
     assert!(
-        rendered.contains("\"proposedClosures\":[\"creates\"]"),
+        rendered.contains("\"proposedClosures\":[\"reads\",\"creates\"]"),
         "and must label it as proposed: {rendered}"
     );
     let decoded = crate::contract_document::decode(&bytes)

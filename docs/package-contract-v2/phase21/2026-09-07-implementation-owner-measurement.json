@@ -1,0 +1,702 @@
+{
+  "format": "implementation-owner-blocker-measurement",
+  "authoritative": false,
+  "before": {
+    "path": "rust/target/ecosystem-investigations/2026-09-07-namespace-full.json",
+    "digest": "sha256:25f7794697a243fa914d6037e4d5d8c2a94418cf523a55d06af34a6e688344ad",
+    "finishedAt": "2026-09-07T14:14:01.904Z",
+    "row": {
+      "probeId": "@corvu/popover@0.2.0|solid1|only",
+      "family": "corvu",
+      "status": "official",
+      "package": "@corvu/popover",
+      "version": "0.2.0",
+      "solidTarget": "solid1",
+      "probeKind": "only",
+      "channel": "stable",
+      "solid": {
+        "solid-js": "1.9.14"
+      },
+      "runtimeCompletion": {},
+      "installedVersions": {
+        "@corvu/popover": "0.2.0",
+        "solid-js": "1.9.14"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 1,
+      "declaredWildcard": false,
+      "generatedEntrypoints": null,
+      "refusedEntrypoints": null,
+      "refusedArtifactCases": 2,
+      "artifactCaseRefusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @corvu/dialog has no exact runtime binding for export Portal"
+        },
+        {
+          "entrypoint": ".",
+          "conditions": [
+            "solid"
+          ],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @corvu/dialog has no exact runtime binding for export Portal"
+        }
+      ],
+      "inapplicableArtifactCases": 0,
+      "artifactCaseInapplicabilities": [],
+      "declinedClosures": 0,
+      "externalEdges": [
+        {
+          "specifier": "@corvu/dialog",
+          "package": "@corvu/dialog",
+          "entrypoint": ".",
+          "resolvedVersion": "0.2.4"
+        }
+      ],
+      "dependencyPlan": {
+        "schemaVersion": 1,
+        "rootIdentity": {
+          "package": "@corvu/popover",
+          "version": "0.2.0",
+          "integrity": "sha512-zynRWyRV7mk2uX7t/COQL4OEa6H6FBgOxxlXLQJ1BV8hTiBJwmfAN/yB/9jy+zlp0G9vp64E8VdsNn6gxUEUEQ=="
+        },
+        "status": "exact-leaf-refusal",
+        "complete": true,
+        "limits": {
+          "maxDepth": 32,
+          "maxNodes": 512
+        },
+        "roots": [
+          {
+            "entrypoint": ".",
+            "conditions": [],
+            "node": "sha256:2bcd1cce4b88f67c400a931c0e0ee94bd511b37372013fa7376a604ef0655b15"
+          },
+          {
+            "entrypoint": ".",
+            "conditions": [
+              "solid"
+            ],
+            "node": "sha256:d0eb8dbf6db290b4495fefeeae3ad3e5cb093bb902778b335744eab275da601b"
+          }
+        ],
+        "cycles": [],
+        "leaves": [
+          {
+            "id": "sha256:31d02484b78b5d78165071652d4f57440f4e47711c840ac8729cc6ea812fdb86",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:c56eba1eb3a41aba048c629e36d48cf498c056812be91bffd28f84435dff87ca",
+            "package": "@corvu/utils",
+            "version": "0.3.2",
+            "integrity": "sha512-ZWlyWEE8qV9+CB9OAyo2bTrZGXQN9ZeM+JfYv89zoR+lRACKTDuoOZEdiyL8Uc7U5dUSH1uTqKhTTnaHWb+wZA==",
+            "entrypoint": ".",
+            "conditions": []
+          },
+          {
+            "id": "sha256:3282258e03ec9f639163241dc4d3fc0002a509166bf0c19766e96eb6a7513075",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:047cef4eb6e0395f1fd9fe42ecc08611d86ca3576385308a006add7da21320f3",
+            "package": "@corvu/utils",
+            "version": "0.4.2",
+            "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
+            "entrypoint": "./scroll",
+            "conditions": []
+          },
+          {
+            "id": "sha256:4609d39bd525a522150f2513198139a5dd98068d2ae39957ed82eaf5414cb47a",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:d10a383c83e54253e4d7d1aacee723a1b08c48dfab8314c29aa21968bd9d64e9",
+            "package": "@corvu/utils",
+            "version": "0.4.2",
+            "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
+            "entrypoint": ".",
+            "conditions": []
+          },
+          {
+            "id": "sha256:5746baa4bf16ae1c9a0631ca8d52e63c437c20b1b5f123c620f73838d62fc4c6",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:8eeddb392c347cffc4ef4e24b1fe9e7d719fa03241741394a8fdfa3d7cc365ea",
+            "package": "@floating-ui/utils",
+            "version": "0.2.12",
+            "integrity": "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==",
+            "entrypoint": ".",
+            "conditions": []
+          },
+          {
+            "id": "sha256:5b168bc82a6f94050766992b203445d1ff3fdc2cb002452f0b7da136436b01d5",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:7b0f4931e909cea157c9970e8be5d25513a193a3647f8046e06fc9030e048eb3",
+            "package": "@corvu/utils",
+            "version": "0.3.2",
+            "integrity": "sha512-ZWlyWEE8qV9+CB9OAyo2bTrZGXQN9ZeM+JfYv89zoR+lRACKTDuoOZEdiyL8Uc7U5dUSH1uTqKhTTnaHWb+wZA==",
+            "entrypoint": ".",
+            "conditions": [
+              "solid"
+            ]
+          },
+          {
+            "id": "sha256:66ea9a55d2bb3e6f546298596cae85e7a4a93ee3e7c6a7a01ccdc7d467997139",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:a047c8c1af5f12061802708fe3bc614525bfa7d38330b9bf44c0fc69570a9a7d",
+            "package": "@corvu/utils",
+            "version": "0.4.2",
+            "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
+            "entrypoint": ".",
+            "conditions": []
+          },
+          {
+            "id": "sha256:75ac9394a177574fa1d1d07b0f65befb83ded6b78dd07311fb912f66fc177af6",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:f79b48564d1cfc51aeef3670ab24ce42e77d8d6518f64c19eefe6d24c4aef91f",
+            "package": "@floating-ui/utils",
+            "version": "0.2.12",
+            "integrity": "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==",
+            "entrypoint": "./dom",
+            "conditions": []
+          },
+          {
+            "id": "sha256:80d9febd659013fc2fb56d190efe8478a0eee6912491453f068ab6bf555d0fca",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:0357316ac0a32799b436eee1eae7d7dce8f32ee08d1d028c7423e2ebd679a431",
+            "package": "@corvu/utils",
+            "version": "0.4.2",
+            "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
+            "entrypoint": ".",
+            "conditions": [
+              "solid"
+            ]
+          },
+          {
+            "id": "sha256:92f01184d115243e5ef7aa356848cddb6f722ca1ab5a128e12119791467f26c7",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:23e233a7c88cf7683ba4dcc313aed9ace39100332c0d8361447c546e98323faa",
+            "package": "@floating-ui/utils",
+            "version": "0.2.12",
+            "integrity": "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==",
+            "entrypoint": "./dom",
+            "conditions": [
+              "solid"
+            ]
+          },
+          {
+            "id": "sha256:bddb83a190e64179943e9b658eca329d19e943db5c9792491b3caeac4a0a3878",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:2ee468197afa246bc11d201164fc5138d53f9734c623adbf1fd084dc8fd19592",
+            "package": "@floating-ui/utils",
+            "version": "0.2.12",
+            "integrity": "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==",
+            "entrypoint": ".",
+            "conditions": [
+              "solid"
+            ]
+          },
+          {
+            "id": "sha256:c14fafc672f749b43255b2597ff0cfca21ded2a1889b599352bfb8bc2cbba1a8",
+            "kind": "artifact-resolution",
+            "specifier": "csstype",
+            "conditions": [
+              "solid"
+            ],
+            "code": "target-not-found",
+            "reason": "resolved target <project-root>/node_modules/csstype/index.js is not a file"
+          },
+          {
+            "id": "sha256:c2c5392346dc310178102c985809ceba0e8a094dc7272a0b63216d3d0abd421d",
+            "kind": "artifact-resolution",
+            "specifier": "csstype",
+            "conditions": [],
+            "code": "target-not-found",
+            "reason": "resolved target <project-root>/node_modules/csstype/index.js is not a file"
+          },
+          {
+            "id": "sha256:e7b98add06c12867e6772a63e6f065492e41bfc49e2464ea829a1599c66404b7",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:6556dee02c6870d030269f2547afebb79df752f6c1129fe30b176c6e87724587",
+            "package": "@corvu/utils",
+            "version": "0.4.2",
+            "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
+            "entrypoint": ".",
+            "conditions": [
+              "solid"
+            ]
+          },
+          {
+            "id": "sha256:f5362948a87e83790d34e50b60319b32ccf794404b4b45b94b30f495c455cbc6",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:9fd04d4bcf8fd7e84261667518695c82c68d64dc34f0e46c0eb62f53ce1af308",
+            "package": "@corvu/utils",
+            "version": "0.4.2",
+            "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
+            "entrypoint": "./scroll",
+            "conditions": [
+              "solid"
+            ]
+          }
+        ],
+        "conditionalDependencies": [],
+        "graphDigest": "sha256:6f2ff47f6a3eb27b864c42def968e13bce7b9bddfaa68de05efc339a52ab623a"
+      },
+      "checklistItems": null,
+      "contractContent": null,
+      "outcome": "failure",
+      "class": "dependency-contract-obligation",
+      "signature": "no certifiable artifact case; 2 case(s) refused; first refusal: .: accepted dependency @corvu/dialog has no exact runtime binding for export Portal",
+      "detail": {
+        "module": "@corvu/dialog"
+      },
+      "exitStatus": 2,
+      "timedOut": false,
+      "durationMs": 10553,
+      "installDurationMs": 23,
+      "generationDurationMs": 9,
+      "stdout": "",
+      "stderr": "solid-checker: no certifiable artifact case; 2 case(s) refused; first refusal: .: accepted dependency @corvu/dialog has no exact runtime binding for export Portal\n",
+      "retainedArtifacts": {
+        "projectDir": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-xWlnPJ",
+        "outputDir": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-slEOCC"
+      },
+      "certificationAttempt": {
+        "attempted": true,
+        "status": "refused",
+        "lane": "published-graph",
+        "laneRequested": "entrypoint-recovery",
+        "coverage": null,
+        "stage": "witness-acquisition",
+        "owner": "certifier",
+        "demandId": "sha256:8608e179058739700669918d65d940abb361dc28a2a1041e70c026126c723b81",
+        "family": "operation-cardinality",
+        "reason": "solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification failed for graph node @corvu/utils@0.4.2 (./create/controllableSignal) during live graph export-value verification: Type Facts demand sha256:8608e179058739700669918d65d940abb361dc28a2a1041e70c026126c723b81 is locally open: operation-cardinality (artifact-case:1bc9791ad052b4b57b2c64bf98e7adaf4acfcdfcc4c56a32c6f7203f3df9aa3f:default): runtime implementation transcript is incomplete or open (reasons=[\"sourceUnavailable\"])",
+        "refusalCount": 0,
+        "memoryExceeded": false,
+        "durationMs": 10250,
+        "stageDurationsMs": {
+          "artifactAcquisition": 0.13,
+          "proposalGeneration": 3023.63,
+          "demandPlanning": 0.01,
+          "witnessAcquisition": 7127.01
+        },
+        "graphPreparation": {
+          "rootCases": 2,
+          "canonicalNodes": 123,
+          "acquiredPublishedArtifacts": 13,
+          "acquisitionUnits": 126,
+          "graphAcquisitionDurationMs": 2.79,
+          "resolutionSession": {
+            "requests": 0,
+            "semanticAcquisitions": 0,
+            "semanticCacheHits": 0,
+            "semanticCacheInvalidations": 0,
+            "moduleDescriptionsParsed": 182,
+            "typeScriptProgramsCreated": 0
+          },
+          "compilerSourceClosureCensus": 22,
+          "proposalGenerations": 123,
+          "proposalGenerationsShared": 43,
+          "proposalFrontiers": [
+            {
+              "nodes": 67,
+              "durationMs": 1140.37
+            },
+            {
+              "nodes": 36,
+              "durationMs": 911.7
+            },
+            {
+              "nodes": 14,
+              "durationMs": 422.27
+            },
+            {
+              "nodes": 4,
+              "durationMs": 215.46
+            },
+            {
+              "nodes": 2,
+              "durationMs": 148.34
+            }
+          ],
+          "graphNodeReferences": 123,
+          "nativeCertificationTransactions": 1,
+          "typeFactsCaseSetBatches": 1
+        },
+        "demandCountsByFamily": {},
+        "artifactSatisfiedDemandsByFamily": {},
+        "refusalCountsByFamily": {},
+        "refusalCountsByOwner": {},
+        "withheldClosures": 0,
+        "withheldClosureReasons": {
+          "noRecipe": 0,
+          "censusRefused": 0,
+          "vetoUnreproducible": 0,
+          "vetoThrew": 0,
+          "vetoTimedOut": 0,
+          "vetoRunRefused": 0,
+          "vetoIncomplete": 0,
+          "dependencyWithheld": 0,
+          "other": 0
+        },
+        "withheldClosureDetails": []
+      }
+    }
+  },
+  "after": {
+    "path": "rust/target/ecosystem-investigations/2026-09-07-implementation-owner-corvu-scoped.json",
+    "digest": "sha256:14a6775cbff53061e96b65b68db1977e6940d5943ba35b6488972f9f5d4a130f",
+    "finishedAt": "2026-09-07T14:20:17.742Z",
+    "row": {
+      "probeId": "@corvu/popover@0.2.0|solid1|only",
+      "family": "corvu",
+      "status": "official",
+      "package": "@corvu/popover",
+      "version": "0.2.0",
+      "solidTarget": "solid1",
+      "probeKind": "only",
+      "channel": "stable",
+      "solid": {
+        "solid-js": "1.9.14"
+      },
+      "runtimeCompletion": {},
+      "installedVersions": {
+        "@corvu/popover": "0.2.0",
+        "solid-js": "1.9.14"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 1,
+      "declaredWildcard": false,
+      "generatedEntrypoints": null,
+      "refusedEntrypoints": null,
+      "refusedArtifactCases": 2,
+      "artifactCaseRefusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @corvu/dialog has no exact runtime binding for export Portal"
+        },
+        {
+          "entrypoint": ".",
+          "conditions": [
+            "solid"
+          ],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @corvu/dialog has no exact runtime binding for export Portal"
+        }
+      ],
+      "inapplicableArtifactCases": 0,
+      "artifactCaseInapplicabilities": [],
+      "declinedClosures": 0,
+      "externalEdges": [
+        {
+          "specifier": "@corvu/dialog",
+          "package": "@corvu/dialog",
+          "entrypoint": ".",
+          "resolvedVersion": "0.2.4"
+        }
+      ],
+      "dependencyPlan": {
+        "schemaVersion": 1,
+        "rootIdentity": {
+          "package": "@corvu/popover",
+          "version": "0.2.0",
+          "integrity": "sha512-zynRWyRV7mk2uX7t/COQL4OEa6H6FBgOxxlXLQJ1BV8hTiBJwmfAN/yB/9jy+zlp0G9vp64E8VdsNn6gxUEUEQ=="
+        },
+        "status": "exact-leaf-refusal",
+        "complete": true,
+        "limits": {
+          "maxDepth": 32,
+          "maxNodes": 512
+        },
+        "roots": [
+          {
+            "entrypoint": ".",
+            "conditions": [],
+            "node": "sha256:2fc3b9c06da6e5e0927a38d9946a508cfab387e55596303012e82cbfe1c47d47"
+          },
+          {
+            "entrypoint": ".",
+            "conditions": [
+              "solid"
+            ],
+            "node": "sha256:9ead1b49da1635530fdbbb805c877b4ae4a46680b28cf1db7443bd707992e915"
+          }
+        ],
+        "cycles": [],
+        "leaves": [
+          {
+            "id": "sha256:16b12b59631f2f3c84a3faa95bbb8bb6799e3fdcc082397236b7cf160dbaaa1f",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:d062bd990dc7afed7b7886119dae98bed9120edc3d26ce91ffda284b53f4f4c4",
+            "package": "@floating-ui/utils",
+            "version": "0.2.12",
+            "integrity": "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==",
+            "entrypoint": "./dom",
+            "conditions": []
+          },
+          {
+            "id": "sha256:2f6dca43cc599196af21a53e7a06f33db3a38d432ddd107b67f9f3a816dabe33",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:fb736cb7ef0fa55bdb333aa9bc46cccdbb29fdac3c29c8ff108ffa62bc8f8567",
+            "package": "@corvu/utils",
+            "version": "0.4.2",
+            "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
+            "entrypoint": ".",
+            "conditions": [
+              "solid"
+            ]
+          },
+          {
+            "id": "sha256:3616f31d7ecf4d6d7b36f41e72d26dbbf09a064834a73c6b8461b34406ee1a41",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:fd9646a3f8574bec4bbd72c64fef4eff45ee55c255a2d68e450ae4cc98eb7fdb",
+            "package": "@corvu/utils",
+            "version": "0.3.2",
+            "integrity": "sha512-ZWlyWEE8qV9+CB9OAyo2bTrZGXQN9ZeM+JfYv89zoR+lRACKTDuoOZEdiyL8Uc7U5dUSH1uTqKhTTnaHWb+wZA==",
+            "entrypoint": ".",
+            "conditions": [
+              "solid"
+            ]
+          },
+          {
+            "id": "sha256:88932514d8643140633f7bb812eaa4061772b8e695d02482e33806c9ba1f2dab",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:c12666fff3c529ce6c2b5b0afb652c7874361dafbb5ee90f237388a2c6e15512",
+            "package": "@corvu/utils",
+            "version": "0.4.2",
+            "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
+            "entrypoint": "./scroll",
+            "conditions": []
+          },
+          {
+            "id": "sha256:906f3bdf71e74f9b24c58a394284763896268e38c11daf116d5c817202766e47",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:dcfdcca51ea8e1bc212dfa3d0f1377cb6299f2f578721b714a4dfdf3d7fd0484",
+            "package": "@floating-ui/utils",
+            "version": "0.2.12",
+            "integrity": "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==",
+            "entrypoint": ".",
+            "conditions": [
+              "solid"
+            ]
+          },
+          {
+            "id": "sha256:9d6f7bce0eccd69931d3b059051504d223e17948adcbc13422ff796d8a6df182",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:99feb44b51046a0aa00a55832526aa62fcbd596f8594398055bc911c20a0e8b7",
+            "package": "@corvu/utils",
+            "version": "0.4.2",
+            "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
+            "entrypoint": ".",
+            "conditions": []
+          },
+          {
+            "id": "sha256:9f67a4dbcc760ab51ba700ebb2fce37c0799a832d3e05fd09514aa6cb449ac4c",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:cdbe0d7fe682443e29d7c2d12989c7d7a0dbfacd6e4b1e84fc545a527ebb0cdf",
+            "package": "@corvu/utils",
+            "version": "0.4.2",
+            "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
+            "entrypoint": ".",
+            "conditions": []
+          },
+          {
+            "id": "sha256:a29982c15e8934a0ef578013951a055be01ed7b67e3a8bcad3ab82c8edaa0b3f",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:48968e116d72113598f88cced34261a153319ca18cb944c2c9fc4906eb67a515",
+            "package": "@floating-ui/utils",
+            "version": "0.2.12",
+            "integrity": "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==",
+            "entrypoint": "./dom",
+            "conditions": [
+              "solid"
+            ]
+          },
+          {
+            "id": "sha256:c14fafc672f749b43255b2597ff0cfca21ded2a1889b599352bfb8bc2cbba1a8",
+            "kind": "artifact-resolution",
+            "specifier": "csstype",
+            "conditions": [
+              "solid"
+            ],
+            "code": "target-not-found",
+            "reason": "resolved target <project-root>/node_modules/csstype/index.js is not a file"
+          },
+          {
+            "id": "sha256:c152a1adb95bb273cade9d0a632b3b37707d59cf13a096beb56e4ba7fb64ac93",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:86a0fb9d1a086092c9ec06022d9886d268309265985b081b24890bc40c76dced",
+            "package": "@corvu/utils",
+            "version": "0.4.2",
+            "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
+            "entrypoint": ".",
+            "conditions": [
+              "solid"
+            ]
+          },
+          {
+            "id": "sha256:c2c5392346dc310178102c985809ceba0e8a094dc7272a0b63216d3d0abd421d",
+            "kind": "artifact-resolution",
+            "specifier": "csstype",
+            "conditions": [],
+            "code": "target-not-found",
+            "reason": "resolved target <project-root>/node_modules/csstype/index.js is not a file"
+          },
+          {
+            "id": "sha256:c49bdee7f419be6f6f476c3ad9e89fa4023ff11f96ba614eec49216d238bbd33",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:c2c1cd9e1ac9aa734d696865e9c9fca941c1b7693cabcc7369c484ac84adc3f2",
+            "package": "@corvu/utils",
+            "version": "0.4.2",
+            "integrity": "sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==",
+            "entrypoint": "./scroll",
+            "conditions": [
+              "solid"
+            ]
+          },
+          {
+            "id": "sha256:e744fdd08a5286c08e24d87909ad005e9065ccbc6f21437ebe232f13326db93a",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:3f2861f4a8fb632ae23610e93f7ad0a415c02ee536c4a16455d1c53b3e03a095",
+            "package": "@floating-ui/utils",
+            "version": "0.2.12",
+            "integrity": "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==",
+            "entrypoint": ".",
+            "conditions": []
+          },
+          {
+            "id": "sha256:facdb0f91e70b9397288665d6188ce8ddcac586e44d744d1cfeea793a19b447b",
+            "kind": "authenticated-receipt-unavailable",
+            "node": "sha256:49b389f1b8edd199d320bc8079006e89541ff1712ba6b0c6e7b554ecb2a53199",
+            "package": "@corvu/utils",
+            "version": "0.3.2",
+            "integrity": "sha512-ZWlyWEE8qV9+CB9OAyo2bTrZGXQN9ZeM+JfYv89zoR+lRACKTDuoOZEdiyL8Uc7U5dUSH1uTqKhTTnaHWb+wZA==",
+            "entrypoint": ".",
+            "conditions": []
+          }
+        ],
+        "conditionalDependencies": [],
+        "graphDigest": "sha256:1de051ca37dfe2c70fb858b13404eab87155e027c496dd6647ffb13cee3a0227"
+      },
+      "checklistItems": null,
+      "contractContent": null,
+      "outcome": "failure",
+      "class": "dependency-contract-obligation",
+      "signature": "no certifiable artifact case; 2 case(s) refused; first refusal: .: accepted dependency @corvu/dialog has no exact runtime binding for export Portal",
+      "detail": {
+        "module": "@corvu/dialog"
+      },
+      "exitStatus": 2,
+      "timedOut": false,
+      "durationMs": 16639,
+      "installDurationMs": 24,
+      "generationDurationMs": 108,
+      "stdout": "",
+      "stderr": "solid-checker: no certifiable artifact case; 2 case(s) refused; first refusal: .: accepted dependency @corvu/dialog has no exact runtime binding for export Portal\n",
+      "retainedArtifacts": {
+        "projectDir": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-D9w7EW",
+        "outputDir": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-NJJbfx"
+      },
+      "certificationAttempt": {
+        "attempted": true,
+        "status": "refused",
+        "lane": "published-graph",
+        "laneRequested": "entrypoint-recovery",
+        "coverage": null,
+        "stage": "witness-acquisition",
+        "owner": "certifier",
+        "demandId": "sha256:cc5ec9b62a8a07a6607bb898c9f2b82d35fba747bc0413a5c66430efd55002eb",
+        "family": "recursive-value-shape",
+        "reason": "solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification failed for graph node @floating-ui/utils@0.2.12 (./dom) during live graph export-value verification: Type Facts demand sha256:cc5ec9b62a8a07a6607bb898c9f2b82d35fba747bc0413a5c66430efd55002eb is locally open: recursive-value-shape (artifact-case:1d311acb3467d439f2a09329da1770216a63d44466c1036ea199b14f65b252cd:getOverflowAncestors): operation value path is locally open (complete=true, presence=Absent, callability=Unknown, reasons=[])",
+        "refusalCount": 0,
+        "memoryExceeded": false,
+        "durationMs": 16282,
+        "stageDurationsMs": {
+          "artifactAcquisition": 0.3,
+          "proposalGeneration": 5703.82,
+          "demandPlanning": 0.04,
+          "witnessAcquisition": 10528.95
+        },
+        "graphPreparation": {
+          "rootCases": 2,
+          "canonicalNodes": 123,
+          "acquiredPublishedArtifacts": 13,
+          "acquisitionUnits": 126,
+          "graphAcquisitionDurationMs": 2.55,
+          "resolutionSession": {
+            "requests": 0,
+            "semanticAcquisitions": 0,
+            "semanticCacheHits": 0,
+            "semanticCacheInvalidations": 0,
+            "moduleDescriptionsParsed": 182,
+            "typeScriptProgramsCreated": 0
+          },
+          "compilerSourceClosureCensus": 22,
+          "proposalGenerations": 123,
+          "proposalGenerationsShared": 43,
+          "proposalFrontiers": [
+            {
+              "nodes": 67,
+              "durationMs": 2153.88
+            },
+            {
+              "nodes": 36,
+              "durationMs": 1628.17
+            },
+            {
+              "nodes": 14,
+              "durationMs": 852.5
+            },
+            {
+              "nodes": 4,
+              "durationMs": 460.6
+            },
+            {
+              "nodes": 2,
+              "durationMs": 357.97
+            }
+          ],
+          "graphNodeReferences": 123,
+          "nativeCertificationTransactions": 1,
+          "typeFactsCaseSetBatches": 1
+        },
+        "demandCountsByFamily": {},
+        "artifactSatisfiedDemandsByFamily": {},
+        "refusalCountsByFamily": {},
+        "refusalCountsByOwner": {},
+        "withheldClosures": 0,
+        "withheldClosureReasons": {
+          "noRecipe": 0,
+          "censusRefused": 0,
+          "vetoUnreproducible": 0,
+          "vetoThrew": 0,
+          "vetoTimedOut": 0,
+          "vetoRunRefused": 0,
+          "vetoIncomplete": 0,
+          "dependencyWithheld": 0,
+          "other": 0
+        },
+        "withheldClosureDetails": []
+      }
+    }
+  },
+  "binary": {
+    "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/debug/solid-checker-rust",
+    "digest": "sha256:abd83b577716a1c53fbfb088b55c1be28e293a94414ad525e7dd39ce59c9b077"
+  },
+  "newlyCertifiedEntrypoints": [],
+  "acceptedArtifactCasesBefore": [],
+  "acceptedArtifactCasesAfter": [],
+  "transition": {
+    "before": "refused",
+    "after": "refused"
+  },
+  "metricChanged": false
+}

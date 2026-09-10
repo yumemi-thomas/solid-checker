@@ -13,10 +13,10 @@
             "sha256": "5f0879305a2353477cbdab90060e4de21e79ab42c0892cc1cc4587b95d98df0e"
           },
           "exports": {
-            "observeIntersection": "summary-a830f7ca4514a2d4a15286680536e5caf83d74352a7fbe2e0c660df1da73a045",
-            "observeMutation": "summary-a830f7ca4514a2d4a15286680536e5caf83d74352a7fbe2e0c660df1da73a045",
-            "observePerformance": "summary-a830f7ca4514a2d4a15286680536e5caf83d74352a7fbe2e0c660df1da73a045",
-            "observeResize": "summary-a830f7ca4514a2d4a15286680536e5caf83d74352a7fbe2e0c660df1da73a045"
+            "observeIntersection": "summary-6a4cc75250cc3d86bcc07c4e91cdd7a97233945d50b1099b04aa57ecfbfbdd23",
+            "observeMutation": "summary-6a4cc75250cc3d86bcc07c4e91cdd7a97233945d50b1099b04aa57ecfbfbdd23",
+            "observePerformance": "summary-6a4cc75250cc3d86bcc07c4e91cdd7a97233945d50b1099b04aa57ecfbfbdd23",
+            "observeResize": "summary-6a4cc75250cc3d86bcc07c4e91cdd7a97233945d50b1099b04aa57ecfbfbdd23"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -40,7 +40,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-a830f7ca4514a2d4a15286680536e5caf83d74352a7fbe2e0c660df1da73a045": {
+    "summary-6a4cc75250cc3d86bcc07c4e91cdd7a97233945d50b1099b04aa57ecfbfbdd23": {
       "call": {
         "callbacks": [
           {
@@ -52,6 +52,7 @@
           }
         ],
         "closed": [
+          "reads",
           "creates"
         ],
         "creates": [],
@@ -75,8 +76,10 @@
           }
         ],
         "proposedClosures": [
+          "reads",
           "creates"
-        ]
+        ],
+        "reads": []
       },
       "shape": "callable"
     }

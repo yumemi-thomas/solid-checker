@@ -1,5 +1,455 @@
 # Precision backlog
 
+## `reads` census: convention decided, rows pending an audit (2026-09-10)
+
+`semantic-model.md` § reads **[Decision 2026-09-10]** scopes the proxy
+property-access read to a proxy the export *owns*: a parameter-rooted receiver
+(component props, a caller's store) is the caller's read, on ADR 0034's
+argument. That resolves the conflict below — the audited documents conform as
+written, `Show`'s `reads: []` beside its props guard is correct, and no
+re-audit for counter-examples is needed. It also keeps the census on machinery
+that exists (ADR 0034/0040 for the caller's side, ADR 0044 for the owned side)
+rather than requiring a proxy fact the producer states is out of its reach.
+Fifteen of the twenty derivable canonical rows shipped the same day, each
+citing its `creates` twin's audited bytes; five — `action`, `flush`, `hydrate`,
+`render`, `createEffect` — are withheld pending a judgement the audit has not
+made, enumerated in the
+[worksheet](package-contract-v2/phase21/2026-09-10-reads-negative-rows-audit-worksheet.md)
+§ 3. Rows are the terminator half only: `reads` is absent from `PROPOSABLE` and
+`reviewed_observation` has no `reads` entry, so nothing certifies yet and no
+verdict moved. Solid 1.x's table needs the same pass. The five were then read against the
+pinned rc.3 bytes (worksheet § 6, verified byte-exact against the audit's own
+`file_sha256`): `createEffect` stays withheld with a cited counter-example on
+the *browser* side — `withHydrationGate` creates a signal the compute reads
+under `hydrating ∧ ssrSource === "client"` — and the other four collapse to one
+model question, whether a scheduling primitive owns the reads of computations
+it drains. That was decided "no" — `semantic-model.md` § reads carries a second
+**[Decision 2026-09-10]**, *the exclusion is about authorship, not timing* —
+and `flush`, `action`, `render` and `hydrate` shipped on it. The table now
+carries **47 rows: 28 `creates` and 19 `reads`**, with `createEffect`'s `reads`
+the one withholding, on cited evidence. Gate 1 is complete for Solid 2. Gate 3 landed the same day: `ClaimDomain::PROPOSABLE` is
+`[Creates, Reads, Returns]` and `require_census_decides_closure` admits
+`reads`, which rides the existing form machinery — `census_form_disposition`
+already clears exactly the parameter-rooted and own-literal provenances the
+decision excuses and refuses every other subject root. Gate 2 was **decided
+against**: a synthesized veto for `reads` can only observe caller-supplied
+values, which is the half the decision assigns to the caller, so shipping one
+would reopen ADR 0036's "veto watching the wrong thing" hazard
+([design](package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md)).
+**Gate 3 was then withdrawn the same day, and the reason is the important
+result.** Verifying that the census refuses an owned read showed it never sees
+one: TypeScript types a `Proxy` as its target, so `ownProxy.value` resolves to
+a data property and the producer records **no uncensused invoking form at
+all** — pinned by `ownProxyRead` in
+`TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises`.
+The census cannot refuse what it cannot see, so admitting `reads` would have
+certified a false closure for exactly the shape the domain is about.
+`PROPOSABLE` and `require_census_decides_closure` are reverted; the rows, both
+model decisions, the fixture and the Go test are kept. This corrects the
+implementation-census plan § 4.4: there are **no** proxy property-access forms
+to add, so `reads` closure needs a producer fact that does not exist, a runtime
+internals premise, or per-export hand recipes with no census — and only the
+third is available. `reads` is closed for 0 of 8950 corpus exports and is
+further from closure than lever F implies.
+
+## Superseded: `reads` census blocked on a re-audit (2026-09-10)
+
+The [admission review](package-contract-v2/phase21/2026-09-10-reads-census-admission-review.md)
+performs the positive review `Solid2::NEGATIVE_ROWS` records as never having
+been done for `reads`, and it fails. `solid-js`'s `For`, `Match`, `Repeat` and
+`Show` close `reads: []` while both published operations of their shared
+summary guard on `{arg: 0, path: ["keyed"]}` — a props-proxy access, which
+`semantic-model.md` § reads settles as the load-bearing non-call read form.
+`@solidjs/web`'s `clientOnly` shows the same shape on `arg1.lazy`;
+`createEffect`'s `arg2.defer` is a plain options object and is not a
+counter-example. A corroborating scan shows *no* bundled document models a
+props access as a read — every `read` operation reads a reactive resource — so
+this is a **convention conflict between the audits and the model**, not a
+one-off audit error, and it disqualifies gate 1 the same way the unreconciled
+`returns` convention does. No rows were added. The remedy is a model decision
+(is a props-proxy access a read?) and then a re-audit; that decision also sizes
+§ 4.4's proxy property-access work. A veto observation for
+`reads` is separately designable from public API alone (instrumented
+caller-supplied accessors) and is partial in the way `creates`' globalThis
+observation is partial; it remains unreviewed. `reads` therefore stays closed
+for 0 of 8950 corpus exports, and every certified import continues to raise
+SC9005.
+
+## Single-case callback graph retry (2026-09-08)
+
+[ADR 0082](adr/0082-single-case-callback-graph-retry.md) adds an opt-in graph
+retry after an exact native callback-flow refusal for one generated case in a
+fresh catalog. Successful ordinary certification, existing publications and
+multi-case proposals do not take this retry. The supported Until probe adds
+one certified root case and completes the row; its callback behavior remains
+open and the original refusal remains explicit. This is an entrypoint
+certification gain, not a callback proof or denominator correction. All 95
+focused workflow tests and full verification pass (exit 0, TOTAL 79.60s).
+The full-corpus comparison is running; its preservation result is pending.
+
+## Exact return source positions before spreads (2026-09-08)
+
+[ADR 0081](adr/0081-exact-return-source-positions-before-spread.md) stops
+returned-value source tracing at an array's first spread. Syntax indexes after
+a spread do not prove runtime tuple positions. Fixed prefixes and independent
+outer siblings remain traced; elisions retain their indexes. The regression
+failed in four cases before the fix and all six cases pass after it, alongside
+the neighboring return-source regressions. This narrows a producer premise,
+adds no diagnostic, and is not a newly certified entrypoint. Flux Store's
+separate dependency-bound returned-store premise remains open.
+
+## Defined input after an undefined default (2026-09-08)
+
+[ADR 0080](adr/0080-defined-input-origin-after-undefined-default.md) binds a
+strict-undefined guard, its sole local-array assignment, and the exact later
+member read. Defined arguments retain caller origin; the fallback has local
+origin and cannot justify a guaranteed caller read. This is a separate limited
+fact, not an unwritten binding. Unasserted exact read inputs consume the
+origin-and-call witness directly; shape assertions remain independent. No
+checker diagnostic is added. The first-reference boundary rejects a tested
+fallback-only counterexample. Full verification passes (exit 0, TOTAL 166.60s).
+The [corrected Corvu measurement](package-contract-v2/phase21/2026-09-08-defined-input-recovery.md)
+recovers both root cases through ordinary consumer verification. The completed
+418-row rerun adds 22 artifact cases: both Popover rows become complete and
+the Corvu aggregator becomes partial. Complete rows rise from 324 to 326;
+all 1,510 old artifact-case selections and exported claims are preserved,
+with zero closure identity transitions. This is new certification without a
+denominator correction. The next generic-result candidates remain open; an
+intrinsic Proxy proof cannot rely on declaration identity alone.
+
+## Duplicate graph compiler contexts (2026-09-08)
+
+[ADR 0079](adr/0079-isolated-graph-compiler-contexts.md) reacquires a locally
+open request when another authenticated installation has the same compiler
+package identity. It preserves source topology, owners, dependency authority
+and all proof requirements; infrastructure and source-census failures do not
+trigger the retry. The native fixture proves the original shared failure,
+distinct accepted importer bindings, and refusal of a mutated input. Corvu now
+advances to the separate Floating UI `getOverflowAncestors` input-origin
+refusal. No package case or complete row is newly certified by that measurement.
+This changes acquisition, not diagnostics, protocol, receipts or trust.
+
+## Factory export-root composition (2026-09-08)
+
+[ADR 0077](adr/0077-receipt-bound-factory-export-roots.md) adds a conditional
+root-only proof for an exact imported whole-parameter return applied to an
+object-literal argument. The initializer source chain, importing module,
+dependency artifact, resolved-import identity, closed return claim and receipt
+must all bind. Finalization refuses an undischarged requirement. The native
+graph fixture covers acceptance and open-return, missing-veto, parameter-slot,
+callable-argument, mutation and different-export refusals. Nested values and
+other return relationships remain open. This adds no checker diagnostic and
+does not infer shape from `any`; corpus gains require separate measurement.
+
+## Receipt composition: reach, granularity, and what still blocks it (2026-09-08)
+
+[ADR 0072](adr/0072-composition-lane-by-refusal-census.md) routes a partial row
+whose refusal census names a dependency frontier to entrypoint recovery by
+policy instead of a reviewed probe-id list; [ADR 0071](adr/0071-independent-graph-case-preparation.md)
+isolates a refused graph node to the exact artifact cases whose graph reaches
+it, with the retained cases as a floor and a measured 32-case recovery budget.
+The [full measurement](package-contract-v2/phase21/2026-09-08-receipt-composition.md)
+moves one row (`solid-js@2.0.0-rc.3`, 1 → 2 entrypoints with its root), leaves
+417 identical and loses nothing; 1,151 → 1,152 certified entrypoints. Full
+verification passes (exit 0, TOTAL 102.22s).
+
+Explicit remaining state. Frontier cases reaching publication are **65 of 173**;
+the 108 that remain are attributed exactly and none is a composition gap: 39
+Type Facts proof refusals inside a graph that composed correctly, 28 above the
+recovery memory budget, 24 reaching a Node builtin (`node:async_hooks`,
+`node:stream` — not a package, so never a receipt), 8 unpublished inside a
+working graph lane, 7 on broken transitive installs, 2 with nothing generated to
+recover. Cross-row receipt reuse is measured as a non-answer: three of 121
+dependency identities are certified corpus rows at the exact installed version.
+
+The self-package edge is **not** an open next step, and this records why so it
+is not reopened by accident. `solid-js/web/dist/web.js` re-exports
+`ErrorBoundary` from `"solid-js"` (11 cases), and
+[ADR 0012](adr/0012-self-package-export-target-rebinding.md) already decided
+that exact case: a bare import naming the package is a semantic dependency on
+another artifact case of the same package, not a local file edge, and the
+mechanism is pinned by `fixtures/package-contracts/self-package-rebinding`.
+Two resolver variants were implemented and reverted — exports-map
+self-reference in JS, and located-root in JS *and* Rust together. The JS-only
+one desynchronized the closures (`artifact module closure mismatch` cost
+`solid-js@2.0.0-rc.3` two graph cases); the exports-map one recovers nothing,
+because `solid-js/web/package.json` names itself `"solid-js/web"` so Node's
+`PACKAGE_SELF_RESOLVE` does not match there either; and the located-root one
+deletes ADR 0012's mechanism, failing
+`self_package_rebinding_keeps_native_dependency_and_target_verification`. The
+eleven cases need the composing lane to reach that row: 42 prepared cases
+against the 32-case budget, and `./web/storage` reaching `node:async_hooks`
+behind the retained floor. **The recovery memory budget** is a deadline, not a
+ceiling; raising it needs the transaction's per-node memory to fall, not the
+number to change.
+
+## First-iteration caller input (2026-09-08)
+
+[ADR 0067](adr/0067-first-iteration-input-origin.md) binds a caller input at the
+first receiver of a supported synchronous for-of body. The explicit limitation
+cannot prove guaranteed execution or later-iteration origin. The
+[ten-probe measurement](package-contract-v2/phase21/2026-09-08-first-iteration-recovery.md)
+recovers three I18n roots and complete rows, preserving all 13 prior control
+selections and claims. Full verification passes (exit 0, TOTAL 240.40s), and
+replacement controls still refuse. Full-corpus measurement is pending; Kobalte
+Utils separately exposes an unaccepted-proposal fallback recovery gap.
+
+## Caller receiver before assignment (2026-09-08)
+
+[ADR 0066](adr/0066-original-receiver-before-assignment.md) binds the first
+method receiver evaluated before a plain parameter assignment. The
+[scoped measurement](package-contract-v2/phase21/2026-09-08-initial-receiver-recovery.md)
+recovers three Marker root cases and three refused-to-complete rows. All ten
+Motion/Utils control selections and exported claims are preserved. Replacement
+and early-getter/later-local-call controls still refuse. Full verification
+passes (exit 0, TOTAL 243.12s). Conditional loops and mixed origins remain open;
+no full-corpus aggregate or denominator correction is claimed for this slice.
+
+## Caller reads before later assignments (2026-09-08)
+
+[ADR 0065](adr/0065-original-input-reads-before-later-writes.md) adds a bounded
+opening-prefix source proof. Utils `handleDiffArray` reads both caller roots
+before assigning sliced results; the retained contracts name whole-input reads.
+Protocol 40 binds those exact early property uses, while typed member claims,
+later reads and mixed origins retain their separate proof requirements. Native
+packed-package and verifier mutation tests pass, including the replacement
+counterexample. Full verification passes (exit 0, TOTAL 242.12s), and the ordinary
+CLI still refuses the unchanged replacement archive. The nine-probe comparison
+restores seven artifact selections and four complete rows, preserving all 29
+pre-regression selections and their exported claim sets. See the
+[measured recovery](package-contract-v2/phase21/2026-09-08-initial-read-recovery.md).
+The [full corpus](package-contract-v2/phase21/2026-09-08-initial-read-full-frontier.md)
+preserves that control group but loses 30 other selections across ten rows:
+318 complete, 61 partial, 30 refused, 9 not advanced. Marker and I18n expose
+first-read/assignment proof gaps; the graph-context investigation separately
+reproduces compiler redirection between identical package installations.
+
+## Positive origin for parameter reads (2026-09-07)
+
+[ADR 0064](adr/0064-positive-parameter-read-origin.md) closes an accepted
+counterexample: a function unconditionally replaced its input with a local
+object, yet was certified as reading the caller's member. The same archived
+source now refuses at the ordinary CLI, while unchanged-input controls pass.
+TypeScript reports no diagnostics. Read-input proofs now require the existing
+affirmative unwritten-binding premise before using typed or composed evidence.
+Full verification passes (exit 0, TOTAL 171.95s). This is a precision correction,
+not a new certification; mixed-origin coverage needs a separate positive proof.
+
+## Own-installation implementation subjects (2026-09-07)
+
+[ADR 0063](adr/0063-own-installation-implementation-subject.md) prevents a
+package's own runtime subject from moving to the first different installation
+with identical bytes. The regression fails before the fix; both focused tests
+and full verification pass (exit 0, TOTAL 116.91s). The scoped Corvu Popover
+rerun clears `sourceUnavailable` and reaches Floating UI's `list.concat`
+value-path refusal. Accepted cases remain empty and the row remains refused.
+This is a cleared blocker, not a certification gain. The subsequent
+`implementation-owner-full` comparison preserves all 1,489 artifact selections
+and all row counts. It precedes the read-origin correction above.
+
+## Exact namespace export identity (2026-09-07)
+
+[ADR 0062](adr/0062-namespace-export-binding.md) binds namespace exports to
+their exact entity and honors explicit exports over earlier bare stars. The
+[full measurement](package-contract-v2/phase21/2026-09-07-namespace-recovery.md)
+adds Kobalte Core's `./src/index.tsx`: 1,488 to 1,489 artifact selections,
+preserving all previous cases. Counts remain 324 complete / 63 partial /
+22 refused / 9 not advanced. Wildcards and explicit generation refusals remain
+distinct. Six positive/control fixture cases and one missing-module refusal
+pass; full verification exits 0, TOTAL 67.59s. No new diagnostic or denominator
+correction is introduced, and the overall coverage ceiling remains open.
+
+## Bounded case recovery: full follow-up (2026-09-07)
+
+The [full comparison](package-contract-v2/phase21/2026-09-07-retry-sources-full-recovery.md)
+adds 651 artifact cases and preserves all 837 previous selections. The unchanged
+entrypoint metric reaches 324 complete / 63 partial / 22 refused / 9 not advanced:
+Locator and Solid 2 Router become complete by entrypoint name, while their
+remaining conditional artifact refusals stay explicit. Total accepted cases:
+1,488 across 387 rows. Full verification and catalog preservation passed.
+No denominator correction or overall coverage ceiling is claimed.
+
+## Compiler-source retry isolation (2026-09-07)
+
+[ADR 0061](adr/0061-compiler-source-retry-isolation.md) gives each repeated
+compiler-source acquisition a fresh scratch directory. Existing directory
+collisions had removed authenticated dependency types, including Solid's,
+from later independent-case attempts. The regression failed before the fix;
+all 83 contract-workflow tests and full verification now pass (exit 0,
+TOTAL 81.04s). The [scoped catalog measurement](package-contract-v2/phase21/2026-09-07-retry-sources-recovery.md)
+adds 73 Kobalte cases, preserves its previous 503, and recovers the distribution
+root. It remains a partial wildcard row; the full comparison is recorded above.
+
+## Default declaration export census (2026-09-07)
+
+[ADR 0060](adr/0060-default-export-census.md) removes an invented public named
+export from named default declarations while preserving explicit named exports.
+The [scoped measurement](package-contract-v2/phase21/2026-09-07-default-export-recovery.md)
+adds 68 artifact cases: Solidbase and both Vite Plugin probes move from refused
+to partial. No complete-row gain or denominator correction is claimed. Focused
+tests and full verification passed; the full follow-up above verifies preservation.
+
+## Independent artifact case recovery (2026-09-07)
+
+[ADR 0059](adr/0059-independent-artifact-case-recovery.md) recertifies exact
+subsets of unaccepted proposals without weakening native census equality or
+copying receipts. Explicit recovery also submits generated partial proposals
+previously skipped without a dependency frontier. The
+[full measurement](package-contract-v2/phase21/2026-09-07-independent-cases-recovery.md)
+adds 69 artifact cases across eight partial rows, preserves all 768 prior
+selections, and reports 322 complete / 60 partial / 27 refused / 9 not advanced.
+No complete-row transition or metric correction is claimed. Full verification
+passed, exit 0, TOTAL 66.99s. The overall ceiling remains under investigation.
+
+## Authenticated ESM source fallback (2026-09-07)
+
+[ADR 0058](adr/0058-authenticated-mjs-source-subject.md) extends source-subject
+selection to `.mjs` only after matching declaration branches are exhausted.
+Native snapshot replay independently verifies that ordering and the exact
+source bytes. Cross-format declarations, blocked targets and missing source
+remain refused. Testing Library advances past `dom-accessibility-api` but
+still refuses at the CommonJS `aria-query` export surface: this is a resolved
+selection blocker, not a new certification or coverage-metric correction.
+[Measurement](package-contract-v2/phase21/2026-09-07-mjs-source-recovery.md).
+
+## Exact conditional and namespace subjects (2026-09-07)
+
+[ADR 0057](adr/0057-exact-conditional-and-namespace-subjects.md) consumes the
+existing snapshot-selected declaration target for singleton custom-condition
+cases, and the exact owning snapshot for dependency namespace declarations.
+Neither missing types nor an unresolved owner grants authority. Focused native
+tests distinguish Node/browser/default selection and reject absent, changed or
+mismatched namespace ownership. Scoped native/consumer measurements recover
+Visibility Observer's complete root and Solid DB's partial root.
+[Measurement](package-contract-v2/phase21/2026-09-07-exact-subject-recovery.md).
+Full corpus confirms 322 complete / 52 partial / 24 refused / 20 not advanced:
+three new artifact cases, all 765 prior selections preserved. Full `make verify`
+passed with exit 0, `TOTAL 116.12s`, and no failure marker. Protocol and receipt
+formats remain unchanged.
+
+## Read input source identity (2026-09-07)
+
+[ADR 0056](adr/0056-unwritten-parameter-input-identity.md), protocol 39, adds an
+affirmative unwritten parameter binding for a root read input. Producer and
+consumer require exact signature/declaration identity and a reachable direct
+property use; no runtime shape or missing member is inferred. The native packed
+archive regression accepts an unwritten generic input and refuses the same
+proposed read after reassignment. This targets `store.shallow` reached by Table
+and Pacer entrypoint recovery. Broader conditional-member, module-evaluation and
+virtual-input proof models remain open. [Scoped measurement](package-contract-v2/phase21/2026-09-07-unwritten-parameter-recovery.md)
+adds 11 Pacer and four Table artifact cases while preserving accepted selections;
+both rows remain partial under the unchanged denominator. Full verification
+passed after the cross-file emission fix with exit 0 and `TOTAL 127.08s`.
+The final full corpus adds 19 cases over the independent-recovery checkpoint,
+preserves all 746 prior cases, and reaches 321 complete / 51 partial / 26 refused
+/ 20 not advanced. Element becomes complete; Form, Hotkeys and Store become
+partially certified. Counts and exact receipts are linked from the measurement.
+
+## Complete imported union premises (2026-09-07)
+
+[ADR 0055](adr/0055-complete-imported-union-premises.md), protocol 38, spells
+every union constituent and binds its declaration identity. Focused producer
+and native receipt tests pass, including changed-member and foreign-module
+falsifiers. Full corpus remains **462 withheld, 442 creates / 20 returns**.
+Eighteen explanations change: six buildHTMLStyles and six removeAxisTransforms
+helper premises now bind but expose further coercions; six calcBoxDelta
+premises resolve but still refuse alias text expansion. These remain checker
+or fact limitations, not established package defects.
+[Evidence](package-contract-v2/phase21/2026-09-07-union-census-measurement.md).
+Full make verify passed in 210.39 seconds; no commits or pushes.
+
+## A returned callable with primitive captures (2026-09-07)
+
+[ADR 0054](adr/0054-returned-callable-with-primitive-captures.md) binds a stable
+same-file factory's exact returned callable and primitive parameter captures.
+Protocol 37 permits an anonymous local body only through its own exact
+compiler symbol. The normal body census, factory/result write checks and
+capture write checks remain required.
+
+Full corpus: **zero candidate closures**, still 462 withheld. Six
+`buildHTMLStyles` occurrences move from the factory refusal to a template
+coercion in `buildTransform`, with an explicit failed premise:
+`TransformTemplate | undefined` becomes `any` in the helper twin. Returned
+callable first refusals 52 → 46; template coercions 7 → 13. This names the
+next producer fix: complete, identity-checked spelling of imported union
+types. [Evidence](package-contract-v2/phase21/2026-09-07-factory-census-measurement.md).
+Full `make verify` passed in 216.74 seconds; no commits or pushes.
+
+## A local helper returns one data-only allocation (2026-09-07)
+
+[ADR 0053](adr/0053-local-literal-result-identity.md), protocol 36, binds a
+recorded access to an exact local call, its callee, a data-only allocation and
+every return site. The ordinary call census still proves the callee's
+execution. Same-allocation returns clear the SVG scrape result; mixed,
+replaced, fallthrough, accessor and async/generator results do not inherit
+that premise. ADR 0044's stated mutation assumption remains explicit.
+
+Full corpus: **468 → 462 withheld**, with **442 creates (405 census + 37
+vetoes)** and **20 returns**; rows **368 / 30** unchanged. All six closures
+are receipt-bound `scrapeSVGMotionValuesFromProps` claims. No additions or
+changed residual reasons. B has 18 original first blockers left; E has 52.
+The [current exhaustive inventory](package-contract-v2/phase21/2026-09-07-literal-result-census-measurement.md)
+records the evidence and next target. The active implementation goal remains
+open.
+
+## Receipt-bound external calls in the creates census (2026-09-07)
+
+[ADR 0052](adr/0052-receipt-bound-dependency-census.md) implements the
+user-authorized dependency composition path. Exact declaration source/span
+and export replay identify the child claim. The census records a conditional
+obligation; authenticated receipt composition requires that exact claim to be
+closed and empty, and finalization binds the same obligation root. External
+implementation bodies are not substituted for contracts.
+
+The full 418-probe run measures **500 → 468 withheld candidates**, comprising
+**448 creates (411 census refusals + 37 vetoes)** and **20 returns**. Rows
+remain **368 certified / 30 refused**. The dependency first-refusal class
+falls **48 → 10**: 32 candidates close, while six `stagger` candidates expose
+a returned-callable blocker, raising that class 46 → 52. All 32 accepted
+mains explicitly close creates and bind to their receipts by SHA-256.
+
+The remaining ten dependency cases have no closed empty creates claim in
+their selected child mains; API names do not establish their disposition.
+The [full measurement and revised ranking](package-contract-v2/phase21/2026-09-07-dependency-census-measurement.md)
+inventory every remaining candidate and specify the next premises, receipt
+bindings, limits and estimated gains for B–J. Full `make verify` passed in
+197.93 seconds, exit 0, with TOTAL present and no failure marker. No new
+snapshots or public contract artifacts changed in this slice; protocol 35
+remains unchanged. Nothing was committed or pushed.
+
+## An explicit bottom type is a non-object fact (2026-09-07)
+
+ADR 0051 implements the first slice of the
+[ranked investigation](package-contract-v2/phase21/2026-09-07-creates-opportunity-ranking.md).
+The geometry chain's second call retained `point: number`; the first call
+carried `scale: never`. The producer now recognizes the explicit bottom flag
+before inspecting distributed constituents. Missing types and empty lists
+without that flag still refuse. Handshake 35 binds the changed coercion and
+primitive-completion meaning; no wire field is added.
+
+The regression failed before the fix and passes after it. Complete Type Facts
+test packages pass; the end-to-end `omittedBoxScale` fixture certifies and pins
+the receipt's `never` slot and `primitive-coercion` disposition. Its `unknown`
+and `any` controls still record and refuse a real coercion. Missing-slot and
+forged-identity producer controls also refuse. Two generated snapshots for
+this fixture change; no existing candidate is removed by generation.
+
+Full `make verify` passed in 193.09 seconds (exit 0, `TOTAL` present, no
+`FAILED during step` marker), including workspace/all-target Clippy, armed
+Rust tests, Go race tests, coverage and ownership comparisons, all 95 contract
+generator fixtures, and the TypeScript oracle. Verification used a writable
+temporary Go cache with `GOPROXY=off GOSUMDB=off`. No commit or push was made.
+
+The requested full published-package measurement subsequently ran all 418
+pinned probes in 154.936 seconds, acquiring missing published artifacts.
+**Withheld candidates 506 → 500; creates census 449 → 443; creates vetoes
+unchanged at 37; returns dependency withholdings unchanged at 20.** Certified /
+refused rows stay 368 / 30. All six `applyBoxDelta` occurrences close, and all
+six accepted `motion-dom` mains now explicitly state `creates: []`, with
+receipts bound to their digests. Every other root withholding count is
+unchanged. See the [exhaustive measurement and reconciliation](package-contract-v2/phase21/2026-09-07-protocol35-census-measurement.md).
+The other ranked slices and the dependency-terminator decision remain open.
+
 ## A written binding whose every value is rooted (2026-09-07)
 
 ADR 0050, taking the case ADRs 0034, 0040 and 0043 each refused with the same
@@ -43,6 +493,20 @@ because the receipt names one, and a derivation naming no slot
 has a local helper's result among its sources.
 
 ## An omitted argument slot receives `undefined` (2026-09-07)
+
+**Investigation correction (2026-09-07):** the reconstruction below was
+refuted for the existing geometry-chain fixture by demanding both
+`scalePoint` transcripts. The second call still carries `point: number`;
+the first carries `scale: never` after narrowing the omitted `undefined`
+slot. `mayBeObjectTypedLocked` rejects the empty `Distributed()` result
+before reaching its existing `Never` flag. An explicit bottom-type prototype
+removed the leaf's one coercion, and restoring the source restored it. No
+implementation was retained during that investigation and no corpus gain was
+claimed. ADR 0051 above subsequently implements the bounded fix. See the
+[reproduction](package-contract-v2/phase21/2026-09-07-creates-chain-diagnostic.md)
+and [ranked investigation](package-contract-v2/phase21/2026-09-07-creates-opportunity-ranking.md).
+The six current `applyBoxDelta` candidates are the measured first-refusal
+target; the wider arithmetic class is not one proven premise-chain defect.
 
 ADR 0049. A call with fewer arguments than the callee has parameters leaves the
 rest `undefined` — the specification, not an inference — and `undefined` is a

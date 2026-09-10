@@ -332,7 +332,7 @@ describe("standalone package-export resolution", () => {
   });
 
   test("keeps JavaScript and TypeScript sources as declaration fallbacks", () => {
-    for (const extension of [".js", ".jsx", ".ts", ".tsx"]) {
+    for (const extension of [".mjs", ".js", ".jsx", ".ts", ".tsx"]) {
       const manifest = {
         name: `source-fallback-${extension.slice(1)}`,
         version: "1.0.0",
@@ -371,9 +371,15 @@ describe("standalone package-export resolution", () => {
         ])
       );
 
-      expect(() => target(root, manifest, [], "declarations")).toThrowError(
-        expect.objectContaining({ code: "declarations-not-found" })
-      );
+      if (runtimeExtension === ".mjs") {
+        expect(target(root, manifest, [], "declarations").file.path).toBe(
+          join(root, "dist/index.mjs")
+        );
+      } else {
+        expect(() => target(root, manifest, [], "declarations")).toThrowError(
+          expect.objectContaining({ code: "declarations-not-found" })
+        );
+      }
     }
   });
 
@@ -754,6 +760,24 @@ describe("exact artifact records and closure", () => {
 
     expect(Object.keys(record.exports)).toEqual(["shared"]);
     expect(record.declarationExports).toEqual(["declarationOnly", "shared"]);
+  });
+
+  test("named default declarations do not invent public named exports", () => {
+    for (const kind of ["function", "class"]) {
+      for (const named of [false, true]) {
+        const manifest = { name: "default-census", version: "1.0.0", type: "module",
+          exports: { ".": { types: "./index.d.ts", import: "./index.js" } } };
+        const extra = named ? "\nexport { Local };" : "";
+        const root = fixture(manifest, {
+          "index.js": `export default ${kind} Local${kind === "function" ? "()" : ""} {}${extra}`,
+          "index.d.ts": `export default ${kind} Local${kind === "function" ? "(): void;" : " {}"}${extra}`
+        });
+        const record = resolvePackageArtifacts({ importer: join(root, "consumer.mjs"),
+          specifier: manifest.name, packageRoot: root, integrity: "sha512:test" });
+        expect(record.declarationExports).toEqual(named ? ["Local", "default"] : ["default"]);
+        expect(Object.keys(record.exports).sort()).toEqual(named ? ["Local", "default"] : ["default"]);
+      }
+    }
   });
 
   test("declaration census retains namespaces without granting an exact binding", () => {

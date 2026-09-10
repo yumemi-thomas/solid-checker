@@ -117,3 +117,9 @@ thiserror = "2"
 inherits = "dev"
 debug = 0
 incremental = false
+
+# Probe certification re-hashes executable images before/after every launch.
+# Keep those checks intact, but do not execute SHA-256's compression loop
+# unoptimized during verification. The checker itself retains debug assertions.
+[profile.verify.package.sha2]
+opt-level = 3

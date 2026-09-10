@@ -233,20 +233,39 @@ impl ClosureReplay<'_> {
         })?;
 
         for hazard in facts.module_hazards {
+            let kind = match hazard.kind {
+                ModuleHazardKind::NonliteralDynamicLoading => {
+                    ClosureHazardKind::NonliteralDynamicLoading
+                }
+                ModuleHazardKind::Eval => ClosureHazardKind::Eval,
+                ModuleHazardKind::OpaqueWasm => ClosureHazardKind::OpaqueWasm,
+                ModuleHazardKind::MutableUnboundGlobal => ClosureHazardKind::MutableUnboundGlobal,
+                // Mirrored in `syntaxHazards` in
+                // `packages/cli/scripts/artifact-resolution.mjs`. The hazard
+                // census is computed twice — here over oxc, there over the
+                // TypeScript AST — and both manifests must agree byte for
+                // byte, spans included, because they feed the closure digest.
+                // `verify_snapshot_closure` is what compares them, and
+                // `closure_difference` names the offenders.
+                ModuleHazardKind::RuntimeAccessorInstallation => {
+                    ClosureHazardKind::RuntimeAccessorInstallation
+                }
+            };
             self.hazards.push(ClosureHazard {
-                kind: match hazard.kind {
-                    ModuleHazardKind::NonliteralDynamicLoading => {
-                        ClosureHazardKind::NonliteralDynamicLoading
-                    }
-                    ModuleHazardKind::Eval => ClosureHazardKind::Eval,
-                    ModuleHazardKind::OpaqueWasm => ClosureHazardKind::OpaqueWasm,
-                    ModuleHazardKind::MutableUnboundGlobal => {
-                        ClosureHazardKind::MutableUnboundGlobal
-                    }
-                },
+                kind,
                 source: format!("./{path}:{}-{}", hazard.span.start, hazard.span.end),
                 affected_exports: Vec::new(),
-                affected_domains: all_domains(),
+                // An installed accessor makes *reads* through the receiver
+                // invisible and says nothing about any other domain: it
+                // creates no owner, returns nothing, invokes no callback.
+                // Widening it to every domain would withdraw the `creates`
+                // and `returns` closures this census already proves, which is
+                // a regression, not caution.
+                affected_domains: if kind == ClosureHazardKind::RuntimeAccessorInstallation {
+                    vec![AffectedClaimDomain::Reads]
+                } else {
+                    all_domains()
+                },
             });
         }
 

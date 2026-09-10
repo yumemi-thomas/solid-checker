@@ -13,7 +13,7 @@
             "sha256": "b7d3c9c3c5d7902806837473604ed13db1667be92712fa629ac9560ee4b2acf8"
           },
           "exports": {
-            "mount": "summary-5f5b804e83be5aede7d0abaf2dc45cc361fe1b11fc38c0a3ccf72ca6ebf6f4dc"
+            "mount": "summary-3a8858d7c65936bb057bc7846cfefb18019d594f9f4c0cb8d7919985be9b9c30"
           },
           "resolution": {
             "runtimeBranch": "/exports/./import",
@@ -35,7 +35,7 @@
             "sha256": "d4017bacdc9bd88d1c0a94298b138d4bcb0c28953d980413c380279ac1a3a216"
           },
           "exports": {
-            "render": "summary-5f5b804e83be5aede7d0abaf2dc45cc361fe1b11fc38c0a3ccf72ca6ebf6f4dc"
+            "render": "summary-3a8858d7c65936bb057bc7846cfefb18019d594f9f4c0cb8d7919985be9b9c30"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1types~1*",
@@ -59,7 +59,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-5f5b804e83be5aede7d0abaf2dc45cc361fe1b11fc38c0a3ccf72ca6ebf6f4dc": {
+    "summary-3a8858d7c65936bb057bc7846cfefb18019d594f9f4c0cb8d7919985be9b9c30": {
       "call": {
         "callbacks": [
           {
@@ -71,6 +71,7 @@
           }
         ],
         "closed": [
+          "reads",
           "creates",
           "returns"
         ],
@@ -95,9 +96,11 @@
           }
         ],
         "proposedClosures": [
+          "reads",
           "creates",
           "returns"
         ],
+        "reads": [],
         "returns": []
       },
       "shape": "callable"

@@ -3205,10 +3205,18 @@ mod tests {
             "createContext",
             CallClaimDomain::Creates
         ));
+        // `reads` is admitted for this export as of 2026-09-10: its audited
+        // summary closes the domain empty, and `semantic-model.md` § reads
+        // [Decision 2026-09-10] scopes the domain to a proxy the export owns,
+        // so a caller's props access is not a counter-example to the closure.
+        assert!(primitive_performs_no_operation(
+            &signals,
+            "createTrackedEffect",
+            CallClaimDomain::Reads
+        ));
         // A domain no dialect admits yet.
         for domain in [
             CallClaimDomain::Callbacks,
-            CallClaimDomain::Reads,
             CallClaimDomain::Writes,
             CallClaimDomain::Invalidates,
             CallClaimDomain::Returns,
@@ -3219,6 +3227,16 @@ mod tests {
                 &signals,
                 "createTrackedEffect",
                 domain
+            ));
+        }
+        // A scheduling primitive answers `reads` too: § reads
+        // [Decision 2026-09-10] attributes the reads of computations its drain
+        // runs to whoever registered them.
+        for export in ["action", "flush"] {
+            assert!(primitive_performs_no_operation(
+                &signals,
+                export,
+                CallClaimDomain::Reads
             ));
         }
         // Empty and unaudited inputs.

@@ -13,10 +13,10 @@
             "sha256": "3c93f1c990c252cd52055e38426deb7565785ed08b16f5c2a9fa4bc88f943815"
           },
           "exports": {
-            "plainValue": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
-            "renamedArrow": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018",
-            "runtimeArrow": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018",
-            "runtimeNamespace": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+            "plainValue": "summary-d0ecc97e0894e16992490fbc1fe8cb56b99877b8864e856948f4adbb1fc29e3b",
+            "renamedArrow": "summary-5bfebad88b873e4b4f425a53c98b50ca7c6234ec978bdb2cd8592d1629fafeb2",
+            "runtimeArrow": "summary-5bfebad88b873e4b4f425a53c98b50ca7c6234ec978bdb2cd8592d1629fafeb2",
+            "runtimeNamespace": "summary-d0ecc97e0894e16992490fbc1fe8cb56b99877b8864e856948f4adbb1fc29e3b"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -84,7 +84,11 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+    "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b": {
+      "call": {},
+      "shape": "unknown"
+    },
+    "summary-5bfebad88b873e4b4f425a53c98b50ca7c6234ec978bdb2cd8592d1629fafeb2": {
       "call": {
         "callbacks": [
           {
@@ -94,6 +98,9 @@
             },
             "operation": "callback-0"
           }
+        ],
+        "closed": [
+          "reads"
         ],
         "operations": [
           {
@@ -113,16 +120,24 @@
               "event": "call"
             }
           }
-        ]
+        ],
+        "proposedClosures": [
+          "reads"
+        ],
+        "reads": []
       },
       "shape": "callable"
     },
-    "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b": {
-      "call": {},
-      "shape": "unknown"
-    },
-    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
-      "call": {},
+    "summary-d0ecc97e0894e16992490fbc1fe8cb56b99877b8864e856948f4adbb1fc29e3b": {
+      "call": {
+        "closed": [
+          "reads"
+        ],
+        "proposedClosures": [
+          "reads"
+        ],
+        "reads": []
+      },
       "shape": "plain"
     }
   }

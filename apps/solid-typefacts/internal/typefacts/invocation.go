@@ -261,6 +261,9 @@ type ExportValueTranscript struct {
 	// every one of them could be described.
 	CallSignatures []SelectedSignature             `cbor:"callSignatures,omitempty" json:"callSignatures,omitempty"`
 	Implementation *ExportImplementationTranscript `cbor:"implementation,omitempty" json:"implementation,omitempty"`
+	// Initializer binds the runtime query to a source initializer. It does not
+	// classify the result of the imported call or authorize dependency behavior.
+	Initializer *ExportInitializerTranscript `cbor:"initializer,omitempty" json:"initializer,omitempty"`
 	// LocalDeclaration answers ExportValueDemand.LocalDeclarationLocation. It
 	// is present exactly when that field was set, and its Location is the
 	// requested location verbatim — which is why the Location alone binds
@@ -269,6 +272,32 @@ type ExportValueTranscript struct {
 	LocalDeclaration *ExportImplementationTranscript `cbor:"localDeclaration,omitempty" json:"localDeclaration,omitempty"`
 	Complete         bool                            `cbor:"complete,omitempty" json:"complete,omitempty"`
 	OpenReasons      []string                        `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+}
+
+type ExportInitializerBinding struct {
+	Declaration ResolvedDeclaration `cbor:"declaration" json:"declaration"`
+	Location    Location            `cbor:"location" json:"location"`
+	Initializer Location            `cbor:"initializer" json:"initializer"`
+}
+
+type ExportInitializerObjectArgument struct {
+	Index    int      `cbor:"index" json:"index"`
+	Location Location `cbor:"location" json:"location"`
+}
+
+// An exact, positively unwritten variable chain ending in an ordinary imported
+// call. Only direct object-literal arguments are listed. Their properties and
+// the call's result remain unclassified. Absence grants no premise.
+type ExportInitializerTranscript struct {
+	Location        Location                          `cbor:"location" json:"location"`
+	Target          SymbolID                          `cbor:"target" json:"target"`
+	Bindings        []ExportInitializerBinding        `cbor:"bindings" json:"bindings"`
+	Call            Location                          `cbor:"call" json:"call"`
+	Callee          Location                          `cbor:"callee" json:"callee"`
+	Declaration     ResolvedDeclaration               `cbor:"declaration" json:"declaration"`
+	Specifier       string                            `cbor:"specifier" json:"specifier"`
+	ExportName      string                            `cbor:"exportName" json:"exportName"`
+	ObjectArguments []ExportInitializerObjectArgument `cbor:"objectArguments" json:"objectArguments"`
 }
 
 // ImplementationCompletionForm classifies, from syntax alone, what an
@@ -289,6 +318,56 @@ const (
 	CompletionUnclassified   ImplementationCompletionForm = "unclassified"
 )
 
+// UnwrittenParameterBinding is affirmative source identity, not type evidence.
+// Protocol 39: a plain parameter without rest/default syntax, duplicate names,
+// writes, arguments or eval references retains the caller's exact slot value.
+type UnwrittenParameterBinding struct {
+	ParameterIndex int      `cbor:"parameterIndex" json:"parameterIndex"`
+	Declaration    Location `cbor:"declaration" json:"declaration"`
+}
+
+// OriginalHelperRead is a one-hop, possible synchronous member read. The
+// caller's plain argument still carries its original input at Call; the exact
+// stable local helper reads that slot without replacing it. It proves neither
+// guaranteed execution nor member shape, and never describes later uses.
+type OriginalHelperRead struct {
+	ParameterIndex       int      `cbor:"parameterIndex" json:"parameterIndex"`
+	Declaration          Location `cbor:"declaration" json:"declaration"`
+	Call                 Location `cbor:"call" json:"call"`
+	ArgumentIndex        int      `cbor:"argumentIndex" json:"argumentIndex"`
+	Argument             Location `cbor:"argument" json:"argument"`
+	Helper               Location `cbor:"helper" json:"helper"`
+	HelperImplementation Location `cbor:"helperImplementation" json:"helperImplementation"`
+	HelperParameter      Location `cbor:"helperParameter" json:"helperParameter"`
+	Read                 Location `cbor:"read" json:"read"`
+	Property             string   `cbor:"property" json:"property"`
+}
+
+// InitialParameterRead binds a direct property use in a write-free opening
+// declaration prefix. It proves the caller's root at this use, not later uses
+// or a property's runtime shape. Absence is not a negative origin fact.
+// FirstIterationOnly restricts a supported loop-body use to its first entry;
+// it is not a guarantee that this use executes or retains origin on later entries.
+// Positional marks a row established by order alone (ADR 0069): the read
+// precedes every store this body performs, with no iteration statement
+// enclosing both. It is the caller's value at that exact use, and only a
+// consumer that binds this use to its own operation may take it.
+type InitialParameterRead struct {
+	ParameterIndex     int      `cbor:"parameterIndex" json:"parameterIndex"`
+	Declaration        Location `cbor:"declaration" json:"declaration"`
+	Use                Location `cbor:"use" json:"use"`
+	FirstIterationOnly bool     `cbor:"firstIterationOnly,omitempty" json:"firstIterationOnly,omitempty"`
+	Positional         bool     `cbor:"positional,omitempty" json:"positional,omitempty"`
+	// UndefinedDefault limits origin to calls whose original argument is not
+	// undefined. It is distinct from an unwritten or positional binding.
+	UndefinedDefault *UndefinedParameterDefault `cbor:"undefinedDefault,omitempty" json:"undefinedDefault,omitempty"`
+}
+
+type UndefinedParameterDefault struct {
+	Guard      Location `cbor:"guard" json:"guard"`
+	Assignment Location `cbor:"assignment" json:"assignment"`
+}
+
 type ExportImplementationTranscript struct {
 	Location    Location             `cbor:"location" json:"location"`
 	QueryName   string               `cbor:"queryName,omitempty" json:"queryName,omitempty"`
@@ -305,9 +384,12 @@ type ExportImplementationTranscript struct {
 	// protocol 20). Absent when the body is Declaration's own. Never stated
 	// unless the alias is exact: an identifier initializer, the binding never
 	// assigned in its file, and the aliased function never assigned in its own.
-	ImplementationOf *ResolvedDeclaration `cbor:"implementationOf,omitempty" json:"implementationOf,omitempty"`
-	ParameterUses    []ParameterUse       `cbor:"parameterUses,omitempty" json:"parameterUses,omitempty"`
-	ControlFlow      *ControlFlowCensus   `cbor:"controlFlow,omitempty" json:"controlFlow,omitempty"`
+	ImplementationOf      *ResolvedDeclaration        `cbor:"implementationOf,omitempty" json:"implementationOf,omitempty"`
+	ParameterUses         []ParameterUse              `cbor:"parameterUses,omitempty" json:"parameterUses,omitempty"`
+	UnwrittenParameters   []UnwrittenParameterBinding `cbor:"unwrittenParameters,omitempty" json:"unwrittenParameters,omitempty"`
+	InitialParameterReads []InitialParameterRead      `cbor:"initialParameterReads,omitempty" json:"initialParameterReads,omitempty"`
+	OriginalHelperReads   []OriginalHelperRead        `cbor:"originalHelperReads,omitempty" json:"originalHelperReads,omitempty"`
+	ControlFlow           *ControlFlowCensus          `cbor:"controlFlow,omitempty" json:"controlFlow,omitempty"`
 	// CallableReturns records the return-carry edges owned by each nested
 	// callable in this implementation. The top-level implementation's return
 	// sites remain in ControlFlow; these rows let a consumer compose a returned
@@ -382,7 +464,9 @@ type ExportImplementationTranscript struct {
 	// is **provably a primitive**: the checker's return type for the
 	// declaration, on the very program this census was classified over — the
 	// premise twin when the census was premised — is a union of primitive
-	// types alone (ADR 0045, handshake protocol 29).
+	// types alone (ADR 0045, handshake protocol 29). An explicit never type
+	// also states this fact: no normal completion can hand back an object
+	// (ADR 0051, handshake protocol 35). Missing type information cannot.
 	//
 	// A coercion of that value therefore reaches no `Symbol.toPrimitive`,
 	// `valueOf` or `toString` of anyone's. The completion form is covered by
@@ -708,6 +792,18 @@ type UncensusedInvokingForm struct {
 	// premise the consumer demanded that callee's census under. Absent when
 	// some operand is neither, which is every case no ADR has reviewed.
 	CoercionPremise *CoercionPremise `cbor:"coercionPremise,omitempty" json:"coercionPremise,omitempty"`
+	// LocalLiteralResult names a call whose every normal completion returns
+	// the same unwritten local data-only literal binding. This is a source
+	// identity fact, not a structural return-type assertion. Its callee must
+	// still receive a complete execution census before a consumer uses it.
+	LocalLiteralResult *LocalLiteralResultPremise `cbor:"localLiteralResult,omitempty" json:"localLiteralResult,omitempty"`
+}
+
+type LocalLiteralResultPremise struct {
+	Call       Location   `cbor:"call" json:"call"`
+	Callee     Location   `cbor:"callee" json:"callee"`
+	Allocation Location   `cbor:"allocation" json:"allocation"`
+	Returns    []Location `cbor:"returns" json:"returns"`
 }
 
 type ParameterValueSource struct {

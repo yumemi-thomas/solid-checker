@@ -13,9 +13,9 @@
             "sha256": "480ccc4769c9928bdb6b9f0e6684082debfe415b0f1ddd21b1511dc4618ca7f8"
           },
           "exports": {
-            "Isolated": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "Isolated": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
             "Panel": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "Render": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "Render": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
             "Root": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "UseChannel": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
           },
@@ -41,6 +41,21 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
+    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
     "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
       "call": {},
       "shape": "callable"

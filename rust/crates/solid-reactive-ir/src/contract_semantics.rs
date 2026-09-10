@@ -302,8 +302,16 @@ pub struct ExportIdentity {
     pub declarations: ExportTargetIdentity,
 }
 
+/// An explicit proposal about evaluation of the selected runtime module.
+/// Absence is not a claim; only authenticated proof can make this knowledge.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ModuleInitializationClaim {
+    Inert,
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ArtifactCase {
+    pub initialization: Option<ModuleInitializationClaim>,
     pub id: String,
     pub entrypoint: String,
     pub resolution_trace: Vec<ResolutionStep>,
@@ -777,7 +785,13 @@ impl ClaimDomain {
     /// candidates for the other domains therefore stay in the proposal plan
     /// sidecar as measurement, and this list grows one domain at a time as
     /// each census lands.
-    pub const PROPOSABLE: [Self; 2] = [Self::Creates, Self::Returns];
+    /// `Reads` is admitted (2026-09-10) on a premise it does not obtain
+    /// itself: a `runtime-accessor-installation` closure hazard withdraws the
+    /// domain for a case whose reads the census structurally cannot refuse.
+    /// That hazard is computed twice, over two ASTs, and both must agree —
+    /// see § 10 of
+    /// `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`.
+    pub const PROPOSABLE: [Self; 3] = [Self::Creates, Self::Returns, Self::Reads];
 
     /// Whether a document may propose this domain for closure proof.
     #[must_use]

@@ -73,6 +73,23 @@ pub(crate) fn synthesize(
         // nothing, so its candidate stays withheld for want of a recipe. See
         // `reviewed_observation`.
         .filter(|record| reviewed_observation(&record.domain).is_some())
+        // The reviewed returns observation detects a value against an EMPTY
+        // enumeration. Applying it to a parameter identity would falsify the
+        // very value the contract permits. Nonempty enumerations require a
+        // claim-addressed recipe until their observation is reviewed here.
+        .filter(|record| {
+            record.domain != "returns"
+                || plan.selected_candidate.artifact_cases().iter().any(|case| {
+                    case.id.as_str() == record.artifact_case
+                        && case.exports.get(&record.export).is_some_and(|export| {
+                            export
+                                .operation_claim(
+                                    solid_reactive_ir::contract_semantics::ClaimDomain::Returns,
+                                )
+                                .is_some_and(|claim| claim.items().is_empty())
+                        })
+                })
+        })
         .filter_map(|record| {
             evidence
                 .call_signatures(&record.export)

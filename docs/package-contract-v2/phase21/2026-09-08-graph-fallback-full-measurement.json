@@ -1,0 +1,243 @@
+{
+ "format": "entrypoint-recovery-measurement",
+ "authoritative": false,
+ "comparison": "published certification status, certified-entrypoint count, root status and refusal stage per probe; wall timings are deliberately excluded",
+ "base": {
+  "path": "rust/target/ecosystem-investigations/2026-09-08-initial-reads-full.json",
+  "digest": "sha256:34cdf6be8d8e3f175cd37f8151848e449ba3dcff5bc8fadc983f378ba847d65c",
+  "finishedAt": "2026-09-07T15:57:05.462Z",
+  "counts": {
+   "complete": 318,
+   "partial": 61,
+   "refused": 30,
+   "notAdvanced": 9,
+   "certifiedEntrypoints": 1123
+  }
+ },
+ "after": {
+  "path": "rust/target/ecosystem-investigations/2026-09-08-graph-fallback-full-t600.json",
+  "digest": "sha256:a612c7c435d98be2ee5f3974b6ac63208e61cc759c4841576c08566b561987f4",
+  "finishedAt": "2026-09-07T23:46:52.724Z",
+  "durationMs": 752583,
+  "timeoutSeconds": 600,
+  "counts": {
+   "complete": 324,
+   "partial": 61,
+   "refused": 23,
+   "certifiedEntrypoints": 640
+  }
+ },
+ "binary": {
+  "path": "rust/target/verify/solid-checker-rust",
+  "digest": "sha256:17b08405401f742b5e8769336be594d91862d0e0ba5637bcf4472f1c09576a97",
+  "producer": "sha256:6a1aff3e6fb04e31acbd5243fd55a44a5a79cfe3a15166b86ba3909b12400290"
+ },
+ "changedRows": [
+  {
+   "probeId": "@kobalte/core@0.13.13|solid1|only",
+   "before": {
+    "status": "certified",
+    "certifiedEntrypoints": 508,
+    "rootCertified": true,
+    "stage": "catalog-publication",
+    "reason": ""
+   },
+   "after": {
+    "status": "infrastructure-failure",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "timeout",
+    "reason": "policy-2 certification attempt timed out"
+   }
+  },
+  {
+   "probeId": "@kobalte/utils@0.9.2|solid1|only",
+   "before": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition",
+    "reason": "solid-checker-rust: policy-2 case-set finalization failed: Type Facts certification failed during live export-value verification: Type Facts demand sha256:20da6f010f7f1bbd0cedc8b0a245aab46f4029f72f40e1c31f3c1bed2febd41f is locally open: recursive-value-shape (artifact-case:4428aaa5ded09533d107ca061ddcc9932d833d8b6c66b6ece2e613b63b9178b9:scrollIntoViewport): parameter-rooted read lacks positive ori"
+   },
+   "after": {
+    "status": "certified",
+    "certifiedEntrypoints": 19,
+    "rootCertified": false,
+    "stage": "catalog-publication",
+    "reason": ""
+   }
+  },
+  {
+   "probeId": "@solid-primitives/i18n@2.2.1|solid1|only",
+   "before": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition",
+    "reason": "solid-checker-rust: policy-2 proof finalization failed: Type Facts certification failed during live export-value verification: Type Facts demand sha256:e51f0404ae8a22dae88f46a1a850fec6999e2afaf1eb1e014cbb39047f70e2f1 is locally open: recursive-value-shape (artifact-case:dca9742a5f4e04c13495063a568e6e073b5ebd0a3c7bcb48a922b17cc7df8f8b:resolveTemplate): parameter-rooted read lacks positive original-"
+   },
+   "after": {
+    "status": "certified",
+    "certifiedEntrypoints": 1,
+    "rootCertified": true,
+    "stage": "catalog-publication",
+    "reason": ""
+   }
+  },
+  {
+   "probeId": "@solid-primitives/i18n@3.0.0-next.4|solid2|floor",
+   "before": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition",
+    "reason": "solid-checker-rust: policy-2 proof finalization failed: Type Facts certification failed during live export-value verification: Type Facts demand sha256:ef85bcfa40b476227a4a459c06654a58dd632df43b271aa996965a316cfd6848 is locally open: recursive-value-shape (artifact-case:803ac1238674967e1f1a4dce70cfb66747b04c8813923fb937bf9f96298fe410:resolveTemplate): parameter-rooted read lacks positive original-"
+   },
+   "after": {
+    "status": "certified",
+    "certifiedEntrypoints": 1,
+    "rootCertified": true,
+    "stage": "catalog-publication",
+    "reason": ""
+   }
+  },
+  {
+   "probeId": "@solid-primitives/i18n@3.0.0-next.4|solid2|head",
+   "before": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition",
+    "reason": "solid-checker-rust: policy-2 proof finalization failed: Type Facts certification failed during live export-value verification: Type Facts demand sha256:ef85bcfa40b476227a4a459c06654a58dd632df43b271aa996965a316cfd6848 is locally open: recursive-value-shape (artifact-case:803ac1238674967e1f1a4dce70cfb66747b04c8813923fb937bf9f96298fe410:resolveTemplate): parameter-rooted read lacks positive original-"
+   },
+   "after": {
+    "status": "certified",
+    "certifiedEntrypoints": 1,
+    "rootCertified": true,
+    "stage": "catalog-publication",
+    "reason": ""
+   }
+  },
+  {
+   "probeId": "@solid-primitives/intersection-observer@3.0.0-next.3|solid2|floor",
+   "before": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition",
+    "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:ca909cc50e1d5f0eaae858c20000786d5d5657482916275c3bb6d1ebad114945: Type Facts certification failed for graph node @solid-primitives/intersection-observer@3.0.0-next.3 (.) during live graph export-value verification: Type Facts demand sha256:233365f2e097c9cc2ddc6459d9b3c191b8d9fac9c537"
+   },
+   "after": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition",
+    "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:77361b0dd31dd900910dab05da0d67f79cfdc8248a3cff74e8dbd4fab08957aa: Type Facts certification failed for graph node @solid-primitives/intersection-observer@3.0.0-next.3 (.) during live graph export-value verification: Type Facts demand sha256:233365f2e097c9cc2ddc6459d9b3c191b8d9fac9c537"
+   }
+  },
+  {
+   "probeId": "@solid-primitives/intersection-observer@3.0.0-next.3|solid2|head",
+   "before": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition",
+    "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:c4caca950168a5a82d5094df97368317000bd45e66d5e3efc1016f21eab46acb: Type Facts certification failed for graph node @solid-primitives/intersection-observer@3.0.0-next.3 (.) during live graph export-value verification: Type Facts demand sha256:0bf4d7694806702a47c7c0e2d8da70b8b49d394a2a5a"
+   },
+   "after": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition",
+    "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:b59b03a705456e108767c484bfcf351fd5ef649ea208bee22f7f56cc6f7267b1: Type Facts certification failed for graph node @solid-primitives/intersection-observer@3.0.0-next.3 (.) during live graph export-value verification: Type Facts demand sha256:0bf4d7694806702a47c7c0e2d8da70b8b49d394a2a5a"
+   }
+  },
+  {
+   "probeId": "@solid-primitives/marker@0.2.2|solid1|only",
+   "before": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition",
+    "reason": "solid-checker-rust: policy-2 proof finalization failed: Type Facts certification failed during live export-value verification: Type Facts demand sha256:f906c64a1f7085bdf7a98e89c155b19c9f59228a3d670ee22d0edd6826c9fd91 is locally open: recursive-value-shape (artifact-case:cd5737525874e07db7a87ac2e43e5b55724806c1c185c88cdb2ab7086fbf156c:makeSearchRegex): parameter-rooted read lacks positive original-"
+   },
+   "after": {
+    "status": "certified",
+    "certifiedEntrypoints": 1,
+    "rootCertified": true,
+    "stage": "catalog-publication",
+    "reason": ""
+   }
+  },
+  {
+   "probeId": "@solid-primitives/marker@2.0.0-next.2|solid2|floor",
+   "before": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition",
+    "reason": "solid-checker-rust: policy-2 proof finalization failed: Type Facts certification failed during live export-value verification: Type Facts demand sha256:4803fd191e7c0174bd61c834c4cc3e0182c8ee48a923cec5efa928b3b36fada9 is locally open: recursive-value-shape (artifact-case:1caee62d77fded5682bedbb2c6a3632ef53820d555731fabfed1374f68df37ac:makeSearchRegex): parameter-rooted read lacks positive original-"
+   },
+   "after": {
+    "status": "certified",
+    "certifiedEntrypoints": 1,
+    "rootCertified": true,
+    "stage": "catalog-publication",
+    "reason": ""
+   }
+  },
+  {
+   "probeId": "@solid-primitives/marker@2.0.0-next.2|solid2|head",
+   "before": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition",
+    "reason": "solid-checker-rust: policy-2 proof finalization failed: Type Facts certification failed during live export-value verification: Type Facts demand sha256:4803fd191e7c0174bd61c834c4cc3e0182c8ee48a923cec5efa928b3b36fada9 is locally open: recursive-value-shape (artifact-case:1caee62d77fded5682bedbb2c6a3632ef53820d555731fabfed1374f68df37ac:makeSearchRegex): parameter-rooted read lacks positive original-"
+   },
+   "after": {
+    "status": "certified",
+    "certifiedEntrypoints": 1,
+    "rootCertified": true,
+    "stage": "catalog-publication",
+    "reason": ""
+   }
+  },
+  {
+   "probeId": "@tanstack/solid-db@0.2.40|solid1|only",
+   "before": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition",
+    "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:2772e7de45b6e7b128d395b3ad670d3833c2aef03001508f9b8fcaa15274da7b: Type Facts certification failed for graph node fractional-indexing@3.4.0 (.) during live graph export-value verification: Type Facts demand sha256:58f876c6629a299943376a972f5c06af588b813bc4a155390bfe65a2fabdbcb6 is loc"
+   },
+   "after": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition",
+    "reason": "solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:aac38d7bca7b45afaf12bc5a0b5d96c0fbbe55c001cb0c55ba9cd4d572398ced: Type Facts certification failed for graph node fractional-indexing@3.4.0 (.) during live graph export-value verification: Type Facts demand sha256:58f876c6629a299943376a972f5c06af588b813bc4a155390bfe65a2fabdbcb6 is loc"
+   }
+  }
+ ],
+ "preservedRowCount": 407,
+ "timeoutBoundaryControl": {
+  "probeId": "@kobalte/core@0.13.13|solid1|only",
+  "why": "the full run reports this row as infrastructure-failure/timeout at 600.014s against a 600s budget; the baseline took 595.496s. Rerun alone on a quiet host with a 1200s budget.",
+  "path": "rust/target/ecosystem-investigations/2026-09-08-kobalte-core-fallback.json",
+  "digest": "sha256:6ccd33ccd352d6d9a8ed99d4fb29e81eca4e311a5b76985bf3e38e551d0f6c67",
+  "finishedAt": "2026-09-07T23:54:28.127Z",
+  "timeoutSeconds": 1200,
+  "certificationDurationMs": 378394,
+  "status": "certified",
+  "stage": "catalog-publication",
+  "coverage": {
+   "declaredEntrypoints": 3,
+   "declaredWildcard": true,
+   "certifiedEntrypoints": 508,
+   "rootCertified": true
+  },
+  "verdict": "identical to the baseline: 508 certified entrypoints with the root. The full-run timeout was host contention, not a certification change."
+ }
+}

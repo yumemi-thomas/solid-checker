@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
@@ -12,11 +12,19 @@ function writeFakeWorker(directory) {
   const path = join(directory, "fake-worker.mjs");
   writeFileSync(path, `
 import { createInterface } from "node:readline";
+import { spawn } from "node:child_process";
+import { writeFileSync } from "node:fs";
 const write = process.stdout.write.bind(process.stdout);
 let served = 0;
 createInterface({ input: process.stdin }).on("line", async line => {
   const request = JSON.parse(line);
   served += 1;
+  if (request.kind.startsWith("descendant-")) {
+    const child = spawn(process.execPath, ["-e", "setTimeout(() => process.exit(0), 3000)"], { stdio: "inherit" });
+    writeFileSync(request.args[0], String(child.pid));
+    if (request.kind === "descendant-crash") process.exit(3);
+    await new Promise(resolve => setTimeout(resolve, 5000));
+  }
   if (request.kind === "crash") process.exit(3);
   if (request.kind === "sleep") await new Promise(resolve => setTimeout(resolve, Number(request.args[0])));
   write(JSON.stringify({
@@ -82,6 +90,35 @@ test("a timed-out request kills its worker and resolves like a killed CLI child;
     assert.equal(slow.status, null);
     const after = JSON.parse((await pool.run({ kind: "echo", args: [] })).stdout).pid;
     assert.notEqual(before, after, "the killed worker was replaced");
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test.each(["descendant-timeout", "descendant-crash", "descendant-memory"])("%s terminates inherited-pipe descendants", async kind => {
+  if (process.platform === "win32") return;
+  const directory = mkdtempSync(join(tmpdir(), "solid-checker-worker-pool-"));
+  const pool = createCliWorkerPool({
+    maxWorkers: 1,
+    workerScript: writeFakeWorker(directory),
+    supervise: kind === "descendant-memory" ? child => {
+      let exceeded = false;
+      const timer = setTimeout(() => { exceeded = true; child.kill("SIGKILL"); }, 500);
+      return { stop: () => clearTimeout(timer), exceeded: () => exceeded, marker: () => "" };
+    } : null
+  });
+  try {
+    await pool.run({ kind: "echo", args: [] });
+    const marker = join(directory, "descendant.pid");
+    const start = performance.now();
+    const result = await pool.run({ kind, args: [marker], timeoutMs: kind === "descendant-memory" ? undefined : 500 });
+    assert.ok(existsSync(marker), "the worker actually spawned its descendant");
+    assert.ok(performance.now() - start < 2500, "settled before the descendant's independent three-second lifetime");
+    assert.equal(result.timedOut, kind === "descendant-timeout");
+    assert.equal(result.memoryExceeded, kind === "descendant-memory");
+    assert.equal(result.status, kind === "descendant-crash" ? 3 : null);
+    assert.equal((await pool.run({ kind: "echo", args: [] })).status, 0);
   } finally {
     await pool.close();
     rmSync(directory, { recursive: true, force: true });

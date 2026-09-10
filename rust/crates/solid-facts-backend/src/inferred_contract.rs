@@ -86,15 +86,27 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
             // measurement only — publishing a closure no census can decide
             // would refuse the row instead of proving anything.
             //
-            // `returns` republishes the *empty* closure only (ADR 0035): a
-            // described return weakened into a partial positive claim is not a
-            // candidate this census decides, and republishing it would propose
-            // an enumeration the census refuses.
+            // The returns census decides empty completion (ADR 0035) and a
+            // single whole-parameter identity. Other described return shapes
+            // remain partial; their enumeration has no complete census.
             let proposable = paths
                 .iter()
                 .filter_map(|path| match path {
                     ClaimPath::Call(domain) if domain.is_proposable() => Some(*domain),
                     _ => None,
+                })
+                // A `reads` closure over a module that installs a property
+                // accessor at run time is a claim the census structurally
+                // cannot refuse: TypeScript types a `Proxy` as its target and
+                // a run-time descriptor changes no declared type, so the read
+                // records no form. The hazard is the only place the premise is
+                // still visible, and it is a fact about the *closure*, so it
+                // withdraws the proposal for every export of the case — see
+                // `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
+                // § 6-§ 9.
+                .filter(|domain| {
+                    *domain != solid_reactive_ir::contract_semantics::ClaimDomain::Reads
+                        || !resolved.closure.installs_runtime_accessor()
                 })
                 .filter(|domain| {
                     *domain != solid_reactive_ir::contract_semantics::ClaimDomain::Returns
@@ -102,7 +114,13 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                             .operation_claim(
                                 solid_reactive_ir::contract_semantics::ClaimDomain::Returns,
                             )
-                            .is_some_and(|claim| claim.items().is_empty())
+                            .is_some_and(|claim| {
+                                claim.items().is_empty()
+                                    || matches!(claim.items(), [id] if export.operation(&id.0).is_some_and(|operation| {
+                                        operation.kind == OperationKind::Return
+                                            && matches!(&operation.output, Some(ValueShape::Parameter { path, .. }) if path.is_empty())
+                                    }))
+                            })
                 })
                 .collect::<Vec<_>>();
             export.propose_closures(proposable);

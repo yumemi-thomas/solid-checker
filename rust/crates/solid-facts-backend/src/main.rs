@@ -4671,12 +4671,23 @@ fn mark_unresolved_export_claims(
     exports: &mut BTreeMap<String, solid_reactive_ir::ContractExport>,
 ) {
     let (mechanism, names) = attribute_unresolved_obligation(index, &defect.location, exports);
+    let mut identity_only = Vec::new();
     let marked = names
         .into_iter()
         .filter(|name| {
-            exports
-                .get_mut(name)
-                .is_some_and(|summary| mark_summary_claims_unknown(summary, domains))
+            let Some(summary) = exports.get_mut(name) else {
+                return false;
+            };
+            if dispatch_independent_parameter_return(&defect.kind, summary) {
+                let mut independent_domains = domains;
+                independent_domains.returns = false;
+                if mark_summary_claims_unknown(summary, independent_domains) {
+                    identity_only.push(name.clone());
+                }
+                false
+            } else {
+                mark_summary_claims_unknown(summary, domains)
+            }
         })
         .collect::<Vec<_>>();
     report_unknown_claim_attribution(
@@ -4687,6 +4698,93 @@ fn mark_unresolved_export_claims(
         domains,
         &marked,
     );
+    if !identity_only.is_empty() {
+        let mut independent_domains = domains;
+        independent_domains.returns = false;
+        report_unknown_claim_attribution(
+            defect.kind.variant_name(),
+            &defect.analysis_context,
+            &defect.location,
+            mechanism,
+            independent_domains,
+            &identity_only,
+        );
+    }
+}
+
+fn dispatch_independent_parameter_return(
+    kind: &solid_reactive_ir::StaticDefectKind,
+    summary: &solid_reactive_ir::ContractExport,
+) -> bool {
+    // A parameter identity describes no properties of the returned value.
+    // Unlike a structured return, it cannot silently omit a reactive member
+    // supplied by unresolved dispatch. Keep the positive identity proposal;
+    // native certification still binds all return sites to the original input.
+    // This grants neither a returns closure nor a reactive-read claim, and
+    // missing contracts or unresolved structured returns still erase it.
+    matches!(
+        kind,
+        solid_reactive_ir::StaticDefectKind::ReactiveDispatchUnresolved { .. }
+    ) && summary
+        .returns
+        .known()
+        .and_then(Option::as_ref)
+        .is_some_and(|returned| {
+            returned.kind == "argument"
+                && returned.parameter.is_some()
+                && returned.elements.is_empty()
+                && returned.properties.is_empty()
+        })
+}
+
+#[cfg(test)]
+mod dispatch_identity_tests {
+    use super::*;
+    use solid_reactive_ir::{ContractClaim, ContractExport, ContractReturn, StaticDefectKind};
+
+    #[test]
+    fn dispatch_identity_preserves_only_a_positive_parameter_relation() {
+        let dispatch = StaticDefectKind::ReactiveDispatchUnresolved {
+            callee: "unresolved".into(),
+            member: None,
+        };
+        let mut summary = ContractExport {
+            kind: "function".into(),
+            returns: ContractClaim::Known(Some(ContractReturn {
+                kind: "argument".into(),
+                parameter: Some(0),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        assert!(dispatch_independent_parameter_return(&dispatch, &summary));
+        let structured = StaticDefectKind::StructuredReturnUnresolved {
+            function: "identity".into(),
+            property: "value".into(),
+            reason: "missing binding".into(),
+        };
+        assert!(!dispatch_independent_parameter_return(
+            &structured,
+            &summary
+        ));
+        for kind in ["object", "tuple", "accessor", "callback-result"] {
+            summary.returns = ContractClaim::Known(Some(ContractReturn {
+                kind: kind.into(),
+                parameter: Some(0),
+                ..Default::default()
+            }));
+            assert!(!dispatch_independent_parameter_return(&dispatch, &summary));
+        }
+        summary.returns = ContractClaim::Known(Some(ContractReturn {
+            kind: "argument".into(),
+            ..Default::default()
+        }));
+        assert!(!dispatch_independent_parameter_return(&dispatch, &summary));
+        summary.returns = ContractClaim::Known(None);
+        assert!(!dispatch_independent_parameter_return(&dispatch, &summary));
+        summary.returns = ContractClaim::Open;
+        assert!(!dispatch_independent_parameter_return(&dispatch, &summary));
+    }
 }
 
 /// Machine-readable context for a locally unresolved proposal domain.
@@ -5024,6 +5122,39 @@ fn emit_package_contract(
     }
     let resolution: solid_facts_backend::ResolvedImport =
         serde_json::from_slice(&fs::read(&request.contract_resolution)?)?;
+    if !request.contract_entry_file.is_empty()
+        && (resolution.runtime.path.ends_with(".mjs") || resolution.runtime.path.ends_with(".js"))
+        && resolution.transform.is_none()
+        && request.package_name == resolution.package_name
+        && request.package_version == resolution.package_version
+    {
+        let proof = fs::read_to_string(&request.contract_entry_file)
+            .ok()
+            .and_then(|source| {
+                if let Ok(proof) = solid_facts::ast::inert_javascript_module(&source) {
+                    return Some(proof);
+                }
+                if !resolution.exports.is_empty() {
+                    return None;
+                }
+                let proof =
+                    solid_facts::ast::inert_javascript_module_with_export_all(&source).ok()?;
+                inert_external_reexports_are_closed(
+                    facts,
+                    contracts,
+                    &resolution,
+                    Path::new(&request.contract_entry_file),
+                )
+                .then_some(proof)
+            });
+        if let Some(proof) = proof {
+            let proposal =
+                solid_facts_backend::encode_inert_entrypoint_workflow(&resolution, &proof, true)?;
+            fs::write(&request.emit_contract, proposal.document)?;
+            fs::write(&request.emit_proposal_plan, proposal.plan)?;
+            return Ok(());
+        }
+    }
     // SC9 findings are proof obligations, not permission to discard every
     // independently known export. After resolving the requested entrypoint we
     // attribute each one to the narrowest claim domain it can invalidate and
@@ -5247,6 +5378,11 @@ fn emit_package_contract(
         }
     }
     let mut external_targets = BTreeSet::new();
+    for name in exports.keys() {
+        if let Some(target) = accepted_declaration_reexport_target(contracts, &resolution, name)? {
+            external_targets.insert(target);
+        }
+    }
     if !request.contract_entry_file.is_empty() {
         let entry_file = Path::new(&request.contract_entry_file).canonicalize()?;
         for name in exports.keys() {
@@ -5332,6 +5468,57 @@ fn emit_package_contract(
         );
     }
     Ok(())
+}
+
+/// A source-only export-all shape is inert only when every runtime target it
+/// evaluates has an exact dependency contract proving both inert initialization
+/// and an empty runtime surface. Relative reexports, namespace exports and
+/// unresolved children stay outside this bounded recovery path.
+fn inert_external_reexports_are_closed(
+    facts: &solid_facts::ProjectFacts,
+    contracts: &solid_reactive_ir::contract_semantics::AcceptedContractIndex,
+    resolution: &solid_facts_backend::ResolvedImport,
+    entry_file: &Path,
+) -> bool {
+    let Some(file) = facts
+        .files
+        .iter()
+        .find(|file| same_canonical_path(Path::new(file.path.as_str()), entry_file))
+    else {
+        return false;
+    };
+    let mut runtime_reexport = false;
+    for export in file.ast.module_level_exports() {
+        if export.kind != solid_facts::ast::ExportKind::All || export.type_only {
+            continue;
+        }
+        runtime_reexport = true;
+        let Some(module) = export.module.as_deref() else {
+            return false;
+        };
+        if module.starts_with('.') || module.starts_with('#') || export.namespace.is_some() {
+            return false;
+        }
+        if !resolution
+            .closure
+            .dependencies
+            .iter()
+            .any(|dependency| dependency.specifier == module)
+        {
+            return false;
+        }
+        let Ok(contract) = contracts.contract(file.path.as_str(), module) else {
+            return false;
+        };
+        let case = contract.artifact_case();
+        if case.initialization
+            != Some(solid_reactive_ir::contract_semantics::ModuleInitializationClaim::Inert)
+            || !case.exports.is_empty()
+        {
+            return false;
+        }
+    }
+    runtime_reexport
 }
 
 /// The machine-readable half of a *claim* refusal, as
@@ -5684,6 +5871,17 @@ fn contract_exports_for_entry_file(
     let mut exports = BTreeMap::new();
     for name in names {
         validate_module_export_precedence(&entry_facts.ast, &entry_file, &name)?;
+        if entry_facts
+            .ast
+            .module_level_exports()
+            .any(|export| !export.type_only && export.namespace.as_deref() == Some(name.as_str()))
+            && !entry_entities_by_name.contains_key(&name)
+        {
+            return Err(format!(
+                "emit package contract: namespace export {name:?} has no exact compiler entity"
+            )
+            .into());
+        }
         let summary = match program.contract_exports.get(&name).cloned() {
             Some(summary) => summary,
             None => accepted_reexport_summary_for_name(
@@ -5756,6 +5954,211 @@ type AcceptedReexportIdentity = (
 /// semantic owner of that surface. Keeping this adapter at emission time
 /// avoids manufacturing a local symbol while still preserving all receipt,
 /// importer, artifact-case, and export-target identity.
+/// Candidate normalization only. A local runtime export may have a direct
+/// declaration re-export without any runtime re-export. Bind that axis to the
+/// catalog's exact importer and export; native snapshot/receipt replay remains
+/// mandatory and is the authority for dependency installation selection.
+fn accepted_declaration_reexport_target(
+    contracts: &solid_reactive_ir::contract_semantics::AcceptedContractIndex,
+    resolution: &solid_facts_backend::ResolvedImport,
+    name: &str,
+) -> Result<Option<(String, String)>, Box<dyn std::error::Error>> {
+    let Some(binding) = resolution.exports.get(name) else {
+        return Ok(None);
+    };
+    declaration_reexport_target(
+        &resolution.declarations,
+        &binding.declarations,
+        name,
+        |importer, module, imported| {
+            let accepted = contracts.resolve_name(importer, module, imported).ok()?;
+            Some((
+                accepted.contract().package().clone(),
+                accepted.identity().declarations.clone(),
+            ))
+        },
+    )
+}
+
+fn declaration_reexport_target(
+    declaration: &solid_facts_backend::ResolvedFile,
+    target: &solid_facts_backend::ResolvedExportTarget,
+    name: &str,
+    lookup: impl Fn(
+        &str,
+        &str,
+        &str,
+    ) -> Option<(
+        solid_reactive_ir::contract_semantics::PackageIdentity,
+        solid_reactive_ir::contract_semantics::ExportTargetIdentity,
+    )>,
+) -> Result<Option<(String, String)>, Box<dyn std::error::Error>> {
+    let importer = &declaration.path;
+    let source = fs::read_to_string(importer)?;
+    if sha256_digest(source.as_bytes()) != declaration.digest {
+        return Ok(None);
+    }
+    let ast = solid_facts::ast::extract(importer, &source)?;
+    let mut candidates = Vec::new();
+    for export in ast
+        .module_level_exports()
+        .filter(|export| !export.type_only)
+    {
+        let Some(module) = export
+            .module
+            .as_deref()
+            .filter(|module| !module.starts_with('.'))
+        else {
+            continue;
+        };
+        for specifier in export
+            .specifiers
+            .iter()
+            .filter(|specifier| !specifier.type_only && specifier.exported == name)
+        {
+            let imported = export_specifier_local_name(&source, specifier, name);
+            let Some((package, expected)) = lookup(importer, module, imported) else {
+                continue;
+            };
+            if target.export_name != expected.export_name
+                || target.module.digest != expected.module.digest.as_str()
+            {
+                continue;
+            }
+            // The first manifest owns this target. Do not search past a nested
+            // package or accept a matching suffix from a different installation.
+            let target_path = Path::new(&target.module.path).canonicalize()?;
+            let Some(owner) = target_path.parent().and_then(|parent| {
+                parent
+                    .ancestors()
+                    .find(|directory| directory.join("package.json").is_file())
+            }) else {
+                continue;
+            };
+            let manifest_bytes = fs::read(owner.join("package.json"))?;
+            let manifest: serde_json::Value = serde_json::from_slice(&manifest_bytes)?;
+            if sha256_digest(&manifest_bytes) != package.manifest.digest.as_str()
+                || sha256_digest(&fs::read(&target_path)?) != expected.module.digest.as_str()
+                || manifest["name"].as_str() != Some(package.name.as_str())
+                || manifest["version"].as_str() != Some(package.version.as_str())
+                || owner
+                    .join(&expected.module.path)
+                    .canonicalize()
+                    .ok()
+                    .as_ref()
+                    != Some(&target_path)
+            {
+                continue;
+            }
+            candidates.push((target.module.path.clone(), target.module.digest.clone()));
+        }
+    }
+    Ok((candidates.len() == 1).then(|| candidates.remove(0)))
+}
+
+#[cfg(test)]
+mod declaration_reexport_tests {
+    use super::*;
+    use solid_facts_backend::{ResolvedExportTarget, ResolvedFile};
+    use solid_reactive_ir::contract_semantics::{
+        ArtifactIdentity, Digest, ExportTargetIdentity, PackageIdentity,
+    };
+
+    #[test]
+    fn declaration_reexport_candidate_binds_exact_import_and_artifact() {
+        let root = std::env::temp_dir().join(format!(
+            "declaration-reexport-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(root.join("dependency")).unwrap();
+        let manifest = br#"{"name":"types","version":"1.0.0"}"#;
+        let target_source = b"export declare function configure(): void;";
+        fs::write(root.join("dependency/package.json"), manifest).unwrap();
+        fs::write(root.join("dependency/setup.d.ts"), target_source).unwrap();
+        let source = b"export { configure as local } from 'types/setup';";
+        fs::write(root.join("parent.d.ts"), source).unwrap();
+        let declaration = ResolvedFile {
+            path: root.join("parent.d.ts").to_str().unwrap().into(),
+            real_path: None,
+            digest: sha256_digest(source),
+        };
+        let target = ResolvedExportTarget {
+            module: ResolvedFile {
+                path: root.join("dependency/setup.d.ts").to_str().unwrap().into(),
+                real_path: None,
+                digest: sha256_digest(target_source),
+            },
+            export_name: "configure".into(),
+        };
+        let artifact = |path: &str, bytes: &[u8]| ArtifactIdentity {
+            path: path.into(),
+            digest: Digest::parse(sha256_digest(bytes)).unwrap(),
+        };
+        let package = PackageIdentity {
+            name: "types".into(),
+            version: "1.0.0".into(),
+            integrity: "exact-test-integrity".into(),
+            manifest: artifact("./package.json", manifest),
+        };
+        let expected = ExportTargetIdentity {
+            module: artifact("./setup.d.ts", target_source),
+            export_name: "configure".into(),
+        };
+        let lookup = |importer: &str, module: &str, name: &str| {
+            (importer == declaration.path && module == "types/setup" && name == "configure")
+                .then(|| (package.clone(), expected.clone()))
+        };
+        let check = |d: &ResolvedFile, t: &ResolvedExportTarget| {
+            declaration_reexport_target(d, t, "local", lookup).unwrap()
+        };
+        assert!(check(&declaration, &target).is_some());
+        assert!(
+            declaration_reexport_target(&declaration, &target, "local", |_, _, _| None)
+                .unwrap()
+                .is_none()
+        );
+        let mut changed = target.clone();
+        changed.export_name = "other".into();
+        assert!(check(&declaration, &changed).is_none());
+        changed = target.clone();
+        changed.module.digest = sha256_digest(b"different");
+        assert!(check(&declaration, &changed).is_none());
+        fs::write(root.join("dependency/other.d.ts"), target_source).unwrap();
+        changed = target.clone();
+        changed.module.path = root.join("dependency/other.d.ts").to_str().unwrap().into();
+        assert!(check(&declaration, &changed).is_none());
+        let mut other_importer = declaration.clone();
+        other_importer.path = root.join("other.d.ts").to_str().unwrap().into();
+        fs::write(&other_importer.path, source).unwrap();
+        assert!(check(&other_importer, &target).is_none());
+        for text in [
+            "export type { configure as local } from 'types/setup';",
+            "export * from 'types/setup';",
+            "export { configure as local } from 'other/setup';",
+        ] {
+            fs::write(&declaration.path, text).unwrap();
+            let mut changed = declaration.clone();
+            changed.digest = sha256_digest(text.as_bytes());
+            assert!(check(&changed, &target).is_none());
+        }
+        fs::write(&declaration.path, source).unwrap();
+        fs::write(
+            root.join("dependency/package.json"),
+            br#"{"name":"types","version":"2.0.0"}"#,
+        )
+        .unwrap();
+        assert!(check(&declaration, &target).is_none());
+        fs::write(root.join("dependency/package.json"), manifest).unwrap();
+        fs::write(root.join("dependency/setup.d.ts"), b"changed bytes").unwrap();
+        assert!(check(&declaration, &target).is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
 fn accepted_reexport_summary_for_name(
     facts: &solid_facts::ProjectFacts,
     files_by_canonical_path: &HashMap<PathBuf, &solid_facts::FileFacts>,
@@ -6971,11 +7374,23 @@ fn entry_export_entity_indexed<'a>(
         return None;
     }
     let file = files_by_canonical_path.get(&entry_file).copied()?;
+    let consult_export_stars =
+        validate_module_export_precedence(&file.ast, &entry_file, name).ok()?;
     for export in file
         .ast
         .module_level_exports()
         .filter(|export| !export.type_only)
     {
+        if export.namespace.as_deref() == Some(name) {
+            let binding = export.namespace_binding.as_ref()?;
+            return entities_by_location
+                .get(&typefacts::Location {
+                    path: file.path.to_string().into(),
+                    start_byte: u64::from(binding.span.start),
+                    end_byte: u64::from(binding.span.end),
+                })
+                .copied();
+        }
         if let Some(specifier) = export
             .specifiers
             .iter()
@@ -7008,7 +7423,8 @@ fn entry_export_entity_indexed<'a>(
                 }
             }
         }
-        if export.kind == solid_facts::ast::ExportKind::All
+        if consult_export_stars
+            && is_bare_runtime_export_star(export)
             && let Some(module) = export.module.as_deref()
             && module.starts_with('.')
         {
@@ -7046,11 +7462,21 @@ fn entry_export_entity_with_visiting<'a>(
     // `namespace`, `declare module`, or `declare global` body binds a member
     // of that namespace object, not a name this module publishes. See
     // `AstFacts::module_level_exports`.
+    let consult_export_stars =
+        validate_module_export_precedence(&file.ast, &entry_file, name).ok()?;
     for export in file
         .ast
         .module_level_exports()
         .filter(|export| !export.type_only)
     {
+        if export.namespace.as_deref() == Some(name) {
+            let binding = export.namespace_binding.as_ref()?;
+            return facts.typescript.entities().find(|entity| {
+                entity.location.path.as_ref() == file.path.as_str()
+                    && entity.location.start_byte == u64::from(binding.span.start)
+                    && entity.location.end_byte == u64::from(binding.span.end)
+            });
+        }
         if let Some(specifier) = export
             .specifiers
             .iter()
@@ -7082,7 +7508,8 @@ fn entry_export_entity_with_visiting<'a>(
                 }
             }
         }
-        if export.kind == solid_facts::ast::ExportKind::All
+        if consult_export_stars
+            && is_bare_runtime_export_star(export)
             && let Some(module) = export.module.as_deref()
             && module.starts_with('.')
         {

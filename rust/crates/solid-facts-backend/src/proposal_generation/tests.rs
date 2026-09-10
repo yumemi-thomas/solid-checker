@@ -135,6 +135,7 @@ fn export(
 fn analysis() -> ProposalAnalysis {
     let closure = ClosureManifest::new(vec![], vec![], vec![]).unwrap();
     let mut case = ArtifactCase {
+        initialization: None,
         id: "import-case".into(),
         entrypoint: ".".into(),
         resolution_trace: vec![

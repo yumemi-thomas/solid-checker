@@ -13,8 +13,8 @@
             "sha256": "f1626624dd712243ab0b566355af7fe0d8ff899c7bd39a0322e1cca317eb90de"
           },
           "exports": {
-            "mode": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
-            "schedule": "summary-0e2e1fd6985c15d05e8af279525bc2b8a4135375e7b13d2422de5dbf30cf3407"
+            "mode": "summary-d0ecc97e0894e16992490fbc1fe8cb56b99877b8864e856948f4adbb1fc29e3b",
+            "schedule": "summary-717a197e69ca5c6079c66ef9dad3b108ec84225c12020c56a465cc88de548079"
           },
           "resolution": {
             "runtimeBranch": "/exports/./node/import",
@@ -32,8 +32,8 @@
             "sha256": "4ca5dde6383ea34995000f35ebc418f9db89d4d0e87298dd9551b7fe29b20e7c"
           },
           "exports": {
-            "mode": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
-            "schedule": "summary-5f5b804e83be5aede7d0abaf2dc45cc361fe1b11fc38c0a3ccf72ca6ebf6f4dc"
+            "mode": "summary-d0ecc97e0894e16992490fbc1fe8cb56b99877b8864e856948f4adbb1fc29e3b",
+            "schedule": "summary-3a8858d7c65936bb057bc7846cfefb18019d594f9f4c0cb8d7919985be9b9c30"
           },
           "resolution": {
             "runtimeBranch": "/exports/./browser/import",
@@ -57,7 +57,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-0e2e1fd6985c15d05e8af279525bc2b8a4135375e7b13d2422de5dbf30cf3407": {
+    "summary-3a8858d7c65936bb057bc7846cfefb18019d594f9f4c0cb8d7919985be9b9c30": {
       "call": {
         "callbacks": [
           {
@@ -69,49 +69,7 @@
           }
         ],
         "closed": [
-          "creates",
-          "returns"
-        ],
-        "creates": [],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "queued"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "callback-0",
-            "kind": "invoke",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "creates",
-          "returns"
-        ],
-        "returns": []
-      },
-      "shape": "callable"
-    },
-    "summary-5f5b804e83be5aede7d0abaf2dc45cc361fe1b11fc38c0a3ccf72ca6ebf6f4dc": {
-      "call": {
-        "callbacks": [
-          {
-            "from": {
-              "arg": 0,
-              "path": []
-            },
-            "operation": "callback-0"
-          }
-        ],
-        "closed": [
+          "reads",
           "creates",
           "returns"
         ],
@@ -136,15 +94,71 @@
           }
         ],
         "proposedClosures": [
+          "reads",
           "creates",
           "returns"
         ],
+        "reads": [],
         "returns": []
       },
       "shape": "callable"
     },
-    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
-      "call": {},
+    "summary-717a197e69ca5c6079c66ef9dad3b108ec84225c12020c56a465cc88de548079": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-d0ecc97e0894e16992490fbc1fe8cb56b99877b8864e856948f4adbb1fc29e3b": {
+      "call": {
+        "closed": [
+          "reads"
+        ],
+        "proposedClosures": [
+          "reads"
+        ],
+        "reads": []
+      },
       "shape": "plain"
     }
   }

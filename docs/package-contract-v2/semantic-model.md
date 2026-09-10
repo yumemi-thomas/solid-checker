@@ -313,6 +313,61 @@ sibling domain; `createStore` publishes three; `Loading` and `isPending` leave
 non-call form, and it is the reason a `reads` census can never be a census of
 calls alone.
 
+**[Decision 2026-09-10] The proxy must be one the export owns.** A property
+access on a store, props, or projection proxy is this export's read only when
+the proxy is a value the export created or imported. An access on a
+**parameter-rooted** receiver — component props, a store the caller passed — is
+the *caller's* read and belongs to the caller's contract, on exactly the
+argument [ADR 0034](../adr/0034-parameter-rooted-accessor-disposition.md) makes
+for a getter and this section already makes for a callable:
+
+> Code the caller attached to an object it passed is not this export's
+> registration any more than a callback it passed is.
+
+So the exclusion above reads in full: *excluding a read a caller-supplied
+callable performs, **and excluding a property access whose receiver the caller
+supplied***. Three things follow, and they are why the carve-out is stated
+rather than left implicit:
+
+- Every `read` operation in every bundled document is already of the owned
+  kind — a reactive-resource read, never a parameter path — so the audits
+  conform as written, and `Show`'s `reads: []` beside its
+  `guard: {arg: 0, path: ["keyed"]}` is correct rather than contradictory.
+- The literal reading was not implementable. The Type Facts producer states,
+  in `invocation.go:629` and `invocation.rs:815`, that a `Proxy` trap "is out
+  of the producer's reach entirely" because `obj.x` on a proxy is the same
+  `PropertyAccessExpression` as `obj.x` on a plain object; and Solid types a
+  store as its plain object type, so no declared-signature premise can
+  separate them. A census obliged to prove "no proxy access occurred" on a
+  caller's value would refuse every export that touches a parameter's
+  properties, permanently.
+- The census therefore reuses the derivations it already has: ADR 0034/0040
+  disposition the parameter-rooted receiver, and
+  [ADR 0044](../adr/0044-a-value-this-program-built.md)'s "a value this program
+  built" decides the owned side — an object literal's members are data
+  properties the specification created, so accessing them is not a read, while
+  a proxy the export obtained by calling a Solid primitive arrives as a *call*
+  the census already enumerates.
+
+**[Decision 2026-09-10] The exclusion is about authorship, not timing.** A read
+performed by a callable this export did not author is not this export's read,
+whoever supplied that callable. The clause above already says so for a
+*caller-supplied* one; a scheduling primitive that drains a queue —
+`@solidjs/signals`' `flush` and `action`, and `@solidjs/web`'s `render` and
+`hydrate` through them — runs computations a **third party** registered, which
+is further from its own act than a caller's callback is. Those reads belong to
+the contracts of whoever registered them.
+
+This does not weaken "including a read this call schedules to a later `at`
+event": that clause is about *when* a read this export authored happens, and it
+still binds. `createEffect`'s own audited closure is the precedent — `reads: []`
+while its `initial-compute` is `tracking: tracked`, which
+`phase21/2026-09-03-implementation-census-plan.md` § 3.2 says "is coherent only
+under this rule". A read of a source the export *created* is unaffected and
+still counts, which is why `createEffect`'s row is withheld: under
+`hydrating ∧ ssrSource === "client"` its client build reads a signal
+`withHydrationGate` created.
+
 ### writes
 
 `writes: [] closed` denies that one invocation of this export gives rise to any

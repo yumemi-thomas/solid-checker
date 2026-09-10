@@ -13,9 +13,9 @@
             "sha256": "fc020d245292ecdacad21e3c6cd6874c666400fda8a7fc29372938cd2779a79d"
           },
           "exports": {
-            "Direct": "summary-a830f7ca4514a2d4a15286680536e5caf83d74352a7fbe2e0c660df1da73a045",
-            "Dormant": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "Invoked": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "Direct": "summary-6a4cc75250cc3d86bcc07c4e91cdd7a97233945d50b1099b04aa57ecfbfbdd23",
+            "Dormant": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "Invoked": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/./import",
@@ -39,7 +39,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-a830f7ca4514a2d4a15286680536e5caf83d74352a7fbe2e0c660df1da73a045": {
+    "summary-6a4cc75250cc3d86bcc07c4e91cdd7a97233945d50b1099b04aa57ecfbfbdd23": {
       "call": {
         "callbacks": [
           {
@@ -51,6 +51,7 @@
           }
         ],
         "closed": [
+          "reads",
           "creates"
         ],
         "creates": [],
@@ -74,20 +75,25 @@
           }
         ],
         "proposedClosures": [
+          "reads",
           "creates"
-        ]
+        ],
+        "reads": []
       },
       "shape": "callable"
     },
-    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
+    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
       "call": {
         "closed": [
+          "reads",
           "creates"
         ],
         "creates": [],
         "proposedClosures": [
+          "reads",
           "creates"
-        ]
+        ],
+        "reads": []
       },
       "shape": "callable"
     }

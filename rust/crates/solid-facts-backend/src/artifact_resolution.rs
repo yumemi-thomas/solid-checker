@@ -101,6 +101,15 @@ pub enum ClosureHazardKind {
     MutableUnboundGlobal,
     UnmaterializedTransform,
     UnacceptedExternalDependency,
+    /// A property accessor installed at run time somewhere in this closure —
+    /// a `Proxy`, a getter descriptor, or a swapped prototype.
+    ///
+    /// Affects `reads` alone. It is the premise the `reads` implementation
+    /// census cannot obtain from the producer, because a read through such an
+    /// accessor records no form at all; see
+    /// `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
+    /// § 7-§ 9.
+    RuntimeAccessorInstallation,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -412,6 +421,22 @@ impl ClosureManifest {
         self.entries
             .iter()
             .any(|entry| entry.role == role && entry.path == path && entry.digest == digest)
+    }
+
+    /// Whether anything in this closure installs a property accessor at run
+    /// time, which is the premise the `reads` implementation census cannot
+    /// obtain for itself.
+    ///
+    /// Asked by the proposal generator, not only by the consumer: a `reads`
+    /// closure proposed over such a closure would be a claim no census can
+    /// refuse, because a read through an installed accessor records no form
+    /// at all. `open_domains` withdraws it on the consumer side too, but by
+    /// then the candidate has already been planned and bound.
+    #[must_use]
+    pub fn installs_runtime_accessor(&self) -> bool {
+        self.hazards
+            .iter()
+            .any(|hazard| hazard.kind == ClosureHazardKind::RuntimeAccessorInstallation)
     }
 
     fn open_domains(&self, export: &str) -> BTreeSet<ClaimDomain> {
@@ -808,6 +833,7 @@ pub(crate) fn proposal_identity(
             manifest,
         },
         ArtifactCase {
+            initialization: None,
             id: identity,
             entrypoint: resolved.requested_entrypoint.clone(),
             resolution_trace,

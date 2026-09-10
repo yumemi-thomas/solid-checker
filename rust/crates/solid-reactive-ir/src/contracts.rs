@@ -856,6 +856,59 @@ fn missing_accepted_export_needs_obligation(
 /// omitting their symbol from the callback map preserves the existing
 /// callable-argument obligation and stays quiet for calls with no callable
 /// argument.
+/// The bound symbols whose `returns` **no consumer in this project can
+/// reach**, so its openness discharges no proof obligation.
+///
+/// Demand read off every consumer in
+/// `docs/package-contract-v2/phase21/2026-09-10-sc9005-demand-scoping-design.md`
+/// § 8: `returns` is consulted where a call's result goes somewhere
+/// (`source_discovery` 225/621/918/1011, `static_rules` 248) and where the
+/// binding is a computation's argument (`owners` 1886, through
+/// `asyncBehavior`). Both reduce to the same question about a *reference*: is
+/// it the callee of a call that throws its result away, or is it anything
+/// else?
+///
+/// Sound in one direction only, and that is the direction that matters. A
+/// symbol sheds only when it has references and **every** one of them is a
+/// discarded call's callee; a reference this cannot classify — an argument, a
+/// member base, a re-export, one that resolves to no symbol — keeps the
+/// obligation. Shedding wrongly drops a fail-closed answer silently, so the
+/// predicate is written to fail toward reporting.
+///
+/// References are counted per file because an import's binding symbol is
+/// file-local: every reference to it is in the file that imported it, which
+/// is what makes "every one of them" decidable here at all.
+fn returns_shed_symbols(facts: &ProjectFacts, entities: &EntitySymbols) -> HashSet<SymbolId> {
+    let mut references = HashMap::<SymbolId, (usize, usize)>::new();
+    for file in &facts.files {
+        let discarded: HashSet<(u32, u32)> = file
+            .ast
+            .calls
+            .iter()
+            .filter(|call| call.result_discarded)
+            .map(|call| (call.callee.start, call.callee.end))
+            .collect();
+        for identifier in &file.ast.identifiers {
+            if identifier.role != solid_facts::ast::IdentifierRole::Reference {
+                continue;
+            }
+            let Some(symbol) = entities.get(&location(file.path.shared(), identifier.span)) else {
+                continue;
+            };
+            let counts = references.entry(symbol.clone()).or_default();
+            counts.0 += 1;
+            if discarded.contains(&(identifier.span.start, identifier.span.end)) {
+                counts.1 += 1;
+            }
+        }
+    }
+    references
+        .into_iter()
+        .filter(|(_, (total, discarded))| *total > 0 && total == discarded)
+        .map(|(symbol, _)| symbol)
+        .collect()
+}
+
 fn push_unknown_contract_claims(
     missing_exports: &mut Vec<StaticDefect>,
     summary: &ContractExport,
@@ -863,6 +916,7 @@ fn push_unknown_contract_claims(
     export: &str,
     reexported: bool,
     location: Location,
+    returns_demanded: bool,
 ) {
     let mut claims = Vec::new();
     if summary.reactive_reads.is_open()
@@ -872,10 +926,16 @@ fn push_unknown_contract_claims(
     {
         claims.push("reactiveReads");
     }
-    if summary.returns.is_open()
-        || summary
-            .open_claims
-            .contains(&crate::contract_semantics::ClaimDomain::Returns)
+    // Scoped by demand (`returns_shed_symbols`): an open domain no consumer
+    // can reach discharges no obligation, so reporting it is noise rather than
+    // a fail-closed answer. Every other conjunct is still unconditional —
+    // `creates`' demand is "the binding is called" and `reads`' is barely
+    // narrower, so scoping them buys almost nothing (design § 9).
+    if returns_demanded
+        && (summary.returns.is_open()
+            || summary
+                .open_claims
+                .contains(&crate::contract_semantics::ClaimDomain::Returns))
     {
         claims.push("returns");
     }
@@ -886,11 +946,15 @@ fn push_unknown_contract_claims(
     {
         claims.push("ownerRequirements");
     }
-    if summary.async_behavior.is_open()
-        || summary
-            .open_claims
-            .contains(&crate::contract_semantics::ClaimDomain::Throws)
-    {
+    // No `open_claims` disjunct here, deliberately. `project_async_behavior`
+    // derives this field from the **returns** domain and inserts
+    // `ClaimDomain::Returns`; it never inserts `Throws`, and no other consumer
+    // path does either, so the `Throws` disjunct this check used to carry was
+    // both unreachable and a claim about the wrong domain. Returns is already
+    // the conjunct above. The `is_open()` guard stays: it is the fail-closed
+    // answer for any summary that arrives with the field genuinely open, which
+    // `ContractExport::unknown_runtime_kind` still constructs.
+    if summary.async_behavior.is_open() {
         claims.push("asyncBehavior");
     }
     if claims.is_empty() {
@@ -988,6 +1052,7 @@ fn resolve_contract_imports_inner(
     let mut by_symbol = HashMap::new();
     let mut missing_exports = Vec::new();
     let mut counts = crate::ContractBindingCounts::default();
+    let returns_shed = returns_shed_symbols(facts, entities);
     for file in &facts.files {
         for import in &file.ast.imports {
             if import.type_only {
@@ -1067,6 +1132,7 @@ fn resolve_contract_imports_inner(
                                 &imported,
                                 false,
                                 member_location.clone(),
+                                !returns_shed.contains(&symbol),
                             );
                         }
                         let resolved = ResolvedContractBinding {
@@ -1143,6 +1209,7 @@ fn resolve_contract_imports_inner(
                         imported,
                         false,
                         binding_location.clone(),
+                        !returns_shed.contains(&symbol),
                     );
                 }
                 let resolved = ResolvedContractBinding {
@@ -1214,6 +1281,7 @@ fn resolve_contract_imports_inner(
                         imported,
                         true,
                         specifier_location.clone(),
+                        !returns_shed.contains(&symbol),
                     );
                 }
                 let resolved = ResolvedContractBinding {

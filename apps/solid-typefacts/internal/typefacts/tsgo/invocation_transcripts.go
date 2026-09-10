@@ -1675,6 +1675,16 @@ func (p *project) returnedParameterIdentityLocked(implementation, expression *as
 	if implementation == nil || ast.HasSyntacticModifier(implementation, ast.ModifierFlagsAsync) {
 		return nil
 	}
+	return p.unwrittenParameterIdentityLocked(implementation, expression)
+}
+
+// Lexical binding identity survives an await when no code can replace the
+// binding. This is deliberately separate from return identity: an async
+// function still wraps its result even when it returns an unwritten parameter.
+func (p *project) unwrittenParameterIdentityLocked(implementation, expression *ast.Node) *typefacts.ParameterValueSource {
+	if implementation == nil {
+		return nil
+	}
 	switch {
 	case ast.IsFunctionDeclaration(implementation):
 		if implementation.AsFunctionDeclaration().AsteriskToken != nil {
@@ -1693,7 +1703,10 @@ func (p *project) returnedParameterIdentityLocked(implementation, expression *as
 		return nil
 	}
 	symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(expression))
-	if symbol == nil || p.symbolIsAssignedLocked(symbol, implementation) {
+	// A redeclaration initializer replaces the parameter without appearing in
+	// the assignment-target census. Require the witnessed binding itself to
+	// have one declaration before treating it as the caller's original value.
+	if symbol == nil || len(symbol.Declarations) != 1 || p.symbolIsAssignedLocked(symbol, implementation) {
 		return nil
 	}
 	// Direct eval and mapped arguments can mutate a binding without a visible

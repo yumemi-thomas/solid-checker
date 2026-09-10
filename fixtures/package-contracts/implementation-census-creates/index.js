@@ -969,3 +969,48 @@ export function writtenByDestructuring(source, other) {
   ({ current } = other);
   return current.value;
 }
+
+// ---------------------------------------------------------------------------
+// ADR 0051: an omitted optional argument can narrow to the explicit bottom
+// type in a later helper call. `geometryHelper` is the bounded end-to-end
+// shape: its caller omits `boxScale`, the guard makes that argument `never` on
+// the first `scaleGeometryPoint` call, and the second call still receives a
+// `number` point. The leaf's arithmetic is therefore primitive in both
+// transcripts, while the helper's returned leaf value still gives the parent
+// addition a primitive-completion premise.
+// ---------------------------------------------------------------------------
+
+function scaleGeometryPoint(point, scale, originPoint) {
+  const distance = point - originPoint;
+  const scaled = scale * distance;
+  return originPoint + scaled;
+}
+
+function geometryHelper(point, scale, translate, originPoint, boxScale) {
+  if (boxScale !== undefined) {
+    point = scaleGeometryPoint(point, boxScale, originPoint);
+  }
+  return scaleGeometryPoint(point, scale, originPoint) + translate;
+}
+
+// The omitted fifth argument is `undefined`, which narrows to an explicit
+// `never` on the guarded leaf call. The certifier must retain the helper's
+// premise for that slot and use the leaf's primitive completion to disposition
+// the parent coercion. **Certifies.**
+export function omittedBoxScale(value) {
+  return geometryHelper(value, 0, 1, 0);
+}
+
+// An explicit `unknown` reaches the guarded leaf call. It remains a possible
+// object, so the leaf's multiplication is an actual coercion and the census
+// withholds `creates`. **Refuses.**
+export function unknownBoxScale(value, boxScale) {
+  return geometryHelper(value, 0, 1, 0, boxScale);
+}
+
+// The `any` control reaches the same helper with no usable premise. Silence
+// about its object-ness is not a primitive fact, so its leaf coercion also
+// withholds `creates`. **Refuses.**
+export function untypedBoxScale(value, boxScale) {
+  return geometryHelper(value, 0, 1, 0, boxScale);
+}

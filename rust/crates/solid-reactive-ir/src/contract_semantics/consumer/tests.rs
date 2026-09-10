@@ -89,6 +89,7 @@ fn accepted() -> AcceptedContract {
         ),
     };
     let case = ArtifactCase {
+        initialization: None,
         id: "case-a".into(),
         entrypoint: ".".into(),
         resolution_trace: vec![],

@@ -85,6 +85,19 @@ impl SnapshotVerifiedExports {
         })
     }
 
+    /// The exact declaration-side reference replayed for this export. A
+    /// consumer must resolve this span in the authenticated owner snapshot;
+    /// the export spelling alone is never a callee identity.
+    pub(super) fn declaration_reference(&self, name: &str) -> Option<(&str, &str, Span, &str)> {
+        let binding = self.bindings.get(name)?;
+        Some((
+            &binding.declarations_path,
+            &binding.declarations_export,
+            binding.declarations_span?,
+            &binding.declarations_snapshot_root,
+        ))
+    }
+
     pub(super) fn runtime_paths(&self) -> impl Iterator<Item = &str> {
         self.bindings
             .values()

@@ -13,7 +13,7 @@
             "sha256": "6dc60acdacfd978341ed2ede2cf15a916d3ee606f6ce5cc47e01f03457e1b1f0"
           },
           "exports": {
-            "Isolated": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "Isolated": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
             "forwarded": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
           },
           "resolution": {
@@ -36,7 +36,7 @@
             "sha256": "e9a25ba3bc2a95e5ca23c06bad054060a6ab0a9643ff9f39ee46416dc5efb240"
           },
           "exports": {
-            "channelFor": "summary-0abb0041d8b91a8b4a96d7f81bddae1de28921c28bde231c3f4b0cc5109e75e2"
+            "channelFor": "summary-af541cfd2e71ac60435cca0ac3f565ebfba5ee970831dd5b46df9a803f1c7fb5"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1direct",
@@ -60,9 +60,10 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-0abb0041d8b91a8b4a96d7f81bddae1de28921c28bde231c3f4b0cc5109e75e2": {
+    "summary-af541cfd2e71ac60435cca0ac3f565ebfba5ee970831dd5b46df9a803f1c7fb5": {
       "call": {
         "closed": [
+          "reads",
           "creates"
         ],
         "creates": [],
@@ -95,11 +96,27 @@
           }
         ],
         "proposedClosures": [
+          "reads",
           "creates"
         ],
         "reads": [
           "read-0"
         ]
+      },
+      "shape": "callable"
+    },
+    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": []
       },
       "shape": "callable"
     },

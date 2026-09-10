@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -99,6 +100,15 @@ export function viaAxisHelper(axis) {
   return lengthOf(axis);
 }
 
+export function viaOptionalAxisHelper(axis) {
+  return optionalLength(axis);
+}
+
+function optionalLength(axis) {
+  if (!axis) return 0;
+  return axis.max - axis.min;
+}
+
 export function omitsTrailingArgument(value) {
   return scaleWithin(value, 2);
 }
@@ -123,6 +133,7 @@ export declare const mirrorAlias: (easing: EasingFunction) => EasingFunction;
 export type BezierDefinition = [number, number, number, number];
 export declare const aliasTuple: (definition: BezierDefinition) => string;
 export declare function viaAxisHelper(axis: Axis): number;
+export declare function viaOptionalAxisHelper(axis?: Axis): number;
 export declare interface AxisDelta { translate: number; scale: number; originPoint: number }
 export declare interface BoxDelta { x: AxisDelta; y: AxisDelta }
 export declare interface Box { x: Axis; y: Axis }
@@ -152,8 +163,9 @@ func premiseProjectWith(t *testing.T, tsconfig string) (typefacts.ExportValueAna
 	}
 	write("pkg/index.js", premiseRuntimeSource)
 	write("pkg/index.d.ts", premiseDeclarationSource)
-	write("harness.ts", `import { clamp, widen, scale, span, viaHelper, viaAxisHelper, applyBoxDelta, omitsTrailingArgument, omitsWrittenArgument, spreadDeclared, annotated, arity, documented, mirrorAlias, aliasTuple } from "./pkg/index.js";
-export const subjects = [clamp, widen, scale, span, viaHelper, viaAxisHelper, applyBoxDelta, omitsTrailingArgument, omitsWrittenArgument, spreadDeclared, annotated, arity, documented, mirrorAlias, aliasTuple];
+	write("pkg/shadow.d.ts", "export interface Axis { min: number; max: number }")
+	write("harness.ts", `import { clamp, widen, scale, span, viaHelper, viaAxisHelper, viaOptionalAxisHelper, applyBoxDelta, omitsTrailingArgument, omitsWrittenArgument, spreadDeclared, annotated, arity, documented, mirrorAlias, aliasTuple } from "./pkg/index.js";
+export const subjects = [clamp, widen, scale, span, viaHelper, viaAxisHelper, viaOptionalAxisHelper, applyBoxDelta, omitsTrailingArgument, omitsWrittenArgument, spreadDeclared, annotated, arity, documented, mirrorAlias, aliasTuple];
 `)
 	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
 	if err != nil {
@@ -621,6 +633,94 @@ func TestAnOmittedSlotSurvivesTheHelperPremiseChain(t *testing.T) {
 	}
 }
 
+// ADR 0051: the omitted slot narrows to never in the first scalePoint call.
+// Its explicit bottom type is not an unavailable type. The second call still
+// has point:number despite the assignment above it; do not replace this
+// measured chain with a reconstruction about an any-poisoned parameter.
+func TestBottomTypePremiseSurvivesBothGeometryCalls(t *testing.T) {
+	analyzer, dir := premiseProject(t)
+	root := premiseTranscript(t, analyzer, dir, "applyBoxDelta")
+	axis := premiseLocalTranscript(t, analyzer, dir, "applyBoxDelta", "applyAxisDelta", root.CallArgumentPremises[0].Arguments)
+	point := premiseLocalTranscript(t, analyzer, dir, "applyBoxDelta", "applyPointDelta", axis.CallArgumentPremises[0].Arguments)
+	if len(point.CallArgumentPremises) != 2 {
+		t.Fatalf("point call premises = %#v, want both scalePoint calls", point.CallArgumentPremises)
+	}
+	// The parent still needs its callee's primitive completion. This is not a
+	// vacuous case where annotating the caller erased the whole coercion.
+	if len(point.UncensusedInvokingForms) != 1 || point.UncensusedInvokingForms[0].CoercionPremise == nil {
+		t.Fatalf("point forms = %#v, want one completion-premised coercion", point.UncensusedInvokingForms)
+	}
+	for index, call := range point.CallArgumentPremises {
+		middle := "number"
+		if index == 0 {
+			middle = "never"
+		}
+		if len(call.Arguments) != 3 || call.Arguments[0].Type != "number" ||
+			call.Arguments[1].Type != middle || call.Arguments[1].Identity == "" || call.Arguments[2].Type != "number" {
+			t.Fatalf("scalePoint call %d arguments = %#v", index, call.Arguments)
+		}
+		leaf := premiseLocalTranscript(t, analyzer, dir, "applyBoxDelta", "scalePoint", call.Arguments)
+		if leaf.ParameterPremiseRefusal != "" || !slices.Equal(leaf.ParameterPremises, call.Arguments) {
+			t.Fatalf("leaf %d did not bind the exact premise: %#v, refusal %q", index, leaf.ParameterPremises, leaf.ParameterPremiseRefusal)
+		}
+		if kinds := markerKinds(leaf.UncensusedInvokingForms); len(kinds) != 0 || !leaf.PrimitiveCompletion {
+			t.Fatalf("leaf %d forms=%v primitive=%v, want a clear primitive completion", index, kinds, leaf.PrimitiveCompletion)
+		}
+	}
+	first := point.CallArgumentPremises[0].Arguments
+	// Removing the slot leaves an actual coercion: no premise is not bottom.
+	missing := []typefacts.ParameterPremise{first[0], first[2]}
+	leaf := premiseLocalTranscript(t, analyzer, dir, "applyBoxDelta", "scalePoint", missing)
+	if kinds := markerKinds(leaf.UncensusedInvokingForms); len(kinds) != 1 || kinds[0] != typefacts.UncensusedCoercion {
+		t.Fatalf("missing bottom premise forms=%v, want a recorded coercion", kinds)
+	}
+	// A spelling of never with another type's identity must not bind.
+	forged := slices.Clone(first)
+	forged[1].Identity = first[0].Identity
+	leaf = premiseLocalTranscript(t, analyzer, dir, "applyBoxDelta", "scalePoint", forged)
+	if leaf.ParameterPremiseRefusal == "" || len(leaf.ParameterPremises) != 0 || len(leaf.UncensusedInvokingForms) == 0 {
+		t.Fatalf("forged bottom identity was not refused: %#v", leaf)
+	}
+}
+
+// The shared predicate serves the form classifier, operand-premise walk and
+// completion fact. Explicit bottom has no object-valued normal completion;
+// missing, any, unknown, generic and object types do not establish that fact.
+func TestBottomTypeIsAnExplicitNonObjectFact(t *testing.T) {
+	const source = `
+export function bottom(value: never) { return +value; }
+export function unknownValue(value: unknown) { return +value; }
+export function anyValue(value: any) { return +value; }
+export function genericValue<T>(value: T) { return +value; }
+export function objectValue(value: object) { return +value; }
+export function noCompletion(): never { throw 1; }
+export function unknownCompletion(value: unknown) { return value; }
+export function objectCompletion(value: object) { return value; }
+`
+	analyzer, dir := markerProject(t, map[string]string{"bottom.ts": source})
+	path := filepath.Join(dir, "bottom.ts")
+	for _, name := range []string{"bottom", "unknownValue", "anyValue", "genericValue", "objectValue"} {
+		transcript := implementationTranscriptFor(t, analyzer, path, source, name)
+		want := 1
+		if name == "bottom" {
+			want = 0
+		}
+		if got := len(transcript.UncensusedInvokingForms); got != want {
+			t.Fatalf("%s: %d forms, want %d", name, got, want)
+		}
+	}
+	for _, name := range []string{"noCompletion", "unknownCompletion", "objectCompletion"} {
+		transcript := implementationTranscriptFor(t, analyzer, path, source, name)
+		if transcript.PrimitiveCompletion != (name == "noCompletion") {
+			t.Fatalf("%s: primitive completion=%v", name, transcript.PrimitiveCompletion)
+		}
+	}
+	var unopened project
+	if !unopened.mayBeObjectTypedLocked(nil) {
+		t.Fatal("an unavailable type is not an explicit bottom type")
+	}
+}
+
 // ADR 0046: a helper premise whose type the *helper's* module cannot name.
 //
 // `viaAxisHelper(axis: Axis)` hands its own parameter to a module-local
@@ -629,6 +729,37 @@ func TestAnOmittedSlotSurvivesTheHelperPremiseChain(t *testing.T) {
 // a JavaScript module the twin refuses it, the helper is censused over `any`,
 // and `axis.max - axis.min` refuses for a reason that is about spelling rather
 // than about the code.
+func TestOptionalImportedHelperPremisePreservesEveryConstituentIdentity(t *testing.T) {
+	analyzer, dir := premiseProject(t)
+	caller := premiseTranscript(t, analyzer, dir, "viaOptionalAxisHelper")
+	if len(caller.CallArgumentPremises) != 1 || len(caller.CallArgumentPremises[0].Arguments) != 1 {
+		t.Fatalf("optional caller premises: %+v; refusal %q", caller.CallArgumentPremises, caller.ParameterPremiseRefusal)
+	}
+	recorded := caller.CallArgumentPremises[0].Arguments
+	raw := premiseLocalTranscript(t, analyzer, dir, "viaOptionalAxisHelper", "optionalLength", nil)
+	if !slices.Contains(markerKinds(raw.UncensusedInvokingForms), typefacts.UncensusedCoercion) {
+		t.Fatal("unpremised helper must actually record its coercion")
+	}
+	if !strings.Contains(recorded[0].Spelling, "import(") || !strings.Contains(recorded[0].Spelling, "undefined") {
+		t.Fatalf("optional imported type has no complete spelling: %+v", recorded[0])
+	}
+	helper := premiseLocalTranscript(t, analyzer, dir, "viaOptionalAxisHelper", "optionalLength", recorded)
+	if len(helper.ParameterPremises) != 1 || helper.ParameterPremises[0] != recorded[0] || slices.Contains(markerKinds(helper.UncensusedInvokingForms), typefacts.UncensusedCoercion) {
+		t.Fatalf("optional premise failed: %+v; refusal %q; forms %+v", helper.ParameterPremises, helper.ParameterPremiseRefusal, helper.UncensusedInvokingForms)
+	}
+	for _, spelling := range []string{
+		strings.ReplaceAll(recorded[0].Spelling, "undefined", "null"),
+		strings.ReplaceAll(recorded[0].Spelling, "/index", "/shadow"),
+	} {
+		forged := append([]typefacts.ParameterPremise(nil), recorded...)
+		forged[0].Spelling = spelling
+		refused := premiseLocalTranscript(t, analyzer, dir, "viaOptionalAxisHelper", "optionalLength", forged)
+		if len(refused.ParameterPremises) != 0 || refused.ParameterPremiseRefusal == "" {
+			t.Fatalf("forged union premise bound: %q -> %+v", spelling, refused.ParameterPremises)
+		}
+	}
+}
+
 func TestAHelperPremiseIsSpelledAsAnImportTypeWhenItsNameIsForeign(t *testing.T) {
 	analyzer, dir := premiseProject(t)
 	caller := premiseTranscript(t, analyzer, dir, "viaAxisHelper")

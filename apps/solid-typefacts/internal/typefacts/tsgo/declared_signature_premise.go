@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -306,6 +307,20 @@ func typeDeclarationIdentity(value *checker.Type, twin *premiseTwin) string {
 	}
 	if alias := value.Alias(); alias != nil && alias.Symbol() != nil {
 		identity += "|alias:" + symbolDeclarationIdentity(alias.Symbol(), twin)
+	}
+	if value.Flags()&checker.TypeFlagsUnion != 0 {
+		// Printed union members can have the same name while resolving to
+		// different modules. The outer union flag proves none of their
+		// identities. Preserve the complete multiset, independent of the
+		// checker program's internal ordering of constituent type IDs.
+		members := make([]string, 0)
+		for _, member := range value.Distributed() {
+			members = append(members, typeDeclarationIdentity(member, twin))
+		}
+		sort.Strings(members)
+		for _, member := range members {
+			identity += "|union-member:" + strconv.Quote(member)
+		}
 	}
 	return identity
 }
@@ -833,6 +848,14 @@ func (p *project) uncensusedInvokingFormCensusUnderPremiseLocked(
 				premise.Calls[call] = twin.originalLocation(premise.Calls[call])
 			}
 		}
+		if premise := forms[index].LocalLiteralResult; premise != nil {
+			premise.Call = twin.originalLocation(premise.Call)
+			premise.Callee = twin.originalLocation(premise.Callee)
+			premise.Allocation = twin.originalLocation(premise.Allocation)
+			for index := range premise.Returns {
+				premise.Returns[index] = twin.originalLocation(premise.Returns[index])
+			}
+		}
 	}
 	return forms, arguments, primitive
 }
@@ -989,6 +1012,27 @@ func undefinedTypeIdentity() string {
 func (p *project) spellableTypeReferenceLocked(value *checker.Type) string {
 	if value == nil {
 		return ""
+	}
+	// An unaliased union has no symbol of its own. Spell every constituent
+	// rather than writing an unresolvable bare alias in another module. A
+	// constituent with no reviewed spelling refuses the whole annotation.
+	if value.Flags()&checker.TypeFlagsUnion != 0 && value.Alias() == nil {
+		members := value.Distributed()
+		if len(members) == 0 {
+			return ""
+		}
+		spellings := make([]string, 0, len(members))
+		for _, member := range members {
+			spelling := p.spellableTypeReferenceLocked(member)
+			if spelling == "" && member != nil && !p.mayBeObjectTypedLocked(member) {
+				spelling = p.formChecker().TypeToString(member)
+			}
+			if spelling == "" {
+				return ""
+			}
+			spellings = append(spellings, "("+spelling+")")
+		}
+		return strings.Join(spellings, " | ")
 	}
 	symbol := value.Symbol()
 	if alias := value.Alias(); alias != nil && alias.Symbol() != nil {

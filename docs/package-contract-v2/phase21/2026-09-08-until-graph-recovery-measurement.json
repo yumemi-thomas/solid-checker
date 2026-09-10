@@ -1,0 +1,341 @@
+{
+  "diagnostic": true,
+  "baseline": "rust/target/ecosystem-investigations/2026-09-08-defined-input-full.json",
+  "baselineDigest": "sha256:1f94bbe1309b743d5b4b4ed760ef67e5da8414a84664826ac384194d2fb92025",
+  "probeId": "@solid-primitives/until@0.1.1|solid1|only",
+  "before": {
+    "status": "refused",
+    "entrypoints": [],
+    "cases": []
+  },
+  "after": {
+    "status": "certified",
+    "entrypoints": [
+      "."
+    ],
+    "cases": [
+      {
+        "entrypoint": ".",
+        "artifactCaseId": "artifact-case:609e87d94104bc17ea20780fbca4b85a67432c1caf98b8c0b453c11c26324454",
+        "selection": {
+          "artifact": {
+            "closureSha256": "1a4efa7b3cf8d277846936b542cd328478d74c81fe6c3a08bc23c3bf601f331c",
+            "path": "./dist/index.js",
+            "sha256": "fd523fb08a6c49afd772bc1357d2de22549dac2522b2383e50591406e77bda7b"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "9b980d1d3e1b6386768cb8a1094b5461e12f3c9c4b65c9cbcea173758fcaeaf1"
+          },
+          "exports": {
+            "until": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "legacy:module",
+            "typesBranch": "legacy:types"
+          }
+        },
+        "summary": {
+          "call": {},
+          "shape": "callable"
+        },
+        "import": {
+          "specifier": "@solid-primitives/until",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-jTHc8r/node_modules/@solid-primitives/.solid-checker-certification-eb3bf42cb704234f55e4ac0bdd20c535766b54443210db227f05bf33adb2d7ee.mjs",
+          "requestedEntrypoint": ".",
+          "packageName": "@solid-primitives/until",
+          "packageVersion": "0.1.1",
+          "packageIntegrity": "sha512-eqsPKJ3j6p6dZHQKoaxPQF9Cz/SYH4I6To7bG6rRi3DUHuzpUrKsX840vQBmhRkRHvXlNw2nXs9NDAkQgkdDYA==",
+          "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-jTHc8r/node_modules/@solid-primitives/until",
+          "packageManifest": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-jTHc8r/node_modules/@solid-primitives/until/package.json",
+            "digest": "sha256:bf96e8bfe0217c9ddc12d293948d93ad3e61df1245944ced30949fc9a52f4e46"
+          },
+          "runtime": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-jTHc8r/node_modules/@solid-primitives/until/dist/index.js",
+            "digest": "sha256:fd523fb08a6c49afd772bc1357d2de22549dac2522b2383e50591406e77bda7b"
+          },
+          "declarations": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-jTHc8r/node_modules/@solid-primitives/until/dist/index.d.ts",
+            "digest": "sha256:9b980d1d3e1b6386768cb8a1094b5461e12f3c9c4b65c9cbcea173758fcaeaf1"
+          },
+          "runtimeTrace": {
+            "branch": "legacy:module",
+            "steps": [
+              {
+                "condition": "module",
+                "target": "dist/index.js"
+              }
+            ]
+          },
+          "declarationTrace": {
+            "branch": "legacy:types",
+            "steps": [
+              {
+                "condition": "types",
+                "target": "dist/index.d.ts"
+              }
+            ]
+          },
+          "closure": {
+            "entries": [
+              {
+                "role": "runtime",
+                "path": "./dist/index.js",
+                "digest": "sha256:fd523fb08a6c49afd772bc1357d2de22549dac2522b2383e50591406e77bda7b"
+              },
+              {
+                "role": "declaration",
+                "path": "./dist/index.d.ts",
+                "digest": "sha256:9b980d1d3e1b6386768cb8a1094b5461e12f3c9c4b65c9cbcea173758fcaeaf1"
+              },
+              {
+                "role": "manifest",
+                "path": "./package.json",
+                "digest": "sha256:bf96e8bfe0217c9ddc12d293948d93ad3e61df1245944ced30949fc9a52f4e46"
+              },
+              {
+                "role": "resolution-input",
+                "path": "./package.json",
+                "digest": "sha256:bf96e8bfe0217c9ddc12d293948d93ad3e61df1245944ced30949fc9a52f4e46"
+              }
+            ],
+            "dependencies": [
+              {
+                "specifier": "@solid-primitives/rootless",
+                "packageName": "@solid-primitives/rootless",
+                "artifactCase": "artifact-case:752fafed450bcf61b48321fa0400f1789e0c837e62a71528a16180ae66c0d4e1",
+                "acceptedContractDigest": "sha256:253ce3a0a5b0246861d20d1e5f1bc815fa12c158b1af3ee75c66a2e7b558ea9f"
+              },
+              {
+                "specifier": "solid-js",
+                "packageName": "solid-js",
+                "artifactCase": "artifact-case:5d5e36f1a70c0df7d4fd05f5c56a1db35ee73b3c7399caa64ce19654a004f2e5",
+                "acceptedContractDigest": "sha256:472fbfe2770d66ba195e483e6ced9368f2e7055b19f7c6b6603ac9848d332fed"
+              }
+            ],
+            "digest": "sha256:1a4efa7b3cf8d277846936b542cd328478d74c81fe6c3a08bc23c3bf601f331c"
+          },
+          "exports": {
+            "until": {
+              "runtime": {
+                "module": {
+                  "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-jTHc8r/node_modules/@solid-primitives/until/dist/index.js",
+                  "digest": "sha256:fd523fb08a6c49afd772bc1357d2de22549dac2522b2383e50591406e77bda7b"
+                },
+                "exportName": "until"
+              },
+              "declarations": {
+                "module": {
+                  "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-jTHc8r/node_modules/@solid-primitives/until/dist/index.d.ts",
+                  "digest": "sha256:9b980d1d3e1b6386768cb8a1094b5461e12f3c9c4b65c9cbcea173758fcaeaf1"
+                },
+                "exportName": "until"
+              }
+            }
+          },
+          "declarationExports": [
+            "Until",
+            "until"
+          ],
+          "authority": "standalonePackageResolver"
+        },
+        "bindings": {
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-jTHc8r/node_modules/@solid-primitives/.solid-checker-certification-eb3bf42cb704234f55e4ac0bdd20c535766b54443210db227f05bf33adb2d7ee.mjs",
+          "specifier": "@solid-primitives/until",
+          "resolvedImportRoot": "sha256:2fd5f10a690f2044f4b73e807a87703455cdaacb94b7338e4d7072851033b8b6",
+          "semanticDigest": "sha256:777acd91b935667872c4e4918af373dc66f8fad27203aac8b0645fb998331ba1",
+          "artifactProvenanceRoot": "sha256:83e2dc95e4ecbe02f84386f1bb98607ca5afa3cb67a6bdf4c977ec8508758e2f",
+          "snapshotRoot": "sha256:3dbb2ad4b558f500e38fb9beddbe4549bfb17079e035de7d7ff49c6eb705f3c8",
+          "packageRoot": "sha256:b8107d22f05ec6a0c877a89fa12baf95a0cb95abf1187ab413e92d862a1d63ff",
+          "manifestRoot": "sha256:6e5f8fffee107a768d6ee32fe92ca731c754a14f1626c2b60d6ad646b202a8f1",
+          "artifactsRoot": "sha256:d3b0324342a432733da350be1a3ca6b32c3fedbc1b8ec11dd3296df3feb432da",
+          "declarationsRoot": "sha256:070b39b11d4394a7ae20803bd0b0ea14065f3808e190dff70f2599305c18633e",
+          "transformRoot": "sha256:986cea276c0555ade63e3907f9c107052f01e05049ed4f459c05d94bc622656c",
+          "exportsRoot": "sha256:5119eee360f5ae97e76381127c92fa6f020db91a7dbe9e134ee675565a798dc1",
+          "closureRoot": "sha256:982044118e842d2bb9d81b442bdc7a5698e475c2016893992a24ce9ad13fb04e",
+          "demandGraphRoot": "sha256:87a9353d8621a4c7a923ae052b07054743dcddaa529be2c8c2bc68f7254a04c1",
+          "verifiedPositiveRoot": "sha256:9bf7207a10f496e7136d9d4d4a8d8184c8e853442a4f211b1d5449174053c8f2",
+          "witnessRoots": {
+            "accepted-dependency-composition": "sha256:6f414f75108578d93105c5a0bbe9514b811d3b0a5b8f3c9a520fa75c5d407e35",
+            "argument-binding": "sha256:973ee7ffd075a1ec1d172176637e033c3fba89af07c2aaab7f905c742fdacce8",
+            "artifact-declarations": "sha256:070b39b11d4394a7ae20803bd0b0ea14065f3808e190dff70f2599305c18633e",
+            "callable-path": "sha256:7ab8bca370adb182ec3f494929305432044ab38e8cd48ba760689398116ee53d",
+            "compiler-reconciliation": "sha256:eaa945c78051661a72031c11c95895324146ea0a7c7b5dbaa0fe5d1bbccd91ec",
+            "domain-exhaustiveness": "sha256:520b64c1777699909578045911cd2ebba3ddfaefcedeb8c033ae081d641064de",
+            "export-identity": "sha256:5119eee360f5ae97e76381127c92fa6f020db91a7dbe9e134ee675565a798dc1",
+            "export-resolution": "sha256:d3b0324342a432733da350be1a3ca6b32c3fedbc1b8ec11dd3296df3feb432da",
+            "guard-partition": "sha256:d64f300a40310e2ea6543630a94259c49825db8c068cedecbea74ff982b31e20",
+            "manifest-entrypoint": "sha256:6e5f8fffee107a768d6ee32fe92ca731c754a14f1626c2b60d6ad646b202a8f1",
+            "module-closure": "sha256:982044118e842d2bb9d81b442bdc7a5698e475c2016893992a24ce9ad13fb04e",
+            "operation-cardinality": "sha256:cc0cddd201a23b98e2ca7aa3ba61cfc3d076eba1d45412649a9f1eb75ce68262",
+            "operation-reachability": "sha256:5a6b1f790fe7190df77f37014c61d2e15c05e9152bde6f3fba7e4b1d5449a46f",
+            "package-identity": "sha256:b8107d22f05ec6a0c877a89fa12baf95a0cb95abf1187ab413e92d862a1d63ff",
+            "recursive-value-shape": "sha256:574edbcac91121cd9ca7349e9c9c6e5da1f495e5955aabc2a8e6978567978598",
+            "rest-spread-coverage": "sha256:7bed0b347a1ef67c47f0932e538512de56f0f8d54a87eeecc8045336034bf516",
+            "selected-signature": "sha256:3d8fe69e7a79817f0ae2539bc766c1b05f151a0d7c5d60cd274a039ef22adc51"
+          },
+          "producerSessionsRoot": "sha256:96b9661df39b5fdf51b8a4e89bf86709f73bd539415aae9b4c44564723a02670",
+          "dependencyReceiptsRoot": "sha256:ae63d522823082a1ba4cf8eb2888e11139ac64cdde2a9cc11eac10c4f914f0c5",
+          "dependencyTrustRoot": "sha256:0c63bb7aae94742052e73ab75135428bdc9f84f43ab1f0f44599011e91e6e1d6",
+          "probeGateRoot": "sha256:e7a1ce03516f53e69413fa9b919e079c109d4789c07a137c279cc1ec93b29a3c",
+          "closedClaimsRoot": "sha256:e1c63059c21829a38d269cf4ac0163ced303f6a8d5e09aa7dcc491af7ec8e7da",
+          "verifierSourceDigest": "sha256:b32bcabbee91721179cc993f27c00e6371f8d34a52fe2d5ac43d984e9c5c890a",
+          "verifierBuildDigest": "sha256:6fa2930d8880fe197563899823e137b7b29b296da3683e758eb059b21ff2a663"
+        },
+        "documentDigest": "sha256:b5853cffb9c9ffc4b0cb5ce55c1f99a2fa68d28bf72cd39fb52b814ddf6540d9",
+        "receiptDigest": "sha256:9f163331fb7240994bc978a4032dad3f4c67a76caf69355afbe4893b999bc5aa",
+        "receipt": {
+          "format": "solid-checker-authenticated-acceptance-receipt",
+          "receiptVersion": 2,
+          "payload": {
+            "semanticModelVersion": 1,
+            "proofVersion": 2,
+            "proofPolicy": 2,
+            "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+            "mainDigest": "sha256:b5853cffb9c9ffc4b0cb5ce55c1f99a2fa68d28bf72cd39fb52b814ddf6540d9",
+            "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-jTHc8r/node_modules/@solid-primitives/.solid-checker-certification-eb3bf42cb704234f55e4ac0bdd20c535766b54443210db227f05bf33adb2d7ee.mjs",
+            "specifier": "@solid-primitives/until",
+            "resolvedImportRoot": "sha256:2fd5f10a690f2044f4b73e807a87703455cdaacb94b7338e4d7072851033b8b6",
+            "semanticDigest": "sha256:777acd91b935667872c4e4918af373dc66f8fad27203aac8b0645fb998331ba1",
+            "artifactProvenanceRoot": "sha256:83e2dc95e4ecbe02f84386f1bb98607ca5afa3cb67a6bdf4c977ec8508758e2f",
+            "snapshotRoot": "sha256:3dbb2ad4b558f500e38fb9beddbe4549bfb17079e035de7d7ff49c6eb705f3c8",
+            "packageRoot": "sha256:b8107d22f05ec6a0c877a89fa12baf95a0cb95abf1187ab413e92d862a1d63ff",
+            "manifestRoot": "sha256:6e5f8fffee107a768d6ee32fe92ca731c754a14f1626c2b60d6ad646b202a8f1",
+            "artifactsRoot": "sha256:d3b0324342a432733da350be1a3ca6b32c3fedbc1b8ec11dd3296df3feb432da",
+            "declarationsRoot": "sha256:070b39b11d4394a7ae20803bd0b0ea14065f3808e190dff70f2599305c18633e",
+            "transformRoot": "sha256:986cea276c0555ade63e3907f9c107052f01e05049ed4f459c05d94bc622656c",
+            "exportsRoot": "sha256:5119eee360f5ae97e76381127c92fa6f020db91a7dbe9e134ee675565a798dc1",
+            "closureRoot": "sha256:982044118e842d2bb9d81b442bdc7a5698e475c2016893992a24ce9ad13fb04e",
+            "demandGraphRoot": "sha256:87a9353d8621a4c7a923ae052b07054743dcddaa529be2c8c2bc68f7254a04c1",
+            "verifiedPositiveRoot": "sha256:9bf7207a10f496e7136d9d4d4a8d8184c8e853442a4f211b1d5449174053c8f2",
+            "witnessRoots": {
+              "accepted-dependency-composition": "sha256:6f414f75108578d93105c5a0bbe9514b811d3b0a5b8f3c9a520fa75c5d407e35",
+              "argument-binding": "sha256:973ee7ffd075a1ec1d172176637e033c3fba89af07c2aaab7f905c742fdacce8",
+              "artifact-declarations": "sha256:070b39b11d4394a7ae20803bd0b0ea14065f3808e190dff70f2599305c18633e",
+              "callable-path": "sha256:7ab8bca370adb182ec3f494929305432044ab38e8cd48ba760689398116ee53d",
+              "compiler-reconciliation": "sha256:eaa945c78051661a72031c11c95895324146ea0a7c7b5dbaa0fe5d1bbccd91ec",
+              "domain-exhaustiveness": "sha256:520b64c1777699909578045911cd2ebba3ddfaefcedeb8c033ae081d641064de",
+              "export-identity": "sha256:5119eee360f5ae97e76381127c92fa6f020db91a7dbe9e134ee675565a798dc1",
+              "export-resolution": "sha256:d3b0324342a432733da350be1a3ca6b32c3fedbc1b8ec11dd3296df3feb432da",
+              "guard-partition": "sha256:d64f300a40310e2ea6543630a94259c49825db8c068cedecbea74ff982b31e20",
+              "manifest-entrypoint": "sha256:6e5f8fffee107a768d6ee32fe92ca731c754a14f1626c2b60d6ad646b202a8f1",
+              "module-closure": "sha256:982044118e842d2bb9d81b442bdc7a5698e475c2016893992a24ce9ad13fb04e",
+              "operation-cardinality": "sha256:cc0cddd201a23b98e2ca7aa3ba61cfc3d076eba1d45412649a9f1eb75ce68262",
+              "operation-reachability": "sha256:5a6b1f790fe7190df77f37014c61d2e15c05e9152bde6f3fba7e4b1d5449a46f",
+              "package-identity": "sha256:b8107d22f05ec6a0c877a89fa12baf95a0cb95abf1187ab413e92d862a1d63ff",
+              "recursive-value-shape": "sha256:574edbcac91121cd9ca7349e9c9c6e5da1f495e5955aabc2a8e6978567978598",
+              "rest-spread-coverage": "sha256:7bed0b347a1ef67c47f0932e538512de56f0f8d54a87eeecc8045336034bf516",
+              "selected-signature": "sha256:3d8fe69e7a79817f0ae2539bc766c1b05f151a0d7c5d60cd274a039ef22adc51"
+            },
+            "producerSessionsRoot": "sha256:96b9661df39b5fdf51b8a4e89bf86709f73bd539415aae9b4c44564723a02670",
+            "dependencyReceiptsRoot": "sha256:ae63d522823082a1ba4cf8eb2888e11139ac64cdde2a9cc11eac10c4f914f0c5",
+            "dependencyTrustRoot": "sha256:0c63bb7aae94742052e73ab75135428bdc9f84f43ab1f0f44599011e91e6e1d6",
+            "probeGateRoot": "sha256:e7a1ce03516f53e69413fa9b919e079c109d4789c07a137c279cc1ec93b29a3c",
+            "closedClaimsRoot": "sha256:e1c63059c21829a38d269cf4ac0163ced303f6a8d5e09aa7dcc491af7ec8e7da",
+            "verifierSourceDigest": "sha256:b32bcabbee91721179cc993f27c00e6371f8d34a52fe2d5ac43d984e9c5c890a",
+            "verifierBuildDigest": "sha256:6fa2930d8880fe197563899823e137b7b29b296da3683e758eb059b21ff2a663",
+            "issuerKind": "persistent-local",
+            "issuerScope": "diagnostic:until-supported-retry",
+            "keyId": "ed25519:sha256:4f5c0df57e871b9ad942c2ce9584ed5f54a782a675e0721f34ca2f4bbda13988",
+            "signatureAlgorithm": "ed25519"
+          },
+          "authentication": {
+            "publicKey": "AJl6Ru7E/wwMO2+ce1HdraoXh+mQWIgh6YuCmeeliBc=",
+            "value": "C/DBhoNiReqpMFx6DNAh0OmfPb+i/27gf61R857KShLnLghsUW6/8lv22Zjl85Q94Pp8SMha8hZdA0oqrK1KAg=="
+          }
+        }
+      }
+    ]
+  },
+  "declaredEntrypoints": 0,
+  "declaredWildcard": false,
+  "ordinaryAnalysis": {
+    "receiptAuthenticated": true,
+    "exactCaseSelected": true
+  },
+  "graphPreparation": {
+    "requestedCases": 1,
+    "retainedProposalCases": 0,
+    "preparedDependencyGraphCases": 1,
+    "rootCases": 1,
+    "canonicalNodes": 9,
+    "acquiredPublishedArtifacts": 6,
+    "acquisitionUnits": 10,
+    "graphAcquisitionDurationMs": 1.85,
+    "resolutionSession": {
+      "requests": 0,
+      "semanticAcquisitions": 0,
+      "semanticCacheHits": 0,
+      "semanticCacheInvalidations": 0,
+      "moduleDescriptionsParsed": 27,
+      "typeScriptProgramsCreated": 0
+    },
+    "compilerSourceClosureCensus": 3,
+    "proposalGenerations": 9,
+    "proposalGenerationsShared": 4,
+    "proposalFrontiers": [
+      {
+        "nodes": 4,
+        "durationMs": 600
+      },
+      {
+        "nodes": 2,
+        "durationMs": 288.2
+      },
+      {
+        "nodes": 1,
+        "durationMs": 108.52
+      },
+      {
+        "nodes": 1,
+        "durationMs": 79.24
+      },
+      {
+        "nodes": 1,
+        "durationMs": 54.22
+      }
+    ],
+    "graphNodeReferences": 9,
+    "nativeCertificationTransactions": 1,
+    "typeFactsCaseSetBatches": 1,
+    "generatedProposalProofFallback": {
+      "originalRefusal": "solid-checker-rust: policy-2 proof finalization failed: Type Facts certification failed during live export-value verification: Type Facts demand sha256:0e0a8163770a1058b7311ba86b5589c34f14528edf5c134e5eabc101bcba1877 is locally open: argument-binding (artifact-case:0b614057894a4cdc0a6cede35f1ede446a65413bd311de1783a455219e8d5cd5:until): callback parameter has no exact direct-call or resolved-argument flow",
+      "demandId": "sha256:0e0a8163770a1058b7311ba86b5589c34f14528edf5c134e5eabc101bcba1877",
+      "family": "argument-binding",
+      "originalProposalDigest": "sha256:7acbf38795315e4a897d5ec8317e3b0095180f9f0dc72041c9c55b497ce6fa2c",
+      "cases": [
+        {
+          "entrypoint": ".",
+          "conditions": []
+        }
+      ]
+    }
+  },
+  "unprovedCallbackRetainedAsRefusal": {
+    "originalRefusal": "solid-checker-rust: policy-2 proof finalization failed: Type Facts certification failed during live export-value verification: Type Facts demand sha256:0e0a8163770a1058b7311ba86b5589c34f14528edf5c134e5eabc101bcba1877 is locally open: argument-binding (artifact-case:0b614057894a4cdc0a6cede35f1ede446a65413bd311de1783a455219e8d5cd5:until): callback parameter has no exact direct-call or resolved-argument flow",
+    "demandId": "sha256:0e0a8163770a1058b7311ba86b5589c34f14528edf5c134e5eabc101bcba1877",
+    "family": "argument-binding",
+    "originalProposalDigest": "sha256:7acbf38795315e4a897d5ec8317e3b0095180f9f0dc72041c9c55b497ce6fa2c",
+    "cases": [
+      {
+        "entrypoint": ".",
+        "conditions": []
+      }
+    ]
+  },
+  "previousAcceptedCasesLost": 0,
+  "newEntrypoints": 1,
+  "newArtifactCases": 1,
+  "completeRowTransitions": 1,
+  "coverageMetricChanged": false,
+  "scope": "single retained probe; no full-corpus total inferred",
+  "transaction": {
+    "diagnostic": true,
+    "probeId": "@solid-primitives/until@0.1.1|solid1|only",
+    "out": "/private/tmp/until-supported-retry-GjZ25u",
+    "elapsedMs": 14518,
+    "failure": null,
+    "misses": []
+  }
+}

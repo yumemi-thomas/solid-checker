@@ -113,18 +113,19 @@ pub use contract_certification::{
     ProbeGate, ProbeGateError, ProbeGateSchedule, ProbeHarnessConfiguration, ProbeHarnessError,
     PublishedArchive, PublishedContractGraphPlan, PublishedGraphCertificationError,
     PublishedGraphLockSelection, PublishedGraphNodeRequest, PublishedGraphPlanningError,
-    PublishedGraphSourceRequest, PublishedPolicy2Catalog, RELATIVE_GRAPH_EXECUTION_PROFILE,
-    ReceiptIssuerKind, ReceiptPublicationError, RecipeGatedPlan, RecipeGatingError, SnapshotLimits,
-    SnapshotVerifiedClosure, SnapshotVerifiedExports, SnapshotVerifiedResolution,
-    TypeFactsCertificationError, TypeFactsCertificationSchedule, TypeFactsProducerPin,
-    UntrustedArtifactEnvelope, VerifiedDependencyComposition, VerifiedProbeGateBatch,
-    VerifiedTypeFactsEvidence, WITHHELD_CLOSURE_NO_RECIPE, WithheldClosure, WitnessWireError,
-    authenticate_policy2_receipt, canonicalize_policy2_main,
+    PublishedGraphSourceRequest, PublishedPolicy2Catalog, RECEIPT_WITNESS_FAMILIES,
+    RELATIVE_GRAPH_EXECUTION_PROFILE, ReceiptIssuerKind, ReceiptPublicationError, RecipeGatedPlan,
+    RecipeGatingError, SnapshotLimits, SnapshotVerifiedClosure, SnapshotVerifiedExports,
+    SnapshotVerifiedResolution, TypeFactsCertificationError, TypeFactsCertificationSchedule,
+    TypeFactsProducerPin, UntrustedArtifactEnvelope, VerifiedDependencyComposition,
+    VerifiedProbeGateBatch, VerifiedTypeFactsEvidence, WITHHELD_CLOSURE_NO_RECIPE, WithheldClosure,
+    WitnessWireError, authenticate_policy2_receipt, canonicalize_policy2_main,
     certify_published_contract_graph_case_set, certify_value_only_case_set,
     decode_policy2_trust_configuration, encode_policy2_trust_configuration,
     issue_builtin_policy2_receipt, issue_policy2_receipt, plan_certification,
-    plan_published_contract_graph, policy2_main_semantic_digest, policy2_policy_digest,
-    policy2_resolved_import_root, policy2_trust_configuration_for_issuer, publish_policy2_catalog,
+    plan_published_contract_graph, policy2_main_closed_claims_root, policy2_main_semantic_digest,
+    policy2_policy_digest, policy2_resolved_import_root, policy2_trust_configuration_for_issuer,
+    publish_policy2_catalog,
 };
 #[cfg(feature = "dialect-v2")]
 pub use contract_certification::{
@@ -321,6 +322,36 @@ pub fn encode_inferred_entrypoint_workflow_with_external_targets(
         normalized.declined,
         pretty,
     )
+}
+
+/// Proposes explicit inert initialization from a byte-bound parser premise.
+/// Certification independently replays the proof and package loading scope.
+pub fn encode_inert_entrypoint_workflow(
+    resolved: &ResolvedImport,
+    proof: &solid_facts::ast::InertJavaScriptModule,
+    pretty: bool,
+) -> Result<ProposalArtifacts, ContractWorkflowError> {
+    if resolved.runtime.digest.trim_start_matches("sha256:") != proof.source_sha256()
+        || !(resolved.runtime.path.ends_with(".mjs") || resolved.runtime.path.ends_with(".js"))
+        || resolved.transform.is_some()
+        || !resolved.exports.is_empty()
+    {
+        return Err(ContractFailure::IdentityMismatch {
+            reason: "inert initialization proposal does not match the exact runtime/export census"
+                .into(),
+        }
+        .into());
+    }
+    let (package, mut case) = artifact_resolution::proposal_identity(resolved)?;
+    case.initialization =
+        Some(solid_reactive_ir::contract_semantics::ModuleInitializationClaim::Inert);
+    let contract =
+        solid_reactive_ir::contract_semantics::ContractProposal::new(package, vec![case])
+            .normalize()
+            .map_err(|error| ContractFailure::InvalidSemanticModel {
+                reason: error.to_string(),
+            })?;
+    contract_workflow::encode_proposal_artifacts(&contract, vec![], vec![], vec![], pretty)
 }
 
 /// Merges independently analyzed exact artifact cases without exposing compact

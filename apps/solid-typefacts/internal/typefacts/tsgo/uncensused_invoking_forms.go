@@ -325,6 +325,14 @@ func (p *project) uncensusedInvokingFormCensusLocked(
 				form.SubjectRoot = subject.derivation
 				form.SubjectDeclaration = subject.declaration
 			}
+			if form.SubjectRoot == "" && (kind == typefacts.UncensusedGetAccessor ||
+				kind == typefacts.UncensusedSetAccessor || kind == typefacts.UncensusedPropertyAccessUnknownAccessor) {
+				subject, write := accessorFormSubjectExpression(node)
+				if premise := p.localLiteralResultLocked(subject); premise != nil {
+					form.LocalLiteralResult = premise
+					form.SubjectWrite = write
+				}
+			}
 			forms = append(forms, form)
 		},
 	)
@@ -2170,7 +2178,10 @@ func (p *project) singleUnwrittenLocalInitializerLocked(name *ast.Node) *ast.Nod
 // hands its caller is provably a primitive, on the very program the census is
 // being classified over (ADR 0045). An async function's return type is a
 // `Promise` and a generator's a `Generator`, so the completion form needs no
-// separate test: neither is a primitive.
+// separate test: neither is a primitive. An explicit never return type states
+// that there is no normal completion, hence no object-valued one (ADR 0051).
+// This says nothing about calls executed before that non-completion; the
+// consumer must still census them before using the completion fact.
 func (p *project) primitiveCompletionLocked(implementation *ast.Node) bool {
 	if implementation == nil {
 		return false
@@ -2219,6 +2230,13 @@ const provablyNonObjectFlags = checker.TypeFlagsStringLike |
 func (p *project) mayBeObjectTypedLocked(value *checker.Type) bool {
 	if value == nil {
 		return true
+	}
+	// Distributed deliberately returns no constituents for never. The bottom
+	// flag is the affirmative fact that there can be no object-valued result,
+	// not an inference from an empty list. Keep the empty-list refusal below
+	// for every type that does not state this fact (ADR 0051, protocol 35).
+	if value.Flags()&checker.TypeFlagsNever != 0 {
+		return false
 	}
 	constituents := value.Distributed()
 	if len(constituents) == 0 {

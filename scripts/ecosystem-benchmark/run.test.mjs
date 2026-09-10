@@ -31,6 +31,42 @@ import {
   runScope,
   startProgressHeartbeat
 } from "./run.mjs";
+import { readCertificationAttempt, reportForPersistence } from "./run.mjs";
+
+test("package selection is exact, intersects other filters, and owns a separate report scope", () => {
+  const manifest = { rows: [
+    { package: "@test/a", solidTarget: "solid1", probes: [{ id: "a1" }] },
+    { package: "@test/a", solidTarget: "solid2", probes: [{ id: "a2" }] },
+    { package: "@test/ab", solidTarget: "solid1", probes: [{ id: "ab" }] }
+  ] };
+  assert.deepEqual(resolveProbeIdFilter({ manifest, packages: ["@test/a"] }), ["a1", "a2"]);
+  assert.deepEqual(resolveProbeIdFilter({ manifest, packages: ["@test/a"], solidTargets: ["2"] }), ["a2"]);
+  assert.deepEqual(resolveProbeIdFilter({ manifest, packages: ["missing"] }), []);
+  const scope = runScope({ packages: ["@test/a"] });
+  assert.equal(scope.kind, "filtered");
+  assert.notEqual(defaultReportPaths(scope).json, defaultReportPaths(runScope()).json);
+});
+
+test("graph retention preserves nodes and edges without changing the compact default", () => {
+  const report = { results: [{ dependencyPlan: { complete: true, nodes: [1], edges: [2], graphDigest: "digest" } }] };
+  assert.deepEqual(reportForPersistence(report).results[0].dependencyPlan, { complete: true, graphDigest: "digest" });
+  assert.deepEqual(reportForPersistence(report, true), report);
+  assert.deepEqual(report.results[0].dependencyPlan.nodes, [1]);
+});
+
+test("certified and refused attempts retain per-export producer explanations", () => {
+  const directory = mkdtempSync(join(tmpdir(), "premise-audit-"));
+  try {
+    const path = join(directory, "audit.json");
+    const details = [{ export: "clamp", domain: "creates", semanticClaimId: "claim", reason: "census refused: form; parameterPremiseRefusal at file.js:1..2 (depth 1): unresolvable type" }];
+    writeFileSync(path, JSON.stringify({ status: "refused", withheldClosures: details }));
+    for (const status of [0, 1]) {
+      const attempt = readCertificationAttempt({ status }, path, 10);
+      assert.equal(attempt.withheldClosures, 1);
+      assert.deepEqual(attempt.withheldClosureDetails, details);
+    }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
 
 test("a Solid 2 probe pinned to solid-js alone is completed with the same-version @solidjs/web", () => {
   const solidReleases = {
@@ -333,6 +369,7 @@ test("complete proposals retain an exact policy-2 certification refusal when att
       refusalCountsByOwner: {},
       // The audit fixture names no withheld closure candidate.
       withheldClosures: 0,
+      withheldClosureDetails: [],
       withheldClosureReasons: {
         noRecipe: 0,
         censusRefused: 0,
@@ -889,8 +926,9 @@ test("cleanup is called once per probe, including for a probe that failed, and i
 
   const cleanupCallsKeepTemp = [];
   const hooksKeepTemp = successHooks({ cleanupCalls: cleanupCallsKeepTemp });
-  await runBenchmark({ manifest, hooks: hooksKeepTemp, options: { keepTemp: true } });
+  const retained = await runBenchmark({ manifest, hooks: hooksKeepTemp, options: { keepTemp: true } });
   assert.equal(cleanupCallsKeepTemp.length, 0, "cleanup must never run when keepTemp is set");
+  assert.deepEqual(retained[0].retainedArtifacts, { projectDir: "/tmp/project-1", outputDir: "/tmp/out-1" });
 });
 
 test("a version mismatch on one probe yields an install-failure/integrity-failure result without runBenchmark rejecting", async () => {
@@ -1274,17 +1312,36 @@ test("a complete proposal is never routed away from reuse", () => {
   );
 });
 
-test("a partial proposal with a dependency-binding refusal is routed to the published graph", () => {
+test("a partial proposal with a dependency-binding refusal is routed to a composing lane", () => {
   for (const refusal of [
     DEPENDENCY_BINDING_REFUSAL,
     UNRESOLVED_DEPENDENCY_MODULE_REFUSAL
   ]) {
+    const result = {
+      class: "partial-success",
+      generatedEntrypoints: 4,
+      artifactCaseRefusals: [PUBLISHER_DEFECT_REFUSAL, refusal]
+    };
+    // Recovery prepares the generated cases *and* the frontier, so it is the
+    // request whenever the row generated anything worth keeping.
     assert.deepEqual(
-      certificationLaneRequest({
-        class: "partial-success",
-        artifactCaseRefusals: [PUBLISHER_DEFECT_REFUSAL, refusal]
-      }),
+      certificationLaneRequest(result),
+      { lane: "entrypoint-recovery" },
+      refusal.reason
+    );
+    // The frontier-only lane publishes the refused cases instead of the
+    // generated ones. It is reached only when asked for by name, or when the
+    // row generated nothing recovery could retain.
+    assert.deepEqual(
+      certificationLaneRequest(result, { frontierOnly: true }),
       { lane: "published-graph" },
+      refusal.reason
+    );
+    // Nothing generated is nothing for recovery to retain, and the policy
+    // never trades the generated cases for the frontier on its own.
+    assert.deepEqual(
+      certificationLaneRequest({ ...result, generatedEntrypoints: 0 }),
+      { lane: "reused-proposal" },
       refusal.reason
     );
   }
@@ -1311,6 +1368,8 @@ test("a partial proposal whose refusals are publisher defects keeps its reuse", 
 
 test("the lane a row reports is the one the audit recorded, not the one requested", () => {
   assert.equal(certificationLaneOf({ graphPreparation: { reusedProposal: true } }), "reused-proposal");
+  assert.equal(certificationLaneOf({ graphPreparation: { retainedProposalFallback: true, rootCases: 3 } }), "generated-proposal");
+  assert.equal(certificationLaneOf({ graphPreparation: { retainedProposalFallback: true, reusedProposal: true, rootCases: 3 } }), "reused-proposal");
   assert.equal(
     certificationLaneOf({ graphPreparation: { rootCases: 3, canonicalNodes: 6 } }),
     "published-graph"
@@ -1342,7 +1401,7 @@ test("the lane a row reports is the one the audit recorded, not the one requeste
   assert.equal(certificationLaneOf(null), null);
 });
 
-test("routing is off unless the run asks for it", async () => {
+test("a dependency frontier with nothing generated to retain keeps its reuse", async () => {
   const manifest = { ...fourProbeManifest(), rows: [fourProbeManifest().rows[0]] };
   const temporary = mkdtempSync(join(tmpdir(), "solid-checker-lane-default-"));
   const hooks = successHooks();
@@ -1391,9 +1450,11 @@ test("routing is off unless the run asks for it", async () => {
     return { status: 1, stdout: "", stderr: "refused", timedOut: false };
   };
   try {
-    // Same row that routes above, with the option absent: the emitted proposal
-    // is handed over and no lane is requested. The default matters because the
-    // routing loses receipts on the measured corpus.
+    // The same frontier the policy routes above, from a generation whose
+    // contract has no readable entrypoint count. Recovery has nothing to
+    // retain, and the frontier-only lane trades away the generated cases --
+    // a trade the measured corpus lost receipts to -- so the emitted proposal
+    // is handed over and no lane is requested.
     const [result] = await runBenchmark({
       manifest,
       hooks,
@@ -1409,7 +1470,48 @@ test("routing is off unless the run asks for it", async () => {
   }
 });
 
-test("a routed partial row withholds its proposal and asks for the graph lane", async () => {
+for (const recoveryEnabled of [false, true]) {
+test(`partial proposals without dependency frontiers reach explicit recovery (${recoveryEnabled})`, async () => {
+  const manifest = { ...fourProbeManifest(), rows: [fourProbeManifest().rows[0]] };
+  const temporary = mkdtempSync(join(tmpdir(), "solid-checker-independent-routing-"));
+  const hooks = successHooks(), calls = [];
+  hooks.mkProject = async () => ({ projectDir: temporary, outputDir: temporary });
+  hooks.generateContract = async ({ outputPath }) => {
+    writeFileSync(outputPath, JSON.stringify({ entrypoints: { ".": { cases: [] } } }));
+    writeFileSync(`${outputPath}.certification-inputs.json`, "{}");
+    writeFileSync(`${outputPath}.refusals.json`, JSON.stringify({ refusals: [{
+      entrypoint: "./missing", conditions: [], class: "published-artifact", reason: "target is absent"
+    }] }));
+    return { status: 0, stdout: `generated unaccepted stable contract proposal for pkg@1.0.0 at ${outputPath}; 1 artifact case(s) refused and omitted; proof verification must issue its receipt`, stderr: "", timedOut: false };
+  };
+  hooks.attemptCertification = async args => {
+    calls.push(args);
+    return { status: 1, stdout: "", stderr: "explicit refusal", timedOut: false };
+  };
+  try {
+    const [result] = await runBenchmark({ manifest, hooks, options: {
+      concurrency: 1, certificationConcurrency: 1, attemptCertification: true,
+      recoverProbeIds: recoveryEnabled ? [manifest.rows[0].probes[0].id] : []
+    }});
+    assert.equal(result.class, "partial-success");
+    assert.equal(calls.length, recoveryEnabled ? 1 : 0);
+    if (recoveryEnabled) {
+      assert.equal(calls[0].recoverEntrypoints, true);
+      assert.equal(calls[0].dependencyGraphLane, false);
+      assert.ok(calls[0].proposal);
+      assert.equal(result.certificationAttempt.laneRequested, "entrypoint-recovery");
+    }
+  } finally { rmSync(temporary, { recursive: true, force: true }); }
+});
+}
+
+for (const recoveryMode of ["graph", "all", "targeted", "other-probe"]) {
+// A dependency frontier is now routed to a composing lane by policy, so
+// `other-probe` -- a row named by no reviewed id list and no flag -- asks for
+// recovery exactly as an explicitly named row does. Only `--dependency-graph-lane`
+// still selects the frontier-only lane.
+const recoverEntrypoints = recoveryMode !== "graph";
+test(`a routed partial row preserves the requested proposal lane (${recoveryMode})`, async () => {
   const manifest = { ...fourProbeManifest(), rows: [fourProbeManifest().rows[0]] };
   const temporary = mkdtempSync(join(tmpdir(), "solid-checker-lane-routing-"));
   const hooks = successHooks();
@@ -1431,6 +1533,9 @@ test("a routed partial row withholds its proposal and asks for the graph lane", 
       inapplicable: []
     }));
     writeFileSync(`${outputPath}.certification-inputs.json`, "{}");
+    // A genuine partial generation kept an entrypoint. Recovery is the
+    // request only when there is something to retain beside the frontier.
+    writeFileSync(outputPath, JSON.stringify({ entrypoints: { ".": {} } }));
     return {
       status: 0,
       stdout:
@@ -1465,18 +1570,22 @@ test("a routed partial row withholds its proposal and asks for the graph lane", 
         concurrency: 1,
         certificationConcurrency: 1,
         attemptCertification: true,
-        dependencyGraphLane: true
+        dependencyGraphLane: recoveryMode === "graph",
+        recoverEntrypoints: recoveryMode === "all",
+        recoverProbeIds: recoveryMode === "targeted" ? [manifest.rows[0].probes[0].id] : ["another-probe"]
       }
     });
     assert.equal(result.class, "partial-success");
     assert.equal(certifications.length, 1);
-    assert.equal(certifications[0].dependencyGraphLane, true);
-    assert.equal(certifications[0].proposal, "");
-    assert.equal(result.certificationAttempt.laneRequested, "published-graph");
+    assert.equal(certifications[0].dependencyGraphLane, recoveryMode === "graph");
+    assert.equal(certifications[0].recoverEntrypoints, recoverEntrypoints);
+    assert.equal(Boolean(certifications[0].proposal), recoveryMode !== "graph");
+    assert.equal(result.certificationAttempt.laneRequested, recoverEntrypoints ? "entrypoint-recovery" : recoveryMode === "graph" ? "published-graph" : "reused-proposal");
   } finally {
     rmSync(temporary, { recursive: true, force: true });
   }
 });
+}
 
 // The reuse branch of the routing rule is unreachable end-to-end today, and
 // this pins *why* rather than leaving it untested: a partial row is queued for

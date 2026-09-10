@@ -22,7 +22,16 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
+import { inspectRetainedCertificationFloor } from "./retained-certification-floor.mjs";
 import { fileURLToPath } from "node:url";
+import {
+  RECOVERY_GRAPH_CASE_BUDGET,
+  recoveryGraphBudgetRefusal,
+  selectRecoveryPreparation,
+  retainedProposalGraphCases,
+  certifyRetainedProposalSelection
+} from "./retained-proposal-graphs.mjs";
+export { RECOVERY_GRAPH_CASE_BUDGET, recoveryGraphBudgetRefusal };
 
 /// The repository/package root the runtime-probe harness source manifest is
 /// recomputed against. This file lives at `<root>/packages/cli/scripts/`, and
@@ -100,7 +109,15 @@ Options:
                           lanes describe different case sets -- the graph lane
                           covers exactly the refused cases, the partial proposal
                           exactly the others -- so this is a choice, not a
-                          strict improvement, and it is off by default
+                          strict improvement, and it is off by default. Also
+                          retries a single generated case after an exact native
+                          callback-flow refusal, only in a fresh catalog
+  --recover-entrypoints  Re-certify generated cases together with exact refused
+                          dependency-composition cases. For a new value-only
+                          publication, isolate proof-refused artifact cases and
+                          re-certify the successful subset (at most 1024 cases).
+                          Never shrinks an existing publication or reuses trial
+                          receipts. Unproved cases retain explicit refusals
   --probe-recipe-corpus <DIR>
                           Hand-authored, claim-addressed runtime-probe recipes
                           (a directory holding recipes.json plus its modules).
@@ -382,6 +399,7 @@ export function parseCertifyArguments(arguments_) {
     proposalRefusalAudit: "",
     proposal: "",
     dependencyGraphLane: false,
+    recoverEntrypoints: false,
     probeRecipeCorpus: "",
     auditOutput: "",
     issuerConfiguration: process.env.SOLID_CHECKER_POLICY2_ISSUER_CONFIG ?? "",
@@ -395,6 +413,10 @@ export function parseCertifyArguments(arguments_) {
     // rest of the parser requires.
     if (argument === "--dependency-graph-lane") {
       options.dependencyGraphLane = true;
+      continue;
+    }
+    if (argument === "--recover-entrypoints") {
+      options.recoverEntrypoints = true;
       continue;
     }
     const separator = argument.indexOf("=");
@@ -716,6 +738,53 @@ function reviewGraphProposal(generated) {
     }
   };
   visit(review);
+  if (artifactCases.size === 0) {
+    // An inert module has no semantic demands, so its native proposal plan has
+    // no demand-bearing artifactCase field to review. The dependency catalog
+    // still needs the exact case identity for the later graph replay. Derive
+    // it from the one inert wire case with the same length-prefixed inputs as
+    // contract_document::artifact_case_id; any other empty plan remains a
+    // refusal rather than an inferred dependency identity.
+    const proposal = JSON.parse(readFileSync(generated.output, "utf8"));
+    const cases = Object.entries(proposal.entrypoints ?? {}).flatMap(
+      ([entrypoint, value]) => (value?.cases ?? []).map(case_ => ({ entrypoint, case_ }))
+    );
+    if (
+      cases.length === 1 &&
+      cases[0].case_?.initialization === "inert" &&
+      Object.keys(cases[0].case_?.exports ?? {}).length === 0
+    ) {
+      const { entrypoint, case_: case_ } = cases[0];
+      const hash = createHash("sha256");
+      const text = value => {
+        const bytes = Buffer.from(value, "utf8");
+        const length = Buffer.alloc(8);
+        length.writeBigUInt64BE(BigInt(bytes.length));
+        hash.update(length);
+        hash.update(bytes);
+      };
+      const digest = value => `sha256:${String(value).replace(/^sha256:/i, "").toLowerCase()}`;
+      const artifact = value => {
+        text(value.path);
+        text(digest(value.sha256));
+      };
+      hash.update("solid-checker:artifact-case:v1");
+      text(entrypoint);
+      if (!case_.resolution || typeof case_.resolution.runtimeBranch !== "string" ||
+          typeof case_.resolution.typesBranch !== "string") {
+        throw new Error("inert graph proposal is missing its exact resolution trace");
+      }
+      text("runtime");
+      text(case_.resolution.runtimeBranch);
+      text("types");
+      text(case_.resolution.typesBranch);
+      artifact(case_.artifact);
+      artifact(case_.declarations);
+      text(digest(case_.artifact.closureSha256));
+      hash.update(Buffer.from([0]));
+      artifactCases.add(`artifact-case:${hash.digest("hex")}`);
+    }
+  }
   if (artifactCases.size !== 1) {
     throw new Error(
       `exact graph proposal plan named ${artifactCases.size} artifact cases; expected one`
@@ -1328,6 +1397,26 @@ export function staticRuntimeDependencies(resolved) {
   );
 }
 
+// A refusal is a discovery hint, never authority. Only request an additional
+// contract for a declaration re-export present in this exact module census.
+// The native graph must still certify that dependency and bind its receipt to
+// the declaration importer; source-only archives do not supply these bindings.
+export function staticBindingDependencies(resolved, artifactCase, refusals = []) {
+  const conditionsKey = value => JSON.stringify([...new Set([...(value ?? []), "import"])].sort());
+  const requested = new Set();
+  for (const refusal of refusals) {
+    if (refusal.entrypoint !== artifactCase.entrypoint ||
+        conditionsKey(refusal.conditions) !== conditionsKey(artifactCase.conditions)) continue;
+    const match = /^accepted dependency (.+) has no exact declarations binding for export [^\n]+$/.exec(refusal.reason ?? "");
+    if (match) requested.add(match[1]);
+  }
+  return [
+    ...staticRuntimeDependencies(resolved),
+    ...resolved.externalDependencies.filter(edge => edge.axis === "declarations" &&
+      edge.kind === "reexport" && requested.has(edge.specifier))
+  ];
+}
+
 export function reexportImporterCensus(packageRoot, edges) {
   const census = new Map();
   for (const edge of edges) {
@@ -1552,10 +1641,94 @@ function reachableGraphStates(root, byKey) {
   return [...byKey.values()].filter(state => found.has(state.node.key));
 }
 
-async function mapWithExactConcurrency(items, concurrency, worker) {
+/// A graph node that could not be prepared, acquired or generated is a fact
+/// about that node, not about the transaction. Its dependents' proposals are
+/// generated *against* its contract, so the refusal reaches every node above
+/// it -- and only those. Nothing weaker would be sound: a dependent generated
+/// without the dependency it names is exactly the dependency-blind proposal
+/// this lane exists to replace.
+export function cascadeGraphNodeRefusals(states, nodeRefusals) {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const state of states) {
+      if (nodeRefusals.has(state.node.key)) continue;
+      const blocked = state.directDependencies.find(
+        dependency => nodeRefusals.has(dependency.state.node.key)
+      );
+      if (!blocked) continue;
+      const cause = nodeRefusals.get(blocked.state.node.key);
+      nodeRefusals.set(state.node.key, {
+        stage: cause.stage,
+        reason: `dependency ${blocked.viaSpecifier} refused: ${cause.reason}`
+      });
+      changed = true;
+    }
+  }
+  return nodeRefusals;
+}
+
+/// Splits prepared artifact cases into the ones whose whole graph is intact
+/// and the ones a refused node reaches, naming the exact node that refused.
+/// A case is never kept with a node missing from its graph, and a refused
+/// case is never dropped silently -- it leaves an explicit coordinate and
+/// reason for the audit.
+export function graphCasesWithoutRefusedNodes({
+  prepared,
+  byKey,
+  nodeRefusals,
+  reachable = reachableGraphStates
+}) {
+  const cases = [];
+  const refusals = [];
+  for (const item of prepared) {
+    const nodes = reachable(item.root, byKey);
+    const refused = nodes.find(state => nodeRefusals.has(state.node.key));
+    if (!refused) {
+      cases.push({ ...item, nodes });
+      continue;
+    }
+    const cause = nodeRefusals.get(refused.node.key);
+    refusals.push({
+      entrypoint: item.artifactCase.entrypoint,
+      conditions: [...item.artifactCase.conditions],
+      stage: cause.stage,
+      reason:
+        `graph node ${refused.node.packageName}@${refused.node.packageVersion} ` +
+        `${refused.node.entrypoint} [${refused.node.conditions.join(",")}] refused: ${cause.reason}`
+    });
+  }
+  return { cases, refusals };
+}
+
+/// Why a graph that dropped a retained case must be abandoned, as a message,
+/// or `null` when every retained case survived preparation.
+///
+/// The retained cases are the ones the proposal lane already generated and
+/// would publish. Here -- unlike at certification time, where every case is
+/// still unproved -- the comparison is certain rather than a wager: a retained
+/// case this graph cannot even prepare is one this lane certainly will not
+/// publish. Taking the lane anyway would trade a covered case for a chance at
+/// a frontier one.
+export function retainedCaseFloorRefusal(retainedCases, survived, caseRefusals) {
+  const lost = retainedCases.filter(value => !survived.has(value));
+  if (lost.length === 0) return null;
+  const [first] = lost;
+  const refusal = caseRefusals.find(
+    value => value.entrypoint === first.entrypoint &&
+      JSON.stringify(value.conditions) === JSON.stringify(first.conditions)
+  );
+  return (
+    `published dependency graph would drop ${lost.length} retained artifact case(s) the ` +
+    `proposal already covers, starting at ${first.entrypoint} ` +
+    `[${first.conditions.join(",")}]: ${refusal?.reason ?? "preparation refused it"}`
+  );
+}
+
+export async function mapWithExactConcurrency(items, concurrency, worker) {
   const results = new Array(items.length);
   let cursor = 0;
-  await Promise.all(
+  const settled = await Promise.allSettled(
     Array.from({ length: Math.min(concurrency, items.length) }, async () => {
       while (cursor < items.length) {
         const index = cursor++;
@@ -1563,6 +1736,11 @@ async function mapWithExactConcurrency(items, concurrency, worker) {
       }
     })
   );
+  // Recovery may start a fresh preparation after a failed one. Do not let
+  // workers from that failed transaction keep writing into its scratch tree
+  // after its caller observes the failure or removes the tree.
+  const failed = settled.find(result => result.status === "rejected");
+  if (failed) throw failed.reason;
   return results;
 }
 
@@ -1606,15 +1784,19 @@ export function publishedGraphPreparationConcurrency(env = process.env) {
 ///     frontier for this lane (the same condition
 ///     `preparePublishedGraphFallback` reports as
 ///     "proposal refusal has no exact dependency-composition case");
-///   * preparation itself failed. The partial proposal is then certified
-///     exactly as it is without the flag, so an unpreparable graph costs the
-///     run nothing it had before. A *refusal* raised during preparation --
-///     a missing issuer or trust configuration, which are request errors and
-///     not graph facts -- still propagates.
+///   * preparation itself failed *for every artifact case*. Preparation
+///     isolates a broken node to the exact cases whose graph reaches it, so
+///     arriving here means no case survived. The partial proposal is then
+///     certified exactly as it is without the flag, so an unpreparable graph
+///     costs the run nothing it had before. A *refusal* raised during
+///     preparation -- a missing issuer or trust configuration, which are
+///     request errors and not graph facts -- still propagates.
 ///
 /// `prepare` is injectable so the decision can be tested without a registry, a
 /// native process, or an authenticated archive; the default is the one
 /// preparation this lane has.
+export class RetainedCasePreparationRefusal extends Error {}
+
 export async function preparedGraphForPartialProposal(
   { output, ...preparation },
   { prepare = preparePublishedGraphFallback } = {}
@@ -1634,6 +1816,19 @@ export async function preparedGraphForPartialProposal(
     return { graph: await prepare({ output, ...preparation }), trace: null };
   } catch (error) {
     if (error instanceof CertificationRefusal) throw error;
+    if (error instanceof RetainedCasePreparationRefusal &&
+        preparation.options?.recoverEntrypoints && preparation.generated) {
+      try {
+        const scratch = mkdtempSync(join(preparation.scratch, "retained-preparation-"));
+        const graph = await prepare({ output, ...preparation, scratch, retainGeneratedCases: true });
+        graph.timing.retainedPreparationFallback = { reason: error.message };
+        return { graph, trace: null };
+      } catch (retryError) {
+        if (retryError instanceof CertificationRefusal) throw retryError;
+        return { graph: null, trace: { partialProposalFrontier: "unprepared",
+          reason: error.message, retainedPreparationRefusal: retryError?.message ?? String(retryError) } };
+      }
+    }
     return {
       graph: null,
       trace: {
@@ -1644,6 +1839,37 @@ export async function preparedGraphForPartialProposal(
   }
 }
 
+/// Coordinates are acquisition requests, never receipt authority. The native
+/// transaction replays all roots and dependency receipts, then verifies the
+/// published set through ordinary discovery. Never union catalog directories.
+export function recoveryGraphCases(generated, refusals) {
+  const retained = generated?.certificationInputs;
+  if (!Array.isArray(retained) || retained.length === 0) {
+    throw new Error("entrypoint recovery has no generated artifact cases to preserve");
+  }
+  const frontier = refusals.filter(isExactDependencyCompositionRefusal);
+  const seen = new Set();
+  const cases = [...retained, ...frontier].map(input => {
+    if (typeof input.entrypoint !== "string" ||
+        !Array.isArray(input.conditions) ||
+        input.conditions.some(condition => typeof condition !== "string")) {
+      throw new Error("entrypoint recovery requires exact entrypoint and condition coordinates");
+    }
+    // Import is implicit in native graph acquisition. Different spellings of
+    // the same selection must not turn a conflicting duplicate into two cases.
+    const conditions = [...new Set([...input.conditions, "import"])].sort();
+    const key = JSON.stringify([input.entrypoint, conditions]);
+    if (seen.has(key)) throw new Error(`entrypoint recovery has conflicting duplicate case ${key}`);
+    seen.add(key);
+    return { entrypoint: input.entrypoint, conditions };
+  });
+  return {
+    cases,
+    retainedCases: cases.slice(0, retained.length),
+    remainingRefusals: refusals.filter(refusal => !isExactDependencyCompositionRefusal(refusal))
+  };
+}
+
 async function preparePublishedGraphFallback({
   options,
   manifest,
@@ -1651,7 +1877,9 @@ async function preparePublishedGraphFallback({
   output,
   certificationImporter,
   rootArtifactSnapshot,
-  fetch_
+  fetch_,
+  generated = null,
+  retainGeneratedCases = false
 }) {
   if (!options.issuerConfiguration) {
     throw new CertificationRefusal({
@@ -1675,6 +1903,30 @@ async function preparePublishedGraphFallback({
   );
   if (dependencyCases.length === 0) {
     throw new Error("proposal refusal has no exact dependency-composition case");
+  }
+  const recovery = options.recoverEntrypoints && generated
+    ? recoveryGraphCases(generated, audit.refusals ?? [])
+    : null;
+  return preparePublishedGraphCases({
+    options, manifest, scratch, certificationImporter, rootArtifactSnapshot,
+    fetch_, generated, dependencyCases, recovery, retainGeneratedCases
+  });
+}
+
+// Exact case coordinates are acquisition requests, not claims that generation
+// refused them. Keep graph preparation separate from the refusal-driven lane
+// selector so a bounded investigation can request a case without fabricating
+// a refusal. Every graph still crosses native archive/lock/receipt verification.
+export async function preparePublishedGraphCases({
+  options, manifest, scratch, certificationImporter, rootArtifactSnapshot,
+  fetch_, generated = null, dependencyCases, recovery = null, retainGeneratedCases = false
+}) {
+  if (!Array.isArray(dependencyCases) || dependencyCases.length === 0) {
+    throw new Error("published graph preparation requires explicit artifact cases");
+  }
+  mkdirSync(scratch, { recursive: true });
+  if (!rootArtifactSnapshot) {
+    rootArtifactSnapshot = await acquirePublishedArtifact({ options, manifest, scratch, fetch_ });
   }
   const bunLockPath = findBunLock(options.packageRoot);
   const bunLock = readFileSync(bunLockPath, "utf8");
@@ -1756,11 +2008,21 @@ async function preparePublishedGraphFallback({
           `Bun lock integrity for ${resolved.packageName}@${resolved.packageVersion} disagrees with acquisition`
         );
       }
+      const canonicalPackageRoot = realpathSync(resolve(resolved.packageRoot));
+      let canonicalImporter;
+      try {
+        canonicalImporter = realpathSync(resolve(request.importer));
+      } catch {
+        // The generated root importer is normally materialized already, but a
+        // caller may provide an exact synthetic importer for a bounded graph
+        // preparation. Preserve its resolved identity until native replay.
+        canonicalImporter = resolve(request.importer);
+      }
       const node = {
         key,
-        importer: resolve(request.importer),
+        importer: canonicalImporter,
         specifier: request.specifier,
-        packageRoot: resolve(resolved.packageRoot),
+        packageRoot: canonicalPackageRoot,
         packageName: resolved.packageName,
         packageVersion: resolved.packageVersion,
         integrity: request.integrity,
@@ -1799,7 +2061,8 @@ async function preparePublishedGraphFallback({
             specifier: dependency.specifier,
             packageRoot: located.dependencyRoot,
             conditions,
-            integrity: located.dependencyLock.integrity
+            integrity: located.dependencyLock.integrity,
+            declarationOnly: dependency.axis === "declarations"
           },
           false,
           nextAncestry
@@ -1808,7 +2071,13 @@ async function preparePublishedGraphFallback({
         directDependencies.push({ state: child, viaSpecifier: dependency.specifier });
         return true;
       };
-      const semanticEdges = staticRuntimeDependencies(resolved);
+      // A declaration-only dependency first uses the independent proposal
+      // lane. Its runtime imports remain authenticated compiler sources, not
+      // inferred behavioral contracts. Native verification still rejects any
+      // claim that actually requires a dependency receipt.
+      const semanticEdges = request.declarationOnly ? [] : isRoot
+        ? staticBindingDependencies(resolved, artifactCase, dependencyCases)
+        : staticRuntimeDependencies(resolved);
       const reexportImporters = reexportImporterCensus(node.packageRoot, semanticEdges);
       for (const dependency of semanticEdges) {
         await addSemanticDependency(dependency);
@@ -1859,7 +2128,8 @@ async function preparePublishedGraphFallback({
     };
     const prepareNode = async (request, isRoot = false, ancestry = []) => {
       const conditions = [...new Set([...(request.conditions ?? []), "import"])].sort();
-      const key = publishedGraphRequestKey({ ...request, conditions });
+      const key = publishedGraphRequestKey({ ...request, conditions }) +
+        (request.declarationOnly ? ":declaration-proposal" : "");
       if (ancestry.includes(key)) {
         throw new Error(`published dependency graph cycle: ${[...ancestry, key].join(" -> ")}`);
       }
@@ -1897,17 +2167,71 @@ async function preparePublishedGraphFallback({
     );
     return { root, nodes: reachableGraphStates(root, byKey) };
   };
-  const prepared = await mapWithExactConcurrency(
-    dependencyCases,
+  // A node that cannot be resolved, located or acquired is a fact about that
+  // node, and the artifact cases whose graph reaches it are the exact set it
+  // refuses. Preparing them together in one transaction is what makes the
+  // dependency evidence shared; it must not also make one broken node refuse
+  // every case. Cases are therefore prepared independently, refused nodes are
+  // recorded by name, and the lane is abandoned only when nothing survives --
+  // which is when the caller's proposal fallback is the better answer.
+  // Preparing semantic graphs for all 118 retained Kobalte cases (59
+  // entrypoints) exceeded the process-tree budget. Large sets keep those
+  // proposals and their ordinary compiler sources as independent roots,
+  // preparing semantic dependencies only for the bounded missing frontier.
+  const { graphCases: requestedCases, retainedProposalCases } =
+    selectRecoveryPreparation(recovery, dependencyCases, { retainGeneratedCases });
+  const caseRefusals = [];
+  const nodeRefusals = new Map();
+  const prepared = (await mapWithExactConcurrency(
+    requestedCases,
     publishedGraphPreparationConcurrency(),
-    prepareArtifactCase
+    async (artifactCase, caseIndex) => {
+      try {
+        const preparedCase = await prepareArtifactCase(artifactCase, caseIndex);
+        return { ...preparedCase, artifactCase };
+      } catch (error) {
+        if (error instanceof CertificationRefusal) throw error;
+        caseRefusals.push({
+          entrypoint: artifactCase.entrypoint,
+          conditions: [...(artifactCase.conditions ?? [])],
+          stage: "graph-preparation",
+          reason: error?.message ?? String(error)
+        });
+        return null;
+      }
+    }
+  )).filter(Boolean);
+  if (prepared.length === 0) {
+    throw new Error(
+      `published dependency graph prepared no artifact case: ${
+        caseRefusals[0]?.reason ?? "no artifact case was requested"
+      }`
+    );
+  }
+  // Nodes no surviving root reaches were prepared for a refused case alone.
+  // Acquiring and generating them would spend this transaction's budget on
+  // evidence nothing can use, and let their own failures refuse a graph they
+  // are not part of.
+  const reachableFromPrepared = new Set(
+    prepared.flatMap(item =>
+      reachableGraphStates(item.root, byKey).map(state => state.node.key)
+    )
   );
+  for (const key of [...byKey.keys()]) {
+    if (!reachableFromPrepared.has(key)) byKey.delete(key);
+  }
   const sourceByKey = new Map();
+  const sourceRefusals = new Map();
+  const retainedSourceKeys = new Set(
+    [...byKey.values()].flatMap(state => state.sourceDependencies.map(source => source.key))
+  );
   const acquisitionUnits = [
     ...[...byKey.values()]
       .filter(state => !state.artifactSnapshot)
       .map(state => ({ kind: "node", state })),
-    ...[...sourceArtifacts.values()].map(source => ({ kind: "source", source }))
+    ...[...sourceArtifacts.values()]
+      .filter(source => retainedSourceKeys.has(source.key))
+      .map(source => ({ kind: "source", source }))
   ];
   const graphAcquisitionStartedAt = performance.now();
   await mapWithExactConcurrency(
@@ -1915,18 +2239,33 @@ async function preparePublishedGraphFallback({
     publishedGraphPreparationConcurrency(),
     async unit => {
       if (unit.kind === "node") {
-        unit.state.artifactSnapshot = await acquireSharedPublishedArtifact(
-          unit.state.nodeManifest,
-          unit.state.node.integrity,
-          unit.state.scratch
-        );
+        try {
+          unit.state.artifactSnapshot = await acquireSharedPublishedArtifact(
+            unit.state.nodeManifest,
+            unit.state.node.integrity,
+            unit.state.scratch
+          );
+        } catch (error) {
+          if (error instanceof CertificationRefusal) throw error;
+          nodeRefusals.set(unit.state.node.key, {
+            stage: "graph-acquisition",
+            reason: error?.message ?? String(error)
+          });
+        }
         return;
       }
-      const artifact = await acquireSharedPublishedArtifact(
-        unit.source.manifest,
-        unit.source.integrity,
-        unit.source.scratch
-      );
+      let artifact;
+      try {
+        artifact = await acquireSharedPublishedArtifact(
+          unit.source.manifest,
+          unit.source.integrity,
+          unit.source.scratch
+        );
+      } catch (error) {
+        if (error instanceof CertificationRefusal) throw error;
+        sourceRefusals.set(unit.source.key, error?.message ?? String(error));
+        return;
+      }
       sourceByKey.set(unit.source.key, {
         packageName: unit.source.packageName,
         packageVersion: unit.source.packageVersion,
@@ -1940,17 +2279,31 @@ async function preparePublishedGraphFallback({
     }
   );
   for (const state of byKey.values()) {
-    state.sourceDependencies = state.sourceDependencies.map(source => {
+    if (nodeRefusals.has(state.node.key)) continue;
+    const acquiredSources = [];
+    let unacquired = null;
+    for (const source of state.sourceDependencies) {
       const acquired = sourceByKey.get(source.key);
       if (!acquired) {
-        throw new Error(`compiler source ${source.packageName}@${source.packageVersion} was not acquired`);
+        unacquired = `compiler source ${source.packageName}@${source.packageVersion} was not acquired${
+          sourceRefusals.has(source.key) ? `: ${sourceRefusals.get(source.key)}` : ""
+        }`;
+        break;
       }
-      return acquired;
-    });
+      acquiredSources.push(acquired);
+    }
+    if (unacquired) {
+      nodeRefusals.set(state.node.key, { stage: "graph-acquisition", reason: unacquired });
+      continue;
+    }
+    state.sourceDependencies = acquiredSources;
   }
+  cascadeGraphNodeRefusals([...byKey.values()], nodeRefusals);
   const graphAcquisitionDurationMs =
     Math.round((performance.now() - graphAcquisitionStartedAt) * 100) / 100;
-  const pendingGeneration = new Set(byKey.values());
+  const pendingGeneration = new Set(
+    [...byKey.values()].filter(state => !nodeRefusals.has(state.node.key))
+  );
   let proposalGenerations = 0;
   let proposalGenerationsShared = 0;
   // Importer variants of one artifact generate once. A node is keyed by the
@@ -1978,99 +2331,115 @@ async function preparePublishedGraphFallback({
       ready,
       publishedGraphPreparationConcurrency(),
       async state => {
-        const dependencies = state.directDependencies.map(dependency => ({
-          ...dependency.state,
-          viaSpecifier: dependency.viaSpecifier,
-          reexportImporters: [
-            ...(state.reexportImporters.get(dependency.viaSpecifier) ?? [])
-          ].sort()
-        }));
-        const merged = mergeProposalDependencies(
-          dependencies,
-          join(state.scratch, `dependency-catalog-${dependencies.length}`)
-        );
-        const generationArguments = [
-          "--package-root",
-          state.node.packageRoot,
-          "--output",
-          state.generatedOutput,
-          "--integrity",
-          state.node.integrity,
-          "--entrypoint",
-          state.node.entrypoint,
-          "--certification-importer",
-          state.node.importer
-        ];
-        const explicitConditions = state.node.conditions.filter(
-          condition => condition !== "import"
-        );
-        if (explicitConditions.length) {
-          generationArguments.push("--conditions", explicitConditions.join(","));
-        }
-        const variantKey = JSON.stringify([
-          state.node.packageRoot,
-          state.node.integrity,
-          state.node.entrypoint,
-          state.node.conditions,
-          dependencies
-            .map(dependency => [dependency.viaSpecifier, dependency.variantKey ?? dependency.node.key])
-            .sort((left, right) => left[0].localeCompare(right[0]) || left[1].localeCompare(right[1]))
-        ]);
-        state.variantKey = variantKey;
-        let generated;
-        const shared = generationByVariantKey.get(variantKey);
-        if (shared) {
-          let representative;
-          try {
-            representative = await shared;
-          } catch (error) {
-            throw new Error(
-              `published dependency graph node ${state.node.packageName}@${state.node.packageVersion} ` +
-              `${state.node.entrypoint} [${state.node.conditions.join(",")}] refused: ${error.message}`,
-              { cause: error }
-            );
-          }
-          proposalGenerationsShared += 1;
-          generated = {
-            ...representative,
-            certificationInputs: representative.certificationInputs.map(input => ({
-              ...input,
-              resolution: { ...input.resolution, importer: state.node.importer }
-            }))
-          };
-        } else {
-          const generation = generatePackageContract(generationArguments, {
-            quiet: true,
-            proposalDependencies: merged.proposalDependencies,
-            proposalDependencyCatalog: merged.catalog,
-            privateGraphPreparation: true,
-            exactConditions: explicitConditions
-          });
-          generationByVariantKey.set(variantKey, generation);
-          try {
-            generated = await generation;
-          } catch (error) {
-            throw new Error(
-              `published dependency graph node ${state.node.packageName}@${state.node.packageVersion} ` +
-              `${state.node.entrypoint} [${state.node.conditions.join(",")}] refused: ${error.message}`,
-              { cause: error }
-            );
-          }
-        }
-        const plannings = certificationPlannings(generated, state.artifactSnapshot, options);
-        if (plannings.length !== 1) {
-          throw new Error(
-            `exact graph node ${state.node.packageName}@${state.node.packageVersion} produced ${plannings.length} artifact cases`
+        // A node whose proposal cannot be generated refuses the artifact
+        // cases that reach it, not the transaction. Its dependents cannot
+        // generate against a contract it never produced, so the cascade
+        // below removes them from this frontier rather than leaving the
+        // loop with nothing ready.
+        const generateNodeProposal = async () => {
+          const dependencies = state.directDependencies.map(dependency => ({
+            ...dependency.state,
+            viaSpecifier: dependency.viaSpecifier,
+            reexportImporters: [
+              ...(state.reexportImporters.get(dependency.viaSpecifier) ?? [])
+            ].sort()
+          }));
+          const merged = mergeProposalDependencies(
+            dependencies,
+            join(state.scratch, `dependency-catalog-${dependencies.length}`)
           );
+          const generationArguments = [
+            "--package-root",
+            state.node.packageRoot,
+            "--output",
+            state.generatedOutput,
+            "--integrity",
+            state.node.integrity,
+            "--entrypoint",
+            state.node.entrypoint,
+            "--certification-importer",
+            state.node.importer
+          ];
+          const explicitConditions = state.node.conditions.filter(
+            condition => condition !== "import"
+          );
+          if (explicitConditions.length) {
+            generationArguments.push("--conditions", explicitConditions.join(","));
+          }
+          const variantKey = JSON.stringify([
+            state.node.packageRoot,
+            state.node.integrity,
+            state.node.entrypoint,
+            state.node.conditions,
+            dependencies
+              .map(dependency => [dependency.viaSpecifier, dependency.variantKey ?? dependency.node.key])
+              .sort((left, right) => left[0].localeCompare(right[0]) || left[1].localeCompare(right[1]))
+          ]);
+          state.variantKey = variantKey;
+          let generated;
+          const shared = generationByVariantKey.get(variantKey);
+          if (shared) {
+            let representative;
+            try {
+              representative = await shared;
+            } catch (error) {
+              throw new Error(
+                `published dependency graph node ${state.node.packageName}@${state.node.packageVersion} ` +
+                `${state.node.entrypoint} [${state.node.conditions.join(",")}] refused: ${error.message}`,
+                { cause: error }
+              );
+            }
+            proposalGenerationsShared += 1;
+            generated = {
+              ...representative,
+              certificationInputs: representative.certificationInputs.map(input => ({
+                ...input,
+                resolution: { ...input.resolution, importer: state.node.importer }
+              }))
+            };
+          } else {
+            const generation = generatePackageContract(generationArguments, {
+              quiet: true,
+              proposalDependencies: merged.proposalDependencies,
+              proposalDependencyCatalog: merged.catalog,
+              privateGraphPreparation: true,
+              exactConditions: explicitConditions
+            });
+            generationByVariantKey.set(variantKey, generation);
+            try {
+              generated = await generation;
+            } catch (error) {
+              throw new Error(
+                `published dependency graph node ${state.node.packageName}@${state.node.packageVersion} ` +
+                `${state.node.entrypoint} [${state.node.conditions.join(",")}] refused: ${error.message}`,
+                { cause: error }
+              );
+            }
+          }
+          const plannings = certificationPlannings(generated, state.artifactSnapshot, options);
+          if (plannings.length !== 1) {
+            throw new Error(
+              `exact graph node ${state.node.packageName}@${state.node.packageVersion} produced ${plannings.length} artifact cases`
+            );
+          }
+          // This plan is diagnostic orchestration material only. The final
+          // native case-set transaction independently decodes the proposal and
+          // derives every authority-bearing demand.
+          const reviewedPlan = reviewGraphProposal(generated);
+          state.planning = plannings[0];
+          state.demandPlan = reviewedPlan;
+          demandPlans[state.nodeIndex] = reviewedPlan;
+          proposalGenerations += 1;
+        };
+        try {
+          await generateNodeProposal();
+        } catch (error) {
+          if (error instanceof CertificationRefusal) throw error;
+          nodeRefusals.set(state.node.key, {
+            stage: "graph-generation",
+            reason: error?.message ?? String(error)
+          });
         }
-        // This plan is diagnostic orchestration material only. The final
-        // native case-set transaction independently decodes the proposal and
-        // derives every authority-bearing demand.
-        const reviewedPlan = reviewGraphProposal(generated);
-        state.planning = plannings[0];
-        state.demandPlan = reviewedPlan;
-        demandPlans[state.nodeIndex] = reviewedPlan;
-        proposalGenerations += 1;
       }
     );
     proposalFrontiers.push({
@@ -2078,17 +2447,72 @@ async function preparePublishedGraphFallback({
       durationMs: Math.round((performance.now() - frontierStartedAt) * 100) / 100
     });
     for (const state of ready) pendingGeneration.delete(state);
+    cascadeGraphNodeRefusals([...pendingGeneration], nodeRefusals);
+    for (const state of [...pendingGeneration]) {
+      if (nodeRefusals.has(state.node.key)) pendingGeneration.delete(state);
+    }
   }
-  preparedCases.push(...prepared);
-  for (const item of preparedCases) {
-    item.nodes = reachableGraphStates(item.root, byKey);
+  const surviving = graphCasesWithoutRefusedNodes({ prepared, byKey, nodeRefusals });
+  caseRefusals.push(...surviving.refusals);
+  preparedCases.push(...surviving.cases);
+  if (preparedCases.length === 0) {
+    throw new Error(
+      `published dependency graph prepared no artifact case: ${
+        caseRefusals[0]?.reason ?? "no artifact case survived preparation"
+      }`
+    );
+  }
+  let retainedRoots = [];
+  if (retainedProposalCases.length) {
+    const lock = exactBunLockSelection(bunLockIndex, manifest.name, manifest.version,
+      bunLockLocatorForInstalledPackage(bunLockPath, options.packageRoot));
+    if (lock.integrity !== options.integrity) {
+      throw new Error("retained proposal lock integrity disagrees with its archive");
+    }
+    const sourceDependenciesByInput = await acquireRootCompilerSources({
+      options, generated, scratch, fetch_
+    });
+    retainedRoots = retainedProposalGraphCases({
+      plannings: certificationPlannings(generated, rootArtifactSnapshot, options),
+      sourceDependenciesByInput, coordinates: retainedProposalCases,
+      lockfile: resolve(bunLockPath), lockLocator: lock.locator
+    });
+    demandPlans.push(...await planDemands({ options, generated,
+      artifactSnapshot: rootArtifactSnapshot, scratch }));
+    preparedCases.unshift(...retainedRoots);
+    recovery.retainedProposalRoots = true;
+  }
+  // Recovery's selection strategy reads these coordinates and requires them to
+  // describe exactly the cases the graph carries, retained ones first. A case
+  // that never prepared is not a case this transaction can publish, so it
+  // leaves the set and stays visible as an explicit preparation refusal.
+  //
+  // The retained cases are the floor, and here -- unlike at certification time
+  // -- the comparison is certain rather than a wager. A retained case is one
+  // the proposal lane already generated and would publish; a retained case
+  // this graph cannot even prepare is one this lane certainly will not. Taking
+  // the lane anyway would trade a proved case for a chance at a frontier one.
+  // So a dropped retained case abandons the graph, and the caller publishes
+  // the proposal exactly as it would have without the lane.
+  if (recovery) {
+    const survived = new Set(preparedCases.map(item => item.artifactCase));
+    const floor = retainedCaseFloorRefusal(recovery.retainedCases, survived, caseRefusals);
+    if (floor) throw new RetainedCasePreparationRefusal(floor);
+    recovery.expectedCases = recovery.cases;
+    recovery.preparationRefusals = caseRefusals;
+    recovery.cases = recovery.cases.filter(value => survived.has(value));
   }
   return {
     preparedCases,
     demandPlans: demandPlans.filter(Boolean),
     timing: {
+      ...(recovery ? { entrypointRecovery: recovery } : {}),
+      ...(caseRefusals.length ? { preparationRefusals: caseRefusals } : {}),
+      requestedCases: requestedCases.length + retainedRoots.length,
+      retainedProposalCases: retainedRoots.length,
+      preparedDependencyGraphCases: surviving.cases.length,
       rootCases: preparedCases.length,
-      canonicalNodes: byKey.size,
+      canonicalNodes: byKey.size + retainedRoots.length,
       acquiredPublishedArtifacts: publishedArtifacts.size,
       acquisitionUnits: acquisitionUnits.length,
       graphAcquisitionDurationMs,
@@ -2151,8 +2575,10 @@ export async function acquireRootCompilerSources({ options, generated, scratch, 
   } catch {
     return empty;
   }
-  const sourceScratch = join(scratch, "root-sources");
-  mkdirSync(sourceScratch, { recursive: true });
+  // Recovery invokes this repeatedly in one transaction. Each collector starts
+  // its source index at zero, so sharing a directory turns EEXIST into a false
+  // unavailable-source disposition and can remove authenticated dependencies.
+  const sourceScratch = mkdtempSync(join(scratch, "root-sources-"));
   const withheldNames = new Set();
   const collector = createCompilerSourceCollector({
     bunLockPath,
@@ -2378,33 +2804,365 @@ async function executeNativeCertification({
   };
 }
 
-async function executeNativeOrGraphCertification({
+export async function executeNativeOrGraphCertification({
   options,
   generated,
   graph,
   artifactSnapshot,
   scratch,
-  fetch_
-}) {
-  if (!graph) {
-    return executeNativeCertification({
-      options,
+  fetch_,
+  caseRecovery = null,
+  prepareGeneratedGraph = null
+}, { executeNative = executeNativeCertification, executeGraph = executePreparedPublishedGraphs } = {}) {
+  const catalogRoot = options.catalog.endsWith("accepted-contracts.json")
+    ? dirname(options.catalog) : options.catalog;
+  // A refused native attempt can itself create this directory. Capture the
+  // protection before either lane runs, never reinterpret that later directory
+  // as a pre-existing publication or discard a publication that was here.
+  const existingPublication = existsSync(catalogRoot);
+  const certifyGenerated = async (recovery, destination = options, publicationExists = existingPublication, trialPrefix = "independent-case-trial") => {
+    if (recovery) {
+      let round = 0;
+      return certifyIndependentCaseSelection({
+        cases: generated.certificationInputs,
+        recovery,
+        existingPublication: publicationExists,
+        certify: async (inputs, publish) => {
+          const trial = join(scratch, `${trialPrefix}-${++round}`);
+          recovery.nativeCertificationTransactions = round;
+          let output = generated.output;
+          if (inputs.length !== generated.certificationInputs.length) {
+            mkdirSync(trial, { recursive: true });
+            output = join(trial, "proposal.json");
+            writeFileSync(output, `${JSON.stringify(projectProposalCases(
+              JSON.parse(readFileSync(generated.output, "utf8")), inputs
+            ))}\n`);
+          }
+          return executeNative({
+            options: publish ? destination : { ...destination,
+              catalog: join(trial, "catalog"), trustConfigurationOutput: join(trial, "trust.json") },
+            generated: { ...generated, output, certificationInputs: inputs },
+            artifactSnapshot, scratch, fetch_
+          });
+        }
+      });
+    }
+    return executeNative({
+      options: destination,
       generated,
       artifactSnapshot,
       scratch,
       fetch_
     });
+  };
+  if (!graph) {
+    try {
+      return await certifyGenerated(caseRecovery);
+    } catch (error) {
+      // No accepted case can be traded for this retry: the ordinary single
+      // case just refused, and the destination had no publication beforehand.
+      // Infrastructure failures and multi-case proposals retain their refusal.
+      if (!prepareGeneratedGraph || existingPublication ||
+          generated?.certificationInputs?.length !== 1 ||
+          !(error instanceof CertificationRefusal) ||
+          error.owner !== "certifier" || error.stage !== "witness-acquisition" ||
+          !error.demandId || !["argument-binding", "callable-path"].includes(error.family)) throw error;
+      const prepared = await prepareGeneratedGraph(error);
+      return executeGraph({ options, cases: prepared.preparedCases, scratch,
+        catalogRoot, trustConfigurationOutput: options.trustConfigurationOutput });
+    }
   }
-  const catalogRoot = options.catalog.endsWith("accepted-contracts.json")
-    ? dirname(options.catalog)
-    : options.catalog;
-  return executePreparedPublishedGraphs({
+  const execute = (cases, catalogRoot, trustConfigurationOutput) => executeGraph({
     options,
-    cases: graph.preparedCases,
+    cases,
     scratch,
     catalogRoot,
-    trustConfigurationOutput: options.trustConfigurationOutput
+    trustConfigurationOutput
   });
+  const recovery = graph.timing?.entrypointRecovery;
+  if (!options.recoverEntrypoints || !recovery) {
+    return execute(graph.preparedCases, catalogRoot, options.trustConfigurationOutput);
+  }
+  let round = 0;
+  const establishFloor = generated && recovery.retainedProposalRoots && existingPublication === false ? async () => {
+    const selection = {}, privateRoot = join(scratch, "verified-retained-floor");
+    const destination = { ...options, catalog: join(privateRoot, "catalog"), trustConfigurationOutput: join(privateRoot, "trust.json") };
+    const result = await certifyGenerated(selection, destination, false, "retained-floor-trial");
+    if (result.authority !== "native-certification-complete" || result.catalogRoot !== destination.catalog) throw new Error("retained floor requires a completed native publication in its private destination");
+    const key = item => JSON.stringify([item.entrypoint, [...new Set([...item.conditions, "import"])].sort()]);
+    const wanted = new Set(selection.publishedCases.map(key));
+    const proposal = JSON.parse(readFileSync(generated.output, "utf8"));
+    const expected = generated.certificationInputs.filter(input => wanted.has(key(input))).map(input => {
+      const projected = projectProposalCases(proposal, [input]);
+      const { exports: _exports, ...artifact } = projected.entrypoints[input.entrypoint].cases[0];
+      return { coordinate: selection.publishedCases.find(item => key(item) === key(input)),
+        package: projected.package, selection: artifact, resolution: input.resolution };
+    });
+    const publication = inspectRetainedCertificationFloor({ catalogRoot: result.catalogRoot, expected });
+    return { acceptedCases: selection.publishedCases, caseRefusals: selection.caseRefusals ?? [], publication,
+      nativeCertificationTransactions: selection.nativeCertificationTransactions };
+  } : null;
+  return certifyRecoverableCaseSelection({
+    cases: graph.preparedCases,
+    recovery,
+    existingPublication,
+    establishFloor,
+    fallback: generated ? async error => {
+      recovery.graphRefusal = { stage: error.stage, owner: error.owner,
+        demandId: error.demandId, family: error.family, reason: error.reason };
+      const independent = graph.timing.independentCaseRecovery = {};
+      const result = await certifyGenerated(independent);
+      recovery.publishedCases = [...independent.publishedCases];
+      recovery.caseRefusals = [...(recovery.caseRefusals ?? []), ...(independent.caseRefusals ?? [])];
+      const key = item => JSON.stringify([item.entrypoint, [...item.conditions].sort()]);
+      const published = new Set(recovery.publishedCases.map(key));
+      recovery.unpublishedCases = recovery.cases.filter(item => !published.has(key(item)));
+      graph.timing.retainedProposalFallback = true;
+      graph.timing.reusedProposal = graph.timing.reusedProposalForRecovery === true;
+      return result;
+    } : null,
+    certify: async (cases, publish) => {
+      graph.timing.nativeCertificationTransactions = ++round;
+      graph.timing.typeFactsCaseSetBatches = round;
+      const trial = join(scratch, `recovery-trial-${round}`);
+      return execute(cases, publish ? catalogRoot : join(trial, "catalog"),
+        publish ? options.trustConfigurationOutput : join(trial, "trust.json"));
+    }
+  });
+}
+
+// Select whole unaccepted artifact cases, never individual claims. Native
+// planning independently authenticates each coordinate and requires its case
+// census to equal this proposal's census before any receipt is published.
+export function projectProposalCases(document, inputs) {
+  const entrypoints = {};
+  for (const input of inputs) {
+    const resolution = input.resolution;
+    if (!resolution || document.package.name !== resolution.packageName ||
+        document.package.version !== resolution.packageVersion ||
+        document.package.integrity !== resolution.packageIntegrity ||
+        input.entrypoint !== resolution.requestedEntrypoint) {
+      throw new Error("case projection requires exact package and entrypoint identities");
+    }
+    const matches = (document.entrypoints[input.entrypoint]?.cases ?? []).filter(item =>
+      resolve(resolution.packageRoot, item.artifact.path) === resolution.runtime.path &&
+      `sha256:${item.artifact.sha256}` === resolution.runtime.digest &&
+      resolve(resolution.packageRoot, item.declarations.path) === resolution.declarations.path &&
+      `sha256:${item.declarations.sha256}` === resolution.declarations.digest &&
+      item.resolution.runtimeBranch === resolution.runtimeTrace.branch &&
+      item.resolution.typesBranch === resolution.declarationTrace.branch
+    );
+    if (matches.length !== 1) throw new Error("case projection requires one exact artifact selection");
+    const selected = entrypoints[input.entrypoint] ??= { cases: [] };
+    if (selected.cases.includes(matches[0])) throw new Error("case projection contains a duplicate artifact selection");
+    selected.cases.push(matches[0]);
+  }
+  if (!inputs.length) throw new Error("case projection cannot publish an empty census");
+  const summaries = {};
+  for (const entrypoint of Object.values(entrypoints)) {
+    for (const item of entrypoint.cases) {
+      for (const reference of Object.values(item.exports)) {
+        const id = typeof reference === "string" ? reference : reference.summary;
+        if (!Object.hasOwn(document.summaries, id)) throw new Error("case projection references a missing summary");
+        summaries[id] = document.summaries[id];
+      }
+    }
+  }
+  return { ...document, entrypoints, summaries };
+}
+
+// The proposal is unaccepted, so no case is assumed proved. Every selected
+// subset gets a fresh native transaction, including final publication. An
+// existing publication cannot be replaced with a smaller set by this lane.
+export async function certifyIndependentCaseSelection({ cases, recovery, existingPublication, certify }) {
+  if (typeof existingPublication !== "boolean") throw new Error("independent recovery requires an explicit publication-state check");
+  const coordinates = recoveryGraphCases({ certificationInputs: cases }, []).cases;
+  recovery.expectedCases = coordinates;
+  const isProofRefusal = error => error instanceof CertificationRefusal &&
+    error.owner === "certifier" && error.stage === "witness-acquisition";
+  let combinedFailure;
+  try {
+    const result = await certify(cases, true);
+    recovery.publishedCases = coordinates;
+    return result;
+  } catch (error) {
+    if (!isProofRefusal(error) || existingPublication || cases.length < 2 || cases.length > 1024) throw error;
+    combinedFailure = error;
+    recovery.combinedRefusal = error.reason ?? error.message;
+  }
+  const selected = [], accepted = [];
+  recovery.caseRefusals = [];
+  const refuse = (index, error) => {
+    recovery.caseRefusals.push({ ...coordinates[index], stage: error.stage,
+        owner: error.owner, demandId: error.demandId ?? null,
+        family: error.family ?? null, reason: error.reason ?? error.message });
+  };
+  if (cases.length > 32) {
+    // The document format bounds the complete census to 1024 cases. A binary
+    // subdivision makes at most 2*N-2 private transactions, instead of repeatedly
+    // verifying a growing prefix. Successful batches provide selection hints
+    // only: the complete union is independently verified before publication.
+    recovery.strategy = "binary-subdivision";
+    const visit = async (start, end) => {
+      try {
+        await certify(cases.slice(start, end), false);
+        selected.push(...cases.slice(start, end));
+        accepted.push(...coordinates.slice(start, end));
+      } catch (error) {
+        if (!isProofRefusal(error)) throw error;
+        if (end - start === 1) return refuse(start, error);
+        const middle = start + Math.floor((end - start) / 2);
+        await visit(start, middle);
+        await visit(middle, end);
+      }
+    };
+    const middle = Math.floor(cases.length / 2);
+    await visit(0, middle);
+    await visit(middle, cases.length);
+  } else {
+    for (let index = 0; index < cases.length; index++) {
+      try {
+        await certify([...selected, cases[index]], false);
+        selected.push(cases[index]);
+        accepted.push(coordinates[index]);
+      } catch (error) {
+        if (!isProofRefusal(error)) throw error;
+        refuse(index, error);
+      }
+    }
+  }
+  if (!selected.length) throw combinedFailure;
+  const result = await certify(selected, true);
+  recovery.publishedCases = accepted;
+  return result;
+}
+
+// Selection is orchestration only. Every trial and final publication asks the
+// native verifier to rebuild all proofs, dependencies, trust and case bindings.
+// Trial receipts never become inputs to the final transaction.
+export async function certifyRecoverableCaseSelection({
+  cases,
+  recovery,
+  certify,
+  fallback = null,
+  establishFloor = null,
+  // ADR 0070. `false` asserts that nothing was published before this attempt,
+  // which is what allows a retained-baseline failure to publish a subset of
+  // the prepared set instead of abandoning the graph. `null` is "not asked",
+  // and keeps the original behaviour: a caller that cannot state the
+  // publication state must not reduce one.
+  existingPublication = null
+}) {
+  if (fallback) {
+    try {
+      return await certifyRecoverableCaseSelection({ cases, recovery, certify, existingPublication, establishFloor });
+    } catch (error) {
+      if (!(error instanceof CertificationRefusal) || error.owner !== "certifier" || error.stage !== "witness-acquisition") throw error;
+      return fallback(error);
+    }
+  }
+  if (recovery.retainedProposalRoots) {
+    return certifyRetainedProposalSelection({ cases, recovery, certify,
+      establishFloor: existingPublication === false ? establishFloor : null,
+      isProofRefusal: error => error instanceof CertificationRefusal &&
+        error.owner === "certifier" && error.stage === "witness-acquisition"
+    });
+  }
+  const retainedCount = recovery.retainedCases.length;
+  if (!retainedCount || retainedCount >= cases.length || cases.length > 32 ||
+      recovery.cases.length !== cases.length ||
+      JSON.stringify(recovery.cases.slice(0, retainedCount)) !== JSON.stringify(recovery.retainedCases)) {
+    return certify(cases, true);
+  }
+  const isProofRefusal = error => error instanceof CertificationRefusal &&
+    error.owner === "certifier" && error.stage === "witness-acquisition";
+  try {
+    const result = await certify(cases, true);
+    recovery.publishedCases = [...recovery.cases];
+    return result;
+  } catch (error) {
+    if (!isProofRefusal(error)) throw error;
+    recovery.combinedRefusal = error.reason ?? error.message;
+  }
+  // A retained case is mandatory for *this* strategy: it is the baseline every
+  // trial extends, so a baseline failure ends it rather than silently dropping
+  // coverage the original proposal selected.
+  //
+  // ADR 0070: ending the strategy is not the same as abandoning the graph. The
+  // prepared set is the retained cases *plus* the dependency-composition
+  // frontier, and the proposal this otherwise falls back to never contained
+  // that frontier — those cases refused at generation for want of a dependency
+  // binding. Losing all of them because one retained case cannot be proved
+  // throws away the only lane that ever covered them. So select independently
+  // across the whole prepared set instead, retained cases included, on the one
+  // condition that makes publishing a subset safe: nothing was published here
+  // before. A caller that cannot state that keeps the original behaviour.
+  const selected = cases.slice(0, retainedCount);
+  const accepted = recovery.cases.slice(0, retainedCount);
+  try {
+    await certify(selected, false);
+  } catch (error) {
+    if (!isProofRefusal(error) || existingPublication !== false) throw error;
+    recovery.retainedBaselineRefusal = error.reason ?? error.message;
+    recovery.strategy = "independent-prepared-selection";
+    selected.length = 0;
+    accepted.length = 0;
+    recovery.caseRefusals = [];
+    // Subdivision, not a growing prefix. Every trial here re-certifies the
+    // whole prepared graph -- for `@kobalte/utils` that is 113 nodes -- so a
+    // transaction per case is the difference between finishing and hitting the
+    // certification budget. A batch that proves is a selection *hint* only; the
+    // complete union is certified again before anything is published.
+    const visit = async (start, end) => {
+      try {
+        await certify([...selected, ...cases.slice(start, end)], false);
+        selected.push(...cases.slice(start, end));
+        accepted.push(...recovery.cases.slice(start, end));
+      } catch (failure) {
+        if (!isProofRefusal(failure)) throw failure;
+        if (end - start === 1) {
+          recovery.caseRefusals.push({
+            ...recovery.cases[start],
+            stage: failure.stage, owner: failure.owner,
+            demandId: failure.demandId ?? null, family: failure.family ?? null,
+            reason: failure.reason ?? failure.message
+          });
+          return;
+        }
+        const middle = start + Math.floor((end - start) / 2);
+        await visit(start, middle);
+        await visit(middle, end);
+      }
+    };
+    await visit(0, cases.length);
+    // Nothing survived, so this lane has no answer at all. Rethrow the baseline
+    // refusal and let the proposal fallback have its turn.
+    if (!selected.length) throw error;
+    const result = await certify(selected, true);
+    recovery.publishedCases = accepted;
+    return result;
+  }
+  recovery.caseRefusals = [];
+  for (let index = retainedCount; index < cases.length; index++) {
+    try {
+      await certify([...selected, cases[index]], false);
+      selected.push(cases[index]);
+      accepted.push(recovery.cases[index]);
+    } catch (error) {
+      if (!isProofRefusal(error)) throw error;
+      recovery.caseRefusals.push({
+        ...recovery.cases[index],
+        stage: error.stage, owner: error.owner,
+        demandId: error.demandId ?? null, family: error.family ?? null,
+        reason: error.reason ?? error.message
+      });
+    }
+  }
+  // Native duplicate/conflict checks and ordinary consumer verification still
+  // gate the complete final selection, even when every private trial passed.
+  const result = await certify(selected, true);
+  recovery.publishedCases = accepted;
+  return result;
 }
 
 function writeAudit(
@@ -2632,7 +3390,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
           if (options.conditions.length) {
             generationArguments.push("--conditions", options.conditions.join(","));
           }
-          if (options.proposalRefusalAudit) {
+          if (options.proposalRefusalAudit && !options.recoverEntrypoints) {
             // Retain the exact bytes that were parsed and validated. Re-reading
             // the path for the scratch copy would let a concurrent replacement
             // substitute a different, incomplete root census after validation.
@@ -2670,12 +3428,13 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
           const reused = options.proposal
             ? reuseEmittedProposal({ options, manifest, certificationImporter, proposalOutput })
             : null;
-          if (reused) {
+          if (reused && !options.recoverEntrypoints) {
             reusedProposal = true;
             return { authority: "rust", generated: reused, graph: null };
           }
           try {
-            const generated = await generatePackageContract(generationArguments, { quiet: true });
+            const generated = reused ?? await generatePackageContract(generationArguments, { quiet: true });
+            reusedProposal = Boolean(reused);
             // Generation succeeded, so `generated` is a real answer for the
             // cases that produced one. When it is only a *partial* answer and
             // the missing cases refused on dependency composition, the caller
@@ -2683,7 +3442,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
             // authenticated dependency catalog behind them. The graph lane is
             // not a superset of the partial proposal -- it covers the refused
             // cases and not the others -- which is why it is opt-in.
-            if (options.dependencyGraphLane) {
+            if (options.dependencyGraphLane || options.recoverEntrypoints) {
               const { graph, trace } = await preparedGraphForPartialProposal({
                 options,
                 manifest,
@@ -2691,11 +3450,16 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
                 output: proposalOutput,
                 certificationImporter,
                 rootArtifactSnapshot: artifactSnapshot,
-                fetch_
+                fetch_,
+                generated
               });
               if (graph) {
-                graphPreparation = { ...graph.timing, partialProposalFrontier: true };
-                return { authority: "rust", generated: null, graph };
+                reusedProposal = false;
+                graphPreparation = Object.assign(graph.timing, {
+                  partialProposalFrontier: true,
+                  ...(options.recoverEntrypoints ? { reusedProposalForRecovery: Boolean(reused) } : {})
+                });
+                return { authority: "rust", generated: options.recoverEntrypoints ? generated : null, graph };
               }
               // A lane that was requested, attempted and could not be prepared
               // leaves the partial proposal as the answer -- but it must leave
@@ -2753,14 +3517,45 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       },
       evidence: {
         obtainWitnesses: async ({ artifactSnapshot, openProposal }) =>
-          measure("witnessAcquisition", () => executeNativeOrGraphCertification({
-            options,
-            generated: openProposal.generated,
-            graph: openProposal.graph,
-            artifactSnapshot,
-            scratch,
-            fetch_
-          }))
+          measure("witnessAcquisition", () => {
+            const caseRecovery = options.recoverEntrypoints && !openProposal.graph &&
+              openProposal.generated?.certificationInputs.length > 1 ? {} : null;
+            if (caseRecovery) graphPreparation = { ...(graphPreparation ?? {}), independentCaseRecovery: caseRecovery };
+            return executeNativeOrGraphCertification({
+              options,
+              generated: openProposal.generated,
+              graph: openProposal.graph,
+              artifactSnapshot,
+              scratch,
+              fetch_,
+              caseRecovery,
+              prepareGeneratedGraph: !openProposal.graph &&
+                (options.dependencyGraphLane || options.recoverEntrypoints) ? async originalRefusal => {
+                const trace = {
+                  originalRefusal: originalRefusal.reason ?? originalRefusal.message,
+                  demandId: originalRefusal.demandId,
+                  family: originalRefusal.family,
+                  originalProposalDigest: `sha256:${createHash("sha256").update(readFileSync(openProposal.generated.output)).digest("hex")}`,
+                  cases: openProposal.generated.certificationInputs.map(({ entrypoint, conditions }) => ({ entrypoint, conditions }))
+                };
+                graphPreparation = { ...(graphPreparation ?? {}), generatedProposalProofFallback: trace };
+                try {
+                  const graph = await preparePublishedGraphCases({
+                    options, manifest, scratch: join(scratch, "generated-proof-fallback"),
+                    certificationImporter, rootArtifactSnapshot: artifactSnapshot, fetch_,
+                    dependencyCases: trace.cases
+                  });
+                  graphPreparation = { ...graph.timing, generatedProposalProofFallback: trace };
+                  reusedProposal = false;
+                  demandPlans.splice(0, demandPlans.length, ...graph.demandPlans);
+                  return graph;
+                } catch (error) {
+                  trace.preparationRefusal = error?.message ?? String(error);
+                  throw originalRefusal;
+                }
+              } : null
+            });
+          })
       },
       issuer: {
         issue: async ({ accepted }) => measure("receiptIssuance", async () => ({

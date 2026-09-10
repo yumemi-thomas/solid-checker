@@ -13,7 +13,7 @@
             "sha256": "c83c79cfdb7cf89d11debcc2a5201cefc7e2a2d110011d427f369115bd37fe81"
           },
           "exports": {
-            "sameName": "summary-d56b106025dc3fe97c292b5aee63c737a503db6c44f4f037fe4c9a4f2eefb175"
+            "sameName": "summary-d664c646122fc4ad84857ee72d209ff0348a1d4c54188d5cf08583e156bab5bd"
           },
           "resolution": {
             "runtimeBranch": "/exports/./node",
@@ -31,7 +31,7 @@
             "sha256": "19867e1ae01c5f4be5061a5e8ed7045552887c595ebb9d78c051a9ac140b3563"
           },
           "exports": {
-            "sameName": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94"
+            "sameName": "summary-791cb4c57004018a3fb0b4d95eff7e5e6d9ddfa314766fc6a3ad977a3fa3d055"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -53,7 +53,7 @@
             "sha256": "19867e1ae01c5f4be5061a5e8ed7045552887c595ebb9d78c051a9ac140b3563"
           },
           "exports": {
-            "sameName": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94"
+            "sameName": "summary-791cb4c57004018a3fb0b4d95eff7e5e6d9ddfa314766fc6a3ad977a3fa3d055"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1jsx-runtime",
@@ -77,25 +77,30 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94": {
+    "summary-791cb4c57004018a3fb0b4d95eff7e5e6d9ddfa314766fc6a3ad977a3fa3d055": {
       "call": {
         "closed": [
+          "reads",
           "creates",
           "returns"
         ],
         "creates": [],
         "proposedClosures": [
+          "reads",
           "creates",
           "returns"
         ],
+        "reads": [],
         "returns": []
       },
       "shape": "callable"
     },
-    "summary-d56b106025dc3fe97c292b5aee63c737a503db6c44f4f037fe4c9a4f2eefb175": {
+    "summary-d664c646122fc4ad84857ee72d209ff0348a1d4c54188d5cf08583e156bab5bd": {
       "call": {
         "closed": [
-          "creates"
+          "reads",
+          "creates",
+          "returns"
         ],
         "creates": [],
         "operations": [
@@ -123,8 +128,11 @@
           }
         ],
         "proposedClosures": [
-          "creates"
+          "reads",
+          "creates",
+          "returns"
         ],
+        "reads": [],
         "returns": [
           "return"
         ]

@@ -1,0 +1,59 @@
+{
+  "binary": "/Users/thomas/Documents/Github/solid-checker/rust/target/release/solid-checker-rust",
+  "binaryDigest": "ead8a609b317a04b538a9dbc35c2a3d178b6045d67b0793d4c9fadc3b298f940",
+  "request": "/private/tmp/inert-discovery-replay/single-planning.json",
+  "requestDigest": "c3e0eaf0b12b5754485d18d5209e0b45073368c2d41fe839f155388b284d3da8",
+  "identicalPlans": true,
+  "results": [
+    {
+      "width": 2,
+      "requests": 28,
+      "elapsedMs": 1030
+    },
+    {
+      "width": 4,
+      "requests": 28,
+      "elapsedMs": 582
+    },
+    {
+      "width": 8,
+      "requests": 28,
+      "elapsedMs": 330
+    },
+    {
+      "width": 14,
+      "requests": 28,
+      "elapsedMs": 215
+    },
+    {
+      "width": 20,
+      "requests": 28,
+      "elapsedMs": 233
+    },
+    {
+      "width": 20,
+      "requests": 28,
+      "elapsedMs": 232
+    },
+    {
+      "width": 14,
+      "requests": 28,
+      "elapsedMs": 225
+    },
+    {
+      "width": 8,
+      "requests": 28,
+      "elapsedMs": 330
+    },
+    {
+      "width": 4,
+      "requests": 28,
+      "elapsedMs": 548
+    },
+    {
+      "width": 2,
+      "requests": 28,
+      "elapsedMs": 1028
+    }
+  ]
+}

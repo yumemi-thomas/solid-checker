@@ -83,16 +83,16 @@ build-rust: build-typefacts
 	$(CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) --workspace
 	cp rust/target/debug/solid-checker-rust bin/solid-checker-rust
 
-# A fresh source build for gates. Unlike build-rust this does not rebuild the
-# pinned TypeFacts producer or overwrite the packaged/check-in binary under bin/.
+# A fresh source build for gates. Checks the producer stamp first and leaves
+# the packaged checker under bin/ untouched.
 build-checker-debug: build-typefacts
-	$(CERTIFICATION_ENV) cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) \
+	$(CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) \
 	  -p solid-facts-backend --bin solid-checker-rust
 
 # A fresh optimized checker for performance measurements. Like the debug gate
 # build, this leaves the checked-in packaged binary under bin/ untouched.
 build-checker-release: build-typefacts
-	$(CERTIFICATION_ENV) cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) \
+	$(CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) \
 	  -p solid-facts-backend --bin solid-checker-rust
 
 package: build-typefacts
@@ -118,6 +118,28 @@ test-probe-harness: build-typefacts
 test-cli:
 	$(BUN) install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
 	$(BUN) run --cwd packages/cli test
+
+# Exact/filter-based library tests, with the same certification inputs as the
+# full suite. The driver rejects missing or empty selections before testing.
+.PHONY: test-focused
+test-focused: export TEST := $(TEST)
+test-focused: export TEST_EXACT := $(if $(TEST_EXACT),$(TEST_EXACT),0)
+test-focused: export TEST_PACKAGE := $(if $(TEST_PACKAGE),$(TEST_PACKAGE),solid-facts-backend)
+test-focused: export SOLID_CHECKER_BUILD_ID := $(SOLID_CHECKER_BUILD_ID)
+test-focused:
+	$(BUN) scripts/test-focused.mjs
+
+.PHONY: verify-fast
+verify-fast: build-typefacts
+	cargo +$(RUST_TOOLCHAIN) fmt --manifest-path $(RUST_MANIFEST) --all -- --check
+	$(CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) clippy --manifest-path $(RUST_MANIFEST) --workspace --all-targets -- -D warnings
+
+.PHONY: ecosystem-package
+ecosystem-package: export PACKAGE := $(PACKAGE)
+ecosystem-package: export ECOSYSTEM_PROFILE := $(if $(ECOSYSTEM_PROFILE),$(ECOSYSTEM_PROFILE),release)
+ecosystem-package: export SOLID_CHECKER_BUILD_ID := $(SOLID_CHECKER_BUILD_ID)
+ecosystem-package:
+	$(BUN) scripts/ecosystem-benchmark/package.mjs
 
 verify:
 	scripts/verify.sh

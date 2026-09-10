@@ -103,6 +103,7 @@
       "additionalProperties": false,
       "required": ["artifact", "declarations", "exports"],
       "properties": {
+        "initialization": { "enum": ["inert"] },
         "artifact": { "$ref": "#/$defs/runtimeArtifact" },
         "declarations": { "$ref": "#/$defs/file" },
         "transform": { "$ref": "#/$defs/file" },
@@ -128,6 +129,7 @@
       "additionalProperties": false,
       "required": ["resolution", "artifact", "declarations", "exports"],
       "properties": {
+        "initialization": { "enum": ["inert"] },
         "resolution": { "$ref": "#/$defs/resolution" },
         "artifact": { "$ref": "#/$defs/runtimeArtifact" },
         "declarations": { "$ref": "#/$defs/file" },

@@ -32,12 +32,19 @@ pub const AST_FACTS_SCHEMA: u32 = 42;
 
 mod emission;
 mod inert_erasure;
+mod inert_javascript;
+mod object_binding;
 mod span_index;
 
 pub use inert_erasure::{
     ImportFreeErasure, InertErasure, RelativeImportErasure, import_free_erasure, inert_erasure,
     relative_import_erasure,
 };
+pub use inert_javascript::{
+    InertJavaScriptModule, InertJavaScriptRefusal, inert_javascript_module,
+    inert_javascript_module_with_export_all,
+};
+pub use object_binding::{UnwrittenObjectBinding, unwritten_object_binding};
 
 pub use emission::{
     EmittingStatement, ModuleEmission, ModuleEmissionError, ModuleFlavor, module_emission,
@@ -217,6 +224,17 @@ pub struct CallFact {
     pub arguments: Vec<ArgumentFact>,
     pub static_callee: bool,
     pub owned_write_option: bool,
+    /// Whether this call's own result provably reaches nothing: the call
+    /// **is** the expression of an `ExpressionStatement`.
+    ///
+    /// One direction only. `true` proves the result is discarded; `false`
+    /// proves nothing and is the default, so a consumer that needs "the
+    /// result is used" reads `!result_discarded` and stays fail-closed on
+    /// every form this does not classify. `await f()` and `void f()` are
+    /// deliberately `false`: the statement's expression is the `await` or the
+    /// unary, and the call's result reaches *it*.
+    #[serde(default)]
+    pub result_discarded: bool,
 }
 
 impl CallFact {
@@ -553,6 +571,16 @@ pub enum ModuleHazardKind {
     Eval,
     OpaqueWasm,
     MutableUnboundGlobal,
+    /// A property accessor installed at run time: a `Proxy` trap, a getter
+    /// descriptor, or a prototype swapped for one that carries either.
+    ///
+    /// The point of the fact is what it makes *invisible*. A declared getter
+    /// is seen — the producer records a `get-accessor` form for it — but an
+    /// accessor installed at run time leaves the receiver's declared type
+    /// saying data property, so a read through it records nothing at all and
+    /// no census can refuse what it cannot see. This hazard is that premise,
+    /// stated syntactically at the one place it is still visible.
+    RuntimeAccessorInstallation,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -582,6 +610,9 @@ pub struct ExportFact {
     /// than contributing the target's names to an export-star set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub namespace: Option<CompactString>,
+    /// Exact exported namespace binding, distinct from any member it exposes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub namespace_binding: Option<NamedSpan>,
     pub specifiers: Vec<ExportSpecifierFact>,
     pub declarations: Vec<ExportSpecifierFact>,
     /// Public declaration names that do not authenticate an exact value
@@ -1257,6 +1288,21 @@ struct Collector<'s, 'semantic> {
     /// The [`Collector::conditional_flow_depth`] at each enclosing function's
     /// entry, innermost last.
     function_flow_depths: Vec<usize>,
+    /// The span of the expression the innermost enclosing `ExpressionStatement`
+    /// discards, while that statement's own expression is being walked.
+    ///
+    /// Compared by span equality rather than tracked as a depth, so a nested
+    /// call answers correctly without any unwinding: in `f(g())` as a
+    /// statement, only `f(...)`'s span matches.
+    discarded_expression: Option<OxcSpan>,
+    /// The concise arrow bodies enclosing the walk, innermost last.
+    ///
+    /// Oxc models `() => f()` as a body holding one `ExpressionStatement`, so
+    /// the syntax that discards a result and the syntax that *returns* one are
+    /// the same node. Without this the arrow's returned call would be recorded
+    /// as discarded, which is the one direction `result_discarded` may never
+    /// be wrong in.
+    concise_arrow_bodies: Vec<OxcSpan>,
 }
 
 struct UnresolvedAssignmentTargets<'semantic> {
@@ -1365,6 +1411,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             iteration_targets: Vec::new(),
             module_directives: Vec::new(),
             conditional_control_stack: Vec::new(),
+            discarded_expression: None,
+            concise_arrow_bodies: Vec::new(),
             method_names: Vec::new(),
             conditional_flow_depth: 0,
             function_flow_depths: Vec::new(),
@@ -1862,6 +1910,31 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
     /// current program. This is deliberately stricter than a name check:
     /// shadowed `require`, `eval`, and `WebAssembly` values are ordinary local
     /// behavior and must not become package-closure hazards.
+    /// Member names that install a property accessor, or a prototype that
+    /// carries one, at run time.
+    ///
+    /// Matched by name alone rather than by receiver. `Object`, `Reflect` and
+    /// `globalThis.Object` all reach the same intrinsic, and an alias
+    /// (`const dp = Object.defineProperty`) reads the member before it calls
+    /// anything, so a receiver test would miss both. Over-refusing is free
+    /// here: the corpus measurement found the broad set and the narrow one
+    /// refuse exactly the same packages.
+    const ACCESSOR_INSTALLING_MEMBERS: [&'static str; 6] = [
+        "defineProperty",
+        "defineProperties",
+        "setPrototypeOf",
+        "__defineGetter__",
+        "__defineSetter__",
+        "__proto__",
+    ];
+
+    fn record_accessor_installation(&mut self, at: oxc_span::Span) {
+        self.module_hazards.push(ModuleHazardFact {
+            span: span(at),
+            kind: ModuleHazardKind::RuntimeAccessorInstallation,
+        });
+    }
+
     fn is_unresolved_named(&self, identifier: &IdentifierReference<'_>, name: &str) -> bool {
         identifier.name == name
             && identifier.reference_id.get().is_some_and(|reference| {
@@ -2006,6 +2079,21 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         walk::walk_import_expression(self, expression);
     }
 
+    fn visit_expression_statement(&mut self, statement: &oxc_ast::ast::ExpressionStatement<'a>) {
+        // Saved and restored rather than cleared: an expression statement
+        // inside a function inside this statement's own expression is a
+        // different discard, and the outer one has to survive it.
+        let expression = statement.expression.span();
+        let returned = self.concise_arrow_bodies.last() == Some(&expression);
+        let enclosing = if returned {
+            self.discarded_expression.take()
+        } else {
+            self.discarded_expression.replace(expression)
+        };
+        walk::walk_expression_statement(self, statement);
+        self.discarded_expression = enclosing;
+    }
+
     fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
         if let Expression::Identifier(callee) = &call.callee {
             if self.is_unresolved_named(callee, "require") {
@@ -2036,6 +2124,17 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 });
             }
         }
+        // `Object.create(prototype, descriptors)` installs the descriptors it
+        // is handed. The one-argument form installs nothing and is ordinary
+        // code, so the arity is the whole distinction.
+        if let Expression::StaticMemberExpression(member) = &call.callee
+            && member.property.name == "create"
+            && call.arguments.len() >= 2
+            && let Expression::Identifier(object) = &member.object
+            && self.is_unresolved_named(object, "Object")
+        {
+            self.record_accessor_installation(call.span);
+        }
         let callee_span = call.callee.span();
         self.calls.push(CallFact {
             span: span(call.span),
@@ -2048,6 +2147,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .map(|argument| self.argument_fact(argument))
                 .collect(),
             static_callee: self.is_static_callee(callee_span),
+            result_discarded: self.discarded_expression == Some(call.span),
             owned_write_option: call.arguments.get(1).is_some_and(|argument| {
                 let Argument::ObjectExpression(options) = argument else {
                     return false;
@@ -2083,6 +2183,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .map(|argument| self.argument_fact(argument))
                 .collect(),
             static_callee: self.is_static_callee(callee_span),
+            result_discarded: self.discarded_expression == Some(expression.span),
             owned_write_option: false,
         });
         walk::walk_new_expression(self, expression);
@@ -2249,7 +2350,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             },
         });
         self.function_flow_depths.push(self.conditional_flow_depth);
+        let concise = function.get_expression().map(GetSpan::span);
+        if let Some(concise) = concise {
+            self.concise_arrow_bodies.push(concise);
+        }
         walk::walk_arrow_function_expression(self, function);
+        if concise.is_some() {
+            self.concise_arrow_bodies.pop();
+        }
         self.function_flow_depths.pop();
     }
 
@@ -2349,6 +2457,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .map(|source| source.value.as_str().into()),
             type_only: declaration.export_kind.is_type(),
             namespace: None,
+            namespace_binding: None,
             specifiers: declaration
                 .specifiers
                 .iter()
@@ -2420,6 +2529,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             module: None,
             type_only: false,
             namespace: None,
+            namespace_binding: None,
             specifiers: vec![],
             declarations: vec![ExportSpecifierFact {
                 local: NamedSpan { span: span(local) },
@@ -2438,6 +2548,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             module: Some(declaration.source.value.as_str().into()),
             type_only: declaration.export_kind.is_type(),
             namespace: declaration.exported.as_ref().map(module_export_name),
+            namespace_binding: declaration.exported.as_ref().map(|name| NamedSpan {
+                span: span(name.span()),
+            }),
             specifiers: vec![],
             declarations: vec![],
             declaration_surface_only: vec![],
@@ -2450,6 +2563,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             span: span(identifier.span),
             role: IdentifierRole::Reference,
         });
+        // The identifier, not `new Proxy(`: `Proxy.revocable` builds the same
+        // thing, and `const P = Proxy` defers the construction to a name this
+        // pass does not follow. A shadowed `Proxy` is somebody's own class and
+        // states nothing.
+        if self.is_unresolved_named(identifier, "Proxy") {
+            self.record_accessor_installation(identifier.span);
+        }
         if let Some(declaration) = identifier
             .reference_id
             .get()
@@ -2694,6 +2814,18 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_object_property(&mut self, property: &ObjectProperty<'a>) {
+        // `{ __proto__: p }` sets the prototype at construction, and no member
+        // expression exists for a literal key, so the static-member arm never
+        // sees it. A *computed* `{ ["__proto__"]: p }` is an ordinary own
+        // property per the specification and installs nothing.
+        let literal_proto = match &property.key {
+            PropertyKey::StaticIdentifier(key) => key.name == "__proto__",
+            PropertyKey::StringLiteral(key) => key.value == "__proto__",
+            _ => false,
+        };
+        if literal_proto && !property.computed && !property.shorthand {
+            self.record_accessor_installation(property.span);
+        }
         let method_name = property
             .method
             .then(|| static_property_name(&property.key))
@@ -2915,6 +3047,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_static_member_expression(&mut self, member: &StaticMemberExpression<'a>) {
+        if Self::ACCESSOR_INSTALLING_MEMBERS.contains(&member.property.name.as_str()) {
+            self.record_accessor_installation(member.span);
+        }
         if let Expression::Identifier(object) = &member.object
             && self.is_unresolved_named(object, "WebAssembly")
         {
@@ -2932,6 +3067,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_computed_member_expression(&mut self, member: &ComputedMemberExpression<'a>) {
+        // A computed member on an intrinsic namespace can spell any of the
+        // names above, so the namespace itself is the fact.
+        if let Expression::Identifier(object) = &member.object
+            && (self.is_unresolved_named(object, "Object")
+                || self.is_unresolved_named(object, "Reflect"))
+        {
+            self.record_accessor_installation(member.span);
+        }
         let property = member.expression.span();
         let member_span = span(member.span);
         self.members.push(MemberFact {
@@ -3076,6 +3219,48 @@ fn export_declaration_surface_names(declaration: &Declaration<'_>) -> Vec<Export
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `result_discarded` proves the result reaches nothing, and proves it in
+    /// one direction only.
+    ///
+    /// The consumer this exists for reads `!result_discarded` as "the result
+    /// may be used", so every form the classifier does not recognise has to
+    /// answer `false`. The negative half of this test is therefore the
+    /// load-bearing half: `await`, `void`, a nested call and a concise arrow
+    /// body all keep the obligation rather than shedding it.
+    #[test]
+    fn a_discarded_call_result_is_stated_only_where_the_call_is_the_whole_statement() {
+        let source = concat!(
+            "declare function f(x?: unknown): unknown;\n",
+            "async function cases(flag: boolean) {\n",
+            "  f();\n",               // 0 discarded: the call is the statement
+            "  const bound = f();\n", // 1 used: bound to a name
+            "  await f();\n",         // 2 used: the await consumes it
+            "  void f();\n",          // 3 used: the unary consumes it
+            "  f(f());\n",            // 4 discarded (outer), 5 used (inner)
+            "  if (flag) { f(); }\n", // 6 discarded inside a block
+            "  return bound;\n",
+            "}\n",
+            "const concise = () => f();\n", // 7 used: a concise body returns it
+            "new Date();\n",                // 8 discarded: `new` as a statement
+        );
+        let facts = extract("/project/discarded.ts", source).unwrap();
+        let discarded: Vec<bool> = facts
+            .calls
+            .iter()
+            .map(|call| call.result_discarded)
+            .collect();
+        assert_eq!(
+            discarded,
+            vec![true, false, false, false, true, false, true, false, true],
+            "calls: {:?}",
+            facts
+                .calls
+                .iter()
+                .map(|call| &source[call.span.start as usize..call.span.end as usize])
+                .collect::<Vec<_>>()
+        );
+    }
 
     #[test]
     fn parameter_initializers_survive_function_and_arrow_normalization() {
@@ -3819,6 +4004,80 @@ renamed();"#,
         assert_eq!(facts.module_hazards.len(), 7);
     }
 
+    /// Every way to install a property accessor at run time, which is the
+    /// condition the `reads` implementation census refuses on
+    /// (`docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
+    /// § 7-§ 9).
+    ///
+    /// The set is not a style preference: each member is pinned by a
+    /// zero-form case in the producer's
+    /// `TestRuntimeInstalledAccessorReadsAreInvisibleToTheProducer`, which
+    /// measured that a read through it records **nothing** for the census to
+    /// refuse. A shape missing here is a hole in the refusal, so add its case
+    /// there and its line here together.
+    ///
+    /// Detection is deliberately by *name*, not by receiver: `Object`,
+    /// `Reflect` and `globalThis.Object` all reach the same intrinsic, and an
+    /// alias (`const dp = Object.defineProperty`) reads the member before it
+    /// calls anything. Over-refusing here is free — the corpus measurement
+    /// (§ 8) found the broad set and the narrow one refuse the same packages.
+    #[test]
+    fn records_every_run_time_accessor_installation_as_a_module_hazard() {
+        let installations = [
+            "new Proxy(target, handler);",
+            "Proxy.revocable(target, handler);",
+            "const aliased = Proxy;",
+            "Object.defineProperty(target, key, descriptor);",
+            "Object.defineProperties(target, descriptors);",
+            "Object.create(prototype, descriptors);",
+            "Reflect.defineProperty(target, key, descriptor);",
+            "target.__defineGetter__(key, read);",
+            "target.__defineSetter__(key, write);",
+            "Object.setPrototypeOf(target, prototype);",
+            "target.__proto__ = prototype;",
+            "const literal = { __proto__: prototype };",
+            "const dp = Object.defineProperty;",
+            "Object[name](target, key, descriptor);",
+        ];
+        for source in installations {
+            let facts = extract("fixture.ts", source).unwrap();
+            assert!(
+                facts
+                    .module_hazards
+                    .iter()
+                    .any(|hazard| hazard.kind == ModuleHazardKind::RuntimeAccessorInstallation),
+                "no accessor-installation hazard for {source}"
+            );
+        }
+    }
+
+    /// The other half of the claim: ordinary code must not be refused. A
+    /// census that refuses everything is sound and worthless.
+    #[test]
+    fn ordinary_object_use_is_not_an_accessor_installation() {
+        let benign = [
+            "Object.create(prototype);",
+            "Object.keys(target);",
+            "Object.assign(target, source);",
+            "Object.entries(target);",
+            "Object.freeze(target);",
+            "const value = target.property;",
+            "const proxied = { proxy: 1 };",
+            "class Declared { get value() { return 1; } }",
+            "const declared = { get value() { return 1; } };",
+        ];
+        for source in benign {
+            let facts = extract("fixture.ts", source).unwrap();
+            assert!(
+                !facts
+                    .module_hazards
+                    .iter()
+                    .any(|hazard| hazard.kind == ModuleHazardKind::RuntimeAccessorInstallation),
+                "{source} was refused as an accessor installation"
+            );
+        }
+    }
+
     #[test]
     fn distinguishes_namespace_reexports_from_export_stars() {
         let facts = extract(
@@ -3828,7 +4087,11 @@ renamed();"#,
         .unwrap();
 
         assert_eq!(facts.exports[0].namespace.as_deref(), Some("namespace"));
+        let binding = facts.exports[0].namespace_binding.as_ref().unwrap().span;
+        assert_eq!(binding.start, 12);
+        assert_eq!(binding.end, 21);
         assert_eq!(facts.exports[1].namespace, None);
+        assert_eq!(facts.exports[1].namespace_binding, None);
     }
 
     #[test]

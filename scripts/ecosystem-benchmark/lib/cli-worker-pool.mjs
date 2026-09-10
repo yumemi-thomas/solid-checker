@@ -33,8 +33,28 @@ export function createCliWorkerPool({
   const spawnWorker = () => {
     const child = spawn(executable, [workerScript], {
       env: environment,
+      detached: process.platform !== "win32",
       stdio: ["pipe", "pipe", "pipe"]
     });
+    // Native certification children inherit this worker's POSIX process group.
+    // Killing only the worker leaves them orphaned, consuming CPU and retaining
+    // pipe handles after the request's deadline. Preserve the kill interface
+    // used by memory supervision, but scope it to this isolated group.
+    if (process.platform !== "win32" && child.pid) {
+      const killChild = child.kill.bind(child);
+      child.kill = (signal = "SIGTERM") => {
+        try {
+          process.kill(-child.pid, signal);
+          return true;
+        } catch (error) {
+          if (error.code !== "ESRCH") throw error;
+          return killChild(signal);
+        }
+      };
+      // `close` may wait for a descendant that inherited stdout. The parent's
+      // `exit` is the point at which its remaining children lose their owner.
+      child.once("exit", () => child.kill("SIGKILL"));
+    }
     const worker = { child, busy: null, served: 0, dead: false, stderr: "" };
     const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
     lines.on("line", line => {

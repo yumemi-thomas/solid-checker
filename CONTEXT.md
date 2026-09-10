@@ -193,7 +193,28 @@ _Avoid_: premise inheritance, propagated types, inferred helper signature, union
 
 **Primitive completion**:
 A transcript's answer to whether the value that implementation hands its caller is provably a primitive: the checker's return type for the declaration, over the very program its census was classified on — the premise twin included — is a union of primitive types alone (ADR 0045). It settles the completion form too, since a `Promise` and a `Generator` are not primitives. A *coercion* in a caller states `coercionPremise`, the calls its clearance rests on (every other operand being primitive by its own type), and the `creates` census grants that premise only from each callee's own primitive completion, read off the transcript it demanded under the premise it recorded. Because the fact belongs to the premise, the same helper may state it under one argument premise and not another.
+An explicit `never` return type also states the fact: no normal completion hands back an object (ADR 0051, handshake protocol 35). This is a positive bottom-type flag, not missing type information or an empty constituent list. The consumer still censuses the implementation's calls and forms; this fact alone does not establish `creates: []`.
 _Avoid_: pure function, returns a number, safe coercion, treating a stated `coercionPremise` as a verdict (it is a statement of what the clearance would rest on)
+
+**Dependency census obligation**:
+A conditional creates-census disposition for an exact external call (ADR 0052). Authenticated declaration/export replay identifies the package, artifact case, accepted-contract digest, export and semantic claim. This statement permits no acceptance until dependency composition authenticates a child receipt explicitly closing that empty creates claim. Finalization binds the obligation root to the composition token that discharged it; the receipt commits both census and dependency evidence.
+_Avoid_: dependency trust, external implementation inspection, interpreting a proposal or absent claim as receipt authority
+
+**Local literal result identity**:
+A complete source derivation that one ordinary local call returns the same unwritten data-only allocation on every normal completion (ADR 0053, protocol 36). It states the call, callee, allocation and all return sites; a terminal return covers fallthrough. The consumer binds the derivation to the callee's independently acquired execution census. Direct accesses can then use ADR 0044's own-literal premise, with its existing mutation assumption; nested member values do not inherit it.
+_Avoid_: structural return shape, inferred purity, treating a missing return as a complete result, treating allocation identity as a complete execution census
+
+**Unwritten parameter input identity**:
+An affirmative producer fact tying an ordinary implementation parameter to its exact signature slot and declaration (ADR 0056, protocol 39). Together with a reachable direct property-use record, it proves the root input identity of a read without asserting runtime shape or member callability. Missing bindings, reassignment, nested member paths and captured or aliased uses confer no permission.
+_Avoid_: generic shape proof, inferred member existence, treating absence of a write record as proof
+
+**Initial parameter read**:
+An affirmative source fact binding the caller's original parameter root to one exact direct property use in a write-free opening declaration prefix (ADR 0065), or the first call receiver evaluated before a following plain parameter assignment stores its RHS (ADR 0066, protocol 41). Later assignments do not invalidate that earlier read. It does not prove any later read, member shape, callability, alias identity or mixed caller/local origin. The consumer matches both the signature declaration and the property-use census; a member origin additionally binds that exact use to the callee's parameter path and call occurrence.
+_Avoid_: globally unwritten parameter, general flow-sensitive origin, type-based input identity
+
+**First-iteration input origin**:
+An initial parameter-read premise explicitly limited to the first entry of a supported synchronous for-of body (ADR 0067, protocol 42). Later iterations may read replacement values. The consumer requires an exact call/use/path match and an explicit zero operation lower bound; this premise cannot establish guaranteed execution or later-iteration origin.
+_Avoid_: unwritten loop parameter, all-iteration caller identity, guaranteed first iteration
 
 **Discarded region**:
 A source region the Solid compiler censused and then **deleted** — the `Value(Elided)` decision, projected as `ExecutionMap::discarded_regions` and classified `ExecutionRole::DiscardedRendering`. Distinct from an *untracked region*, which is code that executes once at render: a discarded region executes zero times, so it supports no finding and no certification. Silence over one means "both compilers deleted this", never "this was proven safe".

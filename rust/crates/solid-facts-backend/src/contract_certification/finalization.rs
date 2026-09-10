@@ -293,6 +293,15 @@ pub(super) fn prepare_value_only(
     if requires_type_facts(plan) && type_facts.is_none() {
         return Err(Policy2FinalizationError::TypeFactsRequired);
     }
+    if let Some(type_facts) = type_facts
+        && (type_facts.dependency_census_root().is_some()
+            || type_facts.factory_requirements_root().is_some())
+    {
+        let Some(dependencies) = dependencies else {
+            return Err(Policy2FinalizationError::DependenciesRequired);
+        };
+        dependencies.verify_type_facts_requirements(type_facts)?;
+    }
     probe_gates.verify_plan(plan)?;
 
     let mut witnesses = plan.artifact_witnesses.clone();

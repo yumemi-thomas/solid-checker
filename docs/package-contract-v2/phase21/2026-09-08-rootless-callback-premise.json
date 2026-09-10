@@ -1,0 +1,476 @@
+{
+  "diagnostic": true,
+  "newEntrypoints": 0,
+  "completeRowTransitions": 0,
+  "baseline": "/Users/thomas/Documents/Github/solid-checker/rust/target/ecosystem-investigations/2026-09-08-defined-input-full.json",
+  "baselineDigest": "sha256:1f94bbe1309b743d5b4b4ed760ef67e5da8414a84664826ac384194d2fb92025",
+  "positiveResult": "/private/tmp/rootless-callback-5EIF6H/result.json",
+  "positiveResultDigest": "sha256:ca0008f539e619db4d65e0a9cded40d4b52a20b307e2a589a475fe410b18a55f",
+  "nativeDigest": "sha256:60897419545cbee73e4daa76034658f9198752f8f3a3c3ab5d99d082944e4f55",
+  "producerDigest": "sha256:c51605838483492782470e4c281558ba294a8d2ba451f68769757d6b4db3ed03",
+  "elapsedMs": 385,
+  "ordinaryAnalysis": {
+    "receiptAuthenticated": true,
+    "exactCaseSelected": true
+  },
+  "changes": [
+    {
+      "export": "createBranch",
+      "before": {
+        "call": {},
+        "shape": "callable"
+      },
+      "after": {
+        "call": {
+          "callbacks": [
+            {
+              "from": {
+                "arg": 0,
+                "path": []
+              },
+              "operation": "callback-0"
+            }
+          ],
+          "operations": [
+            {
+              "at": {
+                "event": "call",
+                "schedule": "same-stack"
+              },
+              "count": {
+                "max": "many",
+                "min": 0,
+                "scope": "call"
+              },
+              "id": "callback-0",
+              "kind": "invoke",
+              "tracking": "untracked",
+              "trigger": {
+                "event": "call"
+              }
+            }
+          ]
+        },
+        "shape": "callable"
+      }
+    },
+    {
+      "export": "createSubRoot",
+      "before": {
+        "call": {},
+        "shape": "callable"
+      },
+      "after": {
+        "call": {
+          "callbacks": [
+            {
+              "from": {
+                "arg": 0,
+                "path": []
+              },
+              "operation": "callback-0"
+            }
+          ],
+          "operations": [
+            {
+              "at": {
+                "event": "call",
+                "schedule": "same-stack"
+              },
+              "count": {
+                "max": "many",
+                "min": 0,
+                "scope": "call"
+              },
+              "id": "callback-0",
+              "kind": "invoke",
+              "tracking": "untracked",
+              "trigger": {
+                "event": "call"
+              }
+            }
+          ]
+        },
+        "shape": "callable"
+      }
+    }
+  ],
+  "otherExportClaimsPreserved": true,
+  "accepted": [
+    {
+      "entrypoint": ".",
+      "case": {
+        "artifact": {
+          "closureSha256": "83e09b51c5e3b3a23fb51b007edec65daa086ced807a60e77f4314234a1459db",
+          "path": "./dist/index.js",
+          "sha256": "0b7d93cfb6e96d7878b49ec28816d50216274e5e486b4171bb64c8c4bc36767f"
+        },
+        "declarations": {
+          "path": "./dist/index.d.ts",
+          "sha256": "4bd627da07b514353e4f81e0b070f28a077bd2ddd85ed6ce0a447aee3b1bf17b"
+        },
+        "exports": {
+          "createBranch": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018",
+          "createCallback": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+          "createDisposable": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+          "createHydratableSingletonRoot": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+          "createRootPool": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+          "createSharedRoot": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+          "createSingletonRoot": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+          "createSubRoot": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/./import/default",
+          "typesBranch": "/exports/./import/types"
+        }
+      },
+      "import": {
+        "specifier": "@solid-primitives/rootless",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/.solid-checker-certification-7a50c05dac239a6ed090bbe71a91915b915d73df0abf6a1b45ab2cc96d54b733.mjs",
+        "requestedEntrypoint": ".",
+        "packageName": "@solid-primitives/rootless",
+        "packageVersion": "1.5.4",
+        "packageIntegrity": "sha512-TOIZa1VUfVJ+9nkCcRajw3U4t9vBOP1HxX1WHNTbXq32mXwlqTvUnC4CRIilohcryBkT9u2ZkhUDSHRTaGp55g==",
+        "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless",
+        "packageManifest": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/package.json",
+          "digest": "sha256:80f29332aedf6caedef85b9299bee0d4d4588d232f64cc212ef0c725968fee12"
+        },
+        "runtime": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.js",
+          "digest": "sha256:0b7d93cfb6e96d7878b49ec28816d50216274e5e486b4171bb64c8c4bc36767f"
+        },
+        "declarations": {
+          "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.d.ts",
+          "digest": "sha256:4bd627da07b514353e4f81e0b070f28a077bd2ddd85ed6ce0a447aee3b1bf17b"
+        },
+        "runtimeTrace": {
+          "branch": "/exports/./import/default",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "."
+            },
+            {
+              "condition": "import",
+              "target": "/exports/."
+            },
+            {
+              "condition": "default",
+              "target": "/exports/./import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/index.js"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": "/exports/./import/types",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "."
+            },
+            {
+              "condition": "import",
+              "target": "/exports/."
+            },
+            {
+              "condition": "types",
+              "target": "/exports/./import"
+            },
+            {
+              "condition": "target",
+              "target": "./dist/index.d.ts"
+            }
+          ]
+        },
+        "closure": {
+          "entries": [
+            {
+              "role": "runtime",
+              "path": "./dist/index.js",
+              "digest": "sha256:0b7d93cfb6e96d7878b49ec28816d50216274e5e486b4171bb64c8c4bc36767f"
+            },
+            {
+              "role": "declaration",
+              "path": "./dist/index.d.ts",
+              "digest": "sha256:4bd627da07b514353e4f81e0b070f28a077bd2ddd85ed6ce0a447aee3b1bf17b"
+            },
+            {
+              "role": "manifest",
+              "path": "./package.json",
+              "digest": "sha256:80f29332aedf6caedef85b9299bee0d4d4588d232f64cc212ef0c725968fee12"
+            },
+            {
+              "role": "resolution-input",
+              "path": "./package.json",
+              "digest": "sha256:80f29332aedf6caedef85b9299bee0d4d4588d232f64cc212ef0c725968fee12"
+            }
+          ],
+          "hazards": [
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/index.js:@solid-primitives/utils",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/index.js:solid-js",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            },
+            {
+              "kind": "unaccepted-external-dependency",
+              "source": "./dist/index.js:solid-js/web",
+              "affectedDomains": [
+                "callbacks",
+                "reads",
+                "writes",
+                "creates",
+                "invalidates",
+                "throws",
+                "returns",
+                "cleanups",
+                "disposals"
+              ]
+            }
+          ],
+          "digest": "sha256:83e09b51c5e3b3a23fb51b007edec65daa086ced807a60e77f4314234a1459db"
+        },
+        "exports": {
+          "createBranch": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.js",
+                "digest": "sha256:0b7d93cfb6e96d7878b49ec28816d50216274e5e486b4171bb64c8c4bc36767f"
+              },
+              "exportName": "createBranch"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.d.ts",
+                "digest": "sha256:4bd627da07b514353e4f81e0b070f28a077bd2ddd85ed6ce0a447aee3b1bf17b"
+              },
+              "exportName": "createBranch"
+            }
+          },
+          "createCallback": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.js",
+                "digest": "sha256:0b7d93cfb6e96d7878b49ec28816d50216274e5e486b4171bb64c8c4bc36767f"
+              },
+              "exportName": "createCallback"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.d.ts",
+                "digest": "sha256:4bd627da07b514353e4f81e0b070f28a077bd2ddd85ed6ce0a447aee3b1bf17b"
+              },
+              "exportName": "createCallback"
+            }
+          },
+          "createDisposable": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.js",
+                "digest": "sha256:0b7d93cfb6e96d7878b49ec28816d50216274e5e486b4171bb64c8c4bc36767f"
+              },
+              "exportName": "createDisposable"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.d.ts",
+                "digest": "sha256:4bd627da07b514353e4f81e0b070f28a077bd2ddd85ed6ce0a447aee3b1bf17b"
+              },
+              "exportName": "createDisposable"
+            }
+          },
+          "createHydratableSingletonRoot": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.js",
+                "digest": "sha256:0b7d93cfb6e96d7878b49ec28816d50216274e5e486b4171bb64c8c4bc36767f"
+              },
+              "exportName": "createHydratableSingletonRoot"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.d.ts",
+                "digest": "sha256:4bd627da07b514353e4f81e0b070f28a077bd2ddd85ed6ce0a447aee3b1bf17b"
+              },
+              "exportName": "createHydratableSingletonRoot"
+            }
+          },
+          "createRootPool": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.js",
+                "digest": "sha256:0b7d93cfb6e96d7878b49ec28816d50216274e5e486b4171bb64c8c4bc36767f"
+              },
+              "exportName": "createRootPool"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.d.ts",
+                "digest": "sha256:4bd627da07b514353e4f81e0b070f28a077bd2ddd85ed6ce0a447aee3b1bf17b"
+              },
+              "exportName": "createRootPool"
+            }
+          },
+          "createSharedRoot": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.js",
+                "digest": "sha256:0b7d93cfb6e96d7878b49ec28816d50216274e5e486b4171bb64c8c4bc36767f"
+              },
+              "exportName": "createSharedRoot"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.d.ts",
+                "digest": "sha256:4bd627da07b514353e4f81e0b070f28a077bd2ddd85ed6ce0a447aee3b1bf17b"
+              },
+              "exportName": "createSharedRoot"
+            }
+          },
+          "createSingletonRoot": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.js",
+                "digest": "sha256:0b7d93cfb6e96d7878b49ec28816d50216274e5e486b4171bb64c8c4bc36767f"
+              },
+              "exportName": "createSingletonRoot"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.d.ts",
+                "digest": "sha256:4bd627da07b514353e4f81e0b070f28a077bd2ddd85ed6ce0a447aee3b1bf17b"
+              },
+              "exportName": "createSingletonRoot"
+            }
+          },
+          "createSubRoot": {
+            "runtime": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.js",
+                "digest": "sha256:0b7d93cfb6e96d7878b49ec28816d50216274e5e486b4171bb64c8c4bc36767f"
+              },
+              "exportName": "createSubRoot"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/rootless/dist/index.d.ts",
+                "digest": "sha256:4bd627da07b514353e4f81e0b070f28a077bd2ddd85ed6ce0a447aee3b1bf17b"
+              },
+              "exportName": "createSubRoot"
+            }
+          }
+        },
+        "declarationExports": [
+          "createBranch",
+          "createCallback",
+          "createDisposable",
+          "createHydratableSingletonRoot",
+          "createRootPool",
+          "createSharedRoot",
+          "createSingletonRoot",
+          "createSubRoot"
+        ],
+        "authority": "standalonePackageResolver"
+      },
+      "documentDigest": "sha256:f2294dc665ccd1467a953da8b2a120d144ce07c3a8c3ae36cc29c8adafc8b165",
+      "receiptDigest": "sha256:94a49f54ba485f3049a3428203b42b8fd319615c48ce6f10b61796ceb441dcce",
+      "receipt": {
+        "format": "solid-checker-authenticated-acceptance-receipt",
+        "receiptVersion": 2,
+        "payload": {
+          "semanticModelVersion": 1,
+          "proofVersion": 2,
+          "proofPolicy": 2,
+          "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+          "mainDigest": "sha256:f2294dc665ccd1467a953da8b2a120d144ce07c3a8c3ae36cc29c8adafc8b165",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-9YQUiO/node_modules/@solid-primitives/.solid-checker-certification-7a50c05dac239a6ed090bbe71a91915b915d73df0abf6a1b45ab2cc96d54b733.mjs",
+          "specifier": "@solid-primitives/rootless",
+          "resolvedImportRoot": "sha256:7e769b27955b2cef4b8dc849582451aee9f355957896be4dbdfefedd98493901",
+          "semanticDigest": "sha256:a6630e51f52aa075632d086c345bf6815a47686015865e2deb2f3227aa2b4edd",
+          "artifactProvenanceRoot": "sha256:3a0c778c83a7e04f9a7564450252ffd82e76339037d5a6bea3b42030292257d3",
+          "snapshotRoot": "sha256:a72fdc47141038fe1dec9b7c7f1d1dd2bdab059c288c1a3ce781c229384a41b2",
+          "packageRoot": "sha256:48e80dec9bbc58665a0ab5beba839677bac75df67806c7e58ca13a5b42593845",
+          "manifestRoot": "sha256:aad260d47789d3465d62b09ba2681c4faa9189548ae5a4705eeadaf1158cca91",
+          "artifactsRoot": "sha256:a860a5911c015d9bfb75c59887ad8150ad8774c9d5e7840b5e766bbbae864441",
+          "declarationsRoot": "sha256:5cf91848318b2b606109bd49b2383d7c06a4e8a166f5ae87209c9b872f6266ef",
+          "transformRoot": "sha256:0e0dd69d8c2283163eb0c8bf51cac33aee75e581084fec18311e019ebc5fe04f",
+          "exportsRoot": "sha256:69b824988d0c0bd84a1003cbec73d8f69ed08c42a36181fcd69712f37e583806",
+          "closureRoot": "sha256:e29137f5dc808740571031f62abf19df4037c1fa960b72477faaf61a8f22dc9b",
+          "demandGraphRoot": "sha256:8ef98d15573f5939c2fb38dfe26cdd3b35200ff7c2c089a733f96d3fb6c0910d",
+          "verifiedPositiveRoot": "sha256:666c6e44e4a8a1eaa04424586f5d889d6aa07852b11d0a040f09fc8b894f656e",
+          "witnessRoots": {
+            "accepted-dependency-composition": "sha256:f1cebaefa6ed340bd06c4e73914fc8e0b7397af7bbfb75bbd818b8addbea81c4",
+            "argument-binding": "sha256:e96d31d314502bff1ef3222e07f6c261ca7807f94a8fa5749a9f1bb69eb3b4ac",
+            "artifact-declarations": "sha256:5cf91848318b2b606109bd49b2383d7c06a4e8a166f5ae87209c9b872f6266ef",
+            "callable-path": "sha256:41a2e9d8b9f695261603293e966fdae11dc5df3ceb7d86d39e04282de8c58141",
+            "compiler-reconciliation": "sha256:344fb6ff4e46bad355e49accc08f8766f4ed7760db877e29257a9038536b8fa8",
+            "domain-exhaustiveness": "sha256:0b4b3ac45bc27f6f8e5342c5793fa73fe0343d9da660149ddf98dc4ac68186ef",
+            "export-identity": "sha256:69b824988d0c0bd84a1003cbec73d8f69ed08c42a36181fcd69712f37e583806",
+            "export-resolution": "sha256:a860a5911c015d9bfb75c59887ad8150ad8774c9d5e7840b5e766bbbae864441",
+            "guard-partition": "sha256:e387a79508157cb8a87208ba4961b9aa5436aedde13659a3d5f20a8e9ff4d91c",
+            "manifest-entrypoint": "sha256:aad260d47789d3465d62b09ba2681c4faa9189548ae5a4705eeadaf1158cca91",
+            "module-closure": "sha256:e29137f5dc808740571031f62abf19df4037c1fa960b72477faaf61a8f22dc9b",
+            "operation-cardinality": "sha256:501112e77dca69d65e226da0938506d63e74186a87d13e35dea82b794aa910b9",
+            "operation-reachability": "sha256:f7e54b7dfefbbb664d568986e420395aed54e88a5d27f76461f2ebf6022df6aa",
+            "package-identity": "sha256:48e80dec9bbc58665a0ab5beba839677bac75df67806c7e58ca13a5b42593845",
+            "recursive-value-shape": "sha256:616c0fa34e6ac1bec416ad488af4d347a24a74d4b2f8cd3474a3a417bcabd703",
+            "rest-spread-coverage": "sha256:6a23b4ea3426f03b29f0b2e3e4ad7e04215db3cd5d143f16d029a5ff9f448140",
+            "selected-signature": "sha256:e9a4a4ce1b55ea2b337ba4c21c2510fa80ecb1633ff4fe15847b5fe0fc17eab4"
+          },
+          "producerSessionsRoot": "sha256:a9867e047ade2e673f7a8e0026185cc828f91269de477358ed33f53f188d04a3",
+          "dependencyReceiptsRoot": "sha256:69d3180529b6b8db2fe1062f3a952d77c4445afce71a3fab79dca2dc47bb588e",
+          "dependencyTrustRoot": "sha256:a9744e24690edef8c030d12a03a3da92b5c28db062ef66c1c6c514a9535e3cc3",
+          "probeGateRoot": "sha256:e9fcc1cd8482a7e4d5fd8b68ac9765061c24a920e12926f1e233f07d434f58a8",
+          "closedClaimsRoot": "sha256:344370c80c7f434e39fc8e86addccb83a0ec53dbaf608d5440f38d340c653999",
+          "verifierSourceDigest": "sha256:b32bcabbee91721179cc993f27c00e6371f8d34a52fe2d5ac43d984e9c5c890a",
+          "verifierBuildDigest": "sha256:6fa2930d8880fe197563899823e137b7b29b296da3683e758eb059b21ff2a663",
+          "issuerKind": "persistent-local",
+          "issuerScope": "diagnostic:rootless-callback",
+          "keyId": "ed25519:sha256:caec0d1d38ee58d7111d959fb54625216a1c4d741c077cc95f27132d310aeed1",
+          "signatureAlgorithm": "ed25519"
+        },
+        "authentication": {
+          "publicKey": "YmQL5BfF+zxLaRf5R85yJdn67Ko+oSJAMpNMbySAMyU=",
+          "value": "HjVeeqMtl7GVrOeo6MbIcOCJU7zYRg05ltgCc6FyA7WcEvIYOeVCfdop4jSqF7tyq0HhDjI4nqRLkNxwCJvlAQ=="
+        }
+      }
+    }
+  ],
+  "negative": {
+    "result": "/private/tmp/rootless-callback-RAUi1O/result.json",
+    "resultDigest": "sha256:a966307d649ab551dbf139a291595266bee0302d7765357855ece485eb53abe1",
+    "failure": "CertificationRefusal: witness-acquisition refused for demand sha256:169f3c03596bc1398c863c63735565208adb166ad1c72de79ec12a7eaba69717: solid-checker-rust: policy-2 proof finalization failed: Type Facts certification failed during live export-value verification: Type Facts demand sha256:169f3c03596bc1398c863c63735565208adb166ad1c72de79ec12a7eaba69717 is locally open: callable-path (artifact-case:901d6a6150d4e3350ef189152fb0fa56f5c8904a9ac151186250ed5b0746f167:createBranch): callback parameter has neither an exact direct call nor an exact dialect callback flow",
+    "elapsedMs": 334,
+    "cacheMisses": []
+  },
+  "excludedInitialAttempt": "/private/tmp/rootless-callback-z3flL2/result.json",
+  "exclusionReason": "Importer mismatch caused regeneration of the old proposal; the callback claims were not certified in that attempt."
+}

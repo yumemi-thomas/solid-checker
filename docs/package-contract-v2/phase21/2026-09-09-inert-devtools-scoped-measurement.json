@@ -1,0 +1,215 @@
+{
+  "authoritative": false,
+  "baseline": {
+    "path": "rust/target/ecosystem-investigations/2026-09-08-original-helper-full.json",
+    "digest": "sha256:7ee58c116e8acff5b96359be7e7be1372aabab56db93c59bc82f198756c6aea2"
+  },
+  "probeId": "solid-devtools@0.34.5|solid1|only",
+  "before": [
+    {
+      "coordinate": {
+        "catalog": "accepted-contracts.json",
+        "catalogDigest": "sha256:152134846d6b1ed55771a1f249c07c65fc3e5dd145ad7b27a978edf661bbbb62"
+      },
+      "documentDigest": "sha256:347f3dee2ef5b1bc83151a4c52ecfefbda5970e31270cb0748e1964bc23b1409",
+      "receiptDigest": "sha256:3d463c347436a8c28d9bbbc9be930f5e9c1d82511b3c1074fc3d6c6e595b19d3",
+      "main": {
+        "entrypoints": {
+          "./vite": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "a90e35a9fea1e7e84bb7285e023c8326ce912a4ab6b17a906fa65ef0e7b00e8b",
+                  "path": "./dist/vite.js",
+                  "sha256": "429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+                },
+                "declarations": {
+                  "path": "./dist/vite.d.ts",
+                  "sha256": "70040d1e8e13efb6826d8bdd215fbd19806aa6366804fa2794166be8e867c108"
+                },
+                "exports": {
+                  "DevtoolsModule": "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b",
+                  "default": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "devtoolsPlugin": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/.~1vite/import/default",
+                  "typesBranch": "/exports/.~1vite/import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+          },
+          "name": "solid-devtools",
+          "version": "0.34.5"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b": {
+            "call": {},
+            "shape": "unknown"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ],
+  "after": [
+    {
+      "coordinate": {
+        "artifactCaseId": "artifact-case:5adc05a2de205d61a9903e9c8bb74a7f97bba8e7c7a556ad31c9275461fcb29c",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-bb2f5cacecab0e42af11b43c1eb6180b97648332e923901c3e5ad1b41bfdc766.mjs",
+        "specifier": "solid-devtools/vite",
+        "resolvedImportRoot": "sha256:c8d0664f277c2caacd305c3928f81dea23feb39cec746f6244749c60dc01a8f8",
+        "semanticDigest": "sha256:5a6f3a1bd045d89272f8e4c92934aac2770962358eac76be70a3770940d16604",
+        "receiptDigest": "sha256:416507f8056cc7e52bbdefeefe863e2de2ff8e1cf0ba7a20095bc0758811e171",
+        "catalog": "cases/c8d0664f277c2caacd305c3928f81dea23feb39cec746f6244749c60dc01a8f8/accepted-contracts.json",
+        "catalogDigest": "sha256:bc7c04e867c220bae7a58a4599c03947acf272f3534a1a6ebcb545bdcc20f9e9"
+      },
+      "documentDigest": "sha256:347f3dee2ef5b1bc83151a4c52ecfefbda5970e31270cb0748e1964bc23b1409",
+      "receiptDigest": "sha256:416507f8056cc7e52bbdefeefe863e2de2ff8e1cf0ba7a20095bc0758811e171",
+      "main": {
+        "entrypoints": {
+          "./vite": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "a90e35a9fea1e7e84bb7285e023c8326ce912a4ab6b17a906fa65ef0e7b00e8b",
+                  "path": "./dist/vite.js",
+                  "sha256": "429c7a213da1af3520aaa90a9218b2ecea9da22ced6f4ea4c958601f20c61972"
+                },
+                "declarations": {
+                  "path": "./dist/vite.d.ts",
+                  "sha256": "70040d1e8e13efb6826d8bdd215fbd19806aa6366804fa2794166be8e867c108"
+                },
+                "exports": {
+                  "DevtoolsModule": "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b",
+                  "default": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "devtoolsPlugin": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/.~1vite/import/default",
+                  "typesBranch": "/exports/.~1vite/import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+          },
+          "name": "solid-devtools",
+          "version": "0.34.5"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b": {
+            "call": {},
+            "shape": "unknown"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    },
+    {
+      "coordinate": {
+        "artifactCaseId": "artifact-case:671931b61f0b4755b643a4a79b0b2f4ebc8357dbbbadf8bd71a878116d5fd85e",
+        "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-gBtbl5/node_modules/.solid-checker-certification-bb2f5cacecab0e42af11b43c1eb6180b97648332e923901c3e5ad1b41bfdc766.mjs",
+        "specifier": "solid-devtools",
+        "resolvedImportRoot": "sha256:98c54c35611003d8785b3e82baa1ca126e97115260e39d7eb03a8dd6b5c436ed",
+        "semanticDigest": "sha256:24f0d42fc4f07ab47ab901ada724b211773a1c29cf56d72157c89ee853c54c2c",
+        "receiptDigest": "sha256:a2e53d2f8dfaf932ef4a9d07a67bf5f9715410f2753b23caf363123cded955a7",
+        "catalog": "cases/98c54c35611003d8785b3e82baa1ca126e97115260e39d7eb03a8dd6b5c436ed/accepted-contracts.json",
+        "catalogDigest": "sha256:e855eb1c6eec2fdda87146fdf7195628cebbae2b9c0ae1127ad7d827e6f4e4c4"
+      },
+      "documentDigest": "sha256:c0c7b3b4abb881e0218383d44c9b16d95f4678bd0fa65903145c35b5611a79c3",
+      "receiptDigest": "sha256:a2e53d2f8dfaf932ef4a9d07a67bf5f9715410f2753b23caf363123cded955a7",
+      "main": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "9bd3f55988073002aa6096e9d1c657f9c11caa578c1796dfc09d0e7ba28a38fb",
+                  "path": "./dist/index_noop.js",
+                  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "0bc700979988009128a36fa70c76f0bca4d1802e74bea5d24bead58831c8709a"
+                },
+                "exports": {},
+                "initialization": "inert",
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-KNVdS9MQzzeVS++Vmg4JeU0fM6ZMuBEmkBA7SmqPS2s5UHpRjv1PNH8gShmlN9L/tki6OUAzJP3H1aKq2AcOSg==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "ecf2bd48b1bdd641923e8e58ff467fc1f3d0e1fcc45eab6a074f91fd24bf320a"
+          },
+          "name": "solid-devtools",
+          "version": "0.34.5"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {}
+      }
+    }
+  ],
+  "priorMainDocumentsPreserved": true,
+  "ordinaryAnalysis": {
+    "receiptAuthenticated": true,
+    "exactCaseSelected": true
+  },
+  "stageDurationsMs": {
+    "artifactAcquisition": 6.72,
+    "proposalGeneration": 445.92,
+    "demandPlanning": 14.36,
+    "witnessAcquisition": 1177.58,
+    "certification": 0.04,
+    "receiptIssuance": 0.01,
+    "catalogPublication": 0.01
+  },
+  "metricChanged": false,
+  "completeRowGain": 0,
+  "remaining": [
+    "./setup",
+    "./babel",
+    "./package.json",
+    "browser/development root case"
+  ],
+  "native": {
+    "path": "rust/target/release/solid-checker-rust",
+    "digest": "sha256:23ea93ae0e0f20d9a786495e772ae91ed9989ec9963bd04b61fbb9eb57d238e9"
+  }
+}

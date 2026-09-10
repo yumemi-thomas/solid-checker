@@ -2,6 +2,7 @@ package typefacts_test
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,45 @@ import (
 
 	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts"
 )
+
+// A matching schema digest does not catch a schema that describes a stale
+// field spelling. Pin the actual JSON transport keys against its closed row.
+func TestInitialParameterReadSchemaAdmitsTransportFields(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "schema", "typefacts-v1.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema struct {
+		Definitions map[string]struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+		} `json:"$defs"`
+	}
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatal(err)
+	}
+	properties := schema.Definitions["initialParameterRead"].Properties
+	if _, stale := properties["conditional"]; stale {
+		t.Fatal("schema still admits the obsolete conditional spelling")
+	}
+	for _, row := range []typefacts.InitialParameterRead{
+		{FirstIterationOnly: true}, {Positional: true},
+		{UndefinedDefault: &typefacts.UndefinedParameterDefault{}},
+	} {
+		encoded, err := json.Marshal(row)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(encoded, &fields); err != nil {
+			t.Fatal(err)
+		}
+		for key := range fields {
+			if _, present := properties[key]; !present {
+				t.Fatalf("transport field %s is excluded by the frozen schema", key)
+			}
+		}
+	}
+}
 
 func TestTypeFactsSchemaHashMatchesFrozenSchema(t *testing.T) {
 	for _, schema := range []struct {
@@ -34,9 +74,9 @@ func TestTypeFactsSchemaHashMatchesFrozenSchema(t *testing.T) {
 // and the fact that the digest above is the schema file's. The third, the build
 // id, is stamped at link time and is covered by the Rust process tests.
 func TestHandshakeDeclaresTheOperationSetsProtocol(t *testing.T) {
-	if typefacts.TypeFactsHandshakeProtocol != 34 {
+	if typefacts.TypeFactsHandshakeProtocol != 46 {
 		t.Fatalf(
-			"handshake protocol = %d, want 34: a subject may be rooted at a written binding whose every value is rooted",
+			"handshake protocol = %d, want 46: original-input helper reads",
 			typefacts.TypeFactsHandshakeProtocol,
 		)
 	}

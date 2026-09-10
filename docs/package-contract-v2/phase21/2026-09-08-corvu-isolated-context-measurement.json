@@ -1,0 +1,40 @@
+{
+  "diagnostic": true,
+  "probeId": "@corvu/popover@0.2.0|solid1|only",
+  "baseline": {
+    "path": "rust/target/ecosystem-investigations/2026-09-08-verified-retained-floor-full.json",
+    "digest": "sha256:15c947a5de23f032c8bc7d6a73e2e15010669aa2371e9966bc7be222dd423bae",
+    "refusal": "solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification failed for graph node @corvu/utils@0.4.2 (./dom) during live graph export-value verification: Type Facts demand sha256:72d49e3850325e4760e56981fde6a0be1652a3294f55556ba6dc4a9d54511dba is locally open: recursive-value-shape (artifact-case:f34410e88fd1b098ba717edf6bb3dff50d8733870160d4b80667a5a2a052d3ce:contains): parameter-rooted read lacks positive original-input identity",
+    "retainedArtifacts": {
+      "projectDir": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3QQP1l",
+      "outputDir": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-q7Ajg4"
+    }
+  },
+  "result": {
+    "path": "/private/tmp/retained-graph-native-N4TwQ9/result.json",
+    "digest": "sha256:6036b01afca46565917bc952a2becb9fcf45a85b08c51f235eee664cf1d41004",
+    "elapsedMs": 16489,
+    "refusal": "CertificationRefusal: witness-acquisition refused for demand sha256:cc5ec9b62a8a07a6607bb898c9f2b82d35fba747bc0413a5c66430efd55002eb: solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification failed for graph node @floating-ui/utils@0.2.12 (./dom) during live graph export-value verification: Type Facts demand sha256:cc5ec9b62a8a07a6607bb898c9f2b82d35fba747bc0413a5c66430efd55002eb is locally open: recursive-value-shape (artifact-case:1d311acb3467d439f2a09329da1770216a63d44466c1036ea199b14f65b252cd:getOverflowAncestors): parameter-rooted read lacks positive original-input identity",
+    "sourceDigests": {
+      "/Users/thomas/Documents/Github/solid-checker/rust/target/verify/solid-checker-rust": "a945acf9995260527b15d1e534836f897375755e187962d7b7eb695592911525",
+      "/Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts": "cd11cb57b37170911a9d1dbcab8719337f4dcaf608d5c5fbfbea91be87f8fe34",
+      "/Users/thomas/Documents/Github/solid-checker/packages/cli/scripts/certify-contract.mjs": "54d65b6bfe466551b1f3e75b286777bc20f71d1fa816149ac20155994372907c",
+      "/Users/thomas/Documents/Github/solid-checker/packages/cli/scripts/retained-proposal-graphs.mjs": "2402d9930a6107deeff4f6073718002be2a9e1a693cd77e4e6d31f494558f9bb"
+    }
+  },
+  "implementationDigest": "sha256:5ace46e869f75fa750e9cdc7a4fd503eb1a901bd67df91407e5a95508d52e5c0",
+  "before": {
+    "status": "refused",
+    "acceptedEntrypoints": [],
+    "acceptedArtifactCases": []
+  },
+  "after": {
+    "status": "refused",
+    "acceptedEntrypoints": [],
+    "acceptedArtifactCases": []
+  },
+  "transitions": [],
+  "newCertifications": 0,
+  "metricChanged": false,
+  "cacheMisses": []
+}

@@ -5,24 +5,7 @@
     "name": "wildcard-asset-entrypoints-package",
     "version": "1.0.0"
   },
-  "refusals": [
-    {
-      "entrypoint": "./assets/comments-only.js",
-      "conditions": [],
-      "stage": "artifact-case",
-      "class": "published-artifact",
-      "applicability": "runtime-module",
-      "reason": "solid-checker-rust: emit package contract: entry file <package-root>/assets/comments-only.js has no runtime ESM exports"
-    },
-    {
-      "entrypoint": "./assets/empty.js",
-      "conditions": [],
-      "stage": "artifact-case",
-      "class": "published-artifact",
-      "applicability": "runtime-module",
-      "reason": "solid-checker-rust: emit package contract: entry file <package-root>/assets/empty.js has no runtime ESM exports"
-    }
-  ],
+  "refusals": [],
   "inapplicable": [
     {
       "entrypoint": "./assets/styles.module.css",

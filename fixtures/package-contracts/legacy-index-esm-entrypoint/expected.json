@@ -13,7 +13,7 @@
             "sha256": "ad2d95e5dfdc417b803cdb1c6d016601a00da97f80418152d3cbcd9871699cd0"
           },
           "exports": {
-            "scheduleLegacy": "summary-0e2e1fd6985c15d05e8af279525bc2b8a4135375e7b13d2422de5dbf30cf3407"
+            "scheduleLegacy": "summary-717a197e69ca5c6079c66ef9dad3b108ec84225c12020c56a465cc88de548079"
           },
           "resolution": {
             "runtimeBranch": "legacy:index",
@@ -37,7 +37,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-0e2e1fd6985c15d05e8af279525bc2b8a4135375e7b13d2422de5dbf30cf3407": {
+    "summary-717a197e69ca5c6079c66ef9dad3b108ec84225c12020c56a465cc88de548079": {
       "call": {
         "callbacks": [
           {
@@ -49,6 +49,7 @@
           }
         ],
         "closed": [
+          "reads",
           "creates",
           "returns"
         ],
@@ -73,9 +74,11 @@
           }
         ],
         "proposedClosures": [
+          "reads",
           "creates",
           "returns"
         ],
+        "reads": [],
         "returns": []
       },
       "shape": "callable"

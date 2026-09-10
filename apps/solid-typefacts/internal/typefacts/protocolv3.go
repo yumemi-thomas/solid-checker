@@ -4,7 +4,32 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 34: a form's subject may be rooted at a
+// TypeFactsHandshakeProtocol is 46: original input through one local helper.
+// Protocol 44: runtime export initializer derivations
+// bind exact source chains and object arguments, without a result verdict.
+// Protocol 43: an initial read is also stated for every
+// use this body's own stores cannot precede, marked `conditional` when the
+// control flow may skip it.
+// Protocol 42: firstIterationOnly limits an initial read
+// to the first entry of a supported synchronous for-of body.
+// Protocol 41: initialParameterReads also binds the first
+// receiver evaluated before a plain parameter assignment stores its RHS.
+// Protocol 40: initialParameterReads binds caller roots
+// at specific reads in a write-free opening declaration prefix.
+// Protocol 39: explicit unwritten parameter bindings prove
+// whole-slot identity without asserting a concrete shape. Protocol 38 union premises spell and identify every
+// constituent, including imported aliases and optional primitive arms.
+// Protocol 37: exact anonymous local callable demands
+// bind their own compiler symbol, with no invented enclosing binding.
+// Protocol 36: localLiteralResult states the exact call,
+// callee, local allocation and complete return set for a data-only result.
+// The consumer must still census and bind that callee (ADR 0053).
+// Protocol 35: an explicit never type is a non-object
+// fact even though Distributed returns no constituents (ADR 0051). This
+// changes coercion classification and primitiveCompletion: a never completion
+// states that no normal value is produced, not that the type is unavailable.
+// The caller's argument premise and the helper's echo still bind the fact.
+// Protocol 34: a form's subject may be rooted at a
 // binding the file **writes**, when every value that binding can hold is
 // rooted at one parameter (ADR 0050). The `parameter` derivation widens to
 // cover it, which is why the number moves: a consumer that reviewed
@@ -221,8 +246,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 34
-	TypeFactsSchemaSHA256             = "sha256:3d4be30f557e0feac9629a13ed03b8f6d8b3be3d79d4edbadc3871bed66bc062"
+	TypeFactsHandshakeProtocol uint64 = 46
+	TypeFactsSchemaSHA256             = "sha256:9d490aeaeaf577fb26d14f9ab380dd9ce372b1eac3530508e97aa3447bdc86f7"
 )
 
 type ServiceHandshake struct {

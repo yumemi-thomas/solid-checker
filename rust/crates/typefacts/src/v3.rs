@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:3d4be30f557e0feac9629a13ed03b8f6d8b3be3d79d4edbadc3871bed66bc062";
+    "sha256:9d490aeaeaf577fb26d14f9ab380dd9ce372b1eac3530508e97aa3447bdc86f7";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -138,6 +138,22 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
+// Protocol 42 marks original-input evidence limited to a loop's first entry.
+// Protocol 41 also binds the first receiver before a plain parameter assignment.
+// Protocol 40 binds original caller roots at exact opening-prefix property uses.
+// Protocol 39 adds affirmative unwritten parameter bindings tied to exact
+// implementation signature slots. These establish source identity, not shape.
+// Protocol 38 includes every union constituent in the premise identity and
+// spells complete imported unions in helper twins.
+// Protocol 37 binds an exact anonymous local callable through its own
+// compiler symbol rather than requiring a named enclosing variable.
+// Protocol 36 adds localLiteralResult: exact call, callee, allocation and
+// complete return sites for one local data-only result. The consumer binds
+// this derivation to the local execution census before granting access.
+// Protocol 35 classifies an explicit never type as non-object even though its
+// distributed constituent set is empty (ADR 0051). Coercions and completion
+// facts share this predicate: never states no normal object-valued completion,
+// never an unavailable type. Call-argument premises and helper echoes bind it.
 // Protocol 34 widens the `parameter` subject derivation to a binding the file
 // **writes**, when every value it can hold is rooted at one parameter
 // (ADR 0050). No flow analysis is involved: if every value is the caller's,
@@ -240,7 +256,10 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // producer is never "not rooted".
 // Protocol 17 includes exact-null loose equality in the positive
 // uncensused-form classifier. Protocol 16 added unchanged-parameter identity.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 34;
+// Protocol 44 adds runtime export initializer derivations. These bind source
+// subjects only; imported call behavior still requires dependency evidence.
+// Protocol 46 binds one-hop original-input helper reads.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 46;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

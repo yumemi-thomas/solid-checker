@@ -1209,6 +1209,7 @@ impl Session {
                 )));
             }
             validate_local_declaration_binding(index, demand, transcript)?;
+            validate_export_initializer_binding(demand, transcript, &envelope)?;
             validate_export_value_transcript(transcript)?;
         }
         validate_export_value_envelope(&envelope, &self.project_id, self.generation, demands)?;
@@ -2108,6 +2109,99 @@ fn validate_export_value_transcript(
     Ok(())
 }
 
+/// Validate the joined subjects before exposing a conditional initializer
+/// premise. Source hashes authenticate the files; these checks prevent a row
+/// for another query, binding, call or argument from answering this demand.
+fn validate_export_initializer_binding(
+    demand: &crate::ExportValueDemand,
+    transcript: &crate::ExportValueTranscript,
+    envelope: &crate::InvocationEnvelope,
+) -> Result<(), SessionError> {
+    let Some(initializer) = &transcript.initializer else {
+        return Ok(());
+    };
+    let invalid = || {
+        SessionError::InvalidResponse(
+            "export initializer lacks exact demand, source or binding identity".into(),
+        )
+    };
+    let contains = |outer: &crate::Location, inner: &crate::Location| {
+        outer.path == inner.path
+            && outer.start_byte <= inner.start_byte
+            && inner.start_byte < inner.end_byte
+            && inner.end_byte <= outer.end_byte
+    };
+    let sourced = |location: &crate::Location| {
+        location.start_byte < location.end_byte
+            && envelope
+                .sources
+                .iter()
+                .any(|source| source.path == location.path)
+    };
+    if demand.implementation_location.as_ref() != Some(&initializer.location)
+        || initializer.target.is_empty()
+        || transcript
+            .implementation
+            .as_ref()
+            .is_none_or(|implementation| {
+                implementation.location != initializer.location
+                    || implementation.target != initializer.target
+            })
+        || initializer.bindings.is_empty()
+        || initializer.bindings.len() > 16
+        || initializer.specifier.is_empty()
+        || initializer.export_name.is_empty()
+        || initializer.declaration.symbol.is_empty()
+        || initializer.declaration.name.is_empty()
+        || !sourced(&initializer.location)
+        || !sourced(&initializer.declaration.location)
+        || !contains(&initializer.call, &initializer.callee)
+        || initializer.object_arguments.is_empty()
+        || initializer.object_arguments.len() > 1_000_000
+    {
+        return Err(invalid());
+    }
+    let mut symbols = std::collections::HashSet::new();
+    for (index, binding) in initializer.bindings.iter().enumerate() {
+        if binding.declaration.symbol.is_empty()
+            || binding.declaration.name.is_empty()
+            || binding.declaration.kind.as_ref() != "VariableDeclaration"
+            || !symbols.insert(&binding.declaration.symbol)
+            || binding.location.path != initializer.call.path
+            || !sourced(&binding.location)
+            || !contains(&binding.location, &binding.declaration.location)
+            || !contains(&binding.location, &binding.initializer)
+            || binding.declaration.location.end_byte > binding.initializer.start_byte
+            || (index == 0 && binding.declaration.symbol != initializer.target)
+            || (index > 0
+                && binding.location.end_byte
+                    > initializer.bindings[index - 1].initializer.start_byte)
+        {
+            return Err(invalid());
+        }
+    }
+    if initializer
+        .bindings
+        .last()
+        .is_none_or(|binding| binding.initializer != initializer.call)
+    {
+        return Err(invalid());
+    }
+    let mut previous_index = None;
+    let mut previous_end = initializer.callee.end_byte;
+    for argument in &initializer.object_arguments {
+        if previous_index.is_some_and(|index| index >= argument.index)
+            || !contains(&initializer.call, &argument.location)
+            || argument.location.start_byte < previous_end
+        {
+            return Err(invalid());
+        }
+        previous_index = Some(argument.index);
+        previous_end = argument.location.end_byte;
+    }
+    Ok(())
+}
+
 /// Binds a local-declaration answer to the demand that asked for it.
 ///
 /// The producer echoes the demanded location into the answer's own `location`,
@@ -2217,6 +2311,106 @@ fn validate_local_declaration_binding(
 fn validate_implementation_transcript(
     transcript: &crate::ExportImplementationTranscript,
 ) -> Result<(), SessionError> {
+    let mut helper_reads = std::collections::BTreeSet::new();
+    if transcript.original_helper_reads.len() > 256
+        || transcript.original_helper_reads.iter().any(|read| {
+            !read.binds_to(transcript)
+                || !helper_reads.insert((
+                    read.call.path.clone(),
+                    read.call.start_byte,
+                    read.call.end_byte,
+                    read.argument_index,
+                    read.read.start_byte,
+                    read.read.end_byte,
+                ))
+        })
+    {
+        return Err(SessionError::InvalidResponse(
+            "original helper read does not bind its exact caller, argument and local helper".into(),
+        ));
+    }
+    let mut previous = None;
+    let mut initial_uses = std::collections::BTreeSet::new();
+    let mut default_parameters = std::collections::BTreeSet::new();
+    for read in &transcript.initial_parameter_reads {
+        let parameter = transcript
+            .signature
+            .as_ref()
+            .and_then(|signature| signature.parameters.get(read.parameter_index));
+        let matching_uses = transcript
+            .parameter_uses
+            .iter()
+            .filter(|usage| {
+                usage.parameter_index == read.parameter_index
+                    && usage.location == read.r#use
+                    && usage.binding_path.is_empty()
+                    && usage.kind == crate::ParameterUseKind::PropertyAccess
+                    && (usage.reach == crate::Reachability::Reachable
+                        || read.first_iteration_only && usage.reach == crate::Reachability::Unknown)
+                    && !usage.captured
+                    && !usage.alias
+            })
+            .count();
+        // A first-iteration row is admitted by entering a loop body, which the
+        // positional rule refuses outright, so a row claiming both describes no
+        // premise a consumer could take.
+        if read.first_iteration_only && read.positional
+            || read.undefined_default.as_ref().is_some_and(|default| {
+                !default.binds_read(read) || !default_parameters.insert(read.parameter_index)
+            })
+            || transcript.completion_form != Some(crate::ImplementationCompletionForm::Plain)
+            || read.declaration.path != transcript.location.path
+            || read.declaration.start_byte >= read.declaration.end_byte
+            || read.r#use.path != read.declaration.path
+            || read.r#use.start_byte >= read.r#use.end_byte
+            || matching_uses != 1
+            || !initial_uses.insert((
+                read.r#use.path.clone(),
+                read.r#use.start_byte,
+                read.r#use.end_byte,
+            ))
+            || parameter.is_none_or(|parameter| {
+                parameter.index != read.parameter_index
+                    || parameter.rest
+                    || parameter.defaulted
+                    || parameter
+                        .declaration
+                        .as_ref()
+                        .is_none_or(|declaration| declaration.location != read.declaration)
+            })
+        {
+            return Err(SessionError::InvalidResponse("initial parameter read does not bind one exact original-input use and signature slot".into()));
+        }
+    }
+    for binding in &transcript.unwritten_parameters {
+        let parameter = transcript
+            .signature
+            .as_ref()
+            .and_then(|signature| signature.parameters.get(binding.parameter_index));
+        if previous.is_some_and(|index| index >= binding.parameter_index)
+            || !matches!(
+                transcript.completion_form,
+                Some(
+                    crate::ImplementationCompletionForm::Plain
+                        | crate::ImplementationCompletionForm::Async
+                )
+            )
+            || binding.declaration.start_byte >= binding.declaration.end_byte
+            || binding.declaration.path != transcript.location.path
+            || parameter.is_none_or(|parameter| {
+                parameter.index != binding.parameter_index
+                    || parameter.rest
+                    || parameter.defaulted
+                    || parameter
+                        .declaration
+                        .as_ref()
+                        .is_none_or(|declaration| declaration.location != binding.declaration)
+            })
+        {
+            return Err(SessionError::InvalidResponse("unwritten parameter binding does not match its exact implementation signature slot".into()));
+        }
+        previous = Some(binding.parameter_index);
+    }
     for form in &transcript.uncensused_invoking_forms {
         if form.captured != form.enclosing_callable.is_some() {
             return Err(SessionError::InvalidResponse(format!(
@@ -3702,6 +3896,9 @@ mod tests {
             completion_form: None,
             implementation_of: None,
             parameter_uses: Vec::new(),
+            unwritten_parameters: Vec::new(),
+            initial_parameter_reads: Vec::new(),
+            original_helper_reads: Vec::new(),
             control_flow: None,
             callable_returns: Vec::new(),
             calls: Vec::new(),
@@ -3713,6 +3910,201 @@ mod tests {
             complete: false,
             open_reasons: Vec::new(),
         }
+    }
+
+    #[test]
+    fn unwritten_parameter_binding_requires_matching_signature_slot() {
+        let mut transcript = implementation_transcript(span("/input.js", 0, 5));
+        transcript.completion_form = Some(crate::ImplementationCompletionForm::Plain);
+        let value = export_value_transcript(span("/input.js", 6, 11)).value;
+        transcript.signature = Some(crate::SelectedSignature {
+            identity: "signature".into(),
+            declaration: resolved_declaration("value", span("/input.js", 0, 5)),
+            overload_ordinal: 0,
+            overload_count: 1,
+            minimum_argument_count: 1,
+            has_rest: false,
+            parameters: vec![crate::SelectedParameter {
+                index: 0,
+                symbol: "input".into(),
+                declaration: Some(crate::Declaration {
+                    name: "input".into(),
+                    kind: "parameter".into(),
+                    location: span("/input.js", 6, 11),
+                }),
+                rest: false,
+                optional: false,
+                defaulted: false,
+                value: value.clone(),
+                declared_type: None,
+                callable_paths: vec![],
+            }],
+            result: value,
+            result_callable_paths: vec![],
+        });
+        transcript
+            .unwritten_parameters
+            .push(crate::UnwrittenParameterBinding {
+                parameter_index: 0,
+                declaration: span("/input.js", 6, 11),
+            });
+        validate_implementation_transcript(&transcript).unwrap();
+        for invalid in [
+            "slot",
+            "duplicate",
+            "declaration",
+            "default",
+            "rest",
+            "generator",
+            "missing-signature",
+        ] {
+            let mut changed = transcript.clone();
+            match invalid {
+                "slot" => changed.unwritten_parameters[0].parameter_index = 1,
+                "duplicate" => changed
+                    .unwritten_parameters
+                    .push(changed.unwritten_parameters[0].clone()),
+                "declaration" => changed.unwritten_parameters[0].declaration.end_byte += 1,
+                "default" => changed.signature.as_mut().unwrap().parameters[0].defaulted = true,
+                "rest" => changed.signature.as_mut().unwrap().parameters[0].rest = true,
+                "generator" => {
+                    changed.completion_form = Some(crate::ImplementationCompletionForm::Generator)
+                }
+                "missing-signature" => changed.signature = None,
+                _ => unreachable!(),
+            }
+            assert!(
+                validate_implementation_transcript(&changed).is_err(),
+                "{invalid}"
+            );
+        }
+        transcript.completion_form = Some(crate::ImplementationCompletionForm::Async);
+        validate_implementation_transcript(&transcript).unwrap();
+        transcript.completion_form = Some(crate::ImplementationCompletionForm::Plain);
+        transcript.unwritten_parameters.clear();
+        transcript.parameter_uses.push(crate::ParameterUse {
+            parameter_index: 0,
+            binding_path: vec![],
+            location: span("/input.js", 20, 25),
+            reach: crate::Reachability::Reachable,
+            kind: crate::ParameterUseKind::PropertyAccess,
+            alias: false,
+            captured: false,
+        });
+        transcript
+            .initial_parameter_reads
+            .push(crate::InitialParameterRead {
+                parameter_index: 0,
+                declaration: span("/input.js", 6, 11),
+                r#use: span("/input.js", 20, 25),
+                first_iteration_only: false,
+                positional: false,
+                undefined_default: None,
+            });
+        validate_implementation_transcript(&transcript).unwrap();
+        for invalid in [
+            "slot",
+            "duplicate",
+            "declaration",
+            "use",
+            "missing-use",
+            "alias",
+            "capture",
+            "reach",
+            "kind",
+            "path",
+            "default",
+            "rest",
+            "async",
+            "missing-signature",
+            "both-markers",
+        ] {
+            let mut changed = transcript.clone();
+            match invalid {
+                "slot" => changed.initial_parameter_reads[0].parameter_index = 1,
+                "duplicate" => changed
+                    .initial_parameter_reads
+                    .push(changed.initial_parameter_reads[0].clone()),
+                "declaration" => changed.initial_parameter_reads[0].declaration.end_byte += 1,
+                "use" => changed.initial_parameter_reads[0].r#use.end_byte += 1,
+                "missing-use" => changed.parameter_uses.clear(),
+                "alias" => changed.parameter_uses[0].alias = true,
+                "capture" => changed.parameter_uses[0].captured = true,
+                "reach" => changed.parameter_uses[0].reach = crate::Reachability::Unreachable,
+                "kind" => changed.parameter_uses[0].kind = crate::ParameterUseKind::Return,
+                "path" => changed.initial_parameter_reads[0].r#use.path = "/other.js".into(),
+                "default" => changed.signature.as_mut().unwrap().parameters[0].defaulted = true,
+                "rest" => changed.signature.as_mut().unwrap().parameters[0].rest = true,
+                "async" => {
+                    changed.completion_form = Some(crate::ImplementationCompletionForm::Async)
+                }
+                "missing-signature" => changed.signature = None,
+                // ADR 0069: the loop that admits a first-iteration row is what
+                // the positional rule refuses outright, so no producer rule can
+                // establish both.
+                "both-markers" => {
+                    changed.initial_parameter_reads[0].positional = true;
+                    changed.initial_parameter_reads[0].first_iteration_only = true;
+                }
+                _ => unreachable!(),
+            }
+            assert!(
+                validate_implementation_transcript(&changed).is_err(),
+                "initial read: {invalid}"
+            );
+        }
+        // A positional row is bound under the same reachable-use filter as an
+        // ordinary one, which is exactly why the producer only states it for a
+        // reachable use: an unbindable row loses the transcript, not the premise.
+        transcript.initial_parameter_reads[0].positional = true;
+        validate_implementation_transcript(&transcript).unwrap();
+        transcript.initial_parameter_reads[0].positional = false;
+        {
+            let mut defaulted = transcript.clone();
+            defaulted.initial_parameter_reads[0].undefined_default =
+                Some(crate::UndefinedParameterDefault {
+                    guard: span("/input.js", 12, 19),
+                    assignment: span("/input.js", 14, 18),
+                });
+            validate_implementation_transcript(&defaulted).unwrap();
+            for invalid in [
+                "guard-after-read",
+                "foreign-guard",
+                "store-outside-guard",
+                "positional",
+                "first-iteration",
+            ] {
+                let mut changed = defaulted.clone();
+                let read = &mut changed.initial_parameter_reads[0];
+                match invalid {
+                    "guard-after-read" => {
+                        read.undefined_default.as_mut().unwrap().guard.end_byte = 30
+                    }
+                    "foreign-guard" => {
+                        read.undefined_default.as_mut().unwrap().guard.path = "/other.js".into()
+                    }
+                    "store-outside-guard" => {
+                        read.undefined_default.as_mut().unwrap().assignment.end_byte = 20
+                    }
+                    "positional" => read.positional = true,
+                    "first-iteration" => read.first_iteration_only = true,
+                    _ => unreachable!(),
+                }
+                assert!(
+                    validate_implementation_transcript(&changed).is_err(),
+                    "{invalid}"
+                );
+            }
+        }
+        transcript.parameter_uses[0].reach = crate::Reachability::Unknown;
+        assert!(validate_implementation_transcript(&transcript).is_err());
+        transcript.initial_parameter_reads[0].positional = true;
+        assert!(validate_implementation_transcript(&transcript).is_err());
+        transcript.initial_parameter_reads[0].positional = false;
+        transcript.initial_parameter_reads[0].first_iteration_only = true;
+        validate_implementation_transcript(&transcript).unwrap();
+        transcript.parameter_uses[0].reach = crate::Reachability::Unreachable;
+        assert!(validate_implementation_transcript(&transcript).is_err());
     }
 
     fn resolved_declaration(name: &str, location: Location) -> crate::ResolvedDeclaration {
@@ -3748,10 +4140,146 @@ mod tests {
             call_signature: None,
             call_signatures: Vec::new(),
             implementation: None,
+            initializer: None,
             local_declaration: None,
             complete: false,
             open_reasons: Vec::new(),
         }
+    }
+
+    #[test]
+    fn export_initializer_requires_exact_joined_source_subjects() {
+        let query = span("/p/harness.ts", 80, 85);
+        let mut demand = export_value_demand(query.clone());
+        demand.implementation_location = Some(query.clone());
+        let mut transcript = export_value_transcript(query.clone());
+        let mut implementation = implementation_transcript(query.clone());
+        implementation.target = "result-symbol".into();
+        transcript.implementation = Some(implementation);
+        let mut root = resolved_declaration("result", span("/p/runtime.ts", 70, 76));
+        root.kind = "VariableDeclaration".into();
+        root.symbol = "result-symbol".into();
+        let mut plugin = resolved_declaration("plugin", span("/p/runtime.ts", 10, 16));
+        plugin.kind = "VariableDeclaration".into();
+        plugin.symbol = "plugin-symbol".into();
+        transcript.initializer = Some(crate::ExportInitializerTranscript {
+            location: query,
+            target: "result-symbol".into(),
+            bindings: vec![
+                crate::ExportInitializerBinding {
+                    declaration: root,
+                    location: span("/p/runtime.ts", 70, 85),
+                    initializer: span("/p/runtime.ts", 79, 85),
+                },
+                crate::ExportInitializerBinding {
+                    declaration: plugin,
+                    location: span("/p/runtime.ts", 10, 60),
+                    initializer: span("/p/runtime.ts", 20, 60),
+                },
+            ],
+            call: span("/p/runtime.ts", 20, 60),
+            callee: span("/p/runtime.ts", 20, 27),
+            declaration: resolved_declaration("createPlugin", span("/p/factory.ts", 16, 28)),
+            specifier: "./factory".into(),
+            export_name: "createPlugin".into(),
+            object_arguments: vec![
+                crate::ExportInitializerObjectArgument {
+                    index: 0,
+                    location: span("/p/runtime.ts", 28, 30),
+                },
+                crate::ExportInitializerObjectArgument {
+                    index: 2,
+                    location: span("/p/runtime.ts", 40, 45),
+                },
+            ],
+        });
+        let envelope = crate::InvocationEnvelope {
+            project_id: "/p/tsconfig.json".into(),
+            generation: 0,
+            demand_sha256: export_value_demand_digest(&[demand.clone()]).into(),
+            module_graph_sha256: crate::SourceHash::of("graph").as_str().into(),
+            schema_sha256: v3::TYPE_FACTS_SCHEMA_SHA256.into(),
+            producer_build: v3::TYPE_FACTS_BUILD_ID.into(),
+            sources: ["/p/factory.ts", "/p/harness.ts", "/p/runtime.ts"]
+                .into_iter()
+                .map(|path| crate::TranscriptSourceDigest {
+                    path: path.into(),
+                    sha256: crate::SourceHash::of(path).as_str().into(),
+                })
+                .collect(),
+            open_reasons: Vec::new(),
+        };
+        validate_export_initializer_binding(&demand, &transcript, &envelope).unwrap();
+        type Mutation = fn(&mut crate::ExportInitializerTranscript);
+        let mutations: &[(&str, Mutation)] = &[
+            ("wrong query", |row| row.location.start_byte += 1),
+            ("wrong runtime target", |row| row.target = "other".into()),
+            ("wrong root symbol", |row| {
+                row.bindings[0].declaration.symbol = "other".into()
+            }),
+            ("empty chain", |row| row.bindings.clear()),
+            ("unbounded chain", |row| {
+                row.bindings.resize(17, row.bindings[0].clone())
+            }),
+            ("cycle", |row| {
+                row.bindings[1].declaration.symbol = row.bindings[0].declaration.symbol.clone()
+            }),
+            ("forward binding", |row| {
+                row.bindings[1].location.end_byte = 100
+            }),
+            ("different module", |row| {
+                row.bindings[1].location.path = "/p/other.ts".into()
+            }),
+            ("non-variable", |row| {
+                row.bindings[0].declaration.kind = "FunctionDeclaration".into()
+            }),
+            ("declaration outside binding", |row| {
+                row.bindings[0].declaration.location.start_byte = 1
+            }),
+            ("initializer outside binding", |row| {
+                row.bindings[0].initializer.end_byte = 100
+            }),
+            ("another call", |row| row.call.end_byte = 59),
+            ("callee outside call", |row| row.callee.start_byte = 1),
+            ("missing dependency identity", |row| {
+                row.declaration.symbol = "".into()
+            }),
+            ("missing specifier", |row| row.specifier = "".into()),
+            ("missing export", |row| row.export_name = "".into()),
+            ("no object argument", |row| row.object_arguments.clear()),
+            ("duplicate slot", |row| row.object_arguments[1].index = 0),
+            ("argument outside call", |row| {
+                row.object_arguments[1].location.end_byte = 100
+            }),
+            ("argument overlaps callee", |row| {
+                row.object_arguments[0].location.start_byte = 21
+            }),
+            ("overlapping arguments", |row| {
+                row.object_arguments[1].location.start_byte = 29
+            }),
+        ];
+        for (name, mutate) in mutations {
+            let mut bad = transcript.clone();
+            mutate(bad.initializer.as_mut().unwrap());
+            assert!(
+                validate_export_initializer_binding(&demand, &bad, &envelope).is_err(),
+                "{name}"
+            );
+        }
+        for omitted in 0..envelope.sources.len() {
+            let mut missing_source = envelope.clone();
+            missing_source.sources.remove(omitted);
+            assert!(
+                validate_export_initializer_binding(&demand, &transcript, &missing_source).is_err()
+            );
+        }
+        let mut unasked = demand.clone();
+        unasked.implementation_location = None;
+        assert!(validate_export_initializer_binding(&unasked, &transcript, &envelope).is_err());
+        transcript.implementation = None;
+        assert!(validate_export_initializer_binding(&demand, &transcript, &envelope).is_err());
+        transcript.initializer = None;
+        validate_export_initializer_binding(&demand, &transcript, &envelope).unwrap();
     }
 
     fn uncensused_form(location: Location) -> crate::UncensusedInvokingForm {
@@ -3767,6 +4295,7 @@ mod tests {
             subject_root: String::new(),
             subject_declaration: None,
             coercion_premise: None,
+            local_literal_result: None,
         }
     }
 

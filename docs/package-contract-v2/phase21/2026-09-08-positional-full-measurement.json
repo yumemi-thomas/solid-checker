@@ -1,0 +1,161 @@
+{
+ "format": "entrypoint-recovery-measurement",
+ "authoritative": false,
+ "comparison": "published certification status, certified-entrypoint count, root status and refusal stage per probe",
+ "base": {
+  "path": "rust/target/ecosystem-investigations/2026-09-08-initial-reads-full.json",
+  "digest": "sha256:34cdf6be8d8e3f175cd37f8151848e449ba3dcff5bc8fadc983f378ba847d65c",
+  "counts": {
+   "complete": 318,
+   "partial": 61,
+   "refused": 30,
+   "certifiedEntrypoints": 1123
+  }
+ },
+ "priorSlice": {
+  "path": "rust/target/ecosystem-investigations/2026-09-08-graph-fallback-full-t600.json",
+  "digest": "sha256:a612c7c435d98be2ee5f3974b6ac63208e61cc759c4841576c08566b561987f4",
+  "note": "ADR 0068 run; @kobalte/core timed out there under host contention"
+ },
+ "after": {
+  "path": "rust/target/ecosystem-investigations/2026-09-08-positional-full-v2.json",
+  "digest": "sha256:75bb1e0569991f00f0d621fa9016623fd7a99dfc5558b980d757e3ad0da84881",
+  "finishedAt": "2026-09-08T00:58:41.391Z",
+  "durationMs": 691136,
+  "timeoutSeconds": 600,
+  "counts": {
+   "complete": 324,
+   "partial": 62,
+   "refused": 23,
+   "certifiedEntrypoints": 1148
+  }
+ },
+ "adr0069Effect": {
+  "changedRowsAgainstPriorSlice": [
+   {
+    "probeId": "@kobalte/core@0.13.13|solid1|only",
+    "before": {
+     "status": "infrastructure-failure",
+     "certifiedEntrypoints": null,
+     "rootCertified": null,
+     "stage": "timeout"
+    },
+    "after": {
+     "status": "certified",
+     "certifiedEntrypoints": 508,
+     "rootCertified": true,
+     "stage": "catalog-publication"
+    }
+   }
+  ],
+  "verdict": "the only difference is @kobalte/core recovering from the prior run's host-contention timeout. ADR 0069 moves no row: every positional row it states is refused by the whole-root arm, which is the arm this corpus's parameter-rooted read demands take."
+ },
+ "changedRowsAgainstBase": [
+  {
+   "probeId": "@kobalte/utils@0.9.2|solid1|only",
+   "before": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition"
+   },
+   "after": {
+    "status": "certified",
+    "certifiedEntrypoints": 19,
+    "rootCertified": false,
+    "stage": "catalog-publication"
+   }
+  },
+  {
+   "probeId": "@solid-primitives/i18n@2.2.1|solid1|only",
+   "before": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition"
+   },
+   "after": {
+    "status": "certified",
+    "certifiedEntrypoints": 1,
+    "rootCertified": true,
+    "stage": "catalog-publication"
+   }
+  },
+  {
+   "probeId": "@solid-primitives/i18n@3.0.0-next.4|solid2|floor",
+   "before": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition"
+   },
+   "after": {
+    "status": "certified",
+    "certifiedEntrypoints": 1,
+    "rootCertified": true,
+    "stage": "catalog-publication"
+   }
+  },
+  {
+   "probeId": "@solid-primitives/i18n@3.0.0-next.4|solid2|head",
+   "before": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition"
+   },
+   "after": {
+    "status": "certified",
+    "certifiedEntrypoints": 1,
+    "rootCertified": true,
+    "stage": "catalog-publication"
+   }
+  },
+  {
+   "probeId": "@solid-primitives/marker@0.2.2|solid1|only",
+   "before": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition"
+   },
+   "after": {
+    "status": "certified",
+    "certifiedEntrypoints": 1,
+    "rootCertified": true,
+    "stage": "catalog-publication"
+   }
+  },
+  {
+   "probeId": "@solid-primitives/marker@2.0.0-next.2|solid2|floor",
+   "before": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition"
+   },
+   "after": {
+    "status": "certified",
+    "certifiedEntrypoints": 1,
+    "rootCertified": true,
+    "stage": "catalog-publication"
+   }
+  },
+  {
+   "probeId": "@solid-primitives/marker@2.0.0-next.2|solid2|head",
+   "before": {
+    "status": "refused",
+    "certifiedEntrypoints": null,
+    "rootCertified": null,
+    "stage": "witness-acquisition"
+   },
+   "after": {
+    "status": "certified",
+    "certifiedEntrypoints": 1,
+    "rootCertified": true,
+    "stage": "catalog-publication"
+   }
+  }
+ ],
+ "preservedRowCountAgainstBase": 411
+}

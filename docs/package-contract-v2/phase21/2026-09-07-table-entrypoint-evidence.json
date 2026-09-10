@@ -1,0 +1,1193 @@
+{
+  "format": "table-entrypoint-investigation",
+  "authoritative": false,
+  "probeId": "@tanstack/solid-table@9.1.2|solid1|only",
+  "before": {
+    "catalogRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-qE5FBh/@tanstack__solid-table@9.1.2--solid1--only.json.accepted-catalog",
+    "pointer": {
+      "format": "solid-checker-accepted-contract-case-set-pointer",
+      "caseSetVersion": 1,
+      "document": "case-sets/703a3c17c43e891f161c31fa12afcdccf576619948acb0007af1241672274e96/accepted-contract-case-set.json",
+      "documentDigest": "sha256:703a3c17c43e891f161c31fa12afcdccf576619948acb0007af1241672274e96"
+    },
+    "cases": [
+      {
+        "entrypoint": "./flex-render",
+        "selection": {
+          "artifact": {
+            "closureSha256": "2d96b6179930ec7ef3f78128a4eb7f8aef22476b8d2ea1664fece937356b11d3",
+            "path": "./dist/flex-render.js",
+            "sha256": "b8f4e550c4f5253ec130d89bb2116ba05dec0a831babc3351b39677a172b409e"
+          },
+          "declarations": {
+            "path": "./dist/flex-render.d.ts",
+            "sha256": "4ba4208f556960fda3e6933e52f1e50c37c0fecf368eb714333423b5199e8ed9"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1flex-render/solid",
+            "typesBranch": "/exports/.~1flex-render/solid"
+          }
+        },
+        "coordinate": {
+          "artifactCaseId": "artifact-case:aba8f0415281766f8062984d349fb9398804a5cb09a6dbc79c87aef5e97648d0",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/.solid-checker-certification-55536ff77a20d2bc4eb9449df722687f569c164f559bf52e8f4761dada338054.mjs",
+          "specifier": "@tanstack/solid-table/flex-render",
+          "resolvedImportRoot": "sha256:74e8d8cc742e2479aeca12e4fb23ea7d1cfb50baf22960d32030856d09189d29",
+          "semanticDigest": "sha256:eb40308bf309265269e02bb56e3b6e97a0cdaba4ed57ba7a5ef1ef127d185ddd",
+          "receiptDigest": "sha256:faa7697006cba86b1f216bbf016904d5fe1401aa80b26eafb5ea267d564cccd6",
+          "catalog": "cases/74e8d8cc742e2479aeca12e4fb23ea7d1cfb50baf22960d32030856d09189d29/accepted-contracts.json",
+          "catalogDigest": "sha256:179ba243092cd73b0ab8a37e8a5c502d440ff3b2f0597305547486fabe9ad066"
+        },
+        "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-qE5FBh/@tanstack__solid-table@9.1.2--solid1--only.json.accepted-catalog/case-sets/703a3c17c43e891f161c31fa12afcdccf576619948acb0007af1241672274e96/cases/74e8d8cc742e2479aeca12e4fb23ea7d1cfb50baf22960d32030856d09189d29/accepted-contracts.json",
+        "documentDigest": "sha256:41f30743951fa70a6dcb986cce59daef80e3916bcc7e70237091743fc042fcca",
+        "receiptDigest": "sha256:faa7697006cba86b1f216bbf016904d5fe1401aa80b26eafb5ea267d564cccd6",
+        "receiptPayload": {
+          "semanticModelVersion": 1,
+          "proofVersion": 2,
+          "proofPolicy": 2,
+          "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+          "mainDigest": "sha256:41f30743951fa70a6dcb986cce59daef80e3916bcc7e70237091743fc042fcca",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/.solid-checker-certification-55536ff77a20d2bc4eb9449df722687f569c164f559bf52e8f4761dada338054.mjs",
+          "specifier": "@tanstack/solid-table/flex-render",
+          "resolvedImportRoot": "sha256:74e8d8cc742e2479aeca12e4fb23ea7d1cfb50baf22960d32030856d09189d29",
+          "semanticDigest": "sha256:eb40308bf309265269e02bb56e3b6e97a0cdaba4ed57ba7a5ef1ef127d185ddd",
+          "artifactProvenanceRoot": "sha256:962e18ba7862b7060322575e54ab0058e85e294bf5937d27a056f15333a89604",
+          "snapshotRoot": "sha256:2f28a8a3c28fe4aa5f8a4bcb54fcc68a5073ebfb1797714e48b6fc06edc0ba3a",
+          "packageRoot": "sha256:d38a9008e341ef96ed4da63c35ea2ab4438604a2c3746a42748fd69f8d9aed8a",
+          "manifestRoot": "sha256:191b8e894820259c6b1a1800c33facfed7040ba55b94aad9f2c4b9d16d98b196",
+          "artifactsRoot": "sha256:20cacafd4f1c501b6a1c04550abde9b5e4f88f1d9f92b023c911c30dee1fbd17",
+          "declarationsRoot": "sha256:bbbed2d9e1b8d2ab26725570bf852b41cdab91ecfe25050c349e0a16cc528a5d",
+          "transformRoot": "sha256:a67d9dd7951cb7e730f7b5818b34eedbcdcc953a6a75ff946b56f92a95a30e40",
+          "exportsRoot": "sha256:133a6c2aeb33a975e42d076ba951f98021b89384c68a18388543cd07ace1e1dd",
+          "closureRoot": "sha256:fe2b857527a7f61cca600806a2c4b55302623098ea6941cef37ca5f6c45334c5",
+          "demandGraphRoot": "sha256:de7aed1ccab84dbeb56867c36263b13a7ed1a9f042907a21cc235ced8b7d9dde",
+          "verifiedPositiveRoot": "sha256:d0d21e471d5d8db6da5be41420f4bdc56168bbdb44974198665bad6bf96e9950",
+          "witnessRoots": {
+            "accepted-dependency-composition": "sha256:cbeb7d9ff182f6afcc202e97e9f75bc7be17f07869c4f24a6b2a7668e9c08b3a",
+            "argument-binding": "sha256:12663ae45e9c8744d9da1d37bc9ddec44415fcfb56cc0d66df50ee4fbc058a3e",
+            "artifact-declarations": "sha256:bbbed2d9e1b8d2ab26725570bf852b41cdab91ecfe25050c349e0a16cc528a5d",
+            "callable-path": "sha256:8b89020d90fcbaa54aae5927dddbea7a340d87a35eaa87e902c61991bf7a7a85",
+            "compiler-reconciliation": "sha256:c2455d46e97ca9046295d54cddd339729979564b3116173468e2a89df5b3fcbc",
+            "domain-exhaustiveness": "sha256:5ec017d8188d1c3050342c99893aa65461841057e8f2733691fdb61d1e347ca6",
+            "export-identity": "sha256:133a6c2aeb33a975e42d076ba951f98021b89384c68a18388543cd07ace1e1dd",
+            "export-resolution": "sha256:20cacafd4f1c501b6a1c04550abde9b5e4f88f1d9f92b023c911c30dee1fbd17",
+            "guard-partition": "sha256:95cf8c66b5563dfd0e0da518fb9a32badae776147f86a21fdac5ec817ae1276f",
+            "manifest-entrypoint": "sha256:191b8e894820259c6b1a1800c33facfed7040ba55b94aad9f2c4b9d16d98b196",
+            "module-closure": "sha256:fe2b857527a7f61cca600806a2c4b55302623098ea6941cef37ca5f6c45334c5",
+            "operation-cardinality": "sha256:1dfbf3901850850253f3001bb4f77b8ea1de02c0878ace0ce150cd81c7eb4fc4",
+            "operation-reachability": "sha256:3543d398b22ea10b3d96d8aa9952c8d55417fbd135a5e95115a0258b00ccc3b1",
+            "package-identity": "sha256:d38a9008e341ef96ed4da63c35ea2ab4438604a2c3746a42748fd69f8d9aed8a",
+            "recursive-value-shape": "sha256:19b68c5296c485d219f44de5eab34578902385cec74e86acb9633a2c1f3b9fd1",
+            "rest-spread-coverage": "sha256:99c651cffa9a8a4f2bd861aedb6df8470848d34a78a65d2c88ece64e453bcd99",
+            "selected-signature": "sha256:2933b1595dd14bce627fb82cd97ea004a206e45132568721208eae008d1efd65"
+          },
+          "producerSessionsRoot": "sha256:74d4cc031969f5b1edbdf94275e5aee7eae781ad5dc4eb98cccdef7da2676291",
+          "dependencyReceiptsRoot": "sha256:a8936ecbe4721e5b3507cf91485ffc5606516cf94136b424b9b756a3f8b51cf6",
+          "dependencyTrustRoot": "sha256:8e3da8b5dd92d9496ef0aa4c419fe8899d8f96b661078493fb7fba4ccc2a65f0",
+          "probeGateRoot": "sha256:e65f7499c4ec45b7d7b60502a3773a4118f0a48d66dfd79a8a5a0ed1b9564ae5",
+          "closedClaimsRoot": "sha256:4b01c58449c4d59852d0f4d9743114f21203ac12d28f952021665fa97f80271f",
+          "verifierSourceDigest": "sha256:fc64b350efc4f2d1e9945acf01d6bc0f34d6f974eb4c22f22a39ee67ccb33331",
+          "verifierBuildDigest": "sha256:b13a1cece363b8d4314cb1a03a2dd7833ad490b0fb739a882259123e69a2daa1",
+          "issuerKind": "persistent-local",
+          "issuerScope": "ecosystem-benchmark:622cf261b33529b302f328ee9b0c7664d62429f21d1cdb938cdae01a312122ae",
+          "keyId": "ed25519:sha256:eeb4305e80e1ffe7a4ab946f4f91252abac96f24fc9b0307d6bf1719ed9334bb",
+          "signatureAlgorithm": "ed25519"
+        },
+        "resolution": {
+          "specifier": "@tanstack/solid-table/flex-render",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/.solid-checker-certification-55536ff77a20d2bc4eb9449df722687f569c164f559bf52e8f4761dada338054.mjs",
+          "requestedEntrypoint": "./flex-render",
+          "packageName": "@tanstack/solid-table",
+          "packageVersion": "9.1.2",
+          "packageIntegrity": "sha512-qrw9ndQDi5VE2YEfB7Vy1BTNw3xKQdsPEeysGEdS2Oudxq/6vs09pVnd12C2PuwteFjDw2xilW2bJCsQDk+u1g==",
+          "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/solid-table",
+          "packageManifest": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/solid-table/package.json",
+            "digest": "sha256:3d53baa5ed321b3c3fbad0d6942e015352244b18d931472f738d7153f4795a44"
+          },
+          "runtime": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/solid-table/dist/flex-render.js",
+            "digest": "sha256:b8f4e550c4f5253ec130d89bb2116ba05dec0a831babc3351b39677a172b409e"
+          },
+          "declarations": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/solid-table/dist/flex-render.d.ts",
+            "digest": "sha256:4ba4208f556960fda3e6933e52f1e50c37c0fecf368eb714333423b5199e8ed9"
+          },
+          "runtimeTrace": {
+            "branch": "/exports/.~1flex-render/solid",
+            "steps": [
+              {
+                "condition": "subpath",
+                "target": "./flex-render"
+              },
+              {
+                "condition": "solid",
+                "target": "/exports/.~1flex-render"
+              },
+              {
+                "condition": "target",
+                "target": "./dist/flex-render.js"
+              }
+            ]
+          },
+          "declarationTrace": {
+            "branch": "/exports/.~1flex-render/solid",
+            "steps": [
+              {
+                "condition": "subpath",
+                "target": "./flex-render"
+              },
+              {
+                "condition": "solid",
+                "target": "/exports/.~1flex-render"
+              },
+              {
+                "condition": "target",
+                "target": "./dist/flex-render.js"
+              }
+            ]
+          },
+          "closure": {
+            "entries": [
+              {
+                "role": "runtime",
+                "path": "./dist/FlexRender.js",
+                "digest": "sha256:19bd4328376b8dbeabe7a47ca6a8646c962004d40559741c2db865a67b041c16"
+              },
+              {
+                "role": "runtime",
+                "path": "./dist/flex-render.js",
+                "digest": "sha256:b8f4e550c4f5253ec130d89bb2116ba05dec0a831babc3351b39677a172b409e"
+              },
+              {
+                "role": "declaration",
+                "path": "./dist/FlexRender.d.ts",
+                "digest": "sha256:47e9d8baa1864fb8054be452cdd3bf27d46b291d65d62f802263da956ea2d6d2"
+              },
+              {
+                "role": "declaration",
+                "path": "./dist/flex-render.d.ts",
+                "digest": "sha256:4ba4208f556960fda3e6933e52f1e50c37c0fecf368eb714333423b5199e8ed9"
+              },
+              {
+                "role": "manifest",
+                "path": "./package.json",
+                "digest": "sha256:3d53baa5ed321b3c3fbad0d6942e015352244b18d931472f738d7153f4795a44"
+              },
+              {
+                "role": "resolution-input",
+                "path": "./package.json",
+                "digest": "sha256:3d53baa5ed321b3c3fbad0d6942e015352244b18d931472f738d7153f4795a44"
+              }
+            ],
+            "hazards": [
+              {
+                "kind": "unaccepted-external-dependency",
+                "source": "./dist/FlexRender.js:solid-js",
+                "affectedDomains": [
+                  "callbacks",
+                  "reads",
+                  "writes",
+                  "creates",
+                  "invalidates",
+                  "throws",
+                  "returns",
+                  "cleanups",
+                  "disposals"
+                ]
+              },
+              {
+                "kind": "unaccepted-external-dependency",
+                "source": "./dist/FlexRender.js:solid-js/web",
+                "affectedDomains": [
+                  "callbacks",
+                  "reads",
+                  "writes",
+                  "creates",
+                  "invalidates",
+                  "throws",
+                  "returns",
+                  "cleanups",
+                  "disposals"
+                ]
+              }
+            ],
+            "digest": "sha256:2d96b6179930ec7ef3f78128a4eb7f8aef22476b8d2ea1664fece937356b11d3"
+          },
+          "authority": "standalonePackageResolver"
+        },
+        "motionGlobalConfig": null,
+        "motionGlobalConfigSummary": null
+      },
+      {
+        "entrypoint": "./flex-render",
+        "selection": {
+          "artifact": {
+            "closureSha256": "2d96b6179930ec7ef3f78128a4eb7f8aef22476b8d2ea1664fece937356b11d3",
+            "path": "./dist/flex-render.js",
+            "sha256": "b8f4e550c4f5253ec130d89bb2116ba05dec0a831babc3351b39677a172b409e"
+          },
+          "declarations": {
+            "path": "./dist/flex-render.d.ts",
+            "sha256": "4ba4208f556960fda3e6933e52f1e50c37c0fecf368eb714333423b5199e8ed9"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1flex-render/import",
+            "typesBranch": "/exports/.~1flex-render/import"
+          }
+        },
+        "coordinate": {
+          "artifactCaseId": "artifact-case:c6750ec7fc57219bfdfc7e59c931648922f9c44d4ca69620cb0269905533bbd3",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/.solid-checker-certification-55536ff77a20d2bc4eb9449df722687f569c164f559bf52e8f4761dada338054.mjs",
+          "specifier": "@tanstack/solid-table/flex-render",
+          "resolvedImportRoot": "sha256:c3e722810ad99717d075a06de104b990fa7d32bfe32fec38fce6735e500c1e96",
+          "semanticDigest": "sha256:333f73c4cdb7bad6a5975d1d65a997e50e907185f688d415e03a371c8ee34d19",
+          "receiptDigest": "sha256:a40cb0dfe4746c8fc603cc3cf6eee1b7b84c4a66d113a4a40259fb8590a0a604",
+          "catalog": "cases/c3e722810ad99717d075a06de104b990fa7d32bfe32fec38fce6735e500c1e96/accepted-contracts.json",
+          "catalogDigest": "sha256:66ba2f0a10bbc8ffd1d4e43c46e487ce0dc98ca44fe0b85921a82ca5f04d0c0d"
+        },
+        "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-qE5FBh/@tanstack__solid-table@9.1.2--solid1--only.json.accepted-catalog/case-sets/703a3c17c43e891f161c31fa12afcdccf576619948acb0007af1241672274e96/cases/c3e722810ad99717d075a06de104b990fa7d32bfe32fec38fce6735e500c1e96/accepted-contracts.json",
+        "documentDigest": "sha256:7d252a4474a42307d5c162f96de81c93b58fa3b57d4607e0b03e4dd179612b66",
+        "receiptDigest": "sha256:a40cb0dfe4746c8fc603cc3cf6eee1b7b84c4a66d113a4a40259fb8590a0a604",
+        "receiptPayload": {
+          "semanticModelVersion": 1,
+          "proofVersion": 2,
+          "proofPolicy": 2,
+          "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+          "mainDigest": "sha256:7d252a4474a42307d5c162f96de81c93b58fa3b57d4607e0b03e4dd179612b66",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/.solid-checker-certification-55536ff77a20d2bc4eb9449df722687f569c164f559bf52e8f4761dada338054.mjs",
+          "specifier": "@tanstack/solid-table/flex-render",
+          "resolvedImportRoot": "sha256:c3e722810ad99717d075a06de104b990fa7d32bfe32fec38fce6735e500c1e96",
+          "semanticDigest": "sha256:333f73c4cdb7bad6a5975d1d65a997e50e907185f688d415e03a371c8ee34d19",
+          "artifactProvenanceRoot": "sha256:962e18ba7862b7060322575e54ab0058e85e294bf5937d27a056f15333a89604",
+          "snapshotRoot": "sha256:2f28a8a3c28fe4aa5f8a4bcb54fcc68a5073ebfb1797714e48b6fc06edc0ba3a",
+          "packageRoot": "sha256:7c86ff8ca88980f49bf019486b42f463d8c9197eda2a350dfb35edc90ea3cdb3",
+          "manifestRoot": "sha256:5f60513c50995b405a1ae3c26d0489857e8e23829939dab2bcb88cf8fe5d21e6",
+          "artifactsRoot": "sha256:873364a3308f1e47eac830c245519ab4dc19d326232a65b17d79f14cff132746",
+          "declarationsRoot": "sha256:027bebdb9995112f8bc02598fd06ebf72e850e77d35c835849f44c0ced9cb2f2",
+          "transformRoot": "sha256:fde61afe406541e5d7d2499a06b2b78b0b94409dac6ace3ed86d6ee226fc33f8",
+          "exportsRoot": "sha256:c0a18e8070a68f29787392cc285b7921bae7abcdbdb08964f15896ae0f66a03d",
+          "closureRoot": "sha256:bf955923d663d06967f2c685f07a8513361ef7c8e3ccd8d2e25ff962a5623766",
+          "demandGraphRoot": "sha256:093daa2d5232cb65a34997e7159f55b2c8337dd642d63c93f9efc810f8b3f1ca",
+          "verifiedPositiveRoot": "sha256:69a344cfe1104ffb7faa4b2581e32b6a723579b7780c85720014accc207e028a",
+          "witnessRoots": {
+            "accepted-dependency-composition": "sha256:422a9853d60a1783ac7344b85f6b17439d0747386e905002bc4cd7e182b370be",
+            "argument-binding": "sha256:d9b6cea79fd93e41bdc4119915cb5755b487fc3438ddfccf744895ba5d92d2ef",
+            "artifact-declarations": "sha256:027bebdb9995112f8bc02598fd06ebf72e850e77d35c835849f44c0ced9cb2f2",
+            "callable-path": "sha256:9877912f3c578cb837a054b6d03892ffca085eda0c08594ea5de6bfbb36ec1c9",
+            "compiler-reconciliation": "sha256:58256ebac1e13f7cbdb9c4a40043810360f4e421cfd0351196de0a5a424fb4f3",
+            "domain-exhaustiveness": "sha256:8dda0a434a26ed1c65815cbcd40340602c59e798e7258318033b660edfd36a54",
+            "export-identity": "sha256:c0a18e8070a68f29787392cc285b7921bae7abcdbdb08964f15896ae0f66a03d",
+            "export-resolution": "sha256:873364a3308f1e47eac830c245519ab4dc19d326232a65b17d79f14cff132746",
+            "guard-partition": "sha256:e02304f4d495b824de67475df813df7f5aaff5c93209a773484f18c9f0bf2851",
+            "manifest-entrypoint": "sha256:5f60513c50995b405a1ae3c26d0489857e8e23829939dab2bcb88cf8fe5d21e6",
+            "module-closure": "sha256:bf955923d663d06967f2c685f07a8513361ef7c8e3ccd8d2e25ff962a5623766",
+            "operation-cardinality": "sha256:baa657001997f4b92156b3d7edcd21c1449261d27c70485e01f6bd64e1da421a",
+            "operation-reachability": "sha256:e608b9ff6593ebcad9dab31fae58f3089650c2a51fe5cf0788c9d9e892c587fa",
+            "package-identity": "sha256:7c86ff8ca88980f49bf019486b42f463d8c9197eda2a350dfb35edc90ea3cdb3",
+            "recursive-value-shape": "sha256:8c202147a657ecef0a9a139afa2aa6bb361689254837a8070ddd8bed538f93e3",
+            "rest-spread-coverage": "sha256:ba4173f2837045e59654e710ace5a74a2fe1f60181b7a21c205aaf95c2c81694",
+            "selected-signature": "sha256:db69fb68f8845601af3098c3c35cb058d75b099fe069f93465f2cd52609523d2"
+          },
+          "producerSessionsRoot": "sha256:46ce5dca65286bd5d653718aae5e3001b59973ddcc792ad2ce62099d0467caf2",
+          "dependencyReceiptsRoot": "sha256:567ebd5fa47b3c2c913d73f9904695347977df2e081382b4bda025aea2cc54a1",
+          "dependencyTrustRoot": "sha256:f5dcf2232b0436273f252f664971f54c3ae9125cfc7f6078ce0b53697ac6d14c",
+          "probeGateRoot": "sha256:36b0dbcd855a9ecffed842da3bfc5c1eb262c88e501c82c7eeebf76eb50f38fb",
+          "closedClaimsRoot": "sha256:d51732c5d4a651bb533533d2f9f2e2f473a64b7432a25ed1d61e5ab6c57ceef0",
+          "verifierSourceDigest": "sha256:fc64b350efc4f2d1e9945acf01d6bc0f34d6f974eb4c22f22a39ee67ccb33331",
+          "verifierBuildDigest": "sha256:b13a1cece363b8d4314cb1a03a2dd7833ad490b0fb739a882259123e69a2daa1",
+          "issuerKind": "persistent-local",
+          "issuerScope": "ecosystem-benchmark:622cf261b33529b302f328ee9b0c7664d62429f21d1cdb938cdae01a312122ae",
+          "keyId": "ed25519:sha256:eeb4305e80e1ffe7a4ab946f4f91252abac96f24fc9b0307d6bf1719ed9334bb",
+          "signatureAlgorithm": "ed25519"
+        },
+        "resolution": {
+          "specifier": "@tanstack/solid-table/flex-render",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/.solid-checker-certification-55536ff77a20d2bc4eb9449df722687f569c164f559bf52e8f4761dada338054.mjs",
+          "requestedEntrypoint": "./flex-render",
+          "packageName": "@tanstack/solid-table",
+          "packageVersion": "9.1.2",
+          "packageIntegrity": "sha512-qrw9ndQDi5VE2YEfB7Vy1BTNw3xKQdsPEeysGEdS2Oudxq/6vs09pVnd12C2PuwteFjDw2xilW2bJCsQDk+u1g==",
+          "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/solid-table",
+          "packageManifest": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/solid-table/package.json",
+            "digest": "sha256:3d53baa5ed321b3c3fbad0d6942e015352244b18d931472f738d7153f4795a44"
+          },
+          "runtime": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/solid-table/dist/flex-render.js",
+            "digest": "sha256:b8f4e550c4f5253ec130d89bb2116ba05dec0a831babc3351b39677a172b409e"
+          },
+          "declarations": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/solid-table/dist/flex-render.d.ts",
+            "digest": "sha256:4ba4208f556960fda3e6933e52f1e50c37c0fecf368eb714333423b5199e8ed9"
+          },
+          "runtimeTrace": {
+            "branch": "/exports/.~1flex-render/import",
+            "steps": [
+              {
+                "condition": "subpath",
+                "target": "./flex-render"
+              },
+              {
+                "condition": "import",
+                "target": "/exports/.~1flex-render"
+              },
+              {
+                "condition": "target",
+                "target": "./dist/flex-render.js"
+              }
+            ]
+          },
+          "declarationTrace": {
+            "branch": "/exports/.~1flex-render/import",
+            "steps": [
+              {
+                "condition": "subpath",
+                "target": "./flex-render"
+              },
+              {
+                "condition": "import",
+                "target": "/exports/.~1flex-render"
+              },
+              {
+                "condition": "target",
+                "target": "./dist/flex-render.js"
+              }
+            ]
+          },
+          "closure": {
+            "entries": [
+              {
+                "role": "runtime",
+                "path": "./dist/FlexRender.js",
+                "digest": "sha256:19bd4328376b8dbeabe7a47ca6a8646c962004d40559741c2db865a67b041c16"
+              },
+              {
+                "role": "runtime",
+                "path": "./dist/flex-render.js",
+                "digest": "sha256:b8f4e550c4f5253ec130d89bb2116ba05dec0a831babc3351b39677a172b409e"
+              },
+              {
+                "role": "declaration",
+                "path": "./dist/FlexRender.d.ts",
+                "digest": "sha256:47e9d8baa1864fb8054be452cdd3bf27d46b291d65d62f802263da956ea2d6d2"
+              },
+              {
+                "role": "declaration",
+                "path": "./dist/flex-render.d.ts",
+                "digest": "sha256:4ba4208f556960fda3e6933e52f1e50c37c0fecf368eb714333423b5199e8ed9"
+              },
+              {
+                "role": "manifest",
+                "path": "./package.json",
+                "digest": "sha256:3d53baa5ed321b3c3fbad0d6942e015352244b18d931472f738d7153f4795a44"
+              },
+              {
+                "role": "resolution-input",
+                "path": "./package.json",
+                "digest": "sha256:3d53baa5ed321b3c3fbad0d6942e015352244b18d931472f738d7153f4795a44"
+              }
+            ],
+            "hazards": [
+              {
+                "kind": "unaccepted-external-dependency",
+                "source": "./dist/FlexRender.js:solid-js",
+                "affectedDomains": [
+                  "callbacks",
+                  "reads",
+                  "writes",
+                  "creates",
+                  "invalidates",
+                  "throws",
+                  "returns",
+                  "cleanups",
+                  "disposals"
+                ]
+              },
+              {
+                "kind": "unaccepted-external-dependency",
+                "source": "./dist/FlexRender.js:solid-js/web",
+                "affectedDomains": [
+                  "callbacks",
+                  "reads",
+                  "writes",
+                  "creates",
+                  "invalidates",
+                  "throws",
+                  "returns",
+                  "cleanups",
+                  "disposals"
+                ]
+              }
+            ],
+            "digest": "sha256:2d96b6179930ec7ef3f78128a4eb7f8aef22476b8d2ea1664fece937356b11d3"
+          },
+          "authority": "standalonePackageResolver"
+        },
+        "motionGlobalConfig": null,
+        "motionGlobalConfigSummary": null
+      }
+    ]
+  },
+  "coverageBefore": {
+    "declaredEntrypoints": 5,
+    "declaredWildcard": false,
+    "certifiedEntrypoints": 1,
+    "rootCertified": false
+  },
+  "files": [
+    {
+      "path": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/table-core/dist/features/row-aggregation/rowAggregationFeature.utils.js",
+      "digest": "sha256:fd1221e3feb4e0595f58f689ecfb8ee7b9765dbb3f5cca197556dfda3d290d6f"
+    },
+    {
+      "path": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/table-core/dist/features/row-aggregation/rowAggregationFeature.utils.d.ts",
+      "digest": "sha256:443a6b749cedbb49e2a251a5e2b65bd2b3e14a251392547616ae670bb8b3e808"
+    },
+    {
+      "path": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/table-core/dist/core/table/coreTablesFeature.types.d.ts",
+      "digest": "sha256:d94633dd8e2a6fed3a643175b6d6088968f825795f1d780f395c0e6a5a8e6769"
+    },
+    {
+      "path": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/table-core/dist/types/TableFeatures.d.ts",
+      "digest": "sha256:54a4f76bd43c187b39f92093798105cf49e83a46f8ff820088a6cf042ff97802"
+    },
+    {
+      "path": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/table-core/dist/types/TableState.d.ts",
+      "digest": "sha256:71be72ef14e170cb2a77471c2c75d7a3877108aa9ee88ad02374eca7007bfa98"
+    }
+  ],
+  "initialGraphAttempt": [
+    {
+      "probeId": "@tanstack/solid-table@9.1.2|solid1|only",
+      "output": "/Users/thomas/Documents/Github/solid-checker/rust/target/ecosystem-investigations/frontier-cUGb0C/@tanstack__solid-table@9.1.2--solid1--only",
+      "error": "witness-acquisition refused for demand sha256:03d3d72159688acd7359e3e36c35ffbe3f6b65fe11f61c0193606821978d41b9: solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification failed for graph node @tanstack/solid-table@9.1.2 (./static-functions) during live graph export-value verification: Type Facts demand sha256:03d3d72159688acd7359e3e36c35ffbe3f6b65fe11f61c0193606821978d41b9 is locally open: recursive-value-shape (artifact-case:144530b0cfa749cbc00600d826e6d9794895e44d5737490569989a5f74843d88:cell_getIsAggregated): operation value path is absent from the signature census (alternative=0, path=[PathSegment { kind: Property, property: \"column\", index: None }, PathSegment { kind: Property, property: \"table\", index: None }, PathSegment { kind: Property, property: \"atoms\", index: None }, PathSegment { kind: Property, property: \"grouping\", index: None }, PathSegment { kind: Property, property: \"get\", index: None }])",
+      "status": "refused",
+      "refusal": {
+        "owner": "certifier",
+        "demandId": "sha256:03d3d72159688acd7359e3e36c35ffbe3f6b65fe11f61c0193606821978d41b9",
+        "family": "recursive-value-shape",
+        "reason": "solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification failed for graph node @tanstack/solid-table@9.1.2 (./static-functions) during live graph export-value verification: Type Facts demand sha256:03d3d72159688acd7359e3e36c35ffbe3f6b65fe11f61c0193606821978d41b9 is locally open: recursive-value-shape (artifact-case:144530b0cfa749cbc00600d826e6d9794895e44d5737490569989a5f74843d88:cell_getIsAggregated): operation value path is absent from the signature census (alternative=0, path=[PathSegment { kind: Property, property: \"column\", index: None }, PathSegment { kind: Property, property: \"table\", index: None }, PathSegment { kind: Property, property: \"atoms\", index: None }, PathSegment { kind: Property, property: \"grouping\", index: None }, PathSegment { kind: Property, property: \"get\", index: None }])"
+      },
+      "preparation": {
+        "entrypointRecovery": {
+          "cases": [
+            {
+              "entrypoint": "./flex-render",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./flex-render",
+              "conditions": [
+                "import",
+                "solid"
+              ]
+            },
+            {
+              "entrypoint": ".",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": ".",
+              "conditions": [
+                "import",
+                "solid"
+              ]
+            },
+            {
+              "entrypoint": "./experimental-worker-plugin",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./experimental-worker-plugin",
+              "conditions": [
+                "import",
+                "solid"
+              ]
+            },
+            {
+              "entrypoint": "./static-functions",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./static-functions",
+              "conditions": [
+                "import",
+                "solid"
+              ]
+            }
+          ],
+          "retainedCases": [
+            {
+              "entrypoint": "./flex-render",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./flex-render",
+              "conditions": [
+                "import",
+                "solid"
+              ]
+            }
+          ],
+          "remainingRefusals": []
+        },
+        "rootCases": 8,
+        "canonicalNodes": 22,
+        "acquiredPublishedArtifacts": 5,
+        "acquisitionUnits": 17,
+        "graphAcquisitionDurationMs": 2.42,
+        "resolutionSession": {
+          "requests": 0,
+          "semanticAcquisitions": 0,
+          "semanticCacheHits": 0,
+          "semanticCacheInvalidations": 0,
+          "moduleDescriptionsParsed": 247,
+          "typeScriptProgramsCreated": 0
+        },
+        "compilerSourceClosureCensus": 10,
+        "proposalGenerations": 22,
+        "proposalGenerationsShared": 2,
+        "proposalFrontiers": [
+          {
+            "nodes": 8,
+            "durationMs": 1953.71
+          },
+          {
+            "nodes": 8,
+            "durationMs": 1997.23
+          },
+          {
+            "nodes": 6,
+            "durationMs": 530.72
+          }
+        ],
+        "graphNodeReferences": 30,
+        "nativeCertificationTransactions": 1,
+        "typeFactsCaseSetBatches": 1,
+        "partialProposalFrontier": true,
+        "reusedProposalForRecovery": false
+      },
+      "coverage": null,
+      "accepted": null
+    }
+  ],
+  "typescript": {
+    "version": "5.9.3",
+    "exitCode": 2,
+    "source": "import type { Cell, TableFeatures, RowData, CellData } from '@tanstack/table-core';\nexport function check<TFeatures extends TableFeatures, TData extends RowData, TValue extends CellData = CellData>(cell: Cell<TFeatures, TData, TValue>) {\n  return cell.column.table.atoms.grouping?.get?.();\n}\n",
+    "output": "../../../../../private/tmp/table-published-types/check.ts(3,34): error TS2339: Property 'grouping' does not exist on type 'Atoms<TFeatures>'.\n"
+  },
+  "newCertifications": 0,
+  "metricChanged": false,
+  "retry": {
+    "reportPath": "/Users/thomas/Documents/Github/solid-checker/rust/target/ecosystem-investigations/2026-09-07-table-recovery.json",
+    "reportDigest": "sha256:b9cdf5cd3d49e2455877e1cf0cedccf37313ef1b91df79ca45efd0d54abfabb6",
+    "finishedAt": "2026-09-07T08:24:28.477Z",
+    "checker": {
+      "nativeBin": "/Users/thomas/Documents/Github/solid-checker/rust/target/verify/solid-checker-rust",
+      "typeFactsBin": "/Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts",
+      "probeRecipeCorpus": "/Users/thomas/Documents/Github/solid-checker/scripts/ecosystem-benchmark/probe-recipes",
+      "entrypointRecovery": {
+        "allSelectedProbes": true,
+        "probeIds": []
+      },
+      "registryCache": "/Users/thomas/Documents/Github/solid-checker/rust/target/registry-cache",
+      "durableWrites": false,
+      "installLockfileCache": "/Users/thomas/Documents/Github/solid-checker/rust/target/install-locks",
+      "materializedStore": "/Users/thomas/Documents/Github/solid-checker/rust/target/materialized-store"
+    },
+    "binaryDigest": "sha256:a222daccedaf9f654b13fa5612170be7ca8258e3b193c5b87f012fe84c37b423",
+    "producerDigest": "sha256:478e196c2c7d034e70e06de17de6db924a47bfbf20ac8c4a0d10219ffe9aeb16",
+    "attempt": {
+      "attempted": true,
+      "status": "refused",
+      "lane": "published-graph",
+      "laneRequested": "entrypoint-recovery",
+      "coverage": null,
+      "stage": "witness-acquisition",
+      "owner": "certifier",
+      "demandId": "sha256:03d3d72159688acd7359e3e36c35ffbe3f6b65fe11f61c0193606821978d41b9",
+      "family": "recursive-value-shape",
+      "reason": "solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification failed for graph node @tanstack/solid-table@9.1.2 (./static-functions) during live graph export-value verification: Type Facts demand sha256:03d3d72159688acd7359e3e36c35ffbe3f6b65fe11f61c0193606821978d41b9 is locally open: recursive-value-shape (artifact-case:144530b0cfa749cbc00600d826e6d9794895e44d5737490569989a5f74843d88:cell_getIsAggregated): operation value path is absent from the signature census (alternative=0, path=[PathSegment { kind: Property, property: \"column\", index: None }, PathSegment { kind: Property, property: \"table\", index: None }, PathSegment { kind: Property, property: \"atoms\", index: None }, PathSegment { kind: Property, property: \"grouping\", index: None }, PathSegment { kind: Property, property: \"get\", index: None }])",
+      "refusalCount": 0,
+      "memoryExceeded": false,
+      "durationMs": 15516,
+      "stageDurationsMs": {
+        "artifactAcquisition": 0.83,
+        "proposalGeneration": 3864.91,
+        "demandPlanning": 0.05,
+        "witnessAcquisition": 11630.43
+      },
+      "graphPreparation": {
+        "entrypointRecovery": {
+          "cases": [
+            {
+              "entrypoint": "./flex-render",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./flex-render",
+              "conditions": [
+                "import",
+                "solid"
+              ]
+            },
+            {
+              "entrypoint": ".",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": ".",
+              "conditions": [
+                "import",
+                "solid"
+              ]
+            },
+            {
+              "entrypoint": "./experimental-worker-plugin",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./experimental-worker-plugin",
+              "conditions": [
+                "import",
+                "solid"
+              ]
+            },
+            {
+              "entrypoint": "./static-functions",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./static-functions",
+              "conditions": [
+                "import",
+                "solid"
+              ]
+            }
+          ],
+          "retainedCases": [
+            {
+              "entrypoint": "./flex-render",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./flex-render",
+              "conditions": [
+                "import",
+                "solid"
+              ]
+            }
+          ],
+          "remainingRefusals": []
+        },
+        "rootCases": 8,
+        "canonicalNodes": 22,
+        "acquiredPublishedArtifacts": 5,
+        "acquisitionUnits": 17,
+        "graphAcquisitionDurationMs": 2.51,
+        "resolutionSession": {
+          "requests": 0,
+          "semanticAcquisitions": 0,
+          "semanticCacheHits": 0,
+          "semanticCacheInvalidations": 0,
+          "moduleDescriptionsParsed": 247,
+          "typeScriptProgramsCreated": 0
+        },
+        "compilerSourceClosureCensus": 10,
+        "proposalGenerations": 22,
+        "proposalGenerationsShared": 2,
+        "proposalFrontiers": [
+          {
+            "nodes": 8,
+            "durationMs": 1548.02
+          },
+          {
+            "nodes": 8,
+            "durationMs": 1700.8
+          },
+          {
+            "nodes": 6,
+            "durationMs": 325.75
+          }
+        ],
+        "graphNodeReferences": 30,
+        "nativeCertificationTransactions": 1,
+        "typeFactsCaseSetBatches": 1,
+        "partialProposalFrontier": true,
+        "reusedProposalForRecovery": true
+      },
+      "demandCountsByFamily": {},
+      "artifactSatisfiedDemandsByFamily": {},
+      "refusalCountsByFamily": {},
+      "refusalCountsByOwner": {},
+      "withheldClosures": 0,
+      "withheldClosureReasons": {
+        "noRecipe": 0,
+        "censusRefused": 0,
+        "vetoUnreproducible": 0,
+        "vetoThrew": 0,
+        "vetoTimedOut": 0,
+        "vetoRunRefused": 0,
+        "vetoIncomplete": 0,
+        "dependencyWithheld": 0,
+        "other": 0
+      },
+      "withheldClosureDetails": []
+    },
+    "retainedArtifacts": {
+      "projectDir": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-HgjxM9",
+      "outputDir": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-SN4GAi"
+    }
+  },
+  "afterAcceptedOriginal": {
+    "catalogRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-qE5FBh/@tanstack__solid-table@9.1.2--solid1--only.json.accepted-catalog",
+    "pointer": {
+      "format": "solid-checker-accepted-contract-case-set-pointer",
+      "caseSetVersion": 1,
+      "document": "case-sets/703a3c17c43e891f161c31fa12afcdccf576619948acb0007af1241672274e96/accepted-contract-case-set.json",
+      "documentDigest": "sha256:703a3c17c43e891f161c31fa12afcdccf576619948acb0007af1241672274e96"
+    },
+    "cases": [
+      {
+        "entrypoint": "./flex-render",
+        "selection": {
+          "artifact": {
+            "closureSha256": "2d96b6179930ec7ef3f78128a4eb7f8aef22476b8d2ea1664fece937356b11d3",
+            "path": "./dist/flex-render.js",
+            "sha256": "b8f4e550c4f5253ec130d89bb2116ba05dec0a831babc3351b39677a172b409e"
+          },
+          "declarations": {
+            "path": "./dist/flex-render.d.ts",
+            "sha256": "4ba4208f556960fda3e6933e52f1e50c37c0fecf368eb714333423b5199e8ed9"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1flex-render/solid",
+            "typesBranch": "/exports/.~1flex-render/solid"
+          }
+        },
+        "coordinate": {
+          "artifactCaseId": "artifact-case:aba8f0415281766f8062984d349fb9398804a5cb09a6dbc79c87aef5e97648d0",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/.solid-checker-certification-55536ff77a20d2bc4eb9449df722687f569c164f559bf52e8f4761dada338054.mjs",
+          "specifier": "@tanstack/solid-table/flex-render",
+          "resolvedImportRoot": "sha256:74e8d8cc742e2479aeca12e4fb23ea7d1cfb50baf22960d32030856d09189d29",
+          "semanticDigest": "sha256:eb40308bf309265269e02bb56e3b6e97a0cdaba4ed57ba7a5ef1ef127d185ddd",
+          "receiptDigest": "sha256:faa7697006cba86b1f216bbf016904d5fe1401aa80b26eafb5ea267d564cccd6",
+          "catalog": "cases/74e8d8cc742e2479aeca12e4fb23ea7d1cfb50baf22960d32030856d09189d29/accepted-contracts.json",
+          "catalogDigest": "sha256:179ba243092cd73b0ab8a37e8a5c502d440ff3b2f0597305547486fabe9ad066"
+        },
+        "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-qE5FBh/@tanstack__solid-table@9.1.2--solid1--only.json.accepted-catalog/case-sets/703a3c17c43e891f161c31fa12afcdccf576619948acb0007af1241672274e96/cases/74e8d8cc742e2479aeca12e4fb23ea7d1cfb50baf22960d32030856d09189d29/accepted-contracts.json",
+        "documentDigest": "sha256:41f30743951fa70a6dcb986cce59daef80e3916bcc7e70237091743fc042fcca",
+        "receiptDigest": "sha256:faa7697006cba86b1f216bbf016904d5fe1401aa80b26eafb5ea267d564cccd6",
+        "receiptPayload": {
+          "semanticModelVersion": 1,
+          "proofVersion": 2,
+          "proofPolicy": 2,
+          "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+          "mainDigest": "sha256:41f30743951fa70a6dcb986cce59daef80e3916bcc7e70237091743fc042fcca",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/.solid-checker-certification-55536ff77a20d2bc4eb9449df722687f569c164f559bf52e8f4761dada338054.mjs",
+          "specifier": "@tanstack/solid-table/flex-render",
+          "resolvedImportRoot": "sha256:74e8d8cc742e2479aeca12e4fb23ea7d1cfb50baf22960d32030856d09189d29",
+          "semanticDigest": "sha256:eb40308bf309265269e02bb56e3b6e97a0cdaba4ed57ba7a5ef1ef127d185ddd",
+          "artifactProvenanceRoot": "sha256:962e18ba7862b7060322575e54ab0058e85e294bf5937d27a056f15333a89604",
+          "snapshotRoot": "sha256:2f28a8a3c28fe4aa5f8a4bcb54fcc68a5073ebfb1797714e48b6fc06edc0ba3a",
+          "packageRoot": "sha256:d38a9008e341ef96ed4da63c35ea2ab4438604a2c3746a42748fd69f8d9aed8a",
+          "manifestRoot": "sha256:191b8e894820259c6b1a1800c33facfed7040ba55b94aad9f2c4b9d16d98b196",
+          "artifactsRoot": "sha256:20cacafd4f1c501b6a1c04550abde9b5e4f88f1d9f92b023c911c30dee1fbd17",
+          "declarationsRoot": "sha256:bbbed2d9e1b8d2ab26725570bf852b41cdab91ecfe25050c349e0a16cc528a5d",
+          "transformRoot": "sha256:a67d9dd7951cb7e730f7b5818b34eedbcdcc953a6a75ff946b56f92a95a30e40",
+          "exportsRoot": "sha256:133a6c2aeb33a975e42d076ba951f98021b89384c68a18388543cd07ace1e1dd",
+          "closureRoot": "sha256:fe2b857527a7f61cca600806a2c4b55302623098ea6941cef37ca5f6c45334c5",
+          "demandGraphRoot": "sha256:de7aed1ccab84dbeb56867c36263b13a7ed1a9f042907a21cc235ced8b7d9dde",
+          "verifiedPositiveRoot": "sha256:d0d21e471d5d8db6da5be41420f4bdc56168bbdb44974198665bad6bf96e9950",
+          "witnessRoots": {
+            "accepted-dependency-composition": "sha256:cbeb7d9ff182f6afcc202e97e9f75bc7be17f07869c4f24a6b2a7668e9c08b3a",
+            "argument-binding": "sha256:12663ae45e9c8744d9da1d37bc9ddec44415fcfb56cc0d66df50ee4fbc058a3e",
+            "artifact-declarations": "sha256:bbbed2d9e1b8d2ab26725570bf852b41cdab91ecfe25050c349e0a16cc528a5d",
+            "callable-path": "sha256:8b89020d90fcbaa54aae5927dddbea7a340d87a35eaa87e902c61991bf7a7a85",
+            "compiler-reconciliation": "sha256:c2455d46e97ca9046295d54cddd339729979564b3116173468e2a89df5b3fcbc",
+            "domain-exhaustiveness": "sha256:5ec017d8188d1c3050342c99893aa65461841057e8f2733691fdb61d1e347ca6",
+            "export-identity": "sha256:133a6c2aeb33a975e42d076ba951f98021b89384c68a18388543cd07ace1e1dd",
+            "export-resolution": "sha256:20cacafd4f1c501b6a1c04550abde9b5e4f88f1d9f92b023c911c30dee1fbd17",
+            "guard-partition": "sha256:95cf8c66b5563dfd0e0da518fb9a32badae776147f86a21fdac5ec817ae1276f",
+            "manifest-entrypoint": "sha256:191b8e894820259c6b1a1800c33facfed7040ba55b94aad9f2c4b9d16d98b196",
+            "module-closure": "sha256:fe2b857527a7f61cca600806a2c4b55302623098ea6941cef37ca5f6c45334c5",
+            "operation-cardinality": "sha256:1dfbf3901850850253f3001bb4f77b8ea1de02c0878ace0ce150cd81c7eb4fc4",
+            "operation-reachability": "sha256:3543d398b22ea10b3d96d8aa9952c8d55417fbd135a5e95115a0258b00ccc3b1",
+            "package-identity": "sha256:d38a9008e341ef96ed4da63c35ea2ab4438604a2c3746a42748fd69f8d9aed8a",
+            "recursive-value-shape": "sha256:19b68c5296c485d219f44de5eab34578902385cec74e86acb9633a2c1f3b9fd1",
+            "rest-spread-coverage": "sha256:99c651cffa9a8a4f2bd861aedb6df8470848d34a78a65d2c88ece64e453bcd99",
+            "selected-signature": "sha256:2933b1595dd14bce627fb82cd97ea004a206e45132568721208eae008d1efd65"
+          },
+          "producerSessionsRoot": "sha256:74d4cc031969f5b1edbdf94275e5aee7eae781ad5dc4eb98cccdef7da2676291",
+          "dependencyReceiptsRoot": "sha256:a8936ecbe4721e5b3507cf91485ffc5606516cf94136b424b9b756a3f8b51cf6",
+          "dependencyTrustRoot": "sha256:8e3da8b5dd92d9496ef0aa4c419fe8899d8f96b661078493fb7fba4ccc2a65f0",
+          "probeGateRoot": "sha256:e65f7499c4ec45b7d7b60502a3773a4118f0a48d66dfd79a8a5a0ed1b9564ae5",
+          "closedClaimsRoot": "sha256:4b01c58449c4d59852d0f4d9743114f21203ac12d28f952021665fa97f80271f",
+          "verifierSourceDigest": "sha256:fc64b350efc4f2d1e9945acf01d6bc0f34d6f974eb4c22f22a39ee67ccb33331",
+          "verifierBuildDigest": "sha256:b13a1cece363b8d4314cb1a03a2dd7833ad490b0fb739a882259123e69a2daa1",
+          "issuerKind": "persistent-local",
+          "issuerScope": "ecosystem-benchmark:622cf261b33529b302f328ee9b0c7664d62429f21d1cdb938cdae01a312122ae",
+          "keyId": "ed25519:sha256:eeb4305e80e1ffe7a4ab946f4f91252abac96f24fc9b0307d6bf1719ed9334bb",
+          "signatureAlgorithm": "ed25519"
+        },
+        "resolution": {
+          "specifier": "@tanstack/solid-table/flex-render",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/.solid-checker-certification-55536ff77a20d2bc4eb9449df722687f569c164f559bf52e8f4761dada338054.mjs",
+          "requestedEntrypoint": "./flex-render",
+          "packageName": "@tanstack/solid-table",
+          "packageVersion": "9.1.2",
+          "packageIntegrity": "sha512-qrw9ndQDi5VE2YEfB7Vy1BTNw3xKQdsPEeysGEdS2Oudxq/6vs09pVnd12C2PuwteFjDw2xilW2bJCsQDk+u1g==",
+          "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/solid-table",
+          "packageManifest": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/solid-table/package.json",
+            "digest": "sha256:3d53baa5ed321b3c3fbad0d6942e015352244b18d931472f738d7153f4795a44"
+          },
+          "runtime": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/solid-table/dist/flex-render.js",
+            "digest": "sha256:b8f4e550c4f5253ec130d89bb2116ba05dec0a831babc3351b39677a172b409e"
+          },
+          "declarations": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/solid-table/dist/flex-render.d.ts",
+            "digest": "sha256:4ba4208f556960fda3e6933e52f1e50c37c0fecf368eb714333423b5199e8ed9"
+          },
+          "runtimeTrace": {
+            "branch": "/exports/.~1flex-render/solid",
+            "steps": [
+              {
+                "condition": "subpath",
+                "target": "./flex-render"
+              },
+              {
+                "condition": "solid",
+                "target": "/exports/.~1flex-render"
+              },
+              {
+                "condition": "target",
+                "target": "./dist/flex-render.js"
+              }
+            ]
+          },
+          "declarationTrace": {
+            "branch": "/exports/.~1flex-render/solid",
+            "steps": [
+              {
+                "condition": "subpath",
+                "target": "./flex-render"
+              },
+              {
+                "condition": "solid",
+                "target": "/exports/.~1flex-render"
+              },
+              {
+                "condition": "target",
+                "target": "./dist/flex-render.js"
+              }
+            ]
+          },
+          "closure": {
+            "entries": [
+              {
+                "role": "runtime",
+                "path": "./dist/FlexRender.js",
+                "digest": "sha256:19bd4328376b8dbeabe7a47ca6a8646c962004d40559741c2db865a67b041c16"
+              },
+              {
+                "role": "runtime",
+                "path": "./dist/flex-render.js",
+                "digest": "sha256:b8f4e550c4f5253ec130d89bb2116ba05dec0a831babc3351b39677a172b409e"
+              },
+              {
+                "role": "declaration",
+                "path": "./dist/FlexRender.d.ts",
+                "digest": "sha256:47e9d8baa1864fb8054be452cdd3bf27d46b291d65d62f802263da956ea2d6d2"
+              },
+              {
+                "role": "declaration",
+                "path": "./dist/flex-render.d.ts",
+                "digest": "sha256:4ba4208f556960fda3e6933e52f1e50c37c0fecf368eb714333423b5199e8ed9"
+              },
+              {
+                "role": "manifest",
+                "path": "./package.json",
+                "digest": "sha256:3d53baa5ed321b3c3fbad0d6942e015352244b18d931472f738d7153f4795a44"
+              },
+              {
+                "role": "resolution-input",
+                "path": "./package.json",
+                "digest": "sha256:3d53baa5ed321b3c3fbad0d6942e015352244b18d931472f738d7153f4795a44"
+              }
+            ],
+            "hazards": [
+              {
+                "kind": "unaccepted-external-dependency",
+                "source": "./dist/FlexRender.js:solid-js",
+                "affectedDomains": [
+                  "callbacks",
+                  "reads",
+                  "writes",
+                  "creates",
+                  "invalidates",
+                  "throws",
+                  "returns",
+                  "cleanups",
+                  "disposals"
+                ]
+              },
+              {
+                "kind": "unaccepted-external-dependency",
+                "source": "./dist/FlexRender.js:solid-js/web",
+                "affectedDomains": [
+                  "callbacks",
+                  "reads",
+                  "writes",
+                  "creates",
+                  "invalidates",
+                  "throws",
+                  "returns",
+                  "cleanups",
+                  "disposals"
+                ]
+              }
+            ],
+            "digest": "sha256:2d96b6179930ec7ef3f78128a4eb7f8aef22476b8d2ea1664fece937356b11d3"
+          },
+          "authority": "standalonePackageResolver"
+        },
+        "motionGlobalConfig": null,
+        "motionGlobalConfigSummary": null
+      },
+      {
+        "entrypoint": "./flex-render",
+        "selection": {
+          "artifact": {
+            "closureSha256": "2d96b6179930ec7ef3f78128a4eb7f8aef22476b8d2ea1664fece937356b11d3",
+            "path": "./dist/flex-render.js",
+            "sha256": "b8f4e550c4f5253ec130d89bb2116ba05dec0a831babc3351b39677a172b409e"
+          },
+          "declarations": {
+            "path": "./dist/flex-render.d.ts",
+            "sha256": "4ba4208f556960fda3e6933e52f1e50c37c0fecf368eb714333423b5199e8ed9"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1flex-render/import",
+            "typesBranch": "/exports/.~1flex-render/import"
+          }
+        },
+        "coordinate": {
+          "artifactCaseId": "artifact-case:c6750ec7fc57219bfdfc7e59c931648922f9c44d4ca69620cb0269905533bbd3",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/.solid-checker-certification-55536ff77a20d2bc4eb9449df722687f569c164f559bf52e8f4761dada338054.mjs",
+          "specifier": "@tanstack/solid-table/flex-render",
+          "resolvedImportRoot": "sha256:c3e722810ad99717d075a06de104b990fa7d32bfe32fec38fce6735e500c1e96",
+          "semanticDigest": "sha256:333f73c4cdb7bad6a5975d1d65a997e50e907185f688d415e03a371c8ee34d19",
+          "receiptDigest": "sha256:a40cb0dfe4746c8fc603cc3cf6eee1b7b84c4a66d113a4a40259fb8590a0a604",
+          "catalog": "cases/c3e722810ad99717d075a06de104b990fa7d32bfe32fec38fce6735e500c1e96/accepted-contracts.json",
+          "catalogDigest": "sha256:66ba2f0a10bbc8ffd1d4e43c46e487ce0dc98ca44fe0b85921a82ca5f04d0c0d"
+        },
+        "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-qE5FBh/@tanstack__solid-table@9.1.2--solid1--only.json.accepted-catalog/case-sets/703a3c17c43e891f161c31fa12afcdccf576619948acb0007af1241672274e96/cases/c3e722810ad99717d075a06de104b990fa7d32bfe32fec38fce6735e500c1e96/accepted-contracts.json",
+        "documentDigest": "sha256:7d252a4474a42307d5c162f96de81c93b58fa3b57d4607e0b03e4dd179612b66",
+        "receiptDigest": "sha256:a40cb0dfe4746c8fc603cc3cf6eee1b7b84c4a66d113a4a40259fb8590a0a604",
+        "receiptPayload": {
+          "semanticModelVersion": 1,
+          "proofVersion": 2,
+          "proofPolicy": 2,
+          "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+          "mainDigest": "sha256:7d252a4474a42307d5c162f96de81c93b58fa3b57d4607e0b03e4dd179612b66",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/.solid-checker-certification-55536ff77a20d2bc4eb9449df722687f569c164f559bf52e8f4761dada338054.mjs",
+          "specifier": "@tanstack/solid-table/flex-render",
+          "resolvedImportRoot": "sha256:c3e722810ad99717d075a06de104b990fa7d32bfe32fec38fce6735e500c1e96",
+          "semanticDigest": "sha256:333f73c4cdb7bad6a5975d1d65a997e50e907185f688d415e03a371c8ee34d19",
+          "artifactProvenanceRoot": "sha256:962e18ba7862b7060322575e54ab0058e85e294bf5937d27a056f15333a89604",
+          "snapshotRoot": "sha256:2f28a8a3c28fe4aa5f8a4bcb54fcc68a5073ebfb1797714e48b6fc06edc0ba3a",
+          "packageRoot": "sha256:7c86ff8ca88980f49bf019486b42f463d8c9197eda2a350dfb35edc90ea3cdb3",
+          "manifestRoot": "sha256:5f60513c50995b405a1ae3c26d0489857e8e23829939dab2bcb88cf8fe5d21e6",
+          "artifactsRoot": "sha256:873364a3308f1e47eac830c245519ab4dc19d326232a65b17d79f14cff132746",
+          "declarationsRoot": "sha256:027bebdb9995112f8bc02598fd06ebf72e850e77d35c835849f44c0ced9cb2f2",
+          "transformRoot": "sha256:fde61afe406541e5d7d2499a06b2b78b0b94409dac6ace3ed86d6ee226fc33f8",
+          "exportsRoot": "sha256:c0a18e8070a68f29787392cc285b7921bae7abcdbdb08964f15896ae0f66a03d",
+          "closureRoot": "sha256:bf955923d663d06967f2c685f07a8513361ef7c8e3ccd8d2e25ff962a5623766",
+          "demandGraphRoot": "sha256:093daa2d5232cb65a34997e7159f55b2c8337dd642d63c93f9efc810f8b3f1ca",
+          "verifiedPositiveRoot": "sha256:69a344cfe1104ffb7faa4b2581e32b6a723579b7780c85720014accc207e028a",
+          "witnessRoots": {
+            "accepted-dependency-composition": "sha256:422a9853d60a1783ac7344b85f6b17439d0747386e905002bc4cd7e182b370be",
+            "argument-binding": "sha256:d9b6cea79fd93e41bdc4119915cb5755b487fc3438ddfccf744895ba5d92d2ef",
+            "artifact-declarations": "sha256:027bebdb9995112f8bc02598fd06ebf72e850e77d35c835849f44c0ced9cb2f2",
+            "callable-path": "sha256:9877912f3c578cb837a054b6d03892ffca085eda0c08594ea5de6bfbb36ec1c9",
+            "compiler-reconciliation": "sha256:58256ebac1e13f7cbdb9c4a40043810360f4e421cfd0351196de0a5a424fb4f3",
+            "domain-exhaustiveness": "sha256:8dda0a434a26ed1c65815cbcd40340602c59e798e7258318033b660edfd36a54",
+            "export-identity": "sha256:c0a18e8070a68f29787392cc285b7921bae7abcdbdb08964f15896ae0f66a03d",
+            "export-resolution": "sha256:873364a3308f1e47eac830c245519ab4dc19d326232a65b17d79f14cff132746",
+            "guard-partition": "sha256:e02304f4d495b824de67475df813df7f5aaff5c93209a773484f18c9f0bf2851",
+            "manifest-entrypoint": "sha256:5f60513c50995b405a1ae3c26d0489857e8e23829939dab2bcb88cf8fe5d21e6",
+            "module-closure": "sha256:bf955923d663d06967f2c685f07a8513361ef7c8e3ccd8d2e25ff962a5623766",
+            "operation-cardinality": "sha256:baa657001997f4b92156b3d7edcd21c1449261d27c70485e01f6bd64e1da421a",
+            "operation-reachability": "sha256:e608b9ff6593ebcad9dab31fae58f3089650c2a51fe5cf0788c9d9e892c587fa",
+            "package-identity": "sha256:7c86ff8ca88980f49bf019486b42f463d8c9197eda2a350dfb35edc90ea3cdb3",
+            "recursive-value-shape": "sha256:8c202147a657ecef0a9a139afa2aa6bb361689254837a8070ddd8bed538f93e3",
+            "rest-spread-coverage": "sha256:ba4173f2837045e59654e710ace5a74a2fe1f60181b7a21c205aaf95c2c81694",
+            "selected-signature": "sha256:db69fb68f8845601af3098c3c35cb058d75b099fe069f93465f2cd52609523d2"
+          },
+          "producerSessionsRoot": "sha256:46ce5dca65286bd5d653718aae5e3001b59973ddcc792ad2ce62099d0467caf2",
+          "dependencyReceiptsRoot": "sha256:567ebd5fa47b3c2c913d73f9904695347977df2e081382b4bda025aea2cc54a1",
+          "dependencyTrustRoot": "sha256:f5dcf2232b0436273f252f664971f54c3ae9125cfc7f6078ce0b53697ac6d14c",
+          "probeGateRoot": "sha256:36b0dbcd855a9ecffed842da3bfc5c1eb262c88e501c82c7eeebf76eb50f38fb",
+          "closedClaimsRoot": "sha256:d51732c5d4a651bb533533d2f9f2e2f473a64b7432a25ed1d61e5ab6c57ceef0",
+          "verifierSourceDigest": "sha256:fc64b350efc4f2d1e9945acf01d6bc0f34d6f974eb4c22f22a39ee67ccb33331",
+          "verifierBuildDigest": "sha256:b13a1cece363b8d4314cb1a03a2dd7833ad490b0fb739a882259123e69a2daa1",
+          "issuerKind": "persistent-local",
+          "issuerScope": "ecosystem-benchmark:622cf261b33529b302f328ee9b0c7664d62429f21d1cdb938cdae01a312122ae",
+          "keyId": "ed25519:sha256:eeb4305e80e1ffe7a4ab946f4f91252abac96f24fc9b0307d6bf1719ed9334bb",
+          "signatureAlgorithm": "ed25519"
+        },
+        "resolution": {
+          "specifier": "@tanstack/solid-table/flex-render",
+          "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/.solid-checker-certification-55536ff77a20d2bc4eb9449df722687f569c164f559bf52e8f4761dada338054.mjs",
+          "requestedEntrypoint": "./flex-render",
+          "packageName": "@tanstack/solid-table",
+          "packageVersion": "9.1.2",
+          "packageIntegrity": "sha512-qrw9ndQDi5VE2YEfB7Vy1BTNw3xKQdsPEeysGEdS2Oudxq/6vs09pVnd12C2PuwteFjDw2xilW2bJCsQDk+u1g==",
+          "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/solid-table",
+          "packageManifest": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/solid-table/package.json",
+            "digest": "sha256:3d53baa5ed321b3c3fbad0d6942e015352244b18d931472f738d7153f4795a44"
+          },
+          "runtime": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/solid-table/dist/flex-render.js",
+            "digest": "sha256:b8f4e550c4f5253ec130d89bb2116ba05dec0a831babc3351b39677a172b409e"
+          },
+          "declarations": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Y2Foje/node_modules/@tanstack/solid-table/dist/flex-render.d.ts",
+            "digest": "sha256:4ba4208f556960fda3e6933e52f1e50c37c0fecf368eb714333423b5199e8ed9"
+          },
+          "runtimeTrace": {
+            "branch": "/exports/.~1flex-render/import",
+            "steps": [
+              {
+                "condition": "subpath",
+                "target": "./flex-render"
+              },
+              {
+                "condition": "import",
+                "target": "/exports/.~1flex-render"
+              },
+              {
+                "condition": "target",
+                "target": "./dist/flex-render.js"
+              }
+            ]
+          },
+          "declarationTrace": {
+            "branch": "/exports/.~1flex-render/import",
+            "steps": [
+              {
+                "condition": "subpath",
+                "target": "./flex-render"
+              },
+              {
+                "condition": "import",
+                "target": "/exports/.~1flex-render"
+              },
+              {
+                "condition": "target",
+                "target": "./dist/flex-render.js"
+              }
+            ]
+          },
+          "closure": {
+            "entries": [
+              {
+                "role": "runtime",
+                "path": "./dist/FlexRender.js",
+                "digest": "sha256:19bd4328376b8dbeabe7a47ca6a8646c962004d40559741c2db865a67b041c16"
+              },
+              {
+                "role": "runtime",
+                "path": "./dist/flex-render.js",
+                "digest": "sha256:b8f4e550c4f5253ec130d89bb2116ba05dec0a831babc3351b39677a172b409e"
+              },
+              {
+                "role": "declaration",
+                "path": "./dist/FlexRender.d.ts",
+                "digest": "sha256:47e9d8baa1864fb8054be452cdd3bf27d46b291d65d62f802263da956ea2d6d2"
+              },
+              {
+                "role": "declaration",
+                "path": "./dist/flex-render.d.ts",
+                "digest": "sha256:4ba4208f556960fda3e6933e52f1e50c37c0fecf368eb714333423b5199e8ed9"
+              },
+              {
+                "role": "manifest",
+                "path": "./package.json",
+                "digest": "sha256:3d53baa5ed321b3c3fbad0d6942e015352244b18d931472f738d7153f4795a44"
+              },
+              {
+                "role": "resolution-input",
+                "path": "./package.json",
+                "digest": "sha256:3d53baa5ed321b3c3fbad0d6942e015352244b18d931472f738d7153f4795a44"
+              }
+            ],
+            "hazards": [
+              {
+                "kind": "unaccepted-external-dependency",
+                "source": "./dist/FlexRender.js:solid-js",
+                "affectedDomains": [
+                  "callbacks",
+                  "reads",
+                  "writes",
+                  "creates",
+                  "invalidates",
+                  "throws",
+                  "returns",
+                  "cleanups",
+                  "disposals"
+                ]
+              },
+              {
+                "kind": "unaccepted-external-dependency",
+                "source": "./dist/FlexRender.js:solid-js/web",
+                "affectedDomains": [
+                  "callbacks",
+                  "reads",
+                  "writes",
+                  "creates",
+                  "invalidates",
+                  "throws",
+                  "returns",
+                  "cleanups",
+                  "disposals"
+                ]
+              }
+            ],
+            "digest": "sha256:2d96b6179930ec7ef3f78128a4eb7f8aef22476b8d2ea1664fece937356b11d3"
+          },
+          "authority": "standalonePackageResolver"
+        },
+        "motionGlobalConfig": null,
+        "motionGlobalConfigSummary": null
+      }
+    ]
+  },
+  "retryPublishedCases": [],
+  "originalCatalogPreserved": true
+}

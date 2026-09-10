@@ -814,7 +814,12 @@ const HAZARD_DEBUG = new Map([
   ["opaque-wasm", "OpaqueWasm"],
   ["mutable-unbound-global", "MutableUnboundGlobal"],
   ["unmaterialized-transform", "UnmaterializedTransform"],
-  ["unaccepted-external-dependency", "UnacceptedExternalDependency"]
+  ["unaccepted-external-dependency", "UnacceptedExternalDependency"],
+  // Order is load-bearing: `HAZARD_ORDER` below is insertion order, and the
+  // Rust side sorts by `ClosureHazardKind`'s derived `Ord`, which is its
+  // declaration order in `artifact_resolution.rs`. Append here exactly where
+  // the variant was appended there.
+  ["runtime-accessor-installation", "RuntimeAccessorInstallation"]
 ]);
 const HAZARD_ORDER = new Map([...HAZARD_DEBUG.keys()].map((value, index) => [value, index]));
 
@@ -1070,7 +1075,9 @@ function selectTarget(target, context) {
     case "string": {
       const selected = substitutePattern(target, context.capture);
       const initial = validateTargetString(selected, context.packageRoot);
-      const path = context.axis === "declarations" ? declarationCandidate(initial) : initial;
+      const path = context.axis === "declarations"
+        ? declarationCandidate(initial, context.mjsSourceFallback ?? false)
+        : initial;
       if (!path) fail("declarations-not-found", `no declaration target exists for ${initial}`);
       return {
         path,
@@ -1171,7 +1178,7 @@ function legacyRuntimeSubpath(path) {
   return undefined;
 }
 
-function declarationCandidate(path) {
+function declarationCandidate(path, mjsSourceFallback = true) {
   if (DECLARATION_EXTENSIONS.some(extension => path.endsWith(extension))) return isFile(path) ? path : undefined;
   const extension = extname(path);
   const stem = extension ? path.slice(0, -extension.length) : path;
@@ -1190,7 +1197,8 @@ function declarationCandidate(path) {
             : [];
   return (
     candidates.find(isFile) ??
-    ([".js", ".jsx", ".ts", ".tsx"].includes(extension) && isFile(path) ? path : undefined)
+    (([".js", ".jsx", ".ts", ".tsx"].includes(extension) ||
+      (extension === ".mjs" && mjsSourceFallback)) && isFile(path) ? path : undefined)
   );
 }
 
@@ -1252,7 +1260,7 @@ export function selectPackageExportTarget({
 
   if (manifest.exports !== undefined) {
     const selected = selectSubpath(manifest.exports, entrypoint);
-    const target = selectTarget(selected.target, {
+    const context = {
       packageRoot,
       axis,
       entrypoint,
@@ -1261,7 +1269,15 @@ export function selectPackageExportTarget({
       pointer: selected.pointer,
       steps: [{ condition: "subpath", target: entrypoint }],
       conditionsTaken: []
-    });
+    };
+    let target;
+    try {
+      target = selectTarget(selected.target, context);
+    } catch (error) {
+      if (axis !== "declarations" || error.code !== "declarations-not-found") throw error;
+      // Exhaust matching declaration branches before consulting ESM source.
+      target = selectTarget(selected.target, { ...context, mjsSourceFallback: true });
+    }
     const path = target.path;
     return {
       path,
@@ -1573,7 +1589,12 @@ function hasModifier(node, kind) {
 }
 
 function isLocallyBoundIdentifier(node, checker, sourceFile) {
-  const symbol = checker.getSymbolAtLocation(node);
+  // `parseModule` only builds a `ts.Program` for a module that needs symbol
+  // identity, so the census can run with no checker at all. Read that as "not
+  // locally bound", which is the conservative answer for every caller: each
+  // one negates this to decide whether a name is the global, and a hazard
+  // recorded for a shadowed name over-refuses rather than under-refuses.
+  const symbol = checker?.getSymbolAtLocation(node);
   return symbol?.declarations?.some(declaration => declaration.getSourceFile() === sourceFile) ?? false;
 }
 
@@ -1935,6 +1956,9 @@ function moduleDescription(path, axis, packageRoot, cache) {
     }
     if (hasModifier(statement, ts.SyntaxKind.DefaultKeyword)) {
       description.direct.set("default", { file: path, name: "default" });
+      // A default declaration's local binding is not another public export.
+      // A separate `export { local }` statement is processed independently.
+      continue;
     }
     if (
       (ts.isFunctionDeclaration(statement) ||
@@ -2175,17 +2199,88 @@ function exactExportBindings(
   return { exports, declarationExports: [...declarationNames].sort(), cache };
 }
 
+// Member names that install a property accessor, or a prototype carrying one,
+// at run time. The mirror of `Collector::ACCESSOR_INSTALLING_MEMBERS` in
+// `rust/crates/solid-facts/src/ast/mod.rs`; the two censuses must agree byte
+// for byte, so change them together.
+const ACCESSOR_INSTALLING_MEMBERS = new Set([
+  "defineProperty",
+  "defineProperties",
+  "setPrototypeOf",
+  "__defineGetter__",
+  "__defineSetter__",
+  "__proto__"
+]);
+
 function syntaxHazards(path, sourceFile, checker) {
   const hazards = [];
   const byteOffset = offset => Buffer.byteLength(sourceFile.text.slice(0, offset), "utf8");
-  const add = (kind, node) =>
+  // An installed accessor makes reads through the receiver invisible and says
+  // nothing about any other domain, so it names `reads` alone. Every other
+  // kind still opens everything.
+  const add = (kind, node, domains = DOMAIN_NAMES) =>
     hazards.push({
       kind,
       source: `${path}:${byteOffset(node.getStart(sourceFile))}-${byteOffset(node.end)}`,
       affectedExports: [],
-      affectedDomains: [...DOMAIN_NAMES]
+      affectedDomains: [...domains]
     });
+  const accessorInstallation = node => add("runtime-accessor-installation", node, ["reads"]);
   const visit = node => {
+    // `Proxy` by identifier rather than by `new Proxy(`: `Proxy.revocable`
+    // builds the same thing and `const P = Proxy` defers construction to a
+    // name this pass does not follow. A shadowed `Proxy` is somebody's own
+    // class and states nothing.
+    if (
+      ts.isIdentifier(node) &&
+      node.text === "Proxy" &&
+      !isLocallyBoundIdentifier(node, checker, sourceFile) &&
+      !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node) &&
+      !ts.isPropertyAssignment(node.parent) &&
+      !ts.isBindingElement(node.parent)
+    ) {
+      accessorInstallation(node);
+    }
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ACCESSOR_INSTALLING_MEMBERS.has(node.name.text)
+    ) {
+      accessorInstallation(node);
+    }
+    // A computed member on an intrinsic namespace can spell any of those
+    // names, so the namespace itself is the fact.
+    if (
+      ts.isElementAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      (node.expression.text === "Object" || node.expression.text === "Reflect") &&
+      !isLocallyBoundIdentifier(node.expression, checker, sourceFile)
+    ) {
+      accessorInstallation(node);
+    }
+    // `Object.create(prototype, descriptors)` installs what it is handed; the
+    // one-argument form installs nothing, so the arity is the distinction.
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === "create" &&
+      node.arguments.length >= 2 &&
+      ts.isIdentifier(node.expression.expression) &&
+      node.expression.expression.text === "Object" &&
+      !isLocallyBoundIdentifier(node.expression.expression, checker, sourceFile)
+    ) {
+      accessorInstallation(node);
+    }
+    // `{ __proto__: p }` sets the prototype at construction, and no member
+    // expression exists for a literal key. A computed `{ ["__proto__"]: p }`
+    // is an ordinary own property and installs nothing.
+    if (
+      ts.isPropertyAssignment(node) &&
+      !ts.isComputedPropertyName(node.name) &&
+      (ts.isIdentifier(node.name) || ts.isStringLiteralLike(node.name)) &&
+      node.name.text === "__proto__"
+    ) {
+      accessorInstallation(node);
+    }
     if (ts.isCallExpression(node)) {
       if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
         if (node.arguments.length !== 1 || !ts.isStringLiteralLike(node.arguments[0])) {

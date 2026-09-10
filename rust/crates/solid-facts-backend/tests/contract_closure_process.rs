@@ -1,0 +1,367 @@
+//! A closed package contract must light up the ordinary reactivity rules.
+//!
+//! This is the regression test the 2026-08-30 policy-2 cut left the repository
+//! without. Every fixture catalog under `fixtures/` carries an obsolete
+//! policy-1 receipt, so the checker's ability to diagnose *third-party*
+//! reactive misuse — the product's central use case — has no live coverage:
+//! see `docs/package-contract-v2/2026-09-10-findings-delta-measurement.md`.
+//!
+//! What this test scopes, and what it deliberately does not:
+//!
+//! - It exercises the **consumer** half of the pipeline: an authenticated
+//!   policy-2 receipt over a contract whose demanded domains are closed, and
+//!   the rules that then fire on a misuse of the package's reactive accessor.
+//! - It says nothing about whether *certification* can currently produce such
+//!   a contract. It cannot: `reads` is closed for 0 of 8950 corpus exports, so
+//!   every real certified import raises SC9005 today. Closure is supplied here
+//!   by the fixture's hand-authored document, which is exactly the input a
+//!   future closure lever is supposed to produce.
+//!
+//! The issuer is test-scoped in the only way that matters: the trust
+//! configuration is written by this test into a temporary tree and handed to
+//! the checker out of band. A project cannot nominate its own issuer
+//! (`contract_interface.rs`: "Trust bytes are deliberately not referenced by
+//! the project catalog"), the key exists only for the duration of the test,
+//! and nothing signed here is committed.
+
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
+
+use crate::support::{decode_findings, temporary_directory};
+use solid_facts_backend::{
+    ConfiguredReceiptIssuer, Policy2ReceiptBindings, Policy2ReceiptProvenance,
+    RECEIPT_WITNESS_FAMILIES, ResolvedImport, authenticate_policy2_receipt,
+    canonicalize_policy2_main, encode_policy2_trust_configuration, issue_policy2_receipt,
+    policy2_main_closed_claims_root, policy2_main_semantic_digest, policy2_resolved_import_root,
+    policy2_trust_configuration_for_issuer, publish_policy2_catalog,
+};
+
+/// The fixture is reused rather than duplicated: its `App.tsx` already pairs a
+/// tracked read with an untracked one over an accessor whose reactivity is
+/// established *only* by the package contract, and its document already closes
+/// `callbacks`, `reads`, `creates` and `returns` — the conjunction
+/// `push_unknown_contract_claims` requires.
+const FIXTURE: &str = "fixtures/reactive-ir/package-return-consumer";
+
+fn repository_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
+}
+
+fn copy_tree(from: &Path, to: &Path) {
+    fs::create_dir_all(to).unwrap();
+    for entry in fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            fs::copy(entry.path(), &target).unwrap();
+        }
+    }
+}
+
+/// Shape-valid stand-ins for roots whose authority comes from the verifier
+/// sessions that would supply them in a real certification. `Policy2ReceiptBindings`
+/// validates shape only, by design, and this test is about what the *consumer*
+/// does with an authenticated receipt.
+fn root(index: u16) -> String {
+    format!("sha256:{index:064x}")
+}
+
+/// The stored catalog spells every path relative to the project, which is what
+/// makes the fixture relocatable; `ResolvedImport::validate` requires absolute
+/// ones. Rewrite exactly the project-relative fields against the temporary
+/// copy, leaving package-relative closure entries alone.
+fn absolutize(import: &mut serde_json::Value, project: &Path) {
+    let at = |value: &serde_json::Value| -> String {
+        project
+            .join(value.as_str().expect("path is a string"))
+            .to_string_lossy()
+            .into_owned()
+    };
+    for key in ["importer", "packageRoot"] {
+        import[key] = at(&import[key]).into();
+    }
+    for key in ["packageManifest", "runtime", "declarations"] {
+        import[key]["path"] = at(&import[key]["path"]).into();
+    }
+    let Some(exports) = import["exports"].as_object_mut() else {
+        return;
+    };
+    for binding in exports.values_mut() {
+        for axis in ["runtime", "declarations"] {
+            binding[axis]["module"]["path"] = project
+                .join(binding[axis]["module"]["path"].as_str().unwrap())
+                .to_string_lossy()
+                .into_owned()
+                .into();
+        }
+    }
+}
+
+/// Runs the fixture under a freshly minted policy-2 receipt, optionally
+/// reopening one claim domain first, and returns the findings.
+fn findings_under_a_minted_receipt(label: &str, reopen: Option<&str>) -> Vec<serde_json::Value> {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("caller guards on the producer");
+
+    let project = temporary_directory(label).join("consumer");
+    copy_tree(&repository_root().join(FIXTURE), &project);
+    // The catalog reader canonicalizes every path it rebases, and the receipt
+    // binds the importer it will compute. On macOS `env::temp_dir()` is a
+    // symlink (`/var` -> `/private/var`), so an uncanonicalized root here binds
+    // a path the consumer never derives.
+    let project = fs::canonicalize(&project).unwrap();
+
+    // The fixture's catalog already carries a valid `import` block; only its
+    // policy-1 authorization is obsolete. Reuse the resolver answer verbatim so
+    // this test replaces the *authorization*, not the resolution.
+    let catalog_path = project.join(".solid-checker/accepted-contracts.json");
+    let catalog: serde_json::Value =
+        serde_json::from_slice(&fs::read(&catalog_path).unwrap()).unwrap();
+    let entry = &catalog["contracts"][0];
+    assert_eq!(
+        entry["status"], "obsolete-policy1",
+        "fixture is expected to start from the obsolete state this test replaces"
+    );
+    let mut import = entry["import"].clone();
+    absolutize(&mut import, &project);
+    let resolved: ResolvedImport = serde_json::from_value(import).unwrap();
+    let document = project.join(entry["document"].as_str().unwrap());
+    if let Some(domain) = reopen {
+        // Reopening one domain in the fixture's own document is how this file
+        // asks whether *partial* closure is worth anything: every sibling
+        // domain stays closed and usable.
+        let mut contract: serde_json::Value =
+            serde_json::from_slice(&fs::read(&document).unwrap()).unwrap();
+        for summary in contract["summaries"].as_object_mut().unwrap().values_mut() {
+            let closed = summary["call"]["closed"].as_array_mut().unwrap();
+            closed.retain(|value| value != domain);
+        }
+        fs::write(&document, serde_json::to_vec(&contract).unwrap()).unwrap();
+    }
+    let canonical_main = canonicalize_policy2_main(&fs::read(&document).unwrap()).unwrap();
+
+    let bindings = Policy2ReceiptBindings {
+        importer: resolved.importer.clone(),
+        specifier: resolved.specifier.clone(),
+        resolved_import_root: policy2_resolved_import_root(&resolved).unwrap(),
+        semantic_digest: policy2_main_semantic_digest(&canonical_main).unwrap(),
+        artifact_provenance_root: root(1),
+        snapshot_root: root(2),
+        package_root: root(3),
+        manifest_root: root(4),
+        artifacts_root: root(5),
+        declarations_root: root(6),
+        transform_root: root(7),
+        exports_root: root(8),
+        closure_root: root(9),
+        demand_graph_root: root(10),
+        verified_positive_root: root(11),
+        witness_roots: RECEIPT_WITNESS_FAMILIES
+            .iter()
+            .enumerate()
+            .map(|(index, family)| {
+                (
+                    (*family).to_owned(),
+                    root(u16::try_from(100 + index).unwrap()),
+                )
+            })
+            .collect(),
+        producer_sessions_root: root(12),
+        dependency_receipts_root: root(13),
+        dependency_trust_root: root(14),
+        probe_gate_root: root(15),
+        // Rebound by the consumer from the document itself: a test issuer
+        // cannot assert a closure the contract does not carry.
+        closed_claims_root: policy2_main_closed_claims_root(&canonical_main).unwrap(),
+        verifier_source_digest: root(17),
+        verifier_build_digest: root(18),
+    };
+
+    let issuer = ConfiguredReceiptIssuer::persistent_local("solid-checker-fixture", [7u8; 32])
+        .expect("test-scoped issuer");
+    let receipt = issue_policy2_receipt(&canonical_main, &bindings, &issuer).unwrap();
+    let trust = policy2_trust_configuration_for_issuer(&issuer, &bindings.verifier_build_digest, 0)
+        .unwrap();
+    let authenticated = authenticate_policy2_receipt(
+        &canonical_main,
+        &receipt,
+        &bindings,
+        Policy2ReceiptProvenance::PersistentLocal {
+            trust_store: trust.trust_store(),
+            scope: issuer.scope(),
+        },
+    )
+    .expect("the test issuer's own receipt authenticates under its own trust");
+
+    // Publication replaces the catalog atomically; the obsolete pointer must be
+    // gone rather than merged with.
+    fs::remove_file(&catalog_path).unwrap();
+    publish_policy2_catalog(
+        &project.join(".solid-checker"),
+        &canonical_main,
+        &receipt,
+        &authenticated,
+        &resolved,
+    )
+    .expect("publish the freshly authorized catalog");
+
+    // Out of band, exactly as an ordinary analysis requires: the project never
+    // names its own issuer.
+    let trust_path = project.join("fixture-trust.json");
+    fs::write(
+        &trust_path,
+        encode_policy2_trust_configuration(&trust).unwrap(),
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .args([
+            "--project",
+            &project.join("tsconfig.json").to_string_lossy(),
+            "--typefacts",
+            &typefacts,
+            "--receipt-trust-configuration",
+            &trust_path.to_string_lossy(),
+            "--format",
+            "json",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    decode_findings(&output.stdout)
+}
+
+fn rules(findings: &[serde_json::Value]) -> Vec<&str> {
+    findings
+        .iter()
+        .map(|finding| finding["rule"].as_str().unwrap_or_default())
+        .collect()
+}
+
+#[test]
+fn a_closed_contract_lets_the_rules_diagnose_third_party_reactive_misuse() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let findings = findings_under_a_minted_receipt("contract-closure", None);
+
+    // The point of the test: an authorized, fully closed contract is consumed
+    // as evidence rather than reported as missing.
+    assert!(
+        !rules(&findings).contains(&"package-contract-incomplete"),
+        "a closed, authenticated contract still reported missing claims: {findings:#?}"
+    );
+    let untracked: Vec<&serde_json::Value> = findings
+        .iter()
+        .filter(|finding| finding["rule"] == "strict-read-untracked")
+        .collect();
+    assert_eq!(
+        untracked.len(),
+        1,
+        "exactly the untracked read of the package's accessor is a violation: {findings:#?}"
+    );
+    assert_eq!(untracked[0]["kind"], "violation");
+}
+
+/// Partial closure has to be worth something, or no incremental closure work
+/// can ever pay off: today `reads` is closed for 0 of 8950 corpus exports, so
+/// every real contract is in exactly this state for at least one domain.
+///
+/// `returns` is the domain reopened here because it is the one this fixture
+/// states positively: reopening it leaves the accessor item in place while
+/// making the collection non-exhaustive, which is exactly the partial-positive
+/// state a real contract reaches. A domain the document states as an *empty*
+/// collection cannot be reopened at all — the document validator refuses
+/// "open domain call operation claim has an empty collection" — so partial
+/// knowledge always means "these items, and maybe more".
+///
+/// The verified positive item must still prove what it proves, and the
+/// obligation must name only the domain that is open.
+#[test]
+fn a_partially_closed_contract_still_proves_what_its_closed_domains_prove() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let findings = findings_under_a_minted_receipt("contract-partial", Some("returns"));
+
+    let untracked: Vec<&serde_json::Value> = findings
+        .iter()
+        .filter(|finding| finding["rule"] == "strict-read-untracked")
+        .collect();
+    assert_eq!(
+        untracked.len(),
+        1,
+        "a partially known `returns` still proves the accessor identity: {findings:#?}"
+    );
+    assert_eq!(untracked[0]["kind"], "violation");
+
+    let obligations: Vec<&str> = findings
+        .iter()
+        .filter(|finding| finding["rule"] == "package-contract-incomplete")
+        .map(|finding| finding["analysisContext"].as_str().unwrap_or_default())
+        .collect();
+    assert!(
+        !obligations.is_empty(),
+        "an open domain must still be reported: {findings:#?}"
+    );
+    for context in &obligations {
+        assert_eq!(
+            *context, "unknown-contract-claims:returns",
+            "the obligation must name only the domain that is open: {findings:#?}"
+        );
+    }
+}
+
+/// An open `returns` is reported only against a binding some consumer can
+/// actually read it from.
+///
+/// The fixture's two exports carry a byte-identical contract and the same
+/// summary id; the only difference is where the consumer puts them, so any
+/// difference in what is reported is attributable to the use position alone.
+///
+/// - `createCount`'s result is bound at module scope, so
+///   `docs/package-contract-v2/phase21/2026-09-10-sc9005-demand-scoping-design.md`
+///   § 8's four consumers can still reach its `returns`. Reported.
+/// - `createLabel` is called as a whole statement and is never an argument, so
+///   `CallFact::result_discarded` is `true` at its only reference and **no
+///   consumer can reach its `returns` at all**. Not reported.
+///
+/// This assertion was written in its inverted form *before* the slice, while
+/// both were reported, so the change landed as a visible flip here rather than
+/// as a claim in a commit message.
+#[test]
+fn an_open_returns_is_reported_only_where_a_consumer_can_read_it() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let findings = findings_under_a_minted_receipt("contract-demand", Some("returns"));
+
+    let reported = |export: &str| {
+        findings.iter().any(|finding| {
+            finding["rule"] == "package-contract-incomplete"
+                && finding["analysisContext"] == "unknown-contract-claims:returns"
+                && finding["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains(export))
+        })
+    };
+
+    assert!(
+        reported("createCount"),
+        "the bound result keeps its obligation: {findings:#?}"
+    );
+    assert!(
+        !reported("createLabel"),
+        "a discarded result no consumer reads must shed the obligation; \
+         reporting it is noise, not a fail-closed answer: {findings:#?}"
+    );
+}

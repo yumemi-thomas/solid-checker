@@ -1,0 +1,4253 @@
+{
+  "installationDrift": [],
+  "format": "entrypoint-recovery-measurement",
+  "authoritative": false,
+  "base": {
+    "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/ecosystem-investigations/2026-09-09-machine-full.json",
+    "digest": "sha256:97ccdd222e33f2a88679b20ffa7335b7b6bae4f7f7b6478ae58335aa64940ab1",
+    "finishedAt": "2026-09-09T00:58:00.567Z",
+    "counts": {
+      "complete": 327,
+      "partial": 64,
+      "refused": 18,
+      "not-advanced": 9
+    }
+  },
+  "after": {
+    "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/ecosystem-investigations/2026-09-09-async-binding-full.json",
+    "digest": "sha256:6e8d6bcba4d24eb8488128d3afd3fc0ed417732031badaccc58312a1baa14b71",
+    "finishedAt": "2026-09-09T01:47:52.964Z",
+    "counts": {
+      "complete": 327,
+      "partial": 64,
+      "refused": 18,
+      "not-advanced": 9
+    }
+  },
+  "binary": {
+    "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/release/solid-checker-rust",
+    "digest": "sha256:ecd4635034cb501cb99ea284e33ca63f2cded4e90ecc255039111578a7ffd227",
+    "producer": "sha256:148a3e0f9ae83268c47e6756247b6d543cd0db997baf969663c03fbed715ff59",
+    "stamp": {
+      "format": 1,
+      "sourceDigest": "09a8f1d5628b3cd4751d88a73a23df7449d09db33bc0c5a1dbbb4be329ffe67a",
+      "toolchain": "go version go1.26.5 darwin/arm64",
+      "buildId": "dev"
+    }
+  },
+  "transitions": [],
+  "selected": [
+    {
+      "probeId": "@solidjs/diagnostics@2.0.0-rc.3|solid2|only",
+      "before": {
+        "catalogRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-i8Jyep/@solidjs__diagnostics@2.0.0-rc.3--solid2--only.json.accepted-catalog",
+        "pointer": {
+          "format": "solid-checker-accepted-contract-case-set-pointer",
+          "caseSetVersion": 1,
+          "document": "case-sets/5fedfb8eefc5e8c54e423e52242415c15306955ec6d8033e3439f7e1527546fb/accepted-contract-case-set.json",
+          "documentDigest": "sha256:5fedfb8eefc5e8c54e423e52242415c15306955ec6d8033e3439f7e1527546fb"
+        },
+        "cases": [
+          {
+            "entrypoint": ".",
+            "selection": {
+              "artifact": {
+                "closureSha256": "1e6f2917803eddefd44647bb44e6bb9d4cb95e2ad5d3bb947b9bd36c6e8f77cb",
+                "path": "./dist/index.js",
+                "sha256": "7a29072aa9d49e906e83894eb8147c310da7cf04c4699061e17687cef37ee234"
+              },
+              "declarations": {
+                "path": "./dist/index.d.ts",
+                "sha256": "d524715e96889ea57e6dffb3de68a578eac36212a12757947c09d166000f11b6"
+              },
+              "resolution": {
+                "runtimeBranch": "/exports/./default",
+                "typesBranch": "/exports/./types"
+              }
+            },
+            "coordinate": {
+              "artifactCaseId": "artifact-case:55a30869485544dc034726021e15d135cbc9faee29d1b05859c28997283f3ace",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/.solid-checker-certification-85791ff1cf731080d8d4b62f4ad692955c45dcaa64f2c7948fb2a491dc72e358.mjs",
+              "specifier": "@solidjs/diagnostics",
+              "resolvedImportRoot": "sha256:917a4462a09c2fde5d4c0df4b206ff094cf079d1727e92e9d957ba19292a3062",
+              "semanticDigest": "sha256:21a93b8a5bcb69937c5a107636d0830423736fe21d04f2154e5085d96da1d02e",
+              "receiptDigest": "sha256:d4409a3406745659a3d68b9682042560ef9d47b6d677740a5d8eb428471fb440",
+              "catalog": "cases/917a4462a09c2fde5d4c0df4b206ff094cf079d1727e92e9d957ba19292a3062/accepted-contracts.json",
+              "catalogDigest": "sha256:882ff2d8e2824ab0141c99169498f6485292b559805e1ba9c1a0ad4d10d21ca6"
+            },
+            "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-i8Jyep/@solidjs__diagnostics@2.0.0-rc.3--solid2--only.json.accepted-catalog/case-sets/5fedfb8eefc5e8c54e423e52242415c15306955ec6d8033e3439f7e1527546fb/cases/917a4462a09c2fde5d4c0df4b206ff094cf079d1727e92e9d957ba19292a3062/accepted-contracts.json",
+            "documentDigest": "sha256:e6a7905f247371d378219f37165bd1304643d6fcd1cbad84b73cb46abc24dec3",
+            "receiptDigest": "sha256:d4409a3406745659a3d68b9682042560ef9d47b6d677740a5d8eb428471fb440",
+            "receiptPayload": {
+              "semanticModelVersion": 1,
+              "proofVersion": 2,
+              "proofPolicy": 2,
+              "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+              "mainDigest": "sha256:e6a7905f247371d378219f37165bd1304643d6fcd1cbad84b73cb46abc24dec3",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/.solid-checker-certification-85791ff1cf731080d8d4b62f4ad692955c45dcaa64f2c7948fb2a491dc72e358.mjs",
+              "specifier": "@solidjs/diagnostics",
+              "resolvedImportRoot": "sha256:917a4462a09c2fde5d4c0df4b206ff094cf079d1727e92e9d957ba19292a3062",
+              "semanticDigest": "sha256:21a93b8a5bcb69937c5a107636d0830423736fe21d04f2154e5085d96da1d02e",
+              "artifactProvenanceRoot": "sha256:cecb00332d0aad2badca6d4b2700ac5f689a65555e5b30c69e74a26a06ed8da7",
+              "snapshotRoot": "sha256:c45ce15a30b9b65df7d3896d0e217ba6687c56dd71cf369b443f510ae41099c2",
+              "packageRoot": "sha256:6454cfbfe3ae92a5285d0a6564dfb93064a0038e188a0e2f661b4fd565b69fb1",
+              "manifestRoot": "sha256:6a5a39a372cd187d5fe5d1a14afe44531e28a68c3d1a990a800ed72897a73bdd",
+              "artifactsRoot": "sha256:7336cc397b82717bc54b300f9d6fca89bfbb17918cee01969617d73e863e5ee8",
+              "declarationsRoot": "sha256:1ed01cbf992ca6bf8584d508acfa3365a1dae95aa98fda0cf6bf3d15f8beea32",
+              "transformRoot": "sha256:a4bc5d54393b48b11912c9485fe379aea83acd6667ddcc7b88a3f22cd73a94be",
+              "exportsRoot": "sha256:8ca4f73638d644b548b634f57dbc29ba2e412e88aa9e796ceae95263616fc20d",
+              "closureRoot": "sha256:876616310dbd5de874861d38c34768d627eebf3d1beb4ba74fd45eb9cf525cea",
+              "demandGraphRoot": "sha256:ca236ee23e2fc8998343ebd7e433b5b91daad3cbd353714be7f8d59e07857fdd",
+              "verifiedPositiveRoot": "sha256:e3ae53d03beca16f2c2a76e6c6a404765567014ab168c88ce490b436fe76a66c",
+              "witnessRoots": {
+                "accepted-dependency-composition": "sha256:cb9a485260e22e8f892ba4ad5efb6351ef5f8199a3b4eaa58a87fabf5bb2bd38",
+                "argument-binding": "sha256:d06727054ae04bb4c0d4d2ee5946718c15d8900570227c1ebdba0fb2c794ca60",
+                "artifact-declarations": "sha256:1ed01cbf992ca6bf8584d508acfa3365a1dae95aa98fda0cf6bf3d15f8beea32",
+                "callable-path": "sha256:dcaf775ae85d23926c57edcc6ceae417b5a37d977bd079e6fce0194f3503bbda",
+                "compiler-reconciliation": "sha256:8f8d4f2af16d1aecb1779072b6ebcabceffb00914ec41e249a7bfa863f2baf57",
+                "domain-exhaustiveness": "sha256:9a76b9d35297cd439e4ce68e4ff30f9ef6d73d1db55742dafaf82b763d923d62",
+                "export-identity": "sha256:8ca4f73638d644b548b634f57dbc29ba2e412e88aa9e796ceae95263616fc20d",
+                "export-resolution": "sha256:7336cc397b82717bc54b300f9d6fca89bfbb17918cee01969617d73e863e5ee8",
+                "guard-partition": "sha256:d06c040b60e29a21fa2c3f9be72c36704741d5923d6d6ce8de947a1069ac50c6",
+                "manifest-entrypoint": "sha256:6a5a39a372cd187d5fe5d1a14afe44531e28a68c3d1a990a800ed72897a73bdd",
+                "module-closure": "sha256:876616310dbd5de874861d38c34768d627eebf3d1beb4ba74fd45eb9cf525cea",
+                "operation-cardinality": "sha256:441a742c5bb441c0aa5a02fdff754a6a218ce99a3fd1da87d93aa402174b94b0",
+                "operation-reachability": "sha256:1bdc151e7835140d37eb1226e70627e1807bc12b88b14a51ecaaeb285e6ae779",
+                "package-identity": "sha256:6454cfbfe3ae92a5285d0a6564dfb93064a0038e188a0e2f661b4fd565b69fb1",
+                "recursive-value-shape": "sha256:ef844d71eb76be3d6696ce48fd36e208dbf64fb280459acaa44ac07475dbc036",
+                "rest-spread-coverage": "sha256:2ee2e4ad5d72eecfb920ef5ac80c8186e7fe3e711a1b168cf4f8944f6335fee9",
+                "selected-signature": "sha256:3a5d2b1f5b89f323b108ef7336ed25c268ae778d20f36a63dafa8544efcf6569"
+              },
+              "producerSessionsRoot": "sha256:69af848d7a2c85838822f23ad8a0241e2e7a7c92baba2ffd6b407f30450e16d8",
+              "dependencyReceiptsRoot": "sha256:2f376483a1dceded927ada0a5919ea8f96945e5c79d3c7aa18d24f4ddc8799cd",
+              "dependencyTrustRoot": "sha256:4ce16f33a174bc4ed5f0350202db8cdd21424d5face178cecdda01dc2f0bb62b",
+              "probeGateRoot": "sha256:131670ec183473b83047be1f8cf9907e418c966a97a6d0c35a361150fca3f27a",
+              "closedClaimsRoot": "sha256:41902493b935c5a2f70065b36e809367ff6c34f1ec6986ac14c49c490f7de993",
+              "verifierSourceDigest": "sha256:d5a8f3dfec87ff73366715de01d8d95090141245a16137806e16a9123617d10a",
+              "verifierBuildDigest": "sha256:47c220603fcb7a6f4580670562fdeec66f406176a8bb4d26451b7f28069fa795",
+              "issuerKind": "persistent-local",
+              "issuerScope": "ecosystem-benchmark:de5422f5dde28ce8a411aa92df9e4de38586a486ca459b73c717d12c14e6f598",
+              "keyId": "ed25519:sha256:0b5f9dd0909d575782c3765d98c9efac878b9ccff04cf3f5062a41c96257e08d",
+              "signatureAlgorithm": "ed25519"
+            },
+            "resolution": {
+              "specifier": "@solidjs/diagnostics",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/.solid-checker-certification-85791ff1cf731080d8d4b62f4ad692955c45dcaa64f2c7948fb2a491dc72e358.mjs",
+              "requestedEntrypoint": ".",
+              "packageName": "@solidjs/diagnostics",
+              "packageVersion": "2.0.0-rc.3",
+              "packageIntegrity": "sha512-fPb20MXqN7LpT02+kxfMBhY3reCKeh7vB++g9Su1EJZ6Ie0PeydyU/CnkUNa9gwLCMKoZG1x0pfAMb9yLGowtw==",
+              "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/diagnostics",
+              "packageManifest": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/diagnostics/package.json",
+                "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+              },
+              "runtime": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/diagnostics/dist/index.js",
+                "digest": "sha256:7a29072aa9d49e906e83894eb8147c310da7cf04c4699061e17687cef37ee234"
+              },
+              "declarations": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/diagnostics/dist/index.d.ts",
+                "digest": "sha256:d524715e96889ea57e6dffb3de68a578eac36212a12757947c09d166000f11b6"
+              },
+              "runtimeTrace": {
+                "branch": "/exports/./default",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "."
+                  },
+                  {
+                    "condition": "default",
+                    "target": "/exports/."
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/index.js"
+                  }
+                ]
+              },
+              "declarationTrace": {
+                "branch": "/exports/./types",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "."
+                  },
+                  {
+                    "condition": "types",
+                    "target": "/exports/."
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/index.d.ts"
+                  }
+                ]
+              },
+              "closure": {
+                "entries": [
+                  {
+                    "role": "runtime",
+                    "path": "./dist/artifact.js",
+                    "digest": "sha256:ab00053b437d364f5b765846da2a475374cba4f0f1d14aef03851c18042be01b"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/assertions.js",
+                    "digest": "sha256:7af52a4272adfdb6ae33e404b14626a1c20d08870a5ac900c7b6de30d101370a"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/budgets.js",
+                    "digest": "sha256:e11025bb73be0ce8ff5389f063bfcd4a9e4f08c2b0fa1ca35a500cc854b0b5fb"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/capture.js",
+                    "digest": "sha256:c02838cb7fd539e569104b6be6b1483b76a1d5171cde723f01a88ce00f5f51fc"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/index.js",
+                    "digest": "sha256:7a29072aa9d49e906e83894eb8147c310da7cf04c4699061e17687cef37ee234"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/artifact.d.ts",
+                    "digest": "sha256:88bb3ed750df9189b94d592b1917f9d08b6fb01a5e756a98c210ea2481526e05"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/assertions.d.ts",
+                    "digest": "sha256:aabd4f381aad4006d9d3368548ed76180a977e36b16a1b41456b3f132bcf132c"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/budgets.d.ts",
+                    "digest": "sha256:d432257a6833c65fc237bf6af1d169643b1bbedd489442b00711f7e0bbdc14c0"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/capture.d.ts",
+                    "digest": "sha256:5521fa5591f8dab8ccac3881a66a719df8855055bcf74f20ed67ea5faee0abc4"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/index.d.ts",
+                    "digest": "sha256:d524715e96889ea57e6dffb3de68a578eac36212a12757947c09d166000f11b6"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/types.d.ts",
+                    "digest": "sha256:bccdaeffaf893315728c74124f14c04b16e88339e3cb93b04e1f4b3b5bfd2435"
+                  },
+                  {
+                    "role": "manifest",
+                    "path": "./package.json",
+                    "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+                  },
+                  {
+                    "role": "resolution-input",
+                    "path": "./package.json",
+                    "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+                  }
+                ],
+                "hazards": [
+                  {
+                    "kind": "unaccepted-external-dependency",
+                    "source": "./dist/capture.js:@solidjs/signals",
+                    "affectedDomains": [
+                      "callbacks",
+                      "reads",
+                      "writes",
+                      "creates",
+                      "invalidates",
+                      "throws",
+                      "returns",
+                      "cleanups",
+                      "disposals"
+                    ]
+                  }
+                ],
+                "digest": "sha256:1e6f2917803eddefd44647bb44e6bb9d4cb95e2ad5d3bb947b9bd36c6e8f77cb"
+              },
+              "authority": "standalonePackageResolver"
+            },
+            "motionGlobalConfig": null,
+            "motionGlobalConfigSummary": null
+          },
+          {
+            "entrypoint": "./browser",
+            "selection": {
+              "artifact": {
+                "closureSha256": "98f91df54efd255a6e51f3f58cdb87a10cbf01b7d334aa2a035e521c0e4d9c09",
+                "path": "./dist/browser.js",
+                "sha256": "213bccb5e63a7ddb11b52ba22e186631d501e9f53f67e369b47146dd776d9623"
+              },
+              "declarations": {
+                "path": "./dist/browser.d.ts",
+                "sha256": "64b12bd698591fa4624f04ee2fb2d65aced57f968eab312d052b54453b423478"
+              },
+              "resolution": {
+                "runtimeBranch": "/exports/.~1browser/default",
+                "typesBranch": "/exports/.~1browser/types"
+              }
+            },
+            "coordinate": {
+              "artifactCaseId": "artifact-case:6744b32a69e153857eabbfbf87015076e08e043524d6f301a6591a0761159eb8",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/.solid-checker-certification-85791ff1cf731080d8d4b62f4ad692955c45dcaa64f2c7948fb2a491dc72e358.mjs",
+              "specifier": "@solidjs/diagnostics/browser",
+              "resolvedImportRoot": "sha256:85e27670fd589eff22494cafd3e57b0cbc3c5e99be8e6fe5e3a919d10c1572a0",
+              "semanticDigest": "sha256:975137bdc5db797747ba16a4e4842a85ac5ecb02536d335c5ac87158e7ed8cff",
+              "receiptDigest": "sha256:437bc10f8523cd232315812f5df5c9aacc93a97a15a808f650fced9e9e64890e",
+              "catalog": "cases/85e27670fd589eff22494cafd3e57b0cbc3c5e99be8e6fe5e3a919d10c1572a0/accepted-contracts.json",
+              "catalogDigest": "sha256:3ed6e7c8ecab91a259f9eabef9d0d1a2d28ce76d8da55ac34b651270412f2a64"
+            },
+            "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-i8Jyep/@solidjs__diagnostics@2.0.0-rc.3--solid2--only.json.accepted-catalog/case-sets/5fedfb8eefc5e8c54e423e52242415c15306955ec6d8033e3439f7e1527546fb/cases/85e27670fd589eff22494cafd3e57b0cbc3c5e99be8e6fe5e3a919d10c1572a0/accepted-contracts.json",
+            "documentDigest": "sha256:1f4d4e2da5b33701699e067c2765385d95ebc8d0f70a51f8499755799218cf48",
+            "receiptDigest": "sha256:437bc10f8523cd232315812f5df5c9aacc93a97a15a808f650fced9e9e64890e",
+            "receiptPayload": {
+              "semanticModelVersion": 1,
+              "proofVersion": 2,
+              "proofPolicy": 2,
+              "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+              "mainDigest": "sha256:1f4d4e2da5b33701699e067c2765385d95ebc8d0f70a51f8499755799218cf48",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/.solid-checker-certification-85791ff1cf731080d8d4b62f4ad692955c45dcaa64f2c7948fb2a491dc72e358.mjs",
+              "specifier": "@solidjs/diagnostics/browser",
+              "resolvedImportRoot": "sha256:85e27670fd589eff22494cafd3e57b0cbc3c5e99be8e6fe5e3a919d10c1572a0",
+              "semanticDigest": "sha256:975137bdc5db797747ba16a4e4842a85ac5ecb02536d335c5ac87158e7ed8cff",
+              "artifactProvenanceRoot": "sha256:cecb00332d0aad2badca6d4b2700ac5f689a65555e5b30c69e74a26a06ed8da7",
+              "snapshotRoot": "sha256:c45ce15a30b9b65df7d3896d0e217ba6687c56dd71cf369b443f510ae41099c2",
+              "packageRoot": "sha256:ffc5aa2d16048253cb14c3b9423a2de174a0e49e316346623c9867c19ae44e5e",
+              "manifestRoot": "sha256:763dd38896599c50d9d17bd668abf8b228c47c389fa8c39f1418374f2ef5c1e6",
+              "artifactsRoot": "sha256:731873726ad364039a7bfd1494ceee10968d932c61dac6f2ffcb4b9f1efb34a1",
+              "declarationsRoot": "sha256:dc410f9d0eb701815f2fcb1062245db9b5ec03f8f1dee5f88f406ae0507a9d33",
+              "transformRoot": "sha256:2fab72e2289da3ceca3f11781ddc1f416e650e9d6037624ff90f37179b4fa5b2",
+              "exportsRoot": "sha256:f0107f550a4c93c30511986bb09766ab7dfa721389c3e7e4c3028c6a42a17d51",
+              "closureRoot": "sha256:a8ffb05797055ac7bc2ace1d9676fa0f850c568dbee609bc73fefa7ccf39491a",
+              "demandGraphRoot": "sha256:84d02f58c9c3bcb2e76a060d6314cccfbb3453a6985442490d747a99bfd8c63e",
+              "verifiedPositiveRoot": "sha256:642f32fcd72f2d3db2c4438a7fa2ab9976a9f661ef30fb9b32203426bf0ae79f",
+              "witnessRoots": {
+                "accepted-dependency-composition": "sha256:e530cc01fe2274e862551e195148dbc91f00105f0f69b0b1bb9b896da864cd99",
+                "argument-binding": "sha256:ba081b2ca67a14949e37a53068ebcaa874f564ec11883f0d39a4e32a167a95da",
+                "artifact-declarations": "sha256:dc410f9d0eb701815f2fcb1062245db9b5ec03f8f1dee5f88f406ae0507a9d33",
+                "callable-path": "sha256:78df23af75e933d20d0ddf51d1b2b7b0108716755913a9f6cfef4d7cb1deb041",
+                "compiler-reconciliation": "sha256:1beb6479ad90870b67a4c682c1e4bd47387d4e8f40cb90072d415828674b9963",
+                "domain-exhaustiveness": "sha256:3566c7e64de15dc2ff8fbc9427e9fd98ca2d92566a0dae9f94468146e7228b08",
+                "export-identity": "sha256:f0107f550a4c93c30511986bb09766ab7dfa721389c3e7e4c3028c6a42a17d51",
+                "export-resolution": "sha256:731873726ad364039a7bfd1494ceee10968d932c61dac6f2ffcb4b9f1efb34a1",
+                "guard-partition": "sha256:0a95a7d0ac9dddaf10fb5f45956a72102972a7489997faeba733717c6f28672b",
+                "manifest-entrypoint": "sha256:763dd38896599c50d9d17bd668abf8b228c47c389fa8c39f1418374f2ef5c1e6",
+                "module-closure": "sha256:a8ffb05797055ac7bc2ace1d9676fa0f850c568dbee609bc73fefa7ccf39491a",
+                "operation-cardinality": "sha256:3acd0e78c82ae145e0313855172810daec7a3cadd12326b77b6b222d0feded29",
+                "operation-reachability": "sha256:bdbfc805a97177d00e48bb79a7ee106eb42bb0d9232903793add335b0b1139b6",
+                "package-identity": "sha256:ffc5aa2d16048253cb14c3b9423a2de174a0e49e316346623c9867c19ae44e5e",
+                "recursive-value-shape": "sha256:e38c4764b87ed4842c5f26849f801216bb0e97927c9665fe34a78efef745de0e",
+                "rest-spread-coverage": "sha256:220e4bffa7cd1929db5d22e68a0ccc177521a1c73b62492acd6ac958273f799f",
+                "selected-signature": "sha256:5ae43c9f694cb76c64e089d466c2b25104f393a9fc8dc9fd13e4d92a757df280"
+              },
+              "producerSessionsRoot": "sha256:4298792677fb23f4ecbeb9b670bc8af537f6008b5f95abc4fb02dfdecbdc532c",
+              "dependencyReceiptsRoot": "sha256:cf0e1aa62f3600dd6ba2cb352a1b19d44f1f4c8d37a1dfa405938685f482a907",
+              "dependencyTrustRoot": "sha256:46be5ce403cb338acf29f0d89321c0595979c91066c60ba142de9315f079703f",
+              "probeGateRoot": "sha256:2ef1513410c833bae5db0ae0fc650d407ff64e2623703ca3ebc8c3bce6fae3f5",
+              "closedClaimsRoot": "sha256:0d4ed896b7e1fe99a00783fb481d8fbe02e8c2e6697d5d7f29a05d5d246e4942",
+              "verifierSourceDigest": "sha256:d5a8f3dfec87ff73366715de01d8d95090141245a16137806e16a9123617d10a",
+              "verifierBuildDigest": "sha256:47c220603fcb7a6f4580670562fdeec66f406176a8bb4d26451b7f28069fa795",
+              "issuerKind": "persistent-local",
+              "issuerScope": "ecosystem-benchmark:de5422f5dde28ce8a411aa92df9e4de38586a486ca459b73c717d12c14e6f598",
+              "keyId": "ed25519:sha256:0b5f9dd0909d575782c3765d98c9efac878b9ccff04cf3f5062a41c96257e08d",
+              "signatureAlgorithm": "ed25519"
+            },
+            "resolution": {
+              "specifier": "@solidjs/diagnostics/browser",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/.solid-checker-certification-85791ff1cf731080d8d4b62f4ad692955c45dcaa64f2c7948fb2a491dc72e358.mjs",
+              "requestedEntrypoint": "./browser",
+              "packageName": "@solidjs/diagnostics",
+              "packageVersion": "2.0.0-rc.3",
+              "packageIntegrity": "sha512-fPb20MXqN7LpT02+kxfMBhY3reCKeh7vB++g9Su1EJZ6Ie0PeydyU/CnkUNa9gwLCMKoZG1x0pfAMb9yLGowtw==",
+              "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/diagnostics",
+              "packageManifest": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/diagnostics/package.json",
+                "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+              },
+              "runtime": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/diagnostics/dist/browser.js",
+                "digest": "sha256:213bccb5e63a7ddb11b52ba22e186631d501e9f53f67e369b47146dd776d9623"
+              },
+              "declarations": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/diagnostics/dist/browser.d.ts",
+                "digest": "sha256:64b12bd698591fa4624f04ee2fb2d65aced57f968eab312d052b54453b423478"
+              },
+              "runtimeTrace": {
+                "branch": "/exports/.~1browser/default",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./browser"
+                  },
+                  {
+                    "condition": "default",
+                    "target": "/exports/.~1browser"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/browser.js"
+                  }
+                ]
+              },
+              "declarationTrace": {
+                "branch": "/exports/.~1browser/types",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./browser"
+                  },
+                  {
+                    "condition": "types",
+                    "target": "/exports/.~1browser"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/browser.d.ts"
+                  }
+                ]
+              },
+              "closure": {
+                "entries": [
+                  {
+                    "role": "runtime",
+                    "path": "./dist/browser.js",
+                    "digest": "sha256:213bccb5e63a7ddb11b52ba22e186631d501e9f53f67e369b47146dd776d9623"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/browser.d.ts",
+                    "digest": "sha256:64b12bd698591fa4624f04ee2fb2d65aced57f968eab312d052b54453b423478"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/types.d.ts",
+                    "digest": "sha256:bccdaeffaf893315728c74124f14c04b16e88339e3cb93b04e1f4b3b5bfd2435"
+                  },
+                  {
+                    "role": "manifest",
+                    "path": "./package.json",
+                    "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+                  },
+                  {
+                    "role": "resolution-input",
+                    "path": "./package.json",
+                    "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+                  }
+                ],
+                "hazards": [
+                  {
+                    "kind": "unaccepted-external-dependency",
+                    "source": "./dist/browser.js:@solidjs/signals",
+                    "affectedDomains": [
+                      "callbacks",
+                      "reads",
+                      "writes",
+                      "creates",
+                      "invalidates",
+                      "throws",
+                      "returns",
+                      "cleanups",
+                      "disposals"
+                    ]
+                  }
+                ],
+                "digest": "sha256:98f91df54efd255a6e51f3f58cdb87a10cbf01b7d334aa2a035e521c0e4d9c09"
+              },
+              "authority": "standalonePackageResolver"
+            },
+            "motionGlobalConfig": null,
+            "motionGlobalConfigSummary": null
+          },
+          {
+            "entrypoint": "./protocol",
+            "selection": {
+              "artifact": {
+                "closureSha256": "3155d04906be579169ed0c52929a86feb6a6b4b242b66342d9e9398494dea8a1",
+                "path": "./dist/protocol.js",
+                "sha256": "4d191edab3b339449dadf9e674d6f67bf433aef5d822e84af97defd7235c5d83"
+              },
+              "declarations": {
+                "path": "./dist/protocol.d.ts",
+                "sha256": "740732a6393c7814b82da1427f056562af1c8eecc1c873ea9c20c981c7c559ef"
+              },
+              "resolution": {
+                "runtimeBranch": "/exports/.~1protocol/default",
+                "typesBranch": "/exports/.~1protocol/types"
+              }
+            },
+            "coordinate": {
+              "artifactCaseId": "artifact-case:e0ad29c3b472a7291cfcb9c24347a5029d466d2608bc54ffb44b029321b99fdc",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/.solid-checker-certification-85791ff1cf731080d8d4b62f4ad692955c45dcaa64f2c7948fb2a491dc72e358.mjs",
+              "specifier": "@solidjs/diagnostics/protocol",
+              "resolvedImportRoot": "sha256:5b4154b24e8c13a5a69d8c0bd3ac79120a67d3e0c13a9ac46767e2d8c6aecdf3",
+              "semanticDigest": "sha256:e5a06d41b03e92734ae4961e4405d69fb85b338e77ff5d27df6a6465a741ee59",
+              "receiptDigest": "sha256:e0073fc9dc9f47073dba471545a12a9695ae30dcd1d9588c1fb2f9dc2750314e",
+              "catalog": "cases/5b4154b24e8c13a5a69d8c0bd3ac79120a67d3e0c13a9ac46767e2d8c6aecdf3/accepted-contracts.json",
+              "catalogDigest": "sha256:4f87f249d4fc80a902b81ae1d7d7c9aa731f10e2f36f4890e6deabd20eab474a"
+            },
+            "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-i8Jyep/@solidjs__diagnostics@2.0.0-rc.3--solid2--only.json.accepted-catalog/case-sets/5fedfb8eefc5e8c54e423e52242415c15306955ec6d8033e3439f7e1527546fb/cases/5b4154b24e8c13a5a69d8c0bd3ac79120a67d3e0c13a9ac46767e2d8c6aecdf3/accepted-contracts.json",
+            "documentDigest": "sha256:827a3ec68c0a118c7509aa6520b8d58e612749984ed7fbaabbc481a600db48f3",
+            "receiptDigest": "sha256:e0073fc9dc9f47073dba471545a12a9695ae30dcd1d9588c1fb2f9dc2750314e",
+            "receiptPayload": {
+              "semanticModelVersion": 1,
+              "proofVersion": 2,
+              "proofPolicy": 2,
+              "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+              "mainDigest": "sha256:827a3ec68c0a118c7509aa6520b8d58e612749984ed7fbaabbc481a600db48f3",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/.solid-checker-certification-85791ff1cf731080d8d4b62f4ad692955c45dcaa64f2c7948fb2a491dc72e358.mjs",
+              "specifier": "@solidjs/diagnostics/protocol",
+              "resolvedImportRoot": "sha256:5b4154b24e8c13a5a69d8c0bd3ac79120a67d3e0c13a9ac46767e2d8c6aecdf3",
+              "semanticDigest": "sha256:e5a06d41b03e92734ae4961e4405d69fb85b338e77ff5d27df6a6465a741ee59",
+              "artifactProvenanceRoot": "sha256:cecb00332d0aad2badca6d4b2700ac5f689a65555e5b30c69e74a26a06ed8da7",
+              "snapshotRoot": "sha256:c45ce15a30b9b65df7d3896d0e217ba6687c56dd71cf369b443f510ae41099c2",
+              "packageRoot": "sha256:eb3c1309234598870e5e242b9464f683903724dd3aba843f1e45ea96d959ee9a",
+              "manifestRoot": "sha256:737e630a9c4c4a1808801c3b28b8156681b2211b2978e1ce1a77ff2dc51d2673",
+              "artifactsRoot": "sha256:56fd520afc2f7832e7860efdc9e04ccc9d2bc3c3a16bb40ecc432bed52111124",
+              "declarationsRoot": "sha256:95f7a6db2492eabd6ecaa7eadab7dbf633b07047fb3c005137d48c9c89a8551c",
+              "transformRoot": "sha256:8a2a71322090224b85e44b063d1591e4410c8f5664da34b0a933d9e71887b4b2",
+              "exportsRoot": "sha256:307dde7d3e8e1247a98086a957ca0bd93f1355a44d6b6e554df19ad261597f42",
+              "closureRoot": "sha256:34a0a739f19e0995a150e711f8b4ebc5f664277d6fb07db00b0ecb1744961de0",
+              "demandGraphRoot": "sha256:611306fbc9e7a4482a9552dbb7238d296dd07e29aefc2b94a0e286ffd9d38fea",
+              "verifiedPositiveRoot": "sha256:f7c11db8c7cb5f8cbf4b7356812a10fc0d0dffe6dffa44b41b6def5228cd3d42",
+              "witnessRoots": {
+                "accepted-dependency-composition": "sha256:4eda526c50f32f4246e31211f980fd3e393546e8dcd007f9f109969ceb3c457a",
+                "argument-binding": "sha256:e4a2e417245a13af594a5f0e7e3fb15d6a557e8d2b3ee165320ea0c3a2624eb2",
+                "artifact-declarations": "sha256:95f7a6db2492eabd6ecaa7eadab7dbf633b07047fb3c005137d48c9c89a8551c",
+                "callable-path": "sha256:6356a999ebc156384ffa04d0731b6415bec600c6f7aceabf60ae736e9aa3d2a3",
+                "compiler-reconciliation": "sha256:e0fa4bee788a856e76648b7830b64d362e747ac6f9442fa40bc8a7eab2014a3a",
+                "domain-exhaustiveness": "sha256:5a06cb8fea4d8118beb0b8ca7f3de99f45cecb6d5279ddcc2e997bdcef9881c0",
+                "export-identity": "sha256:307dde7d3e8e1247a98086a957ca0bd93f1355a44d6b6e554df19ad261597f42",
+                "export-resolution": "sha256:56fd520afc2f7832e7860efdc9e04ccc9d2bc3c3a16bb40ecc432bed52111124",
+                "guard-partition": "sha256:fdedf3f1e903fa4fc82b1aca8084cc9b10fbc87bbc2422e484d415a2790a7dc6",
+                "manifest-entrypoint": "sha256:737e630a9c4c4a1808801c3b28b8156681b2211b2978e1ce1a77ff2dc51d2673",
+                "module-closure": "sha256:34a0a739f19e0995a150e711f8b4ebc5f664277d6fb07db00b0ecb1744961de0",
+                "operation-cardinality": "sha256:74f531afc03a27606ffa8bb17165b5500c6534c332464fbedcd770744319863e",
+                "operation-reachability": "sha256:fff73f13f994334e0d8f3edbee0a27ba06db2f8c0398732dcaf4c891fca69c94",
+                "package-identity": "sha256:eb3c1309234598870e5e242b9464f683903724dd3aba843f1e45ea96d959ee9a",
+                "recursive-value-shape": "sha256:c0f94f28673155190da136d04754df4197573f52f6c96ffd9e4b4893e28f1074",
+                "rest-spread-coverage": "sha256:fc560974f5bd991034d759afd4543924a7d0d3bb13a49bc319659c1106d736e1",
+                "selected-signature": "sha256:877807b45e667051a72d1763d7705ba519209850ffacd7814e115e76185fe870"
+              },
+              "producerSessionsRoot": "sha256:e196f8902315fee316c59b07a938ce9ff3445bdc998c53208caabd4d9f66eb3e",
+              "dependencyReceiptsRoot": "sha256:54d1a8ce237940cae9777854153678935faadaeaa83d1d05f68fae5bd83feef8",
+              "dependencyTrustRoot": "sha256:72903dccda64c65d025384e8f28bff8de2a5cb2627af8b93c900eb1c38029a74",
+              "probeGateRoot": "sha256:b9e10675889777e6beb83f87ee73030f8b96f27bf0816162811ffddea2042e55",
+              "closedClaimsRoot": "sha256:e8c0b04991a9f33bb9758fa19095445aee7ef7f0304440f5cf769f8217e91903",
+              "verifierSourceDigest": "sha256:d5a8f3dfec87ff73366715de01d8d95090141245a16137806e16a9123617d10a",
+              "verifierBuildDigest": "sha256:47c220603fcb7a6f4580670562fdeec66f406176a8bb4d26451b7f28069fa795",
+              "issuerKind": "persistent-local",
+              "issuerScope": "ecosystem-benchmark:de5422f5dde28ce8a411aa92df9e4de38586a486ca459b73c717d12c14e6f598",
+              "keyId": "ed25519:sha256:0b5f9dd0909d575782c3765d98c9efac878b9ccff04cf3f5062a41c96257e08d",
+              "signatureAlgorithm": "ed25519"
+            },
+            "resolution": {
+              "specifier": "@solidjs/diagnostics/protocol",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/.solid-checker-certification-85791ff1cf731080d8d4b62f4ad692955c45dcaa64f2c7948fb2a491dc72e358.mjs",
+              "requestedEntrypoint": "./protocol",
+              "packageName": "@solidjs/diagnostics",
+              "packageVersion": "2.0.0-rc.3",
+              "packageIntegrity": "sha512-fPb20MXqN7LpT02+kxfMBhY3reCKeh7vB++g9Su1EJZ6Ie0PeydyU/CnkUNa9gwLCMKoZG1x0pfAMb9yLGowtw==",
+              "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/diagnostics",
+              "packageManifest": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/diagnostics/package.json",
+                "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+              },
+              "runtime": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/diagnostics/dist/protocol.js",
+                "digest": "sha256:4d191edab3b339449dadf9e674d6f67bf433aef5d822e84af97defd7235c5d83"
+              },
+              "declarations": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-LskVQS/node_modules/@solidjs/diagnostics/dist/protocol.d.ts",
+                "digest": "sha256:740732a6393c7814b82da1427f056562af1c8eecc1c873ea9c20c981c7c559ef"
+              },
+              "runtimeTrace": {
+                "branch": "/exports/.~1protocol/default",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./protocol"
+                  },
+                  {
+                    "condition": "default",
+                    "target": "/exports/.~1protocol"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/protocol.js"
+                  }
+                ]
+              },
+              "declarationTrace": {
+                "branch": "/exports/.~1protocol/types",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./protocol"
+                  },
+                  {
+                    "condition": "types",
+                    "target": "/exports/.~1protocol"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/protocol.d.ts"
+                  }
+                ]
+              },
+              "closure": {
+                "entries": [
+                  {
+                    "role": "runtime",
+                    "path": "./dist/protocol.js",
+                    "digest": "sha256:4d191edab3b339449dadf9e674d6f67bf433aef5d822e84af97defd7235c5d83"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/browser.d.ts",
+                    "digest": "sha256:64b12bd698591fa4624f04ee2fb2d65aced57f968eab312d052b54453b423478"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/protocol.d.ts",
+                    "digest": "sha256:740732a6393c7814b82da1427f056562af1c8eecc1c873ea9c20c981c7c559ef"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/types.d.ts",
+                    "digest": "sha256:bccdaeffaf893315728c74124f14c04b16e88339e3cb93b04e1f4b3b5bfd2435"
+                  },
+                  {
+                    "role": "manifest",
+                    "path": "./package.json",
+                    "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+                  },
+                  {
+                    "role": "resolution-input",
+                    "path": "./package.json",
+                    "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+                  }
+                ],
+                "digest": "sha256:3155d04906be579169ed0c52929a86feb6a6b4b242b66342d9e9398494dea8a1"
+              },
+              "authority": "standalonePackageResolver"
+            },
+            "motionGlobalConfig": null,
+            "motionGlobalConfigSummary": null
+          }
+        ]
+      },
+      "after": {
+        "catalogRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-58nMPk/@solidjs__diagnostics@2.0.0-rc.3--solid2--only.json.accepted-catalog",
+        "pointer": {
+          "format": "solid-checker-accepted-contract-case-set-pointer",
+          "caseSetVersion": 1,
+          "document": "case-sets/13f04aac810ce36641583a07a41944c93e4c29c1c45c84c005f8da3ae2d4853c/accepted-contract-case-set.json",
+          "documentDigest": "sha256:13f04aac810ce36641583a07a41944c93e4c29c1c45c84c005f8da3ae2d4853c"
+        },
+        "cases": [
+          {
+            "entrypoint": ".",
+            "selection": {
+              "artifact": {
+                "closureSha256": "1e6f2917803eddefd44647bb44e6bb9d4cb95e2ad5d3bb947b9bd36c6e8f77cb",
+                "path": "./dist/index.js",
+                "sha256": "7a29072aa9d49e906e83894eb8147c310da7cf04c4699061e17687cef37ee234"
+              },
+              "declarations": {
+                "path": "./dist/index.d.ts",
+                "sha256": "d524715e96889ea57e6dffb3de68a578eac36212a12757947c09d166000f11b6"
+              },
+              "resolution": {
+                "runtimeBranch": "/exports/./default",
+                "typesBranch": "/exports/./types"
+              }
+            },
+            "coordinate": {
+              "artifactCaseId": "artifact-case:55a30869485544dc034726021e15d135cbc9faee29d1b05859c28997283f3ace",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/.solid-checker-certification-765c76e76b7ce6c4b1b7926ba72ba581454e7f7164f9006f424c3db781f57b6b.mjs",
+              "specifier": "@solidjs/diagnostics",
+              "resolvedImportRoot": "sha256:5691272e80d00d12f58112e49a9aeba7d5f061f5848fc5b694b2818931eeba54",
+              "semanticDigest": "sha256:21a93b8a5bcb69937c5a107636d0830423736fe21d04f2154e5085d96da1d02e",
+              "receiptDigest": "sha256:f49475e5c7413e3e4e8c3167e5e79fbf8b4a17dab0f972bc40fcb9e4a09a4d07",
+              "catalog": "cases/5691272e80d00d12f58112e49a9aeba7d5f061f5848fc5b694b2818931eeba54/accepted-contracts.json",
+              "catalogDigest": "sha256:06ae110b38a175cee58465a133f55d0c060958fd066d6c385c600637d6534ab9"
+            },
+            "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-58nMPk/@solidjs__diagnostics@2.0.0-rc.3--solid2--only.json.accepted-catalog/case-sets/13f04aac810ce36641583a07a41944c93e4c29c1c45c84c005f8da3ae2d4853c/cases/5691272e80d00d12f58112e49a9aeba7d5f061f5848fc5b694b2818931eeba54/accepted-contracts.json",
+            "documentDigest": "sha256:e6a7905f247371d378219f37165bd1304643d6fcd1cbad84b73cb46abc24dec3",
+            "receiptDigest": "sha256:f49475e5c7413e3e4e8c3167e5e79fbf8b4a17dab0f972bc40fcb9e4a09a4d07",
+            "receiptPayload": {
+              "semanticModelVersion": 1,
+              "proofVersion": 2,
+              "proofPolicy": 2,
+              "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+              "mainDigest": "sha256:e6a7905f247371d378219f37165bd1304643d6fcd1cbad84b73cb46abc24dec3",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/.solid-checker-certification-765c76e76b7ce6c4b1b7926ba72ba581454e7f7164f9006f424c3db781f57b6b.mjs",
+              "specifier": "@solidjs/diagnostics",
+              "resolvedImportRoot": "sha256:5691272e80d00d12f58112e49a9aeba7d5f061f5848fc5b694b2818931eeba54",
+              "semanticDigest": "sha256:21a93b8a5bcb69937c5a107636d0830423736fe21d04f2154e5085d96da1d02e",
+              "artifactProvenanceRoot": "sha256:cecb00332d0aad2badca6d4b2700ac5f689a65555e5b30c69e74a26a06ed8da7",
+              "snapshotRoot": "sha256:c45ce15a30b9b65df7d3896d0e217ba6687c56dd71cf369b443f510ae41099c2",
+              "packageRoot": "sha256:6454cfbfe3ae92a5285d0a6564dfb93064a0038e188a0e2f661b4fd565b69fb1",
+              "manifestRoot": "sha256:6a5a39a372cd187d5fe5d1a14afe44531e28a68c3d1a990a800ed72897a73bdd",
+              "artifactsRoot": "sha256:7336cc397b82717bc54b300f9d6fca89bfbb17918cee01969617d73e863e5ee8",
+              "declarationsRoot": "sha256:1ed01cbf992ca6bf8584d508acfa3365a1dae95aa98fda0cf6bf3d15f8beea32",
+              "transformRoot": "sha256:a4bc5d54393b48b11912c9485fe379aea83acd6667ddcc7b88a3f22cd73a94be",
+              "exportsRoot": "sha256:8ca4f73638d644b548b634f57dbc29ba2e412e88aa9e796ceae95263616fc20d",
+              "closureRoot": "sha256:876616310dbd5de874861d38c34768d627eebf3d1beb4ba74fd45eb9cf525cea",
+              "demandGraphRoot": "sha256:ca236ee23e2fc8998343ebd7e433b5b91daad3cbd353714be7f8d59e07857fdd",
+              "verifiedPositiveRoot": "sha256:ffb4e5b89529404fea03a4702a3512b85042f6b069543504b9c4a4878c1ac538",
+              "witnessRoots": {
+                "accepted-dependency-composition": "sha256:cb9a485260e22e8f892ba4ad5efb6351ef5f8199a3b4eaa58a87fabf5bb2bd38",
+                "argument-binding": "sha256:d06727054ae04bb4c0d4d2ee5946718c15d8900570227c1ebdba0fb2c794ca60",
+                "artifact-declarations": "sha256:1ed01cbf992ca6bf8584d508acfa3365a1dae95aa98fda0cf6bf3d15f8beea32",
+                "callable-path": "sha256:84d628f637b7830275be8bbcb890715477e8e581a5def99e6dc4677f7b7f1e6a",
+                "compiler-reconciliation": "sha256:8f8d4f2af16d1aecb1779072b6ebcabceffb00914ec41e249a7bfa863f2baf57",
+                "domain-exhaustiveness": "sha256:9a76b9d35297cd439e4ce68e4ff30f9ef6d73d1db55742dafaf82b763d923d62",
+                "export-identity": "sha256:8ca4f73638d644b548b634f57dbc29ba2e412e88aa9e796ceae95263616fc20d",
+                "export-resolution": "sha256:7336cc397b82717bc54b300f9d6fca89bfbb17918cee01969617d73e863e5ee8",
+                "guard-partition": "sha256:d06c040b60e29a21fa2c3f9be72c36704741d5923d6d6ce8de947a1069ac50c6",
+                "manifest-entrypoint": "sha256:6a5a39a372cd187d5fe5d1a14afe44531e28a68c3d1a990a800ed72897a73bdd",
+                "module-closure": "sha256:876616310dbd5de874861d38c34768d627eebf3d1beb4ba74fd45eb9cf525cea",
+                "operation-cardinality": "sha256:441a742c5bb441c0aa5a02fdff754a6a218ce99a3fd1da87d93aa402174b94b0",
+                "operation-reachability": "sha256:1bdc151e7835140d37eb1226e70627e1807bc12b88b14a51ecaaeb285e6ae779",
+                "package-identity": "sha256:6454cfbfe3ae92a5285d0a6564dfb93064a0038e188a0e2f661b4fd565b69fb1",
+                "recursive-value-shape": "sha256:306c26da1f059cb68053289e4c98f9bf1f6baab921894ae5b5b0587502a99239",
+                "rest-spread-coverage": "sha256:2ee2e4ad5d72eecfb920ef5ac80c8186e7fe3e711a1b168cf4f8944f6335fee9",
+                "selected-signature": "sha256:3a5d2b1f5b89f323b108ef7336ed25c268ae778d20f36a63dafa8544efcf6569"
+              },
+              "producerSessionsRoot": "sha256:f09b345a30dfb35e50bf8f5b5d93000d4bdb7ebfb2a79d8105bc2325a9f99585",
+              "dependencyReceiptsRoot": "sha256:2f376483a1dceded927ada0a5919ea8f96945e5c79d3c7aa18d24f4ddc8799cd",
+              "dependencyTrustRoot": "sha256:4ce16f33a174bc4ed5f0350202db8cdd21424d5face178cecdda01dc2f0bb62b",
+              "probeGateRoot": "sha256:131670ec183473b83047be1f8cf9907e418c966a97a6d0c35a361150fca3f27a",
+              "closedClaimsRoot": "sha256:41902493b935c5a2f70065b36e809367ff6c34f1ec6986ac14c49c490f7de993",
+              "verifierSourceDigest": "sha256:09a8f1d5628b3cd4751d88a73a23df7449d09db33bc0c5a1dbbb4be329ffe67a",
+              "verifierBuildDigest": "sha256:47c220603fcb7a6f4580670562fdeec66f406176a8bb4d26451b7f28069fa795",
+              "issuerKind": "persistent-local",
+              "issuerScope": "ecosystem-benchmark:3eb77ff28ad44fc6bb91cc005257b3e9c3d7ef4921550e0ce24ce8b7c9d288f7",
+              "keyId": "ed25519:sha256:740dafb219414f64eae94dada69a0f2787c2c064005583e6d8f4b96aabad5cc6",
+              "signatureAlgorithm": "ed25519"
+            },
+            "resolution": {
+              "specifier": "@solidjs/diagnostics",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/.solid-checker-certification-765c76e76b7ce6c4b1b7926ba72ba581454e7f7164f9006f424c3db781f57b6b.mjs",
+              "requestedEntrypoint": ".",
+              "packageName": "@solidjs/diagnostics",
+              "packageVersion": "2.0.0-rc.3",
+              "packageIntegrity": "sha512-fPb20MXqN7LpT02+kxfMBhY3reCKeh7vB++g9Su1EJZ6Ie0PeydyU/CnkUNa9gwLCMKoZG1x0pfAMb9yLGowtw==",
+              "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/diagnostics",
+              "packageManifest": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/diagnostics/package.json",
+                "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+              },
+              "runtime": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/diagnostics/dist/index.js",
+                "digest": "sha256:7a29072aa9d49e906e83894eb8147c310da7cf04c4699061e17687cef37ee234"
+              },
+              "declarations": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/diagnostics/dist/index.d.ts",
+                "digest": "sha256:d524715e96889ea57e6dffb3de68a578eac36212a12757947c09d166000f11b6"
+              },
+              "runtimeTrace": {
+                "branch": "/exports/./default",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "."
+                  },
+                  {
+                    "condition": "default",
+                    "target": "/exports/."
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/index.js"
+                  }
+                ]
+              },
+              "declarationTrace": {
+                "branch": "/exports/./types",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "."
+                  },
+                  {
+                    "condition": "types",
+                    "target": "/exports/."
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/index.d.ts"
+                  }
+                ]
+              },
+              "closure": {
+                "entries": [
+                  {
+                    "role": "runtime",
+                    "path": "./dist/artifact.js",
+                    "digest": "sha256:ab00053b437d364f5b765846da2a475374cba4f0f1d14aef03851c18042be01b"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/assertions.js",
+                    "digest": "sha256:7af52a4272adfdb6ae33e404b14626a1c20d08870a5ac900c7b6de30d101370a"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/budgets.js",
+                    "digest": "sha256:e11025bb73be0ce8ff5389f063bfcd4a9e4f08c2b0fa1ca35a500cc854b0b5fb"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/capture.js",
+                    "digest": "sha256:c02838cb7fd539e569104b6be6b1483b76a1d5171cde723f01a88ce00f5f51fc"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/index.js",
+                    "digest": "sha256:7a29072aa9d49e906e83894eb8147c310da7cf04c4699061e17687cef37ee234"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/artifact.d.ts",
+                    "digest": "sha256:88bb3ed750df9189b94d592b1917f9d08b6fb01a5e756a98c210ea2481526e05"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/assertions.d.ts",
+                    "digest": "sha256:aabd4f381aad4006d9d3368548ed76180a977e36b16a1b41456b3f132bcf132c"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/budgets.d.ts",
+                    "digest": "sha256:d432257a6833c65fc237bf6af1d169643b1bbedd489442b00711f7e0bbdc14c0"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/capture.d.ts",
+                    "digest": "sha256:5521fa5591f8dab8ccac3881a66a719df8855055bcf74f20ed67ea5faee0abc4"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/index.d.ts",
+                    "digest": "sha256:d524715e96889ea57e6dffb3de68a578eac36212a12757947c09d166000f11b6"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/types.d.ts",
+                    "digest": "sha256:bccdaeffaf893315728c74124f14c04b16e88339e3cb93b04e1f4b3b5bfd2435"
+                  },
+                  {
+                    "role": "manifest",
+                    "path": "./package.json",
+                    "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+                  },
+                  {
+                    "role": "resolution-input",
+                    "path": "./package.json",
+                    "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+                  }
+                ],
+                "hazards": [
+                  {
+                    "kind": "unaccepted-external-dependency",
+                    "source": "./dist/capture.js:@solidjs/signals",
+                    "affectedDomains": [
+                      "callbacks",
+                      "reads",
+                      "writes",
+                      "creates",
+                      "invalidates",
+                      "throws",
+                      "returns",
+                      "cleanups",
+                      "disposals"
+                    ]
+                  }
+                ],
+                "digest": "sha256:1e6f2917803eddefd44647bb44e6bb9d4cb95e2ad5d3bb947b9bd36c6e8f77cb"
+              },
+              "authority": "standalonePackageResolver"
+            },
+            "motionGlobalConfig": null,
+            "motionGlobalConfigSummary": null
+          },
+          {
+            "entrypoint": "./browser",
+            "selection": {
+              "artifact": {
+                "closureSha256": "98f91df54efd255a6e51f3f58cdb87a10cbf01b7d334aa2a035e521c0e4d9c09",
+                "path": "./dist/browser.js",
+                "sha256": "213bccb5e63a7ddb11b52ba22e186631d501e9f53f67e369b47146dd776d9623"
+              },
+              "declarations": {
+                "path": "./dist/browser.d.ts",
+                "sha256": "64b12bd698591fa4624f04ee2fb2d65aced57f968eab312d052b54453b423478"
+              },
+              "resolution": {
+                "runtimeBranch": "/exports/.~1browser/default",
+                "typesBranch": "/exports/.~1browser/types"
+              }
+            },
+            "coordinate": {
+              "artifactCaseId": "artifact-case:6744b32a69e153857eabbfbf87015076e08e043524d6f301a6591a0761159eb8",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/.solid-checker-certification-765c76e76b7ce6c4b1b7926ba72ba581454e7f7164f9006f424c3db781f57b6b.mjs",
+              "specifier": "@solidjs/diagnostics/browser",
+              "resolvedImportRoot": "sha256:f99a4d2ca5aa87c4617e936bb93e3c64945b88bb2e8c906819175fde3e29420c",
+              "semanticDigest": "sha256:975137bdc5db797747ba16a4e4842a85ac5ecb02536d335c5ac87158e7ed8cff",
+              "receiptDigest": "sha256:e25fd089719a2621cf3b4ac4ec8fe55c4be2db3601428c50e807a4efde51ba6a",
+              "catalog": "cases/f99a4d2ca5aa87c4617e936bb93e3c64945b88bb2e8c906819175fde3e29420c/accepted-contracts.json",
+              "catalogDigest": "sha256:005aa5280f84e455ea694c3e8ccaf3295cfecace9f898b4354738e2c911e569e"
+            },
+            "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-58nMPk/@solidjs__diagnostics@2.0.0-rc.3--solid2--only.json.accepted-catalog/case-sets/13f04aac810ce36641583a07a41944c93e4c29c1c45c84c005f8da3ae2d4853c/cases/f99a4d2ca5aa87c4617e936bb93e3c64945b88bb2e8c906819175fde3e29420c/accepted-contracts.json",
+            "documentDigest": "sha256:1f4d4e2da5b33701699e067c2765385d95ebc8d0f70a51f8499755799218cf48",
+            "receiptDigest": "sha256:e25fd089719a2621cf3b4ac4ec8fe55c4be2db3601428c50e807a4efde51ba6a",
+            "receiptPayload": {
+              "semanticModelVersion": 1,
+              "proofVersion": 2,
+              "proofPolicy": 2,
+              "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+              "mainDigest": "sha256:1f4d4e2da5b33701699e067c2765385d95ebc8d0f70a51f8499755799218cf48",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/.solid-checker-certification-765c76e76b7ce6c4b1b7926ba72ba581454e7f7164f9006f424c3db781f57b6b.mjs",
+              "specifier": "@solidjs/diagnostics/browser",
+              "resolvedImportRoot": "sha256:f99a4d2ca5aa87c4617e936bb93e3c64945b88bb2e8c906819175fde3e29420c",
+              "semanticDigest": "sha256:975137bdc5db797747ba16a4e4842a85ac5ecb02536d335c5ac87158e7ed8cff",
+              "artifactProvenanceRoot": "sha256:cecb00332d0aad2badca6d4b2700ac5f689a65555e5b30c69e74a26a06ed8da7",
+              "snapshotRoot": "sha256:c45ce15a30b9b65df7d3896d0e217ba6687c56dd71cf369b443f510ae41099c2",
+              "packageRoot": "sha256:ffc5aa2d16048253cb14c3b9423a2de174a0e49e316346623c9867c19ae44e5e",
+              "manifestRoot": "sha256:763dd38896599c50d9d17bd668abf8b228c47c389fa8c39f1418374f2ef5c1e6",
+              "artifactsRoot": "sha256:731873726ad364039a7bfd1494ceee10968d932c61dac6f2ffcb4b9f1efb34a1",
+              "declarationsRoot": "sha256:dc410f9d0eb701815f2fcb1062245db9b5ec03f8f1dee5f88f406ae0507a9d33",
+              "transformRoot": "sha256:2fab72e2289da3ceca3f11781ddc1f416e650e9d6037624ff90f37179b4fa5b2",
+              "exportsRoot": "sha256:f0107f550a4c93c30511986bb09766ab7dfa721389c3e7e4c3028c6a42a17d51",
+              "closureRoot": "sha256:a8ffb05797055ac7bc2ace1d9676fa0f850c568dbee609bc73fefa7ccf39491a",
+              "demandGraphRoot": "sha256:84d02f58c9c3bcb2e76a060d6314cccfbb3453a6985442490d747a99bfd8c63e",
+              "verifiedPositiveRoot": "sha256:abaa773bde326e57846d4beb846ce27249ddba1904fd790f3e21dc562ded92b4",
+              "witnessRoots": {
+                "accepted-dependency-composition": "sha256:e530cc01fe2274e862551e195148dbc91f00105f0f69b0b1bb9b896da864cd99",
+                "argument-binding": "sha256:ba081b2ca67a14949e37a53068ebcaa874f564ec11883f0d39a4e32a167a95da",
+                "artifact-declarations": "sha256:dc410f9d0eb701815f2fcb1062245db9b5ec03f8f1dee5f88f406ae0507a9d33",
+                "callable-path": "sha256:90c20aa8be88501df81e8c8da257c0edc50402352e1d8806d18a8d50b2997e8e",
+                "compiler-reconciliation": "sha256:1beb6479ad90870b67a4c682c1e4bd47387d4e8f40cb90072d415828674b9963",
+                "domain-exhaustiveness": "sha256:3566c7e64de15dc2ff8fbc9427e9fd98ca2d92566a0dae9f94468146e7228b08",
+                "export-identity": "sha256:f0107f550a4c93c30511986bb09766ab7dfa721389c3e7e4c3028c6a42a17d51",
+                "export-resolution": "sha256:731873726ad364039a7bfd1494ceee10968d932c61dac6f2ffcb4b9f1efb34a1",
+                "guard-partition": "sha256:0a95a7d0ac9dddaf10fb5f45956a72102972a7489997faeba733717c6f28672b",
+                "manifest-entrypoint": "sha256:763dd38896599c50d9d17bd668abf8b228c47c389fa8c39f1418374f2ef5c1e6",
+                "module-closure": "sha256:a8ffb05797055ac7bc2ace1d9676fa0f850c568dbee609bc73fefa7ccf39491a",
+                "operation-cardinality": "sha256:3acd0e78c82ae145e0313855172810daec7a3cadd12326b77b6b222d0feded29",
+                "operation-reachability": "sha256:bdbfc805a97177d00e48bb79a7ee106eb42bb0d9232903793add335b0b1139b6",
+                "package-identity": "sha256:ffc5aa2d16048253cb14c3b9423a2de174a0e49e316346623c9867c19ae44e5e",
+                "recursive-value-shape": "sha256:18f38fda29aa028d53d127aa96f3910311eeb6e844badc4075a3275e97547b6c",
+                "rest-spread-coverage": "sha256:220e4bffa7cd1929db5d22e68a0ccc177521a1c73b62492acd6ac958273f799f",
+                "selected-signature": "sha256:5ae43c9f694cb76c64e089d466c2b25104f393a9fc8dc9fd13e4d92a757df280"
+              },
+              "producerSessionsRoot": "sha256:1cfa7de0bdd84d70ac052d4ce33a0c66ca93f2ac3fcacb17e57fc912d99fe238",
+              "dependencyReceiptsRoot": "sha256:cf0e1aa62f3600dd6ba2cb352a1b19d44f1f4c8d37a1dfa405938685f482a907",
+              "dependencyTrustRoot": "sha256:46be5ce403cb338acf29f0d89321c0595979c91066c60ba142de9315f079703f",
+              "probeGateRoot": "sha256:2ef1513410c833bae5db0ae0fc650d407ff64e2623703ca3ebc8c3bce6fae3f5",
+              "closedClaimsRoot": "sha256:0d4ed896b7e1fe99a00783fb481d8fbe02e8c2e6697d5d7f29a05d5d246e4942",
+              "verifierSourceDigest": "sha256:09a8f1d5628b3cd4751d88a73a23df7449d09db33bc0c5a1dbbb4be329ffe67a",
+              "verifierBuildDigest": "sha256:47c220603fcb7a6f4580670562fdeec66f406176a8bb4d26451b7f28069fa795",
+              "issuerKind": "persistent-local",
+              "issuerScope": "ecosystem-benchmark:3eb77ff28ad44fc6bb91cc005257b3e9c3d7ef4921550e0ce24ce8b7c9d288f7",
+              "keyId": "ed25519:sha256:740dafb219414f64eae94dada69a0f2787c2c064005583e6d8f4b96aabad5cc6",
+              "signatureAlgorithm": "ed25519"
+            },
+            "resolution": {
+              "specifier": "@solidjs/diagnostics/browser",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/.solid-checker-certification-765c76e76b7ce6c4b1b7926ba72ba581454e7f7164f9006f424c3db781f57b6b.mjs",
+              "requestedEntrypoint": "./browser",
+              "packageName": "@solidjs/diagnostics",
+              "packageVersion": "2.0.0-rc.3",
+              "packageIntegrity": "sha512-fPb20MXqN7LpT02+kxfMBhY3reCKeh7vB++g9Su1EJZ6Ie0PeydyU/CnkUNa9gwLCMKoZG1x0pfAMb9yLGowtw==",
+              "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/diagnostics",
+              "packageManifest": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/diagnostics/package.json",
+                "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+              },
+              "runtime": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/diagnostics/dist/browser.js",
+                "digest": "sha256:213bccb5e63a7ddb11b52ba22e186631d501e9f53f67e369b47146dd776d9623"
+              },
+              "declarations": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/diagnostics/dist/browser.d.ts",
+                "digest": "sha256:64b12bd698591fa4624f04ee2fb2d65aced57f968eab312d052b54453b423478"
+              },
+              "runtimeTrace": {
+                "branch": "/exports/.~1browser/default",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./browser"
+                  },
+                  {
+                    "condition": "default",
+                    "target": "/exports/.~1browser"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/browser.js"
+                  }
+                ]
+              },
+              "declarationTrace": {
+                "branch": "/exports/.~1browser/types",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./browser"
+                  },
+                  {
+                    "condition": "types",
+                    "target": "/exports/.~1browser"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/browser.d.ts"
+                  }
+                ]
+              },
+              "closure": {
+                "entries": [
+                  {
+                    "role": "runtime",
+                    "path": "./dist/browser.js",
+                    "digest": "sha256:213bccb5e63a7ddb11b52ba22e186631d501e9f53f67e369b47146dd776d9623"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/browser.d.ts",
+                    "digest": "sha256:64b12bd698591fa4624f04ee2fb2d65aced57f968eab312d052b54453b423478"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/types.d.ts",
+                    "digest": "sha256:bccdaeffaf893315728c74124f14c04b16e88339e3cb93b04e1f4b3b5bfd2435"
+                  },
+                  {
+                    "role": "manifest",
+                    "path": "./package.json",
+                    "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+                  },
+                  {
+                    "role": "resolution-input",
+                    "path": "./package.json",
+                    "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+                  }
+                ],
+                "hazards": [
+                  {
+                    "kind": "unaccepted-external-dependency",
+                    "source": "./dist/browser.js:@solidjs/signals",
+                    "affectedDomains": [
+                      "callbacks",
+                      "reads",
+                      "writes",
+                      "creates",
+                      "invalidates",
+                      "throws",
+                      "returns",
+                      "cleanups",
+                      "disposals"
+                    ]
+                  }
+                ],
+                "digest": "sha256:98f91df54efd255a6e51f3f58cdb87a10cbf01b7d334aa2a035e521c0e4d9c09"
+              },
+              "authority": "standalonePackageResolver"
+            },
+            "motionGlobalConfig": null,
+            "motionGlobalConfigSummary": null
+          },
+          {
+            "entrypoint": "./playwright",
+            "selection": {
+              "artifact": {
+                "closureSha256": "139a2dac089dcbf46e999a0c2584a842e62411cfadc384e26a21428e4fff5467",
+                "path": "./dist/playwright.js",
+                "sha256": "34ab4d0d84989c14df23b957dd978616d0550f4194e3b71cf4d790a84c8c605c"
+              },
+              "declarations": {
+                "path": "./dist/playwright.d.ts",
+                "sha256": "41650ac6f5974881142047db9d1ca198cfe4c802558a6550984859d0f2170803"
+              },
+              "resolution": {
+                "runtimeBranch": "/exports/.~1playwright/default",
+                "typesBranch": "/exports/.~1playwright/types"
+              }
+            },
+            "coordinate": {
+              "artifactCaseId": "artifact-case:2898448241fb6f5d7e18d0a84bf547b39000c1a4ed44fa2c91b9e73ec3f41209",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/.solid-checker-certification-765c76e76b7ce6c4b1b7926ba72ba581454e7f7164f9006f424c3db781f57b6b.mjs",
+              "specifier": "@solidjs/diagnostics/playwright",
+              "resolvedImportRoot": "sha256:dbba0297a84a28ef661ba82a8890a6645504d36e29f9b29a96f3d6c70c420f25",
+              "semanticDigest": "sha256:35294e912f26171fe98c2e10a96f1ec3377c6f3334e133e20894acd23465a997",
+              "receiptDigest": "sha256:fbe0ed9aa001837dc21fff2a2f04e3c6b370c5ca193730710616a346005704e9",
+              "catalog": "cases/dbba0297a84a28ef661ba82a8890a6645504d36e29f9b29a96f3d6c70c420f25/accepted-contracts.json",
+              "catalogDigest": "sha256:219ff1d5985a91ead3388eb39f895038a5a33e76955eaf1fdcc84772b2f5eaa7"
+            },
+            "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-58nMPk/@solidjs__diagnostics@2.0.0-rc.3--solid2--only.json.accepted-catalog/case-sets/13f04aac810ce36641583a07a41944c93e4c29c1c45c84c005f8da3ae2d4853c/cases/dbba0297a84a28ef661ba82a8890a6645504d36e29f9b29a96f3d6c70c420f25/accepted-contracts.json",
+            "documentDigest": "sha256:78e1efe7407368e328433af3ff14bcbe12ad80fe38875e532b5e19824bbfd027",
+            "receiptDigest": "sha256:fbe0ed9aa001837dc21fff2a2f04e3c6b370c5ca193730710616a346005704e9",
+            "receiptPayload": {
+              "semanticModelVersion": 1,
+              "proofVersion": 2,
+              "proofPolicy": 2,
+              "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+              "mainDigest": "sha256:78e1efe7407368e328433af3ff14bcbe12ad80fe38875e532b5e19824bbfd027",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/.solid-checker-certification-765c76e76b7ce6c4b1b7926ba72ba581454e7f7164f9006f424c3db781f57b6b.mjs",
+              "specifier": "@solidjs/diagnostics/playwright",
+              "resolvedImportRoot": "sha256:dbba0297a84a28ef661ba82a8890a6645504d36e29f9b29a96f3d6c70c420f25",
+              "semanticDigest": "sha256:35294e912f26171fe98c2e10a96f1ec3377c6f3334e133e20894acd23465a997",
+              "artifactProvenanceRoot": "sha256:cecb00332d0aad2badca6d4b2700ac5f689a65555e5b30c69e74a26a06ed8da7",
+              "snapshotRoot": "sha256:c45ce15a30b9b65df7d3896d0e217ba6687c56dd71cf369b443f510ae41099c2",
+              "packageRoot": "sha256:a2dde1ef4268372aaa2ec676ef8808c5faee0b1b66090d80ab98fb4a75e6ed80",
+              "manifestRoot": "sha256:068aafc505773b58407aaea02c5cab0369b551a8e8de30f353452df25256d683",
+              "artifactsRoot": "sha256:9f5459ccb06a6920d26dde3fa530f1d744fb0b6518cc2ff6676e8a02e9d501fd",
+              "declarationsRoot": "sha256:f32fea8c710e311ef9c0dc8bdd2cc7ac564b47ae7a155a5fb8f9ac93b4c00de1",
+              "transformRoot": "sha256:0568f5265e5d2bc814b1ca47896a4a31c537ad26f7e4af2feebbff1d9547d754",
+              "exportsRoot": "sha256:0a357c035d3b49d2fe4669a39d87329ae37e51ac1a5e55f61805d30ad5dd9315",
+              "closureRoot": "sha256:c97bf1cd7ae444b2fd0e813d9064fc28c0e67e202c1d97933ac788a917d2c9ed",
+              "demandGraphRoot": "sha256:aa085bc07dc9ab2ba0a5e8c124515aec77e4f21aad07f400b3330287a0a988a1",
+              "verifiedPositiveRoot": "sha256:9525a941343e9e715ad8a9146152e04818b64d557eb3dd1b979f6058a828d365",
+              "witnessRoots": {
+                "accepted-dependency-composition": "sha256:4d020f5a5919760183bba3b14eeea36e8b29ad77dc7e2be6f20ad98da0c11c60",
+                "argument-binding": "sha256:bbd921581dc925f0204b69c0802d61b4ee4a5fe9113f608c0746080aa60c14b2",
+                "artifact-declarations": "sha256:f32fea8c710e311ef9c0dc8bdd2cc7ac564b47ae7a155a5fb8f9ac93b4c00de1",
+                "callable-path": "sha256:b9e3bdea56b78f20d24faf49beb6741068ccbf174d56fc900e12685c34a748fb",
+                "compiler-reconciliation": "sha256:4c0dadef47fa5c399fe750886a82c173ca3e0ace289b1992156c42a91a7e20ca",
+                "domain-exhaustiveness": "sha256:ecb6cb098e5d61e7b9eab1d7ab3efa1a0db741efdc79fbf19fe83e167bd9eff7",
+                "export-identity": "sha256:0a357c035d3b49d2fe4669a39d87329ae37e51ac1a5e55f61805d30ad5dd9315",
+                "export-resolution": "sha256:9f5459ccb06a6920d26dde3fa530f1d744fb0b6518cc2ff6676e8a02e9d501fd",
+                "guard-partition": "sha256:8e5fa27cea34261ec19bb31f80212dd881fc1e574eda7d5d78a6eadc1ca0e270",
+                "manifest-entrypoint": "sha256:068aafc505773b58407aaea02c5cab0369b551a8e8de30f353452df25256d683",
+                "module-closure": "sha256:c97bf1cd7ae444b2fd0e813d9064fc28c0e67e202c1d97933ac788a917d2c9ed",
+                "operation-cardinality": "sha256:909605990c40b2755bcb4a1950d584c9a48b7a259168ed68f59dd7d4b7bf4bc0",
+                "operation-reachability": "sha256:0bb4f1c528fdbba18771e167d1c30edcd15483ac906b6ee3e401dffa318829e3",
+                "package-identity": "sha256:a2dde1ef4268372aaa2ec676ef8808c5faee0b1b66090d80ab98fb4a75e6ed80",
+                "recursive-value-shape": "sha256:98b7b28b1d1a76430428f85bcd40e2ad516cf6471b3b20eeed248b7ac9d0aa54",
+                "rest-spread-coverage": "sha256:d6365b6f2e4818e4ed7d2dba36b84d6de16faf52307b9671c74e319529df4436",
+                "selected-signature": "sha256:3b85da6919bb20e5561a6fed82c17dab7a198f9e07d2f20dcf84cc38e313774c"
+              },
+              "producerSessionsRoot": "sha256:a2c61605f63adda14a6c5afed01b4478541105af3be93fdfb48f8b6ddb9645f0",
+              "dependencyReceiptsRoot": "sha256:9099937aaebe7a922b9999dc2d7cc8a9d40cb3bfd2c36025146d58bfdbf8041c",
+              "dependencyTrustRoot": "sha256:ed4958af8a6f406f4684772877edc464b3358aefe08902856648ee481fb273e1",
+              "probeGateRoot": "sha256:9375409a427b7ca84e8c9463bda7fec714a5eac5b6e71cdffef96ff0227be713",
+              "closedClaimsRoot": "sha256:e3bb87ef3400c71f9559830802f3ede9728ceceb6455558712ad23ec012c4e1c",
+              "verifierSourceDigest": "sha256:09a8f1d5628b3cd4751d88a73a23df7449d09db33bc0c5a1dbbb4be329ffe67a",
+              "verifierBuildDigest": "sha256:47c220603fcb7a6f4580670562fdeec66f406176a8bb4d26451b7f28069fa795",
+              "issuerKind": "persistent-local",
+              "issuerScope": "ecosystem-benchmark:3eb77ff28ad44fc6bb91cc005257b3e9c3d7ef4921550e0ce24ce8b7c9d288f7",
+              "keyId": "ed25519:sha256:740dafb219414f64eae94dada69a0f2787c2c064005583e6d8f4b96aabad5cc6",
+              "signatureAlgorithm": "ed25519"
+            },
+            "resolution": {
+              "specifier": "@solidjs/diagnostics/playwright",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/.solid-checker-certification-765c76e76b7ce6c4b1b7926ba72ba581454e7f7164f9006f424c3db781f57b6b.mjs",
+              "requestedEntrypoint": "./playwright",
+              "packageName": "@solidjs/diagnostics",
+              "packageVersion": "2.0.0-rc.3",
+              "packageIntegrity": "sha512-fPb20MXqN7LpT02+kxfMBhY3reCKeh7vB++g9Su1EJZ6Ie0PeydyU/CnkUNa9gwLCMKoZG1x0pfAMb9yLGowtw==",
+              "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/diagnostics",
+              "packageManifest": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/diagnostics/package.json",
+                "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+              },
+              "runtime": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/diagnostics/dist/playwright.js",
+                "digest": "sha256:34ab4d0d84989c14df23b957dd978616d0550f4194e3b71cf4d790a84c8c605c"
+              },
+              "declarations": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/diagnostics/dist/playwright.d.ts",
+                "digest": "sha256:41650ac6f5974881142047db9d1ca198cfe4c802558a6550984859d0f2170803"
+              },
+              "runtimeTrace": {
+                "branch": "/exports/.~1playwright/default",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./playwright"
+                  },
+                  {
+                    "condition": "default",
+                    "target": "/exports/.~1playwright"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/playwright.js"
+                  }
+                ]
+              },
+              "declarationTrace": {
+                "branch": "/exports/.~1playwright/types",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./playwright"
+                  },
+                  {
+                    "condition": "types",
+                    "target": "/exports/.~1playwright"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/playwright.d.ts"
+                  }
+                ]
+              },
+              "closure": {
+                "entries": [
+                  {
+                    "role": "runtime",
+                    "path": "./dist/artifact.js",
+                    "digest": "sha256:ab00053b437d364f5b765846da2a475374cba4f0f1d14aef03851c18042be01b"
+                  },
+                  {
+                    "role": "runtime",
+                    "path": "./dist/playwright.js",
+                    "digest": "sha256:34ab4d0d84989c14df23b957dd978616d0550f4194e3b71cf4d790a84c8c605c"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/browser.d.ts",
+                    "digest": "sha256:64b12bd698591fa4624f04ee2fb2d65aced57f968eab312d052b54453b423478"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/playwright.d.ts",
+                    "digest": "sha256:41650ac6f5974881142047db9d1ca198cfe4c802558a6550984859d0f2170803"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/types.d.ts",
+                    "digest": "sha256:bccdaeffaf893315728c74124f14c04b16e88339e3cb93b04e1f4b3b5bfd2435"
+                  },
+                  {
+                    "role": "manifest",
+                    "path": "./package.json",
+                    "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+                  },
+                  {
+                    "role": "resolution-input",
+                    "path": "./package.json",
+                    "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+                  }
+                ],
+                "digest": "sha256:139a2dac089dcbf46e999a0c2584a842e62411cfadc384e26a21428e4fff5467"
+              },
+              "authority": "standalonePackageResolver"
+            },
+            "motionGlobalConfig": null,
+            "motionGlobalConfigSummary": null
+          },
+          {
+            "entrypoint": "./protocol",
+            "selection": {
+              "artifact": {
+                "closureSha256": "3155d04906be579169ed0c52929a86feb6a6b4b242b66342d9e9398494dea8a1",
+                "path": "./dist/protocol.js",
+                "sha256": "4d191edab3b339449dadf9e674d6f67bf433aef5d822e84af97defd7235c5d83"
+              },
+              "declarations": {
+                "path": "./dist/protocol.d.ts",
+                "sha256": "740732a6393c7814b82da1427f056562af1c8eecc1c873ea9c20c981c7c559ef"
+              },
+              "resolution": {
+                "runtimeBranch": "/exports/.~1protocol/default",
+                "typesBranch": "/exports/.~1protocol/types"
+              }
+            },
+            "coordinate": {
+              "artifactCaseId": "artifact-case:e0ad29c3b472a7291cfcb9c24347a5029d466d2608bc54ffb44b029321b99fdc",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/.solid-checker-certification-765c76e76b7ce6c4b1b7926ba72ba581454e7f7164f9006f424c3db781f57b6b.mjs",
+              "specifier": "@solidjs/diagnostics/protocol",
+              "resolvedImportRoot": "sha256:9ce4b9992fff3be2d8d1217f7272f7b19f1c1e0e64d951bf563fe625149c00e3",
+              "semanticDigest": "sha256:e5a06d41b03e92734ae4961e4405d69fb85b338e77ff5d27df6a6465a741ee59",
+              "receiptDigest": "sha256:1476067771052c17b963757b447842296bb57eaaaa868e80ccad1c3a61e4bf4d",
+              "catalog": "cases/9ce4b9992fff3be2d8d1217f7272f7b19f1c1e0e64d951bf563fe625149c00e3/accepted-contracts.json",
+              "catalogDigest": "sha256:7e7ec09168c6ef2a80ad62f6decf135713cc4568d7626ed983cc9228c39ba4d2"
+            },
+            "catalogPath": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-58nMPk/@solidjs__diagnostics@2.0.0-rc.3--solid2--only.json.accepted-catalog/case-sets/13f04aac810ce36641583a07a41944c93e4c29c1c45c84c005f8da3ae2d4853c/cases/9ce4b9992fff3be2d8d1217f7272f7b19f1c1e0e64d951bf563fe625149c00e3/accepted-contracts.json",
+            "documentDigest": "sha256:827a3ec68c0a118c7509aa6520b8d58e612749984ed7fbaabbc481a600db48f3",
+            "receiptDigest": "sha256:1476067771052c17b963757b447842296bb57eaaaa868e80ccad1c3a61e4bf4d",
+            "receiptPayload": {
+              "semanticModelVersion": 1,
+              "proofVersion": 2,
+              "proofPolicy": 2,
+              "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+              "mainDigest": "sha256:827a3ec68c0a118c7509aa6520b8d58e612749984ed7fbaabbc481a600db48f3",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/.solid-checker-certification-765c76e76b7ce6c4b1b7926ba72ba581454e7f7164f9006f424c3db781f57b6b.mjs",
+              "specifier": "@solidjs/diagnostics/protocol",
+              "resolvedImportRoot": "sha256:9ce4b9992fff3be2d8d1217f7272f7b19f1c1e0e64d951bf563fe625149c00e3",
+              "semanticDigest": "sha256:e5a06d41b03e92734ae4961e4405d69fb85b338e77ff5d27df6a6465a741ee59",
+              "artifactProvenanceRoot": "sha256:cecb00332d0aad2badca6d4b2700ac5f689a65555e5b30c69e74a26a06ed8da7",
+              "snapshotRoot": "sha256:c45ce15a30b9b65df7d3896d0e217ba6687c56dd71cf369b443f510ae41099c2",
+              "packageRoot": "sha256:eb3c1309234598870e5e242b9464f683903724dd3aba843f1e45ea96d959ee9a",
+              "manifestRoot": "sha256:737e630a9c4c4a1808801c3b28b8156681b2211b2978e1ce1a77ff2dc51d2673",
+              "artifactsRoot": "sha256:56fd520afc2f7832e7860efdc9e04ccc9d2bc3c3a16bb40ecc432bed52111124",
+              "declarationsRoot": "sha256:95f7a6db2492eabd6ecaa7eadab7dbf633b07047fb3c005137d48c9c89a8551c",
+              "transformRoot": "sha256:8a2a71322090224b85e44b063d1591e4410c8f5664da34b0a933d9e71887b4b2",
+              "exportsRoot": "sha256:307dde7d3e8e1247a98086a957ca0bd93f1355a44d6b6e554df19ad261597f42",
+              "closureRoot": "sha256:34a0a739f19e0995a150e711f8b4ebc5f664277d6fb07db00b0ecb1744961de0",
+              "demandGraphRoot": "sha256:611306fbc9e7a4482a9552dbb7238d296dd07e29aefc2b94a0e286ffd9d38fea",
+              "verifiedPositiveRoot": "sha256:f340b10fe41f65dda4910ba88894427892a1f4b752984b737792d8f83c2fc814",
+              "witnessRoots": {
+                "accepted-dependency-composition": "sha256:4eda526c50f32f4246e31211f980fd3e393546e8dcd007f9f109969ceb3c457a",
+                "argument-binding": "sha256:e4a2e417245a13af594a5f0e7e3fb15d6a557e8d2b3ee165320ea0c3a2624eb2",
+                "artifact-declarations": "sha256:95f7a6db2492eabd6ecaa7eadab7dbf633b07047fb3c005137d48c9c89a8551c",
+                "callable-path": "sha256:6356a999ebc156384ffa04d0731b6415bec600c6f7aceabf60ae736e9aa3d2a3",
+                "compiler-reconciliation": "sha256:e0fa4bee788a856e76648b7830b64d362e747ac6f9442fa40bc8a7eab2014a3a",
+                "domain-exhaustiveness": "sha256:5a06cb8fea4d8118beb0b8ca7f3de99f45cecb6d5279ddcc2e997bdcef9881c0",
+                "export-identity": "sha256:307dde7d3e8e1247a98086a957ca0bd93f1355a44d6b6e554df19ad261597f42",
+                "export-resolution": "sha256:56fd520afc2f7832e7860efdc9e04ccc9d2bc3c3a16bb40ecc432bed52111124",
+                "guard-partition": "sha256:fdedf3f1e903fa4fc82b1aca8084cc9b10fbc87bbc2422e484d415a2790a7dc6",
+                "manifest-entrypoint": "sha256:737e630a9c4c4a1808801c3b28b8156681b2211b2978e1ce1a77ff2dc51d2673",
+                "module-closure": "sha256:34a0a739f19e0995a150e711f8b4ebc5f664277d6fb07db00b0ecb1744961de0",
+                "operation-cardinality": "sha256:74f531afc03a27606ffa8bb17165b5500c6534c332464fbedcd770744319863e",
+                "operation-reachability": "sha256:fff73f13f994334e0d8f3edbee0a27ba06db2f8c0398732dcaf4c891fca69c94",
+                "package-identity": "sha256:eb3c1309234598870e5e242b9464f683903724dd3aba843f1e45ea96d959ee9a",
+                "recursive-value-shape": "sha256:c19d631fd3fd19b6001583bbe408234fcd0d89b23fea6933752138bafd829cf8",
+                "rest-spread-coverage": "sha256:fc560974f5bd991034d759afd4543924a7d0d3bb13a49bc319659c1106d736e1",
+                "selected-signature": "sha256:877807b45e667051a72d1763d7705ba519209850ffacd7814e115e76185fe870"
+              },
+              "producerSessionsRoot": "sha256:5eac01d08c2224182791b383044547b1ba10ec0ab6bb85e5c54d5ff027dd272e",
+              "dependencyReceiptsRoot": "sha256:54d1a8ce237940cae9777854153678935faadaeaa83d1d05f68fae5bd83feef8",
+              "dependencyTrustRoot": "sha256:72903dccda64c65d025384e8f28bff8de2a5cb2627af8b93c900eb1c38029a74",
+              "probeGateRoot": "sha256:b9e10675889777e6beb83f87ee73030f8b96f27bf0816162811ffddea2042e55",
+              "closedClaimsRoot": "sha256:e8c0b04991a9f33bb9758fa19095445aee7ef7f0304440f5cf769f8217e91903",
+              "verifierSourceDigest": "sha256:09a8f1d5628b3cd4751d88a73a23df7449d09db33bc0c5a1dbbb4be329ffe67a",
+              "verifierBuildDigest": "sha256:47c220603fcb7a6f4580670562fdeec66f406176a8bb4d26451b7f28069fa795",
+              "issuerKind": "persistent-local",
+              "issuerScope": "ecosystem-benchmark:3eb77ff28ad44fc6bb91cc005257b3e9c3d7ef4921550e0ce24ce8b7c9d288f7",
+              "keyId": "ed25519:sha256:740dafb219414f64eae94dada69a0f2787c2c064005583e6d8f4b96aabad5cc6",
+              "signatureAlgorithm": "ed25519"
+            },
+            "resolution": {
+              "specifier": "@solidjs/diagnostics/protocol",
+              "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/.solid-checker-certification-765c76e76b7ce6c4b1b7926ba72ba581454e7f7164f9006f424c3db781f57b6b.mjs",
+              "requestedEntrypoint": "./protocol",
+              "packageName": "@solidjs/diagnostics",
+              "packageVersion": "2.0.0-rc.3",
+              "packageIntegrity": "sha512-fPb20MXqN7LpT02+kxfMBhY3reCKeh7vB++g9Su1EJZ6Ie0PeydyU/CnkUNa9gwLCMKoZG1x0pfAMb9yLGowtw==",
+              "packageRoot": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/diagnostics",
+              "packageManifest": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/diagnostics/package.json",
+                "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+              },
+              "runtime": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/diagnostics/dist/protocol.js",
+                "digest": "sha256:4d191edab3b339449dadf9e674d6f67bf433aef5d822e84af97defd7235c5d83"
+              },
+              "declarations": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wh3h8m/node_modules/@solidjs/diagnostics/dist/protocol.d.ts",
+                "digest": "sha256:740732a6393c7814b82da1427f056562af1c8eecc1c873ea9c20c981c7c559ef"
+              },
+              "runtimeTrace": {
+                "branch": "/exports/.~1protocol/default",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./protocol"
+                  },
+                  {
+                    "condition": "default",
+                    "target": "/exports/.~1protocol"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/protocol.js"
+                  }
+                ]
+              },
+              "declarationTrace": {
+                "branch": "/exports/.~1protocol/types",
+                "steps": [
+                  {
+                    "condition": "subpath",
+                    "target": "./protocol"
+                  },
+                  {
+                    "condition": "types",
+                    "target": "/exports/.~1protocol"
+                  },
+                  {
+                    "condition": "target",
+                    "target": "./dist/protocol.d.ts"
+                  }
+                ]
+              },
+              "closure": {
+                "entries": [
+                  {
+                    "role": "runtime",
+                    "path": "./dist/protocol.js",
+                    "digest": "sha256:4d191edab3b339449dadf9e674d6f67bf433aef5d822e84af97defd7235c5d83"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/browser.d.ts",
+                    "digest": "sha256:64b12bd698591fa4624f04ee2fb2d65aced57f968eab312d052b54453b423478"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/protocol.d.ts",
+                    "digest": "sha256:740732a6393c7814b82da1427f056562af1c8eecc1c873ea9c20c981c7c559ef"
+                  },
+                  {
+                    "role": "declaration",
+                    "path": "./dist/types.d.ts",
+                    "digest": "sha256:bccdaeffaf893315728c74124f14c04b16e88339e3cb93b04e1f4b3b5bfd2435"
+                  },
+                  {
+                    "role": "manifest",
+                    "path": "./package.json",
+                    "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+                  },
+                  {
+                    "role": "resolution-input",
+                    "path": "./package.json",
+                    "digest": "sha256:c51267ef37b1c2c68defcf489f57dda1a215a6fc318f5c6be1121c93ede14b87"
+                  }
+                ],
+                "digest": "sha256:3155d04906be579169ed0c52929a86feb6a6b4b242b66342d9e9398494dea8a1"
+              },
+              "authority": "standalonePackageResolver"
+            },
+            "motionGlobalConfig": null,
+            "motionGlobalConfigSummary": null
+          }
+        ]
+      },
+      "coverageBefore": {
+        "declaredEntrypoints": 6,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 3,
+        "rootCertified": true
+      },
+      "coverageAfter": {
+        "declaredEntrypoints": 6,
+        "declaredWildcard": false,
+        "certifiedEntrypoints": 4,
+        "rootCertified": true
+      },
+      "certificationRefusal": null,
+      "generationRefusals": [
+        {
+          "entrypoint": "./vitest",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/vitest.js has no runtime ESM exports"
+        }
+      ],
+      "recovery": {
+        "independentCaseRecovery": {
+          "expectedCases": [
+            {
+              "entrypoint": ".",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./browser",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./playwright",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./protocol",
+              "conditions": [
+                "import"
+              ]
+            }
+          ],
+          "nativeCertificationTransactions": 1,
+          "publishedCases": [
+            {
+              "entrypoint": ".",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./browser",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./playwright",
+              "conditions": [
+                "import"
+              ]
+            },
+            {
+              "entrypoint": "./protocol",
+              "conditions": [
+                "import"
+              ]
+            }
+          ]
+        },
+        "reusedProposal": true
+      }
+    }
+  ],
+  "preservation": [
+    {
+      "probeId": "@corvu-next/accordion@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu-next/calendar@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu-next/dialog@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu-next/disclosure@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu-next/dismissible@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu-next/drawer@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu-next/focus-trap@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu-next/list@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu-next/otp-field@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu-next/persistent@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu-next/popover@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu-next/presence@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu-next/prevent-scroll@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu-next/resizable@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu-next/tooltip@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu-next/transition-size@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu-next/utils@0.1.5|solid2|only",
+      "beforeCases": 34,
+      "afterCases": 34,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu/accordion@0.2.5|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu/calendar@0.1.2|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu/dialog@0.2.4|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu/disclosure@0.2.2|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu/drawer@0.2.4|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu/otp-field@0.1.4|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu/popover@0.2.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu/resizable@0.2.5|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu/tooltip@0.2.2|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@corvu/utils@0.4.2|solid1|only",
+      "beforeCases": 34,
+      "afterCases": 34,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@kobalte/core@0.13.13|solid1|only",
+      "beforeCases": 577,
+      "afterCases": 577,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@kobalte/core@2.0.0-alpha.0|solid2|only",
+      "beforeCases": 122,
+      "afterCases": 122,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@kobalte/solidbase@0.6.13|solid1|only",
+      "beforeCases": 66,
+      "afterCases": 66,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@kobalte/utils@0.9.2|solid1|only",
+      "beforeCases": 23,
+      "afterCases": 23,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@kobalte/utils@2.0.0-alpha.0|solid2|only",
+      "beforeCases": 8,
+      "afterCases": 8,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-devtools/debugger@0.28.1|solid1|only",
+      "beforeCases": 4,
+      "afterCases": 4,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-devtools/extension-adapter@0.12.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-devtools/frontend@0.15.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-devtools/locator@0.16.7|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-devtools/logger@0.9.11|solid1|only",
+      "beforeCases": 4,
+      "afterCases": 4,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-devtools/overlay@0.33.5|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-devtools/shared@0.20.0|solid1|only",
+      "beforeCases": 8,
+      "afterCases": 8,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-devtools/transform@0.10.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-devtools/ui@0.10.3|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/a11y@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/a11y@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/active-element@2.1.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/active-element@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/active-element@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/analytics@0.2.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/analytics@2.0.0-next.2|solid2|floor",
+      "beforeCases": 4,
+      "afterCases": 4,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/analytics@2.0.0-next.2|solid2|head",
+      "beforeCases": 4,
+      "afterCases": 4,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/async@0.0.101-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/async@0.0.101-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/audio@1.4.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/audio@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/audio@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/autofocus@0.1.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/bounds@0.1.7|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/bounds@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/bounds@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/broadcast-channel@0.1.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/broadcast-channel@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/broadcast-channel@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/clipboard@1.6.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/clipboard@2.0.0-next.17|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/clipboard@2.0.0-next.17|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/connectivity@0.4.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/connectivity@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/connectivity@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/context@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/context@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/controlled-props@0.1.4|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/controlled-signal@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/controlled-signal@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/cookies@0.0.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/cookies@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/cookies@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/cookies-store@1.1.11|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/countdown@1.0.9|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/cursor@0.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/cursor@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/cursor@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/date@2.1.8|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/date@3.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/date@3.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/date-difference@1.0.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/db-store@1.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/debounce@1.3.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/deep@0.3.7|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/deep@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/deep@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/destructure@0.2.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/destructure@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/destructure@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/devices@1.3.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/devices@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/devices@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/event-bus@1.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/event-bus@3.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/event-bus@3.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/event-dispatcher@0.1.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/event-dispatcher@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/event-dispatcher@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/event-listener@2.4.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/event-listener@3.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/event-listener@3.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/event-props@0.3.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/event-props@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/event-props@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/fetch@2.5.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/filesystem@1.3.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/filesystem@3.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/filesystem@3.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/flux-store@0.1.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/focus@1.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/focus@1.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/form@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/form@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/fullscreen@1.3.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/fullscreen@2.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/fullscreen@2.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/geolocation@1.5.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/geolocation@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/geolocation@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/gestures@1.2.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/gestures@3.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/gestures@3.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/graphql@3.0.0-next.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/history@0.2.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/history@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/history@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/i18n@2.2.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/i18n@3.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/i18n@3.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/idle@0.2.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/idle@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/idle@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/immutable@2.0.0-next.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/input-mask@0.3.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/input-mask@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/input-mask@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/interaction@1.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/interaction@1.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/intersection-observer@2.2.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/jsx-parser@0.2.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/jsx-tokenizer@1.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/jsx-tokenizer@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/jsx-tokenizer@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/keyboard@1.3.7|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/keyboard@2.0.0-next.5|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/keyboard@2.0.0-next.5|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/keyed@1.5.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/keyed@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/keyed@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/lifecycle@0.1.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/lifecycle@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/lifecycle@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/list@0.1.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/list@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/list@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/list-state@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/list-state@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/map@0.7.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/map@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/map@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/marker@0.2.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/marker@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/marker@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/masonry@0.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/masonry@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/masonry@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/match@0.0.100|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/match@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/match@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/media@2.3.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/media@4.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/media@4.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/mediastream@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/mediastream@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/memo@1.5.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/memo@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/memo@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/mouse@2.1.7|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/mouse@4.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/mouse@4.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/mutable@1.1.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/mutable@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/mutable@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/mutation-observer@1.2.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/mutation-observer@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/mutation-observer@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/notification@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/notification@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/orientation@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/orientation@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/page-utilities@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/page-utilities@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/page-visibility@2.1.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/pagination@0.5.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/pagination@1.0.0-next.6|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/pagination@1.0.0-next.6|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/permission@1.3.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/permission@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/permission@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/platform@0.2.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/platform@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/platform@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/pointer@0.3.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/pointer@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/pointer@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/presence@0.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/presence@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/presence@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/promise@1.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/promise@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/promise@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/props@3.2.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/props@4.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/props@4.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/queue@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/queue@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/raf@2.3.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/raf@4.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/raf@4.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/range@0.2.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/range@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/range@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/reducer@0.0.101|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/refs@1.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/refs@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/refs@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/resize-observer@2.2.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/resize-observer@4.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/resize-observer@4.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/resource@0.4.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/rootless@1.5.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/rootless@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/rootless@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/scheduled@1.5.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/scheduled@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/scheduled@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/script-loader@2.3.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/script-loader@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/script-loader@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/scroll@2.1.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/scroll@3.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/scroll@3.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/selection@0.1.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/selection@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/selection@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/sensors@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/sensors@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/set@0.7.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/set@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/set@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/share@2.2.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/share@4.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/share@4.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/signal-builders@0.2.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/signal-builders@1.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/signal-builders@1.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/sortable@1.0.0-next.0|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/sortable@1.0.0-next.0|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/spring@0.1.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/spring@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/spring@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/sse@0.0.103|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/sse@1.0.0-next.2|solid2|floor",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/sse@1.0.0-next.2|solid2|head",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/start@0.0.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/state-machine@0.1.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/state-machine@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/state-machine@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/static-store@0.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/static-store@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/static-store@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/storage@4.4.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/storage@5.0.0-next.4|solid2|floor",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/storage@5.0.0-next.4|solid2|head",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/stream@0.7.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/styles@0.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/styles@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/styles@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/throttle@1.2.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/timer@1.4.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/timer@1.4.5-next.1|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/timer@1.4.5-next.1|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/transition-group@1.1.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/transition-group@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/transition-group@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/trigger@1.2.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/trigger@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/trigger@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/tween@1.4.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/tween@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/tween@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/until@0.1.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/upload@0.1.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/upload@1.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/upload@1.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/url@0.2.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/url@0.2.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/utils@6.4.1|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/utils@7.0.0-next.4|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/vibrate@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/vibrate@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/video@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/video@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/virtual@0.2.5|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/visibility-observer@2.0.1|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/websocket@1.4.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/websocket@2.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/websocket@2.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/workers@2.0.1-next.1|solid2|floor",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solid-primitives/workers@2.0.1-next.1|solid2|head",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/diagnostics@2.0.0-rc.3|solid2|only",
+      "beforeCases": 3,
+      "afterCases": 4,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/element@2.0.0-rc.3|solid2|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/h@2.0.0-rc.3|solid2|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/html@2.0.0-rc.3|solid2|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/image@0.1.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/meta@0.29.4|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/meta@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/meta@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/router@1.0.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/router@2.0.0-next.18|solid2|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/signals@2.0.0-rc.3|solid2|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/start@2.0.3|solid1|only",
+      "beforeCases": 11,
+      "afterCases": 11,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/start-devtools@1.0.0-next.4|solid2|floor",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/start-devtools@1.0.0-next.4|solid2|head",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/universal@2.0.0-rc.3|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/vite-plugin@3.0.0-next.34|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/vite-plugin@3.0.0-next.34|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@solidjs/web@2.0.0-rc.3|solid2|only",
+      "beforeCases": 26,
+      "afterCases": 26,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/ai-devtools-core@0.5.8|solid1|only",
+      "beforeCases": 10,
+      "afterCases": 10,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/charts@0.15.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/devtools@0.14.2|solid1|only",
+      "beforeCases": 5,
+      "afterCases": 5,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/devtools-a11y@0.2.2|solid1|only",
+      "beforeCases": 4,
+      "afterCases": 4,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/devtools-ui@0.7.1|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/devtools-utils@0.7.0|solid1|only",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/form-devtools@1.0.0-alpha.2|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/hotkeys-devtools@0.9.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/pacer-devtools@1.4.0|solid1|only",
+      "beforeCases": 8,
+      "afterCases": 8,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-ai-devtools@0.2.71|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-charts@0.15.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-db@0.2.40|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-devtools@0.8.12|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-form@2.0.0-alpha.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-form-devtools@1.0.0-alpha.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-hotkeys@0.10.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-hotkeys-devtools@0.7.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-pacer@0.22.0|solid1|only",
+      "beforeCases": 14,
+      "afterCases": 14,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-pacer-devtools@0.14.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-query@5.102.5|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-query@6.0.0-rc.0|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-query@6.0.0-rc.0|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-query-devtools@5.102.5|solid1|only",
+      "beforeCases": 5,
+      "afterCases": 5,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|floor",
+      "beforeCases": 5,
+      "afterCases": 5,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|head",
+      "beforeCases": 5,
+      "afterCases": 5,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-query-persist-client@5.102.5|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-query-persist-client@6.0.0-rc.0|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-query-persist-client@6.0.0-rc.0|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-router@1.170.30|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-router@2.0.0-rc.2|solid2|floor",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-router@2.0.0-rc.2|solid2|head",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-devtools@1.167.1|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-devtools@2.0.0-rc.2|solid2|floor",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-devtools@2.0.0-rc.2|solid2|head",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-ssr-query@1.167.2-pre.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-ssr-query@2.0.0-rc.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-ssr-query@2.0.0-rc.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-start@1.168.47|solid1|only",
+      "beforeCases": 5,
+      "afterCases": 5,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-start@2.0.0-rc.2|solid2|floor",
+      "beforeCases": 5,
+      "afterCases": 5,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-start@2.0.0-rc.2|solid2|head",
+      "beforeCases": 5,
+      "afterCases": 5,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-start-client@1.168.29|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-start-client@2.0.0-rc.2|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-start-client@2.0.0-rc.2|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-start-config@1.120.20|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-store@0.11.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-table@9.1.2|solid1|only",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-table-devtools@9.2.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/solid-virtual@3.13.37|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "@tanstack/table-devtools@9.2.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "beforeCases": 18,
+      "afterCases": 18,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "motion-solidjs@0.6.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "motion-solidjs@0.7.0-beta.4|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "motion-solidjs@0.7.0-beta.4|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "solid-devtools@0.34.5|solid1|only",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "solid-js@1.9.14|solid1|only",
+      "beforeCases": 39,
+      "afterCases": 39,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "solid-js@2.0.0-rc.3|solid2|only",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "solid-recharts@1.0.1|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "solid-recharts@2.0.0-beta.1|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    },
+    {
+      "probeId": "solid-recharts@2.0.0-beta.1|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "preserved": true,
+      "lostCases": []
+    }
+  ],
+  "metricChanged": false,
+  "existingEntrypointSelectionsPreserved": true
+}

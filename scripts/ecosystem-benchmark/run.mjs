@@ -431,12 +431,17 @@ export function runScope({
   families = [],
   solidTargets = [],
   probeIds = [],
+  packages = [],
   includeSupplemental = false
 } = {}) {
   const filters = [];
   if (sentinel) filters.push("sentinel");
   for (const family of [...families].sort()) filters.push(`family-${family}`);
   for (const target of [...solidTargets].sort()) filters.push(`solid${target}`);
+  if (packages.length) {
+    const digest = createHash("sha256").update([...packages].sort().join("\0")).digest("hex").slice(0, 12);
+    filters.push(`packages-${digest}`);
+  }
   if (probeIds.length) {
     const digest = createHash("sha256")
       .update([...probeIds].sort().join("\0"))
@@ -450,6 +455,7 @@ export function runScope({
     families: [...families].sort(),
     solidTargets: [...solidTargets].sort(),
     probeIds: [...probeIds].sort(),
+    ...(packages.length ? { packages: [...packages].sort() } : {}),
     includeSupplemental,
     // A stable, order-independent name for this scope. `full` owns the
     // canonical report path; every filter earns its own so it can never
@@ -472,6 +478,7 @@ function describeScopeShort(scope) {
   if (!scope || scope.kind === "full") return "full corpus";
   const filters = [];
   if (scope.sentinel) filters.push("sentinel");
+  for (const name of scope.packages ?? []) filters.push(`package=${name}`);
   for (const family of scope.families ?? []) filters.push(`family=${family}`);
   for (const target of scope.solidTargets ?? []) filters.push(`solid${target}`);
   if (scope.probeIds?.length) filters.push(`${scope.probeIds.length} explicit probe(s)`);
@@ -480,12 +487,14 @@ function describeScopeShort(scope) {
 
 export function resolveProbeIdFilter({
   manifest,
+  packages = [],
   families = [],
   solidTargets = [],
   sentinelIds = null,
   explicitProbeIds = []
 }) {
   const noFilter =
+    packages.length === 0 &&
     families.length === 0 &&
     solidTargets.length === 0 &&
     sentinelIds === null &&
@@ -501,6 +510,7 @@ export function resolveProbeIdFilter({
   // ids -- and it means an explicitly requested fork probe id still resolves
   // when the caller opted in with --include-supplemental.
   for (const row of [...(manifest?.rows ?? []), ...(manifest?.supplemental ?? [])]) {
+    if (packages.length && !packages.includes(row.package)) continue;
     if (families.length && !families.includes(row.family)) continue;
     if (normalizedTargets.length && !normalizedTargets.includes(row.solidTarget)) continue;
     for (const probe of row.probes ?? []) {
@@ -666,10 +676,32 @@ function buildResult({
 // the cases the plain lane refused, and the reused proposal exactly the ones it
 // generated. `certificationAttempt.coverage` is what makes that trade visible
 // per row rather than hidden inside one word.
-export function certificationLaneRequest(result) {
+//
+// Which of the two composing lanes it asks for is not a preference. The
+// frontier-only graph lane publishes exactly the refused cases *instead of*
+// the generated ones; entrypoint recovery prepares the union and publishes
+// what proves, so it dominates whenever there is anything to retain. The
+// frontier-only lane is therefore reached only when the row generated nothing
+// to keep, or when `--dependency-graph-lane` asks for it by name.
+//
+// This is a policy over the row's own refusal census, not a reviewed list of
+// probe ids: a row that needs an accepted contract for a dependency is exactly
+// a row the composing lane is the answer for, wherever it appears in the
+// corpus.
+export function certificationLaneRequest(result, { frontierOnly = false } = {}) {
   if (result?.class !== "partial-success") return { lane: "reused-proposal" };
-  return partialProposalHasDependencyFrontier(result.artifactCaseRefusals)
-    ? { lane: "published-graph" }
+  if (!partialProposalHasDependencyFrontier(result.artifactCaseRefusals)) {
+    return { lane: "reused-proposal" };
+  }
+  if (frontierOnly) return { lane: "published-graph" };
+  // The policy never selects the frontier-only lane. It publishes the refused
+  // cases *instead of* the generated ones, and a measured corpus lost receipts
+  // to exactly that trade; only an explicit `--dependency-graph-lane` accepts
+  // it. A row whose generated entrypoint count could not be read has nothing
+  // recovery can retain, so it keeps its reuse rather than risking the trade
+  // on a number that is missing.
+  return (result.generatedEntrypoints ?? 0) > 0
+    ? { lane: "entrypoint-recovery" }
     : { lane: "reused-proposal" };
 }
 
@@ -680,6 +712,7 @@ export function certificationLaneRequest(result) {
 export function certificationLaneOf(audit) {
   const preparation = audit?.graphPreparation;
   if (preparation?.reusedProposal === true) return "reused-proposal";
+  if (preparation?.retainedProposalFallback === true) return "generated-proposal";
   if (preparation && typeof preparation === "object" && "rootCases" in preparation) {
     return "published-graph";
   }
@@ -689,7 +722,7 @@ export function certificationLaneOf(audit) {
   return audit ? "generated-proposal" : null;
 }
 
-function readCertificationAttempt(
+export function readCertificationAttempt(
   result,
   auditPath,
   durationMs,
@@ -748,6 +781,7 @@ function readCertificationAttempt(
       // open. Read off the audit's `withheldClosures`; an older audit has none.
       withheldClosures: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures.length : 0,
       withheldClosureReasons: withheldClosureReasons(audit),
+      withheldClosureDetails: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures : [],
       ordinaryAnalysis: audit?.ordinaryAnalysis ?? null
     };
   }
@@ -790,7 +824,8 @@ function readCertificationAttempt(
     refusalCountsByFamily: countBy(refusals, "family"),
     refusalCountsByOwner: countBy(refusals, "owner"),
     withheldClosures: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures.length : 0,
-    withheldClosureReasons: withheldClosureReasons(audit)
+    withheldClosureReasons: withheldClosureReasons(audit),
+    withheldClosureDetails: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures : []
   };
 }
 
@@ -1095,7 +1130,7 @@ async function runProbe(
 
 async function certifyCompleteProbe(
   item,
-  { timeoutMs, keepTemp, dependencyGraphLane = false },
+  { timeoutMs, keepTemp, dependencyGraphLane = false, recoverEntrypoints = false, recoverProbeIds = [] },
   hooks
 ) {
   const certificationStart = hooks.now?.() ?? Date.now();
@@ -1168,9 +1203,9 @@ async function certifyCompleteProbe(
         item.task.row.package
       );
       const proposalRefusalAudit = `${outputPath}.refusals.json`;
-      laneRequested = dependencyGraphLane
-        ? certificationLaneRequest(item.result).lane
-        : "reused-proposal";
+      laneRequested = (recoverEntrypoints || recoverProbeIds.includes(item.task.probe.id))
+        ? "entrypoint-recovery"
+        : certificationLaneRequest(item.result, { frontierOnly: dependencyGraphLane }).lane;
       try {
         certificationResult = await hooks.attemptCertification({
           packageRoot,
@@ -1195,7 +1230,8 @@ async function certifyCompleteProbe(
             existsSync(`${outputPath}.certification-inputs.json`)
               ? outputPath
               : "",
-          dependencyGraphLane: laneRequested === "published-graph"
+          dependencyGraphLane: laneRequested === "published-graph",
+          recoverEntrypoints: laneRequested === "entrypoint-recovery"
         });
       } catch (error) {
         certificationResult = {
@@ -1263,6 +1299,8 @@ export async function runBenchmark({ manifest, probeIds = null, options = {}, ho
   // rows go certified -> refused, two gain a certified root), so the canonical
   // report must not take it silently. See docs/ecosystem-benchmark.md.
   const dependencyGraphLane = options.dependencyGraphLane ?? false;
+  const recoverEntrypoints = options.recoverEntrypoints ?? false;
+  const recoverProbeIds = options.recoverProbeIds ?? [];
   const certificationConcurrency =
     options.certificationConcurrency ?? DEFAULT_CERTIFICATION_CONCURRENCY;
 
@@ -1375,7 +1413,7 @@ export async function runBenchmark({ manifest, probeIds = null, options = {}, ho
           try {
             await certifyCompleteProbe(
               work.item,
-              { timeoutMs, keepTemp, dependencyGraphLane },
+              { timeoutMs, keepTemp, dependencyGraphLane, recoverEntrypoints, recoverProbeIds },
               hooks
             );
           } finally {
@@ -1416,6 +1454,12 @@ export async function runBenchmark({ manifest, probeIds = null, options = {}, ho
             wakeWorkers();
           }
         }
+        if (keepTemp && projectLease.project) {
+          result.retainedArtifacts = {
+            projectDir: projectLease.project.projectDir,
+            outputDir: projectLease.project.outputDir
+          };
+        }
         const item = {
           manifestIndex: work.scheduledTask.manifestIndex,
           task: work.scheduledTask.task,
@@ -1427,6 +1471,14 @@ export async function runBenchmark({ manifest, probeIds = null, options = {}, ho
         if (
           attemptCertification &&
           (result.class === "success" ||
+            ((recoverEntrypoints || recoverProbeIds.includes(item.task.probe.id)) &&
+              result.class === "partial-success" && result.generatedEntrypoints > 0) ||
+            // A row whose refusal census names a dependency frontier is a row a
+            // composing lane can answer. Leaving it out of the queue would
+            // decide that on scheduling grounds before any evidence is asked
+            // for.
+            certificationLaneRequest(result, { frontierOnly: dependencyGraphLane }).lane !==
+              "reused-proposal" ||
             (result.dependencyPlan?.complete === true &&
               (result.dependencyPlan?.roots?.length ?? 0) > 0))
         ) {
@@ -1454,6 +1506,18 @@ export async function runBenchmark({ manifest, probeIds = null, options = {}, ho
 // by run.test.mjs without touching npm, the network, or the real checker.
 // ---------------------------------------------------------------------------
 
+export function reportForPersistence(report, includeGraph = false) {
+  if (includeGraph) return report;
+  return {
+    ...report,
+    results: report.results.map(result => {
+      if (!result.dependencyPlan || typeof result.dependencyPlan !== "object") return result;
+      const { nodes, edges, ...plan } = result.dependencyPlan;
+      return { ...result, dependencyPlan: plan };
+    })
+  };
+}
+
 function usage() {
   return `Usage: bun scripts/ecosystem-benchmark/run.mjs [options]
 
@@ -1462,6 +1526,8 @@ function usage() {
   --family <ID>          restrict to one family (repeatable)
   --solid <1|2>          restrict to one Solid target (repeatable)
   --probe <ID>           run one exact probe id (repeatable)
+  --package <NAME>       run all probes of an exact package name (repeatable)
+  --include-graph        retain dependency graph nodes and edges in JSON
   --json <FILE>          default benchmarks/ecosystem/report<-scope>.json
   --markdown <FILE>      default benchmarks/ecosystem/report<-scope>.md
                          Only an unfiltered run defaults to the canonical
@@ -1505,6 +1571,11 @@ function usage() {
                          improvement: measured on the 2026-09-03 corpus it
                          turns six certified rows into refusals and gives two
                          rows a certified root. Off by default
+  --recover-entrypoints  re-certify generated and refused dependency cases
+                         together; isolate proof-refused value-only cases for
+                         new publications. Preserve existing catalogs. Opt-in
+  --recover-probe <ID>   enable recovery only for this exact probe (repeatable),
+                         without filtering other probes from a full measurement
   --probe-recipe-corpus <DIR>
                          hand-authored, claim-addressed runtime-probe recipes
                          to certify closed claim domains against. A proposal
@@ -1533,6 +1604,8 @@ function parseArgs(argv) {
     families: [],
     solidTargets: [],
     probeIds: [],
+    packages: [],
+    includeGraph: false,
     // Left null until the scope is known: the default path depends on which
     // subset the run covers. An explicit flag sets it and wins.
     json: null,
@@ -1549,6 +1622,8 @@ function parseArgs(argv) {
     materializedStore: true,
     attemptCertification: false,
     dependencyGraphLane: false,
+    recoverEntrypoints: false,
+    recoverProbeIds: [],
     probeRecipeCorpus: null,
     keepTemp: false,
     includeSupplemental: false,
@@ -1583,6 +1658,12 @@ function parseArgs(argv) {
         break;
       case "--probe":
         options.probeIds.push(takeValue(argv, index++, arg));
+        break;
+      case "--package":
+        options.packages.push(takeValue(argv, index++, arg));
+        break;
+      case "--include-graph":
+        options.includeGraph = true;
         break;
       case "--json":
         options.json = takeValue(argv, index++, arg);
@@ -1625,6 +1706,12 @@ function parseArgs(argv) {
         break;
       case "--dependency-graph-lane":
         options.dependencyGraphLane = true;
+        break;
+      case "--recover-entrypoints":
+        options.recoverEntrypoints = true;
+        break;
+      case "--recover-probe":
+        options.recoverProbeIds.push(takeValue(argv, index++, arg));
         break;
       case "--probe-recipe-corpus":
         options.probeRecipeCorpus = takeValue(argv, index++, arg);
@@ -1868,7 +1955,8 @@ function buildRealHooks({
       entrypoints = [],
       proposalRefusalAudit = "",
       proposal = "",
-      dependencyGraphLane = false
+      dependencyGraphLane = false,
+      recoverEntrypoints = false
     }) => {
       const authorityDir = `${catalogPath}.authority`;
       mkdirSync(authorityDir, { recursive: true });
@@ -1902,6 +1990,7 @@ function buildRealHooks({
             : []),
           ...(proposal ? ["--proposal", proposal] : []),
           ...(dependencyGraphLane ? ["--dependency-graph-lane"] : []),
+          ...(recoverEntrypoints ? ["--recover-entrypoints"] : []),
           // Only supplied when the run configured one. Absent, a plan that
           // proposes a closed claim domain refuses its mandatory veto instead
           // of certifying it unvetoed.
@@ -1966,13 +2055,19 @@ async function main(argv = process.argv.slice(2)) {
     return;
   }
 
-  const unknownProbeIds = unknownExplicitProbeIds(manifest, options.probeIds);
+  const unknownProbeIds = unknownExplicitProbeIds(manifest, [...options.probeIds, ...options.recoverProbeIds]);
   if (unknownProbeIds.length) {
     fail(`unknown --probe id(s): ${unknownProbeIds.join(", ")}`);
     return;
   }
 
   let sentinelIds = null;
+  const eligibleRows = [...manifest.rows, ...(options.includeSupplemental ? manifest.supplemental ?? [] : [])];
+  const unknownPackages = options.packages.filter(name => !eligibleRows.some(row => row.package === name));
+  if (unknownPackages.length) {
+    fail(`unknown --package name(s): ${unknownPackages.join(", ")}`);
+    return;
+  }
   if (options.sentinel) {
     try {
       sentinelIds = readSentinelIds(DEFAULT_SENTINEL);
@@ -1983,6 +2078,7 @@ async function main(argv = process.argv.slice(2)) {
   }
 
   const scope = runScope({
+    packages: options.packages,
     sentinel: options.sentinel,
     families: options.families,
     solidTargets: options.solidTargets,
@@ -1995,11 +2091,16 @@ async function main(argv = process.argv.slice(2)) {
 
   const probeIds = resolveProbeIdFilter({
     manifest,
+    packages: options.packages,
     families: options.families,
     solidTargets: options.solidTargets,
     sentinelIds,
     explicitProbeIds: options.probeIds
   });
+  if (probeIds && !collectProbeTasks(manifest, new Set(probeIds), options).length) {
+    fail("the requested filters selected no runnable probes");
+    return;
+  }
 
   let baseline = null;
   if (options.baseline) {
@@ -2021,7 +2122,8 @@ async function main(argv = process.argv.slice(2)) {
         Boolean(baselineScope.sentinel) === scope.sentinel &&
         JSON.stringify(baselineScope.families ?? []) === JSON.stringify(scope.families) &&
         JSON.stringify(baselineScope.solidTargets ?? []) === JSON.stringify(scope.solidTargets) &&
-        JSON.stringify(baselineScope.probeIds ?? []) === JSON.stringify(scope.probeIds);
+        JSON.stringify(baselineScope.probeIds ?? []) === JSON.stringify(scope.probeIds) &&
+        JSON.stringify(baselineScope.packages ?? []) === JSON.stringify(scope.packages ?? []);
       if (!sameScope) {
         fail(
           `baseline ${options.baseline} covers a different scope than this run ` +
@@ -2088,6 +2190,8 @@ async function main(argv = process.argv.slice(2)) {
         certificationConcurrency: options.certificationConcurrency,
         attemptCertification: options.attemptCertification,
         dependencyGraphLane: options.dependencyGraphLane,
+        recoverEntrypoints: options.recoverEntrypoints,
+        recoverProbeIds: options.recoverProbeIds,
         keepTemp: options.keepTemp,
         includeSupplemental: options.includeSupplemental,
         scheduleCosts
@@ -2120,6 +2224,11 @@ async function main(argv = process.argv.slice(2)) {
       checker: {
         nativeBin: binaries.nativeBin,
         typeFactsBin: binaries.typeFactsBin,
+        probeRecipeCorpus: options.probeRecipeCorpus ? resolve(options.probeRecipeCorpus) : null,
+        entrypointRecovery: {
+          allSelectedProbes: options.recoverEntrypoints,
+          probeIds: [...new Set(options.recoverProbeIds)].sort()
+        },
         registryCache,
         durableWrites: options.durableWrites,
         installLockfileCache: options.installLockfileCache ? DEFAULT_INSTALL_LOCKFILE_CACHE : null,
@@ -2144,17 +2253,10 @@ async function main(argv = process.argv.slice(2)) {
   // report (tens of KB per probe) and no consumer reads them from disk: the
   // ledgers and gates read only `complete`/`status`/`roots`/`rootIdentity`/
   // `leaves`/`cycles`, and `graphDigest` already commits to the full graph.
-  // Drop them from the serialized report so a re-measure diffs on semantics
+  // Drop them by default (investigations opt in with --include-graph) so a re-measure diffs on semantics
   // rather than rewriting the whole graph. (The planner's own unit tests build
   // plans in-memory and are unaffected.)
-  const persistedReport = {
-    ...report,
-    results: report.results.map(result => {
-      if (!result.dependencyPlan || typeof result.dependencyPlan !== "object") return result;
-      const { nodes, edges, ...plan } = result.dependencyPlan;
-      return { ...result, dependencyPlan: plan };
-    })
-  };
+  const persistedReport = reportForPersistence(report, options.includeGraph);
 
   try {
     mkdirSync(dirname(options.json), { recursive: true });

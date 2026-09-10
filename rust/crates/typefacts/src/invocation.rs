@@ -347,6 +347,11 @@ pub struct ExportValueTranscript {
     pub call_signatures: Vec<SelectedSignature>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub implementation: Option<ExportImplementationTranscript>,
+    /// Exact runtime export initializer derivation, not a call-result verdict.
+    /// A consumer must independently authenticate the imported factory's
+    /// return contract before using its object argument as a result premise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initializer: Option<ExportInitializerTranscript>,
     /// The answer to [`ExportValueDemand::local_declaration_location`],
     /// present exactly when that field was set.
     ///
@@ -385,6 +390,38 @@ pub struct ExportValueTranscript {
     pub complete: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub open_reasons: Vec<Arc<str>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExportInitializerBinding {
+    pub declaration: ResolvedDeclaration,
+    pub location: Location,
+    pub initializer: Location,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExportInitializerObjectArgument {
+    pub index: u32,
+    pub location: Location,
+}
+
+/// A positively unwritten, same-module variable chain ending in one ordinary
+/// imported call. Object arguments are direct literals; no member behavior or
+/// result identity is asserted here. Missing derivations grant no premise.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExportInitializerTranscript {
+    pub location: Location,
+    pub target: Arc<str>,
+    pub bindings: Vec<ExportInitializerBinding>,
+    pub call: Location,
+    pub callee: Location,
+    pub declaration: ResolvedDeclaration,
+    pub specifier: Arc<str>,
+    pub export_name: Arc<str>,
+    pub object_arguments: Vec<ExportInitializerObjectArgument>,
 }
 
 /// What a function-like implementation hands its caller when it completes,
@@ -461,6 +498,142 @@ pub struct CallArgumentPremise {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UnwrittenParameterBinding {
+    pub parameter_index: usize,
+    pub declaration: Location,
+}
+
+/// Protocol 46: original input transferred to a stable local helper, whose
+/// unchanged parameter is read synchronously at one exact member call.
+/// Possible execution only; no member shape or later input identity follows.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OriginalHelperRead {
+    pub parameter_index: usize,
+    pub declaration: Location,
+    pub call: Location,
+    pub argument_index: usize,
+    pub argument: Location,
+    pub helper: Location,
+    pub helper_implementation: Location,
+    pub helper_parameter: Location,
+    pub read: Location,
+    pub property: Arc<str>,
+}
+
+impl OriginalHelperRead {
+    pub fn binds_to(&self, implementation: &ExportImplementationTranscript) -> bool {
+        let encloses = |outer: &Location, inner: &Location| {
+            outer.path == inner.path
+                && outer.start_byte < outer.end_byte
+                && inner.start_byte < inner.end_byte
+                && outer.start_byte <= inner.start_byte
+                && inner.end_byte <= outer.end_byte
+        };
+        implementation.completion_form == Some(ImplementationCompletionForm::Plain)
+            && !self.property.is_empty()
+            && self.declaration.path == implementation.location.path
+            && self.helper.path == self.declaration.path
+            && encloses(&self.call, &self.argument)
+            && encloses(&self.helper_implementation, &self.helper)
+            && encloses(&self.helper_implementation, &self.helper_parameter)
+            && encloses(&self.helper_implementation, &self.read)
+            && implementation
+                .parameter_uses
+                .iter()
+                .filter(|usage| {
+                    usage.parameter_index == self.parameter_index
+                        && usage.location == self.argument
+                        && usage.binding_path.is_empty()
+                        && !usage.alias
+                        && !usage.captured
+                        && usage.reach != Reachability::Unreachable
+                        && usage.kind == ParameterUseKind::ArgumentKnown
+                })
+                .count()
+                == 1
+            && implementation
+                .signature
+                .as_ref()
+                .and_then(|s| s.parameters.get(self.parameter_index))
+                .is_some_and(|p| {
+                    p.index == self.parameter_index
+                        && !p.defaulted
+                        && !p.rest
+                        && p.declaration
+                            .as_ref()
+                            .is_some_and(|d| d.location == self.declaration)
+                })
+            && implementation
+                .calls
+                .iter()
+                .filter(|call| {
+                    call.location == self.call
+                        && call.kind == CallKind::Call
+                        && !call.captured
+                        && call.reach != Reachability::Unreachable
+                        && !call.target.is_empty()
+                        && call
+                            .declaration
+                            .as_ref()
+                            .is_some_and(|d| d.location == self.helper)
+                        && call
+                            .argument_parameters
+                            .get(self.argument_index)
+                            .and_then(Option::as_ref)
+                            .is_some_and(|p| {
+                                p.parameter_index == self.parameter_index && p.path.is_empty()
+                            })
+                })
+                .count()
+                == 1
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InitialParameterRead {
+    pub parameter_index: usize,
+    pub declaration: Location,
+    pub r#use: Location,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub first_iteration_only: bool,
+    /// ADR 0069: established by order alone — the read precedes every store
+    /// this body performs, with no iteration statement enclosing both. The
+    /// claim is about *this* use, so only a consumer that binds the use to its
+    /// own operation may take it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub positional: bool,
+    /// Origin holds only for a defined caller argument; the undefined branch
+    /// creates a local empty array. Never an unconditional identity premise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub undefined_default: Option<UndefinedParameterDefault>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UndefinedParameterDefault {
+    pub guard: Location,
+    pub assignment: Location,
+}
+
+impl UndefinedParameterDefault {
+    /// Envelope validation only. The pinned producer owns the exhaustive
+    /// store census and strict-undefined guard semantics at these locations.
+    pub fn binds_read(&self, read: &InitialParameterRead) -> bool {
+        !read.positional
+            && !read.first_iteration_only
+            && self.guard.path == read.declaration.path
+            && self.assignment.path == self.guard.path
+            && self.guard.start_byte < self.assignment.start_byte
+            && self.assignment.start_byte < self.assignment.end_byte
+            && self.assignment.end_byte < self.guard.end_byte
+            && self.guard.end_byte <= read.r#use.start_byte
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExportImplementationTranscript {
     pub location: Location,
     #[serde(default, skip_serializing_if = "str::is_empty")]
@@ -490,6 +663,14 @@ pub struct ExportImplementationTranscript {
     pub implementation_of: Option<ResolvedDeclaration>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub parameter_uses: Vec<ParameterUse>,
+    /// Protocol 39: affirmative identity of plain, unwritten caller slots.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unwritten_parameters: Vec<UnwrittenParameterBinding>,
+    /// Protocol 40: original caller roots at specific opening-prefix reads.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub initial_parameter_reads: Vec<InitialParameterRead>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub original_helper_reads: Vec<OriginalHelperRead>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub control_flow: Option<ControlFlowCensus>,
     /// Return-carry edges owned by nested callables in this implementation.
@@ -752,6 +933,19 @@ pub struct UncensusedInvokingForm {
     /// [`ExportImplementationTranscript::primitive_completion`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coercion_premise: Option<CoercionPremise>,
+    /// Complete source derivation for a local call returning one data-only
+    /// literal allocation. The consumer must bind and census that exact call.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_literal_result: Option<LocalLiteralResultPremise>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalLiteralResultPremise {
+    pub call: Location,
+    pub callee: Location,
+    pub allocation: Location,
+    pub returns: Vec<Location>,
 }
 
 /// The calls one `coercion` form's clearance would rest on. See

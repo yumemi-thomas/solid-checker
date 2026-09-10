@@ -15,6 +15,56 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
+test("single-case graph retry follows an exact callback refusal without replacing accepted coverage", async () => {
+  for (const variant of ["recover", "success", "existing", "multiple", "infrastructure", "other-family", "not-requested"]) {
+    const scratch = mkdtempSync(join(tmpdir(), "single-case-graph-retry-"));
+    try {
+      const catalog = join(scratch, "catalog");
+      if (variant === "existing") mkdirSync(catalog);
+      const failure = new CertificationRefusal({ stage: "witness-acquisition", owner: "certifier",
+        demandId: variant === "infrastructure" ? null : "exact-callback-demand",
+        family: variant === "other-family" ? "recursive-value-shape" : "argument-binding", reason: "unproved" });
+      const preparedCases = [{ artifactCase: { entrypoint: ".", conditions: [] } }];
+      const events = [];
+      const ordinary = { authority: "native-certification-complete", lane: "ordinary" };
+      const recovered = { authority: "native-certification-complete", lane: "graph" };
+      const run = executeNativeOrGraphCertification({
+        options: { catalog }, scratch, graph: null,
+        generated: { certificationInputs: variant === "multiple" ? [{}, {}] : [{}] },
+        prepareGeneratedGraph: variant === "not-requested" ? null : async error => {
+          assert.equal(error, failure);
+          events.push("prepare");
+          return { preparedCases };
+        }
+      }, {
+        executeNative: async () => {
+          events.push("ordinary");
+          if (variant === "success") return ordinary;
+          // A failed attempt may create this directory. Its existence must
+          // not be confused with a publication predating the transaction.
+          mkdirSync(catalog, { recursive: true });
+          throw failure;
+        },
+        executeGraph: async ({ cases }) => {
+          events.push("graph");
+          assert.equal(cases, preparedCases);
+          return recovered;
+        }
+      });
+      if (variant === "recover") {
+        assert.equal(await run, recovered);
+        assert.deepEqual(events, ["ordinary", "prepare", "graph"]);
+      } else if (variant === "success") {
+        assert.equal(await run, ordinary);
+        assert.deepEqual(events, ["ordinary"]);
+      } else {
+        await assert.rejects(run, error => error === failure);
+        assert.deepEqual(events, ["ordinary"]);
+      }
+    } finally { rmSync(scratch, { recursive: true, force: true }); }
+  }
+});
+
 import {
   adoptFrameValue,
   createFrameRecord,
@@ -29,6 +79,11 @@ import {
   buildPublishedGraphExecutionRequest,
   CertificationRefusal,
   acquireRootCompilerSources,
+  cascadeGraphNodeRefusals,
+  graphCasesWithoutRefusedNodes,
+  retainedCaseFloorRefusal,
+  recoveryGraphBudgetRefusal,
+  RECOVERY_GRAPH_CASE_BUDGET,
   certifyContract,
   isExactDependencyCompositionRefusal,
   isReusableDependencyRefusalAudit,
@@ -37,10 +92,18 @@ import {
   mergeProposalDependencies,
   reexportImporterCensus,
   staticRuntimeDependencies,
+  staticBindingDependencies,
   certificationImporterPathFor,
   parseCertifyArguments,
   partialProposalHasDependencyFrontier,
   preparedGraphForPartialProposal,
+  RetainedCasePreparationRefusal,
+  recoveryGraphCases,
+  certifyRecoverableCaseSelection,
+  certifyIndependentCaseSelection,
+  executeNativeOrGraphCertification,
+  projectProposalCases,
+  mapWithExactConcurrency,
   publishedGraphPreparationConcurrency,
   registryAcquisitionConcurrency,
   registryCacheRoot,
@@ -74,6 +137,26 @@ import {
   withheldClaimsFromEmitterOutput,
   declinedClosuresFromEmitterOutput
 } from "../scripts/generate-package-contract.mjs";
+
+test("declaration binding recovery requests only exact refused reexports without granting authority", () => {
+  const runtime = { axis: "runtime", kind: "import", specifier: "runtime", importerPath: "./index.js" };
+  const declaration = { axis: "declarations", kind: "reexport", specifier: "types/setup", importerPath: "./index.d.ts" };
+  const resolved = { externalDependencies: [runtime, declaration,
+    { ...declaration, kind: "import", specifier: "type-import" },
+    { ...declaration, specifier: "unrequested" }] };
+  const coordinate = { entrypoint: "./setup", conditions: ["import"] };
+  const refusal = { ...coordinate, conditions: [], reason: "accepted dependency types/setup has no exact declarations binding for export configure" };
+  assert.deepEqual(staticBindingDependencies(resolved, coordinate, [refusal]), [runtime, declaration]);
+  for (const altered of [
+    { ...refusal, entrypoint: "." },
+    { ...refusal, conditions: ["browser"] },
+    { ...refusal, reason: refusal.reason.replace("declarations", "runtime") },
+    { ...refusal, reason: refusal.reason.replace("types/setup", "type-import") },
+    { ...refusal, reason: refusal.reason.replace("types/setup", "outside-census") }
+  ]) assert.deepEqual(staticBindingDependencies(resolved, coordinate, [altered]), [runtime]);
+  assert.deepEqual(staticBindingDependencies(resolved, coordinate), [runtime]);
+  assert.deepEqual(staticRuntimeDependencies(resolved), [runtime]);
+});
 
 test("a withheld-closure record is read off the native transaction's stdout, and only when whole", () => {
   const record = {
@@ -514,6 +597,615 @@ test("the dependency-graph lane is an explicit, valueless, default-off request",
   assert.deepEqual(options.entrypoints, ["./web"]);
 });
 
+test("entrypoint recovery is opt-in and retains generated cases beside the dependency frontier", () => {
+  const base = ["--integrity", "sha512-cGlubmVk"];
+  assert.equal(parseCertifyArguments(base).recoverEntrypoints, false);
+  const options = parseCertifyArguments([...base, "--recover-entrypoints", "--entrypoint", "./m"]);
+  assert.equal(options.recoverEntrypoints, true);
+  assert.deepEqual(options.entrypoints, ["./m"]);
+  const generated = { certificationInputs: [{ entrypoint: "./m", conditions: [] }] };
+  const frontier = [".", "./v2"].map(entrypoint => ({
+    entrypoint, conditions: [], stage: "artifact-case", class: "dependency-composition",
+    applicability: "runtime-module", reason: "missing exact dependency binding"
+  }));
+  const unproved = { entrypoint: "./other", conditions: [], class: "published-artifact" };
+  const result = recoveryGraphCases(generated, [...frontier, unproved]);
+  assert.deepEqual(result.cases, ["./m", ".", "./v2"].map(entrypoint => ({ entrypoint, conditions: ["import"] })));
+  assert.deepEqual(result.retainedCases, [{ entrypoint: "./m", conditions: ["import"] }]);
+  assert.deepEqual(result.remainingRefusals, [unproved]);
+  // The requests are rebuilt, without mutating or transplanting evidence.
+  assert.deepEqual(generated.certificationInputs[0].conditions, []);
+  assert.throws(() => recoveryGraphCases({ certificationInputs: [] }, frontier), /no generated artifact cases/);
+  assert.throws(() => recoveryGraphCases({ certificationInputs: [{ entrypoint: "./m" }] }, frontier), /exact entrypoint/);
+  assert.throws(() => recoveryGraphCases(generated, [
+    ...frontier, { ...frontier[0], entrypoint: "./m", conditions: ["import"] }
+  ]), /conflicting duplicate/);
+  assert.throws(() => recoveryGraphCases(generated, [...frontier, frontier[0]]), /conflicting duplicate/);
+  // Two genuine condition selections stay separate even on the same subpath.
+  assert.equal(recoveryGraphCases(generated, [{ ...frontier[0], entrypoint: "./m", conditions: ["browser"] }]).cases.length, 2);
+});
+
+test("recovery publishes newly proved cases with every retained case and exact refusals", async () => {
+  const cases = ["retained", "good", "bad"];
+  const coordinates = cases.map(entrypoint => ({ entrypoint, conditions: ["import"] }));
+  const recovery = { cases: coordinates, retainedCases: coordinates.slice(0, 1) };
+  const attempts = [];
+  const result = await certifyRecoverableCaseSelection({ cases, recovery, certify: async (selected, publish) => {
+    attempts.push({ selected: [...selected], publish });
+    if (selected.includes("bad")) throw new CertificationRefusal({ stage: "witness-acquisition", owner: "certifier", demandId: "exact-demand", family: "recursive-value-shape", reason: "unproved" });
+    return { final: publish };
+  }});
+  assert.deepEqual(attempts, [
+    { selected: cases, publish: true },
+    { selected: ["retained"], publish: false },
+    { selected: ["retained", "good"], publish: false },
+    { selected: cases, publish: false },
+    { selected: ["retained", "good"], publish: true }
+  ]);
+  assert.deepEqual(result, { final: true });
+  assert.deepEqual(recovery.publishedCases, coordinates.slice(0, 2));
+  assert.equal(recovery.caseRefusals[0].entrypoint, "bad");
+  assert.equal(recovery.caseRefusals[0].demandId, "exact-demand");
+});
+
+test("independent recovery certifies fresh subsets and publishes exact accepted cases", async () => {
+  const cases = [".", "./bad", "./good"].map(entrypoint => ({ entrypoint, conditions: ["import"] }));
+  const recovery = {}, attempts = [];
+  await certifyIndependentCaseSelection({ cases, recovery, existingPublication: false, certify: async (selected, publish) => {
+    attempts.push({ cases: selected.map(x => x.entrypoint), publish });
+    if (selected.some(x => x.entrypoint === "./bad")) throw new CertificationRefusal({
+      stage: "witness-acquisition", owner: "certifier", demandId: "bad-demand", reason: "unproved"
+    });
+  }});
+  assert.deepEqual(attempts, [
+    { cases: [".", "./bad", "./good"], publish: true },
+    { cases: ["."], publish: false },
+    { cases: [".", "./bad"], publish: false },
+    { cases: [".", "./good"], publish: false },
+    { cases: [".", "./good"], publish: true }
+  ]);
+  assert.deepEqual(recovery.expectedCases, cases);
+  assert.deepEqual(recovery.publishedCases, [cases[0], cases[2]]);
+  assert.equal(recovery.caseRefusals[0].demandId, "bad-demand");
+});
+
+test("graph fallback independently certifies unaccepted cases and captures prior publication before attempts", async () => {
+  for (const existedBefore of [false, true]) {
+    const scratch = mkdtempSync(join(tmpdir(), "graph-fallback-selection-"));
+    try {
+      const catalog = join(scratch, "catalog");
+      const marker = join(catalog, "existing-publication");
+      if (existedBefore) {
+        mkdirSync(catalog);
+        writeFileSync(marker, "preserve me");
+      }
+      const coordinates = [".", "./bad", "./good"].map(entrypoint => ({ entrypoint, conditions: ["import"] }));
+      const selection = { artifact: { path: "./index.js", sha256: "runtime" },
+        declarations: { path: "./index.d.ts", sha256: "types" },
+        resolution: { runtimeBranch: "/import", typesBranch: "/types" }, exports: { value: "summary" } };
+      const document = { package: { name: "pkg", version: "1.0.0", integrity: "pin" },
+        entrypoints: Object.fromEntries(coordinates.map(c => [c.entrypoint, { cases: [selection] }])),
+        summaries: { summary: { shape: "plain", call: {} } } };
+      const output = join(scratch, "proposal.json");
+      writeFileSync(output, JSON.stringify(document));
+      const inputs = coordinates.map(c => ({ ...c, resolution: {
+        packageName: "pkg", packageVersion: "1.0.0", packageIntegrity: "pin", requestedEntrypoint: c.entrypoint,
+        packageRoot: "/pkg", runtime: { path: "/pkg/index.js", digest: "sha256:runtime" },
+        declarations: { path: "/pkg/index.d.ts", digest: "sha256:types" },
+        runtimeTrace: { branch: "/import" }, declarationTrace: { branch: "/types" }
+      } }));
+      const graphOnly = { entrypoint: "./graph-only", conditions: ["import"] };
+      const recovery = { cases: [...coordinates, graphOnly], retainedCases: coordinates };
+      const graph = { preparedCases: recovery.cases, timing: { entrypointRecovery: recovery, reusedProposalForRecovery: true } };
+      const failure = new CertificationRefusal({ stage: "witness-acquisition", owner: "certifier", demandId: "bad-demand", reason: "unproved" });
+      const attempts = [];
+      const run = executeNativeOrGraphCertification({
+        options: { catalog, trustConfigurationOutput: join(scratch, "trust.json"), recoverEntrypoints: true },
+        generated: { output, certificationInputs: inputs }, graph, scratch
+      }, {
+        executeGraph: async () => {
+          // A failed attempt leaves a directory, but no accepted case set.
+          mkdirSync(catalog, { recursive: true });
+          throw failure;
+        },
+        executeNative: async ({ generated, options }) => {
+          const selected = generated.certificationInputs.map(c => c.entrypoint);
+          const projected = JSON.parse(readFileSync(generated.output, "utf8"));
+          assert.deepEqual(Object.keys(projected.entrypoints), selected);
+          assert.deepEqual(projected.summaries, document.summaries);
+          attempts.push({ selected, publish: options.catalog === catalog });
+          if (selected.includes("./bad")) throw failure;
+          return { authority: "native-certification-complete" };
+        }
+      });
+      if (existedBefore) {
+        await assert.rejects(run, error => error === failure);
+        assert.deepEqual(attempts, [{ selected: [".", "./bad", "./good"], publish: true }]);
+        assert.equal(readFileSync(marker, "utf8"), "preserve me");
+        assert.equal(recovery.publishedCases, undefined);
+      } else {
+        assert.deepEqual(await run, { authority: "native-certification-complete" });
+        assert.deepEqual(attempts.at(-1), { selected: [".", "./good"], publish: true });
+        assert.ok(attempts.some(a => !a.publish));
+        assert.deepEqual(recovery.publishedCases, [coordinates[0], coordinates[2]]);
+        assert.deepEqual(recovery.unpublishedCases, [coordinates[1], graphOnly]);
+        assert.equal(recovery.caseRefusals[0].demandId, "bad-demand");
+        assert.equal(recovery.graphRefusal.reason, "unproved");
+        assert.equal(graph.timing.independentCaseRecovery.nativeCertificationTransactions, attempts.length);
+      }
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  }
+});
+
+test("case projection preserves whole claims and requires exact artifact identities", () => {
+  const selected = { artifact: { path: "./index.js", sha256: "runtime" },
+    declarations: { path: "./index.d.ts", sha256: "types" },
+    resolution: { runtimeBranch: "/import", typesBranch: "/types" }, exports: { value: "summary" } };
+  const document = { package: { name: "pkg", version: "1.0.0", integrity: "pin" },
+    entrypoints: { ".": { cases: [selected] }, "./other": { cases: [{ ...selected, exports: { value: "other" } }] } },
+    summaries: { summary: { shape: "plain", call: {} }, other: { shape: "callable" } } };
+  const input = { entrypoint: ".", resolution: { packageName: "pkg", packageVersion: "1.0.0", packageIntegrity: "pin",
+    requestedEntrypoint: ".", packageRoot: "/pkg", runtime: { path: "/pkg/index.js", digest: "sha256:runtime" },
+    declarations: { path: "/pkg/index.d.ts", digest: "sha256:types" }, runtimeTrace: { branch: "/import" },
+    declarationTrace: { branch: "/types" } } };
+  const projected = projectProposalCases(document, [input]);
+  assert.deepEqual(Object.keys(projected.entrypoints), ["."]);
+  assert.equal(projected.entrypoints["."].cases[0], selected);
+  assert.equal(projected.summaries.summary, document.summaries.summary);
+  assert.deepEqual(Object.keys(projected.summaries), ["summary"]);
+  assert.equal(Object.keys(document.entrypoints).length, 2);
+  for (const change of [
+    x => x.resolution.packageIntegrity = "other",
+    x => x.resolution.runtime.digest = "sha256:other",
+    x => x.resolution.declarations.path = "/pkg/other.d.ts",
+    x => x.resolution.runtimeTrace.branch = "/browser",
+    x => x.resolution.declarationTrace.branch = "/other"
+  ]) {
+    const changed = structuredClone(input); change(changed);
+    assert.throws(() => projectProposalCases(document, [changed]), /exact/);
+  }
+  assert.throws(() => projectProposalCases(document, [input, input]), /duplicate/);
+  assert.throws(() => projectProposalCases(document, []), /empty/);
+  const detailed = structuredClone(document);
+  detailed.entrypoints["."].cases[0].exports.value = { summary: "summary", stability: "unknown" };
+  assert.deepEqual(Object.keys(projectProposalCases(detailed, [input]).summaries), ["summary"]);
+});
+
+test("large recovery privately certifies and reads its retained floor before publishing graph additions", async () => {
+  for (const existedBefore of [false, true]) {
+    const scratch = mkdtempSync(join(tmpdir(), "verified-floor-workflow-"));
+    try {
+      const catalog = join(scratch, "catalog");
+      if (existedBefore) { mkdirSync(catalog); writeFileSync(join(catalog, "existing"), "preserve"); }
+      const coordinates = ["./kept", "./bad", "./graph"].map(entrypoint => ({ entrypoint, conditions: ["import"] }));
+      const selection = { artifact: { path: "./index.js", sha256: "runtime", closureSha256: "closure" }, declarations: { path: "./index.d.ts", sha256: "types" }, resolution: { runtimeBranch: "/import", typesBranch: "/types" }, exports: { value: "summary" } };
+      const document = { package: { name: "pkg", version: "1.0.0", integrity: "pin" }, entrypoints: Object.fromEntries(coordinates.slice(0, 2).map(c => [c.entrypoint, { cases: [selection] }])), summaries: { summary: { shape: "plain", call: {} } } };
+      const output = join(scratch, "proposal.json"); writeFileSync(output, JSON.stringify(document));
+      const inputs = coordinates.slice(0, 2).map(c => ({ entrypoint: c.entrypoint, conditions: [], resolution: {
+        importer: "/project/importer.mjs", specifier: `pkg/${c.entrypoint.slice(2)}`,
+        packageName: "pkg", packageVersion: "1.0.0", packageIntegrity: "pin", packageRoot: "/pkg", requestedEntrypoint: c.entrypoint,
+        runtime: { path: "/pkg/index.js", digest: "sha256:runtime" }, declarations: { path: "/pkg/index.d.ts", digest: "sha256:types" }, runtimeTrace: { branch: "/import" }, declarationTrace: { branch: "/types" }
+      } }));
+      const recovery = { cases: coordinates, retainedCases: coordinates.slice(0, 2), retainedProposalRoots: true };
+      const graph = { preparedCases: coordinates, timing: { entrypointRecovery: recovery } };
+      const failure = new CertificationRefusal({ stage: "witness-acquisition", owner: "certifier", reason: "bad remains unproved" });
+      const nativeAttempts = [], graphAttempts = [];
+      const write = (path, value) => { const bytes = JSON.stringify(value); writeFileSync(path, bytes); return `sha256:${createHash("sha256").update(bytes).digest("hex")}`; };
+      const run = executeNativeOrGraphCertification({ options: { catalog, trustConfigurationOutput: join(scratch, "trust.json"), recoverEntrypoints: true }, generated: { output, certificationInputs: inputs }, graph, scratch }, {
+        executeGraph: async ({ cases, catalogRoot }) => {
+          graphAttempts.push({ cases: cases.map(c => c.entrypoint), public: catalogRoot === catalog });
+          if (cases.some(c => c.entrypoint === "./bad")) throw failure;
+          return { authority: "native-certification-complete", catalogRoot };
+        },
+        executeNative: async ({ generated, options }) => {
+          nativeAttempts.push({ selected: generated.certificationInputs.map(c => c.entrypoint), public: options.catalog === catalog });
+          if (generated.certificationInputs.some(c => c.entrypoint === "./bad")) throw failure;
+          mkdirSync(options.catalog, { recursive: true });
+          const main = JSON.parse(readFileSync(generated.output, "utf8"));
+          const documentDigest = write(join(options.catalog, "main.json"), main);
+          const imported = generated.certificationInputs[0].resolution;
+          const bindings = { importer: imported.importer, specifier: imported.specifier, resolvedImportRoot: "exact-root", semanticDigest: "exact-semantic" };
+          const receiptDigest = write(join(options.catalog, "receipt.json"), { payload: { ...bindings, mainDigest: documentDigest } });
+          write(join(options.catalog, "accepted-contracts.json"), { format: "solid-checker-accepted-contract-catalog", catalogVersion: 2, contracts: [{ document: "main.json", documentDigest, receipt: "receipt.json", receiptDigest, bindings, import: imported }] });
+          return { authority: "native-certification-complete", catalogRoot: options.catalog };
+        }
+      });
+      if (existedBefore) {
+        await assert.rejects(run, error => error === failure);
+        assert.equal(recovery.verifiedRetainedFloor, undefined);
+        assert.deepEqual(nativeAttempts, [{ selected: ["./kept", "./bad"], public: true }]);
+        assert.equal(readFileSync(join(catalog, "existing"), "utf8"), "preserve");
+      } else {
+        assert.equal((await run).catalogRoot, catalog);
+        assert.ok(nativeAttempts.every(attempt => !attempt.public));
+        assert.deepEqual(graphAttempts, [
+          { cases: ["./kept", "./bad", "./graph"], public: true },
+          { cases: ["./kept", "./bad"], public: false },
+          { cases: ["./kept", "./graph"], public: true }
+        ]);
+        assert.deepEqual(recovery.publishedCases, [coordinates[0], coordinates[2]]);
+        assert.deepEqual(recovery.caseRefusals.map(c => c.entrypoint), ["./bad"]);
+        assert.equal(recovery.verifiedRetainedFloor.publication.cases.length, 1);
+        assert.deepEqual(recovery.cases, coordinates);
+      }
+    } finally { rmSync(scratch, { recursive: true, force: true }); }
+  }
+});
+
+test("independent recovery cannot shrink an existing publication or clear an empty result", async () => {
+  const cases = [".", "./bad"].map(entrypoint => ({ entrypoint, conditions: [] }));
+  const failure = new CertificationRefusal({ stage: "witness-acquisition", owner: "certifier", reason: "unproved" });
+  for (const existingPublication of [true, false]) {
+    const recovery = {}, attempts = [];
+    await assert.rejects(certifyIndependentCaseSelection({ cases, recovery, existingPublication,
+      certify: async (selected, publish) => { attempts.push(publish); throw failure; }
+    }), error => error === failure);
+    assert.deepEqual(attempts, existingPublication ? [true] : [true, false, false]);
+    assert.equal(recovery.publishedCases, undefined);
+  }
+  let calls = 0;
+  await assert.rejects(certifyIndependentCaseSelection({ cases: [cases[0], cases[0]], recovery: {},
+    existingPublication: false, certify: async () => { calls++; }
+  }), /conflicting duplicate/);
+  assert.equal(calls, 0);
+  await assert.rejects(certifyIndependentCaseSelection({ cases, recovery: {}, certify: async () => { calls++; } }), /publication-state/);
+  const oversized = Array.from({ length: 1025 }, (_, index) => ({ entrypoint: `./case${index}`, conditions: [] }));
+  await assert.rejects(certifyIndependentCaseSelection({ cases: oversized, recovery: {}, existingPublication: false,
+    certify: async () => { calls++; throw failure; }
+  }), error => error === failure);
+  assert.equal(calls, 1);
+});
+
+test("independent recovery propagates non-proof and final-publication failures", async () => {
+  const cases = [".", "./bad"].map(entrypoint => ({ entrypoint, conditions: [] }));
+  const failure = new CertificationRefusal({ stage: "witness-acquisition", owner: "certifier", reason: "unproved" });
+  const trust = new CertificationRefusal({ stage: "receipt-issuance", owner: "trust", reason: "missing issuer" });
+  const recovery = {};
+  await assert.rejects(certifyIndependentCaseSelection({ cases, recovery, existingPublication: false,
+    certify: async (selected, publish) => {
+      if (selected.length === 2) throw failure;
+      if (publish) throw trust;
+    }
+  }), error => error === trust);
+  assert.equal(recovery.publishedCases, undefined);
+  let calls = 0;
+  await assert.rejects(certifyIndependentCaseSelection({ cases, recovery: {}, existingPublication: false,
+    certify: async () => { calls++; throw trust; }
+  }), error => error === trust);
+  assert.equal(calls, 1);
+});
+
+test("large recovery subdivides refused batches and freshly verifies the union", async () => {
+  const cases = Array.from({ length: 64 }, (_, index) => ({ entrypoint: `./case${index}`, conditions: [] }));
+  const bad = new Set([cases[0], cases[31], cases[63]]), attempts = [], recovery = {};
+  const failure = new CertificationRefusal({ stage: "witness-acquisition", owner: "certifier", reason: "unproved" });
+  await certifyIndependentCaseSelection({ cases, recovery, existingPublication: false,
+    certify: async (selected, publish) => {
+      attempts.push({ selected, publish });
+      if (selected.some(item => bad.has(item))) throw failure;
+    }
+  });
+  assert.equal(recovery.strategy, "binary-subdivision");
+  assert.deepEqual(attempts.at(-1), { selected: cases.filter(item => !bad.has(item)), publish: true });
+  assert.equal(recovery.publishedCases.length, 61);
+  assert.deepEqual(recovery.caseRefusals.map(x => x.entrypoint), ["./case0", "./case31", "./case63"]);
+  assert.ok(attempts.length <= 2 * cases.length);
+  assert.ok(attempts.some(x => !x.publish && x.selected.length > 1));
+
+  const conflicting = {};
+  await assert.rejects(certifyIndependentCaseSelection({ cases, recovery: conflicting, existingPublication: false,
+    certify: async (selected, publish) => { if (publish) throw failure; }
+  }), error => error === failure);
+  assert.equal(conflicting.publishedCases, undefined);
+
+  const none = {};
+  let calls = 0;
+  await assert.rejects(certifyIndependentCaseSelection({ cases, recovery: none, existingPublication: false,
+    certify: async () => { calls++; throw failure; }
+  }), error => error === failure);
+  assert.equal(none.caseRefusals.length, 64);
+  assert.equal(calls, 127);
+  assert.equal(none.publishedCases, undefined);
+});
+
+test("failed graph preparation waits for its other workers before returning", async () => {
+  let release;
+  const blocked = new Promise(resolve => { release = resolve; });
+  let completed = false;
+  let rejected = false;
+  const result = mapWithExactConcurrency([0, 1], 2, async index => {
+    if (index === 0) throw new Error("first worker failed");
+    await blocked;
+    completed = true;
+  }).catch(error => { rejected = true; throw error; });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(rejected, false);
+  release();
+  await assert.rejects(result, /first worker failed/);
+  assert.equal(completed, true);
+});
+
+test("recovery never drops a retained case or hides a non-proof failure", async () => {
+  for (const proofFailure of [true, false]) {
+    const cases = ["retained", "candidate"];
+    const recovery = { cases, retainedCases: ["retained"] };
+    let calls = 0;
+    const failure = proofFailure
+      ? new CertificationRefusal({ stage: "witness-acquisition", owner: "certifier", reason: "base unproved" })
+      : new Error("publication failed");
+    await assert.rejects(certifyRecoverableCaseSelection({ cases, recovery, certify: async () => { calls++; throw failure; } }), error => error === failure);
+    assert.equal(calls, proofFailure ? 2 : 1);
+    assert.equal(recovery.publishedCases, undefined);
+  }
+});
+
+test("a refused retained case selects independently across the prepared set when nothing was published", async () => {
+  // ADR 0070. The prepared set is the retained proposal cases plus the
+  // dependency-composition frontier that the proposal never contained. One
+  // unprovable retained case must not take the frontier down with it.
+  const cases = ["retained-ok", "retained-bad", "frontier"];
+  const recovery = { cases, retainedCases: ["retained-ok", "retained-bad"] };
+  const attempts = [];
+  const result = await certifyRecoverableCaseSelection({
+    cases, recovery, existingPublication: false,
+    certify: async (selected, publish) => {
+      attempts.push({ selected: [...selected], publish });
+      if (selected.includes("retained-bad")) {
+        throw new CertificationRefusal({ stage: "witness-acquisition", owner: "certifier", reason: "retained-bad unproved" });
+      }
+      return { published: [...selected] };
+    }
+  });
+  assert.deepEqual(result.published, ["retained-ok", "frontier"]);
+  assert.deepEqual(recovery.publishedCases, ["retained-ok", "frontier"]);
+  assert.equal(recovery.strategy, "independent-prepared-selection");
+  assert.match(recovery.retainedBaselineRefusal, /retained-bad unproved/);
+  assert.deepEqual(recovery.caseRefusals.map(refusal => refusal.stage), ["witness-acquisition"]);
+  assert.deepEqual(recovery.caseRefusals.map(refusal => refusal.reason), ["retained-bad unproved"]);
+  assert.equal(attempts.at(-1).publish, true);
+  assert.deepEqual(attempts.at(-1).selected, ["retained-ok", "frontier"]);
+});
+
+test("prepared-set selection subdivides instead of spending a transaction per case", async () => {
+  // Each trial re-certifies the whole prepared graph, so the transaction count
+  // is the difference between finishing and hitting the certification budget.
+  const cases = Array.from({ length: 24 }, (_, index) => `case-${index}`);
+  const bad = "case-17";
+  const recovery = { cases, retainedCases: cases.slice(0, 20) };
+  let trials = 0;
+  const result = await certifyRecoverableCaseSelection({
+    cases, recovery, existingPublication: false,
+    certify: async (selected, publish) => {
+      trials++;
+      if (selected.includes(bad)) {
+        throw new CertificationRefusal({ stage: "witness-acquisition", owner: "certifier", reason: "one bad case" });
+      }
+      return { published: [...selected] };
+    }
+  });
+  assert.deepEqual(result.published, cases.filter(item => item !== bad));
+  assert.deepEqual(recovery.publishedCases, cases.filter(item => item !== bad));
+  assert.equal(recovery.caseRefusals.length, 1);
+  assert.equal(recovery.caseRefusals[0].reason, "one bad case");
+  // Combined + baseline + subdivision + final publish. A prefix walk would
+  // spend 24 trials on the subdivision alone.
+  assert.ok(trials < 16, `expected a subdivision-shaped transaction count, spent ${trials}`);
+});
+
+test("an existing publication is never reduced by the prepared-set selection", async () => {
+  const cases = ["retained-bad", "frontier"];
+  const failure = new CertificationRefusal({ stage: "witness-acquisition", owner: "certifier", reason: "retained-bad unproved" });
+  for (const existingPublication of [true, null, undefined]) {
+    const recovery = { cases, retainedCases: ["retained-bad"] };
+    await assert.rejects(certifyRecoverableCaseSelection({
+      cases, recovery,
+      ...(existingPublication === undefined ? {} : { existingPublication }),
+      certify: async selected => {
+        if (selected.includes("retained-bad")) throw failure;
+        return {};
+      }
+    }), error => error === failure);
+    assert.equal(recovery.publishedCases, undefined);
+    assert.equal(recovery.strategy, undefined);
+  }
+});
+
+test("a prepared set that proves nothing rethrows so the proposal fallback still runs", async () => {
+  const cases = ["retained-bad", "frontier-bad"];
+  const recovery = { cases, retainedCases: ["retained-bad"] };
+  const failure = new CertificationRefusal({ stage: "witness-acquisition", owner: "certifier", reason: "nothing provable" });
+  let fallbacks = 0;
+  const result = await certifyRecoverableCaseSelection({
+    cases, recovery, existingPublication: false,
+    certify: async () => { throw failure; },
+    fallback: async error => { assert.equal(error, failure); fallbacks++; return { authority: "proposal-fallback" }; }
+  });
+  assert.equal(fallbacks, 1);
+  assert.equal(result.authority, "proposal-fallback");
+  assert.equal(recovery.publishedCases, undefined);
+});
+
+test("recovery final combined publication must pass independently", async () => {
+  const cases = ["retained", "candidate"];
+  const recovery = { cases, retainedCases: ["retained"] };
+  let publications = 0;
+  await assert.rejects(certifyRecoverableCaseSelection({ cases, recovery, certify: async (_, publish) => {
+    if (publish && ++publications === 1) throw new CertificationRefusal({ stage: "witness-acquisition", owner: "certifier", reason: "initial refusal" });
+    if (publish) throw new Error("final conflict");
+    return {};
+  }}), /final conflict/);
+  assert.equal(recovery.publishedCases, undefined);
+});
+
+test("a graph refusal can fall back only through fresh retained-proposal certification", async () => {
+  const cases = ["retained", "candidate"];
+  const recovery = { cases, retainedCases: ["retained"] };
+  const failure = new CertificationRefusal({ stage: "witness-acquisition", owner: "certifier", reason: "retained graph cannot prove its dependency" });
+  let fallbackCalls = 0;
+  const result = await certifyRecoverableCaseSelection({ cases, recovery,
+    certify: async () => { throw failure; }, fallback: async error => {
+      assert.equal(error, failure); fallbackCalls++; return { authority: "fresh-retained-certification" };
+    }
+  });
+  assert.equal(fallbackCalls, 1);
+  assert.equal(result.authority, "fresh-retained-certification");
+  await assert.rejects(certifyRecoverableCaseSelection({ cases, recovery,
+    certify: async () => { throw failure; }, fallback: async () => { throw new Error("retained certification also failed"); }
+  }), /retained certification also failed/);
+});
+
+test("recovery selection is bounded and successful combined certification needs no retries", async () => {
+  for (const count of [3, 33]) {
+    const cases = Array.from({ length: count }, (_, index) => String(index));
+    let calls = 0;
+    await certifyRecoverableCaseSelection({ cases, recovery: { cases, retainedCases: cases.slice(0, 1) }, certify: async (selected, publish) => {
+      calls++; assert.deepEqual(selected, cases); assert.equal(publish, true); return {};
+    }});
+    assert.equal(calls, 1);
+  }
+});
+
+// A graph state shaped exactly as `prepareState` leaves one, so the default
+// reachability walk under test is the real one.
+function graphNodeFixture(key, dependencies = []) {
+  const state = {
+    node: {
+      key,
+      packageName: key,
+      packageVersion: "1.0.0",
+      entrypoint: ".",
+      conditions: ["import"],
+      dependencies: dependencies.map(dependency => ({
+        specifier: dependency.node.key,
+        node: dependency.node.key
+      }))
+    },
+    directDependencies: dependencies.map(dependency => ({
+      viaSpecifier: dependency.node.key,
+      state: dependency
+    }))
+  };
+  return state;
+}
+
+test("a refused graph node refuses exactly the artifact cases whose graph reaches it", () => {
+  const broken = graphNodeFixture("node-builtin-owner");
+  const shared = graphNodeFixture("shared");
+  const brokenRoot = graphNodeFixture("root-a", [broken, shared]);
+  const intactRoot = graphNodeFixture("root-b", [shared]);
+  const byKey = new Map(
+    [broken, shared, brokenRoot, intactRoot].map(state => [state.node.key, state])
+  );
+  const nodeRefusals = new Map([
+    ["node-builtin-owner", { stage: "graph-preparation", reason: "node:async_hooks is not a package receipt" }]
+  ]);
+  const prepared = [
+    { root: brokenRoot, artifactCase: { entrypoint: "./server", conditions: ["import", "node"] } },
+    { root: intactRoot, artifactCase: { entrypoint: ".", conditions: ["import"] } }
+  ];
+  const { cases, refusals } = graphCasesWithoutRefusedNodes({ prepared, byKey, nodeRefusals });
+  assert.equal(cases.length, 1);
+  assert.equal(cases[0].artifactCase.entrypoint, ".");
+  // The surviving case keeps its whole graph, including the node it shares
+  // with the refused one.
+  assert.deepEqual(cases[0].nodes.map(state => state.node.key).sort(), ["root-b", "shared"]);
+  assert.equal(refusals.length, 1);
+  assert.equal(refusals[0].entrypoint, "./server");
+  assert.deepEqual(refusals[0].conditions, ["import", "node"]);
+  assert.equal(refusals[0].stage, "graph-preparation");
+  assert.match(refusals[0].reason, /graph node node-builtin-owner@1\.0\.0 \. \[import\] refused: node:async_hooks/);
+});
+
+test("a refused graph node refuses every node generated against its contract", () => {
+  const broken = graphNodeFixture("broken");
+  const middle = graphNodeFixture("middle", [broken]);
+  const root = graphNodeFixture("root", [middle]);
+  const unrelated = graphNodeFixture("unrelated");
+  const nodeRefusals = cascadeGraphNodeRefusals(
+    [broken, middle, root, unrelated],
+    new Map([["broken", { stage: "graph-generation", reason: "closure module was not found" }]])
+  );
+  assert.deepEqual([...nodeRefusals.keys()].sort(), ["broken", "middle", "root"]);
+  assert.equal(nodeRefusals.get("middle").stage, "graph-generation");
+  assert.match(nodeRefusals.get("middle").reason, /dependency broken refused: closure module was not found/);
+  assert.match(nodeRefusals.get("root").reason, /dependency middle refused: dependency broken refused:/);
+  assert.equal(nodeRefusals.has("unrelated"), false);
+});
+
+test("a graph that cannot prepare a retained case is abandoned rather than published smaller", () => {
+  const retained = [
+    { entrypoint: ".", conditions: ["import"] },
+    { entrypoint: "./http", conditions: ["import"] }
+  ];
+  assert.equal(retainedCaseFloorRefusal(retained, new Set(retained), []), null);
+  // Only the frontier dropping is not a floor breach: those cases refused at
+  // generation, so the proposal never covered them.
+  assert.equal(
+    retainedCaseFloorRefusal(retained, new Set(retained), [
+      { entrypoint: "./config", conditions: ["import"], stage: "graph-preparation", reason: "crossws is not installed" }
+    ]),
+    null
+  );
+  const message = retainedCaseFloorRefusal(
+    retained,
+    new Set([retained[0]]),
+    [{ entrypoint: "./http", conditions: ["import"], stage: "graph-preparation", reason: "crossws is not installed" }]
+  );
+  assert.match(message, /would drop 1 retained artifact case\(s\)/);
+  assert.match(message, /starting at \.\/http \[import\]: crossws is not installed/);
+});
+
+test("a recovery set above the graph budget is refused before any preparation work", () => {
+  assert.equal(recoveryGraphBudgetRefusal(RECOVERY_GRAPH_CASE_BUDGET), null);
+  assert.equal(recoveryGraphBudgetRefusal(1), null);
+  const message = recoveryGraphBudgetRefusal(RECOVERY_GRAPH_CASE_BUDGET + 1);
+  assert.match(message, new RegExp(`prepares ${RECOVERY_GRAPH_CASE_BUDGET + 1} artifact cases`));
+  assert.match(message, new RegExp(`above the ${RECOVERY_GRAPH_CASE_BUDGET}-case graph budget`));
+  // The measured boundary: 24 prepared cases certify, 59 exceeded the runner's
+  // memory ceiling and cost the row its whole publication.
+  assert.equal(recoveryGraphBudgetRefusal(24), null);
+  assert.notEqual(recoveryGraphBudgetRefusal(59), null);
+});
+
+test("a refused node no surviving case reaches leaves every case intact", () => {
+  const orphan = graphNodeFixture("orphan");
+  const root = graphNodeFixture("root");
+  const byKey = new Map([orphan, root].map(state => [state.node.key, state]));
+  const { cases, refusals } = graphCasesWithoutRefusedNodes({
+    prepared: [{ root, artifactCase: { entrypoint: ".", conditions: ["import"] } }],
+    byKey,
+    nodeRefusals: new Map([["orphan", { stage: "graph-acquisition", reason: "archive digest mismatch" }]])
+  });
+  assert.equal(refusals.length, 0);
+  assert.equal(cases.length, 1);
+});
+
+test("an unpreparable graph still reports the reason and takes no lane", async () => {
+  const root = mkdtempSync(join(tmpdir(), "recovery-preparation-"));
+  const output = join(root, "proposal.json");
+  const generated = { certificationInputs: [{ entrypoint: "./retained", conditions: [] }] };
+  const refusals = ["./good", "./bad"].map(entrypoint => ({ entrypoint, conditions: [],
+    stage: "artifact-case", class: "dependency-composition", applicability: "runtime-module" }));
+  writeFileSync(`${output}.refusals.json`, JSON.stringify({ refusals }));
+  try {
+    // Preparation isolates a broken node to the cases that reach it, so a
+    // throw from it now means no case survived at all. There is no second
+    // preparation attempt to make: the caller's proposal is the answer.
+    let attempts = 0;
+    const result = await preparedGraphForPartialProposal(
+      { output, scratch: root, generated, options: { recoverEntrypoints: true } },
+      { prepare: async () => { attempts++; throw new Error("published dependency graph prepared no artifact case: virtual module unavailable"); } }
+    );
+    assert.equal(attempts, 1);
+    assert.equal(result.graph, null);
+    assert.equal(result.trace.partialProposalFrontier, "unprepared");
+    assert.match(result.trace.reason, /prepared no artifact case: virtual module unavailable/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test("a partial proposal has a dependency frontier only when a refusal is a dependency composition", () => {
   const binding = {
     reason: "accepted dependency @solidjs/signals has no exact runtime binding for export $PROXY"
@@ -644,6 +1336,31 @@ test("the partial-proposal graph lane falls back, and says so, without ever swal
         }
       }
     );
+
+    for (const mode of ["recover", "unrequested", "retry-fails", "generic-error"]) {
+      const attempts = [];
+      const recovered = await preparedGraphForPartialProposal(
+        { output, scratch: root, options: { recoverEntrypoints: mode !== "unrequested" }, generated: {} },
+        { prepare: async input => {
+          attempts.push(input);
+          if (attempts.length === 1) throw mode === "generic-error"
+            ? new Error("retained preparation failed")
+            : new RetainedCasePreparationRefusal("retained preparation failed");
+          assert.equal(input.retainGeneratedCases, true);
+          assert.notEqual(input.scratch, root);
+          if (mode === "retry-fails") throw new Error("retained source acquisition failed");
+          return { timing: {} };
+        } }
+      );
+      assert.equal(attempts.length, ["recover", "retry-fails"].includes(mode) ? 2 : 1);
+      if (mode === "recover") {
+        assert.equal(recovered.graph.timing.retainedPreparationFallback.reason, "retained preparation failed");
+      } else {
+        assert.equal(recovered.graph, null);
+        assert.equal(recovered.trace.reason, "retained preparation failed");
+        if (mode === "retry-fails") assert.equal(recovered.trace.retainedPreparationRefusal, "retained source acquisition failed");
+      }
+    }
 
     // (c) A refusal is not a graph fact. A missing issuer or trust
     // configuration is a request error, and certifying the partial proposal
@@ -1878,6 +2595,39 @@ test("root certification names only the declaration-only packages the lockfile s
         join(project, "node_modules", source.packageName)
       );
     }
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("repeated root source acquisition preserves identities without reusing scratch files", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-source-retries-"));
+  try {
+    writeRootSourceInstall(project, { lockedNames: ["alpha", "beta"] });
+    const scratch = join(project, "scratch");
+    mkdirSync(scratch);
+    const archive = new TextEncoder().encode("first archive").buffer;
+    const args = {
+      options: { packageRoot: join(project, "node_modules/root-package"),
+        registryOrigin: "https://registry.npmjs.org", integrity: "sha512-root-package" },
+      generated: rootSourceGenerated(project), scratch,
+      fetch_: registryStub({ alpha: { archive }, beta: { archive } })
+    };
+    const [first] = await acquireRootCompilerSources(args);
+    const [second] = await acquireRootCompilerSources(args);
+    const identity = source => [source.packageName, source.packageVersion,
+      source.lockfile, source.lockLocator, source.installedPackageRoot];
+    assert.deepEqual(first.map(source => source.packageName), ["alpha", "beta"]);
+    assert.deepEqual(second.map(identity), first.map(identity));
+    for (let index = 0; index < first.length; index++) {
+      assert.notEqual(second[index].archive, first[index].archive);
+      assert.equal(readFileSync(first[index].archive, "utf8"), "first archive");
+    }
+    const [third] = await acquireRootCompilerSources({ ...args,
+      fetch_: registryStub({ alpha: { archive: new TextEncoder().encode("new archive").buffer } }) });
+    assert.deepEqual(third.map(source => source.packageName), ["alpha"],
+      "a genuine acquisition failure still withholds the package on a later attempt");
+    assert.equal(readFileSync(first[0].archive, "utf8"), "first archive");
   } finally {
     rmSync(project, { recursive: true, force: true });
   }

@@ -14,7 +14,7 @@
           },
           "exports": {
             "captured": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
-            "direct": "summary-3a867ed12e19ce9c6d61910469d1d174f2eb148030508f55d5f741c268a4035a",
+            "direct": "summary-8388000f6a1a95c9da80e58313765841ddcf4c56ed9acedafa74b528a0d4ad6e",
             "mixed": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94"
           },
           "resolution": {
@@ -39,9 +39,10 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-3a867ed12e19ce9c6d61910469d1d174f2eb148030508f55d5f741c268a4035a": {
+    "summary-8388000f6a1a95c9da80e58313765841ddcf4c56ed9acedafa74b528a0d4ad6e": {
       "call": {
         "closed": [
+          "reads",
           "creates",
           "returns"
         ],
@@ -76,6 +77,7 @@
           }
         ],
         "proposedClosures": [
+          "reads",
           "creates",
           "returns"
         ],

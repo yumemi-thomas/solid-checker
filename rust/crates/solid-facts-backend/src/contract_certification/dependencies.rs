@@ -846,8 +846,9 @@ fn composed_from_withheld_dependency(
     })
 }
 
-/// Certifies a complete root case-set through one Type Facts session and one
-/// native bottom-up transaction. Canonical nodes shared by multiple roots are
+/// Certifies a complete root case-set through one native bottom-up transaction.
+/// Type Facts acquisition shares a session with bounded context isolation for
+/// duplicate installations. Canonical nodes shared by multiple roots are
 /// acquired once for evidence; receipt composition remains graph-root-local,
 /// so no child receipt is transplanted between root graphs.
 pub fn certify_published_contract_graph_case_set(
@@ -2666,6 +2667,8 @@ pub struct VerifiedDependencyComposition {
     trust_root: String,
     verifier_build_digest: Option<String>,
     semantic_dependency_count: usize,
+    census_requirements_root: Option<String>,
+    factory_requirements_root: Option<String>,
 }
 
 impl VerifiedDependencyComposition {
@@ -2702,6 +2705,9 @@ impl VerifiedDependencyComposition {
         let mut trust_rows = Vec::new();
         let mut verifier_build_digest = None::<String>;
         let mut witnesses = Vec::with_capacity(schedule.requirements().len());
+        let factory_claims = type_facts
+            .map(|facts| facts.factory_return_claims())
+            .unwrap_or_default();
         for requirement in schedule.requirements() {
             let dependency = expected_dependencies
                 .iter()
@@ -2726,7 +2732,7 @@ impl VerifiedDependencyComposition {
             })?;
             let census = requirement
                 .semantic_claim_id()
-                .and_then(|claim| type_facts?.independent_creates_census(parent, claim));
+                .and_then(|claim| type_facts?.creates_census(parent, claim));
             authenticate_dependency_receipt(
                 parent,
                 requirement,
@@ -2737,6 +2743,42 @@ impl VerifiedDependencyComposition {
                 revocation_epoch,
                 census,
             )?;
+            let census_claims = requirement
+                .semantic_claim_id()
+                .and_then(|claim| {
+                    type_facts.map(|facts| facts.dependency_creates_claims(parent, claim))
+                })
+                .unwrap_or_default();
+            let mut census_sites = Vec::new();
+            for claim in census_claims.iter().filter(|claim| {
+                claim.package == requirement.dependency().package
+                    && claim.artifact_case == requirement.dependency().artifact_case
+                    && claim.accepted_contract_digest
+                        == requirement.dependency().accepted_contract_digest
+            }) {
+                let empty = dependency_gating
+                    .certified_candidate
+                    .artifact_case(&claim.artifact_case)
+                    .and_then(|case| case.exports.get(&claim.export))
+                    .and_then(|export| {
+                        export.operation_claim(
+                            solid_reactive_ir::contract_semantics::ClaimDomain::Creates,
+                        )
+                    })
+                    .is_some_and(|creates| creates.is_closed() && creates.items().is_empty());
+                if !empty || !receipt.contains_closed_claim_id(&claim.semantic_claim_id) {
+                    return Err(DependencyReceiptCompositionError::MissingClosedClaim {
+                        demand_id: requirement.demand_id().into(),
+                        semantic_claim_id: claim.semantic_claim_id.clone(),
+                    });
+                }
+                census_sites.push(format!(
+                    "census-dependency-creates:{}:{}:{}",
+                    claim.export,
+                    claim.semantic_claim_id,
+                    receipt.receipt_digest()
+                ));
+            }
             match &verifier_build_digest {
                 Some(expected) if expected != receipt.verifier_build_digest().as_str() => {
                     return Err(DependencyReceiptCompositionError::VerifierBuildDisagreement);
@@ -2755,7 +2797,11 @@ impl VerifiedDependencyComposition {
             );
             let evidence_root = census.map_or(evidence_root.clone(), |census| {
                 composition_root(
-                    "independent-creates-census-composition",
+                    if census_claims.is_empty() {
+                        "independent-creates-census-composition"
+                    } else {
+                        "dependency-creates-census-composition"
+                    },
                     graph_root,
                     &[evidence_root.as_str(), census],
                 )
@@ -2767,8 +2813,14 @@ impl VerifiedDependencyComposition {
                 format!("dependency-receipt:{}", receipt.receipt_digest()),
             ];
             if let Some(census) = census {
-                sites.push(format!("independent-creates-census:{census}"));
+                let kind = if census_claims.is_empty() {
+                    "independent-creates-census"
+                } else {
+                    "dependency-creates-census"
+                };
+                sites.push(format!("{kind}:{census}"));
             }
+            sites.extend(census_sites);
             witnesses.push(
                 solid_reactive_ir::contract_semantics::certification::WitnessBinding::new(
                     solid_reactive_ir::contract_semantics::certification::ProofWitnessVariant::AcceptedDependencyComposition,
@@ -2780,6 +2832,85 @@ impl VerifiedDependencyComposition {
             receipt_rows.push(format!(
                 "{}:{}:{}:{}",
                 requirement.demand_id(),
+                dependency.digest(),
+                receipt.receipt_digest(),
+                receipt.main_digest()
+            ));
+            trust_rows.push(format!(
+                "{}:{:?}:{}:{}:{}",
+                receipt.trust_store_digest(),
+                receipt.issuer_kind(),
+                receipt.issuer_scope(),
+                receipt.revocation_epoch(),
+                receipt.verifier_build_digest().as_str()
+            ));
+        }
+        // A positive factory proof names its importing module explicitly.
+        // Discharge each claim against that exact node, independently of the
+        // representative an ordinary dependency-artifact demand selected.
+        // No token is returned if even one conditional proof is unfulfilled.
+        for (demand_id, claim) in &factory_claims {
+            let missing = || DependencyReceiptCompositionError::MissingGraphEdge {
+                demand_id: demand_id.clone(),
+            };
+            let requirement = schedule
+                .requirements()
+                .iter()
+                .find(|requirement| {
+                    requirement.authenticates_dependency_artifact()
+                        && requirement.dependency().package == claim.package
+                        && requirement.dependency().artifact_case == claim.artifact_case
+                        && requirement.dependency().accepted_contract_digest
+                            == claim.accepted_contract_digest
+                        && requirement.dependency().specifier == claim.specifier
+                })
+                .ok_or_else(missing)?;
+            let mut selected = expected_dependencies.iter().filter(|identity| {
+                identity.package_name == claim.package
+                    && identity.artifact_case == claim.artifact_case
+                    && identity.semantic_digest == claim.accepted_contract_digest
+                    && identity.importer == claim.importer
+                    && identity.resolved_import_root == claim.resolved_import_root
+            });
+            let dependency = selected.next().ok_or_else(missing)?;
+            if selected.next().is_some() {
+                return Err(missing());
+            }
+            let receipt = receipt_map.get(dependency.digest()).ok_or_else(|| {
+                DependencyReceiptCompositionError::MissingReceipt {
+                    dependency: dependency.digest().into(),
+                }
+            })?;
+            let dependency_gating = gating.get(dependency.digest()).ok_or_else(|| {
+                DependencyReceiptCompositionError::DependencyOutsideGraph {
+                    dependency: dependency.digest().into(),
+                }
+            })?;
+            authenticate_dependency_receipt(
+                parent,
+                requirement,
+                dependency,
+                dependency_gating,
+                receipt,
+                issuer,
+                revocation_epoch,
+                None,
+            )?;
+            if !claim.is_closed_in(dependency_gating.certified_candidate)
+                || !receipt.contains_closed_claim_id(&claim.semantic_claim_id)
+            {
+                return Err(DependencyReceiptCompositionError::MissingClosedClaim {
+                    demand_id: demand_id.clone(),
+                    semantic_claim_id: claim.semantic_claim_id.clone(),
+                });
+            }
+            if verifier_build_digest.as_deref() != Some(receipt.verifier_build_digest().as_str()) {
+                return Err(DependencyReceiptCompositionError::VerifierBuildDisagreement);
+            }
+            receipt_rows.push(format!(
+                "factory-return-discharge:{demand_id}:{}:{}:{}:{}:{}",
+                claim.export,
+                claim.semantic_claim_id,
                 dependency.digest(),
                 receipt.receipt_digest(),
                 receipt.main_digest()
@@ -2814,6 +2945,10 @@ impl VerifiedDependencyComposition {
             trust_root: composition_root("dependency-trust", graph_root, &trust_rows),
             verifier_build_digest,
             semantic_dependency_count: expected_dependencies.len(),
+            census_requirements_root: type_facts
+                .and_then(super::type_facts::VerifiedTypeFactsEvidence::dependency_census_root),
+            factory_requirements_root: type_facts
+                .and_then(super::type_facts::VerifiedTypeFactsEvidence::factory_requirements_root),
         })
     }
 
@@ -2822,6 +2957,18 @@ impl VerifiedDependencyComposition {
         plan: &CertificationPlan,
     ) -> Result<(), DependencyReceiptCompositionError> {
         if self.demand_graph_root != plan.demand_graph().root().as_str() {
+            return Err(DependencyReceiptCompositionError::ParentTransplant);
+        }
+        Ok(())
+    }
+
+    pub(super) fn verify_type_facts_requirements(
+        &self,
+        type_facts: &super::type_facts::VerifiedTypeFactsEvidence,
+    ) -> Result<(), DependencyReceiptCompositionError> {
+        if self.census_requirements_root != type_facts.dependency_census_root()
+            || self.factory_requirements_root != type_facts.factory_requirements_root()
+        {
             return Err(DependencyReceiptCompositionError::ParentTransplant);
         }
         Ok(())

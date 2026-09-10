@@ -13,14 +13,14 @@
             "sha256": "1a4694b11191fff588029501d4a147324cd196ddd69356e075613bec733234a2"
           },
           "exports": {
-            "Alias": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "Async": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "Defaulted": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "Destructured": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "Direct": "summary-d56b106025dc3fe97c292b5aee63c737a503db6c44f4f037fe4c9a4f2eefb175",
-            "Mutated": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "Nested": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
-            "Updated": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
+            "Alias": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "Async": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "Defaulted": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "Destructured": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "Direct": "summary-d664c646122fc4ad84857ee72d209ff0348a1d4c54188d5cf08583e156bab5bd",
+            "Mutated": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "Nested": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "Updated": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
           "resolution": {
             "runtimeBranch": "/exports/./import",
@@ -44,10 +44,27 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-d56b106025dc3fe97c292b5aee63c737a503db6c44f4f037fe4c9a4f2eefb175": {
+    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
       "call": {
         "closed": [
+          "reads",
           "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-d664c646122fc4ad84857ee72d209ff0348a1d4c54188d5cf08583e156bab5bd": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
         ],
         "creates": [],
         "operations": [
@@ -75,22 +92,13 @@
           }
         ],
         "proposedClosures": [
-          "creates"
+          "reads",
+          "creates",
+          "returns"
         ],
+        "reads": [],
         "returns": [
           "return"
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
-      "call": {
-        "closed": [
-          "creates"
-        ],
-        "creates": [],
-        "proposedClosures": [
-          "creates"
         ]
       },
       "shape": "callable"

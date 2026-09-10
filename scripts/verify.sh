@@ -20,14 +20,6 @@ case "$rust_test_runner" in
     ;;
 esac
 
-run_rust_tests() {
-  if [ "$rust_test_runner" = nextest ]; then
-    cargo +1.97 nextest run --cargo-profile "$cargo_profile" "$@"
-  else
-    cargo +1.97 test --profile "$cargo_profile" "$@"
-  fi
-}
-
 # `bun` is now required before the first cargo step, not only by the Bun gates
 # further down: the timing clock below is a `bun -e`, and under `set -e` a
 # failed command substitution in an assignment aborts the script with a bare
@@ -44,10 +36,9 @@ fi
 #
 # `make verify` is one long sequence of unequal steps, and without a breakdown
 # every discussion about its cost is a guess. Each `step <name>` closes the
-# previous step (printing its wall time) and opens the next, so the commands
-# below stay exactly what they were -- same commands, same order, same
-# fail-fast: nothing is wrapped, nothing is subshelled, `set -eu` still aborts
-# the script on the first failure.
+# previous step (printing its wall time) and opens the next. The combined test
+# stage waits for both suites and reports each status; `set -eu` prevents later
+# gates from running if either suite fails.
 #
 # The clock is a single `bun -e` per boundary (bun is already required by
 # steps below), so one read serves as the previous step's end and the next
@@ -116,38 +107,11 @@ go vet ./apps/solid-typefacts/...
 step bun-install
 bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
 
-step go-test-race
-go test -race ./apps/solid-typefacts/...
-
-step clippy
-cargo +1.97 clippy --profile "$cargo_profile" \
-  --manifest-path "$rust_manifest" --workspace --all-targets
-
-step check-backend-v1
-cargo +1.97 check --profile "$cargo_profile" \
-  --manifest-path "$rust_manifest" -p solid-facts-backend \
-  --all-targets --no-default-features --features dialect-v1
-
-step check-backend-v2
-cargo +1.97 check --profile "$cargo_profile" \
-  --manifest-path "$rust_manifest" -p solid-facts-backend \
-  --all-targets --no-default-features --features dialect-v2
-
-step check-wasm-v1
-cargo +1.97 check --profile "$cargo_profile" \
-  --manifest-path "$rust_manifest" -p solid-checker-wasm \
-  --all-targets --no-default-features --features dialect-v1
-
-step check-wasm-v2
-cargo +1.97 check --profile "$cargo_profile" \
-  --manifest-path "$rust_manifest" -p solid-checker-wasm \
-  --all-targets --no-default-features --features dialect-v2
-
 step compiler-identity
 bun scripts/check-compiler-facts-identity.mjs
 
 step build-typefacts
-scripts/build-typefacts.sh
+TYPEFACTS_BUILD_ID="${SOLID_CHECKER_BUILD_ID:-dev}" scripts/build-typefacts.sh
 
 # ---------------------------------------------------------------------------
 # The Makefile's CERTIFICATION_ENV, for every step below that builds.
@@ -161,9 +125,8 @@ scripts/build-typefacts.sh
 # loud failure (see
 # `probe_harness::tests::a_build_that_must_carry_probe_pins_carries_them`).
 #
-# They are computed here rather than at the top of the script because
-# `SOLID_TYPEFACTS_CERTIFICATION_SHA256` is a digest of the producer binary
-# `build-typefacts` above may have just rewritten.
+# Compute these before *every* Cargo build, including Clippy and feature
+# checks, so preflight and tests do not alternate unpinned/pinned builds.
 step certification-pins
 if ! command -v node >/dev/null 2>&1; then
   echo "make verify: node is required (the certification pins compiled into the verifier are" >&2
@@ -195,6 +158,35 @@ if [ -n "${PROBE_BROWSER:-}" ]; then
   export PROBE_BROWSER SOLID_CHECKER_PROBE_BROWSER_SHA256 SOLID_CHECKER_EXPECT_BROWSER_PIN
 fi
 
+SOLID_CHECKER_BUILD_ID="${SOLID_CHECKER_BUILD_ID:-dev}"
+TYPEFACTS_BUILD_ID="$SOLID_CHECKER_BUILD_ID"
+SOLID_CHECKER_CARGO_PROFILE="$cargo_profile"
+export SOLID_CHECKER_BUILD_ID TYPEFACTS_BUILD_ID SOLID_CHECKER_CARGO_PROFILE
+
+step clippy
+cargo +1.97 clippy --profile "$cargo_profile" \
+  --manifest-path "$rust_manifest" --workspace --all-targets -- -D warnings
+
+step check-backend-v1
+cargo +1.97 check --profile "$cargo_profile" \
+  --manifest-path "$rust_manifest" -p solid-facts-backend \
+  --all-targets --no-default-features --features dialect-v1
+
+step check-backend-v2
+cargo +1.97 check --profile "$cargo_profile" \
+  --manifest-path "$rust_manifest" -p solid-facts-backend \
+  --all-targets --no-default-features --features dialect-v2
+
+step check-wasm-v1
+cargo +1.97 check --profile "$cargo_profile" \
+  --manifest-path "$rust_manifest" -p solid-checker-wasm \
+  --all-targets --no-default-features --features dialect-v1
+
+step check-wasm-v2
+cargo +1.97 check --profile "$cargo_profile" \
+  --manifest-path "$rust_manifest" -p solid-checker-wasm \
+  --all-targets --no-default-features --features dialect-v2
+
 # The product-owned corpus carries exact checker expectations and per-finding
 # TypeScript ownership for every retained former parity case.
 #
@@ -220,9 +212,20 @@ bun scripts/tsc-oracle.mjs provision --dialect all
 SOLID_CHECKER_RC3_ARCHIVE_ROOT="$PWD/rust/target/tsc-oracle/v2/node_modules"
 export SOLID_CHECKER_RC3_ARCHIVE_ROOT
 
-step test-workspace
+step go-rust-tests
 TYPEFACTS_TEST_BIN="$PWD/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
-  run_rust_tests --manifest-path "$rust_manifest" --workspace
+  node scripts/verify-tests.mjs "$rust_test_runner" &
+tests_pid=$!
+stop_tests() {
+  kill -TERM "$tests_pid" 2>/dev/null || :
+  wait "$tests_pid" 2>/dev/null || :
+  exit 130
+}
+trap stop_tests INT TERM HUP
+tests_status=0
+wait "$tests_pid" || tests_status=$?
+trap - INT TERM HUP
+test "$tests_status" -eq 0
 
 step build-checker
 cargo +1.97 build --profile "$cargo_profile" --manifest-path "$rust_manifest" \

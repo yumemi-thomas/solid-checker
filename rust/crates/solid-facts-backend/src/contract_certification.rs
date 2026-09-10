@@ -77,11 +77,11 @@ pub use policy2_receipt::{
     AuthenticatedPolicy2Receipt, BuiltInReceiptEntry, ConfiguredReceiptIssuer,
     Policy2ReceiptBindings, Policy2ReceiptError, Policy2ReceiptProvenance,
     Policy2TrustConfiguration, Policy2TrustEntry, Policy2TrustStore, PublishedPolicy2Catalog,
-    ReceiptIssuerKind, ReceiptPublicationError, authenticate_policy2_receipt,
-    canonicalize_policy2_main, decode_policy2_trust_configuration,
+    RECEIPT_WITNESS_FAMILIES, ReceiptIssuerKind, ReceiptPublicationError,
+    authenticate_policy2_receipt, canonicalize_policy2_main, decode_policy2_trust_configuration,
     encode_policy2_trust_configuration, issue_builtin_policy2_receipt, issue_policy2_receipt,
-    policy2_main_semantic_digest, policy2_policy_digest, policy2_resolved_import_root,
-    policy2_trust_configuration_for_issuer, publish_policy2_catalog,
+    policy2_main_closed_claims_root, policy2_main_semantic_digest, policy2_policy_digest,
+    policy2_resolved_import_root, policy2_trust_configuration_for_issuer, publish_policy2_catalog,
 };
 pub use probe_gates::{ProbeGate, ProbeGateError, ProbeGateSchedule, VerifiedProbeGateBatch};
 pub use probe_harness::{ProbeHarnessConfiguration, ProbeHarnessError};
@@ -339,6 +339,7 @@ impl CertificationRequest {
 /// weakened proposal rather than editing the demand graph.
 #[derive(Clone)]
 pub struct CertificationPlan {
+    verified_initialization: Option<solid_facts::ast::InertJavaScriptModule>,
     snapshot: ArtifactSnapshot,
     verified_resolution: SnapshotVerifiedResolution,
     verified_closure: SnapshotVerifiedClosure,
@@ -926,6 +927,13 @@ fn plan_certification_with_dependencies(
         false,
     )?)?
     .normalize()?;
+    let verified_initialization = verify_inert_initialization(
+        &snapshot,
+        &verified_resolution,
+        &verified_closure,
+        &selected,
+        dependencies,
+    )?;
     let policy = proof_policy_2();
     let candidates = policy
         .inspect_candidates(&selected)
@@ -941,9 +949,11 @@ fn plan_certification_with_dependencies(
         &verified_resolution,
         &verified_closure,
         &verified_exports,
+        verified_initialization.as_ref(),
         &demand_graph,
     );
     Ok(CertificationPlan {
+        verified_initialization,
         snapshot,
         verified_resolution,
         verified_closure,
@@ -956,6 +966,155 @@ fn plan_certification_with_dependencies(
         resolved_import: request.resolved_import,
         certification_sources: Vec::new(),
     })
+}
+
+fn verify_inert_initialization(
+    snapshot: &ArtifactSnapshot,
+    resolution: &SnapshotVerifiedResolution,
+    closure: &SnapshotVerifiedClosure,
+    selected: &NormalizedContract,
+    dependencies: &[&CertificationPlan],
+) -> Result<Option<solid_facts::ast::InertJavaScriptModule>, ArtifactSnapshotError> {
+    let case = selected
+        .artifact_cases()
+        .first()
+        .expect("selection contains one case");
+    let Some(solid_reactive_ir::contract_semantics::ModuleInitializationClaim::Inert) =
+        case.initialization
+    else {
+        return Ok(None);
+    };
+    verify_inert_module_snapshot(
+        snapshot,
+        resolution.runtime_path(),
+        case.transform.is_some(),
+        Some(closure),
+        dependencies,
+    )
+    .map(Some)
+}
+
+fn verify_inert_module_snapshot(
+    snapshot: &ArtifactSnapshot,
+    path: &str,
+    transformed: bool,
+    closure: Option<&SnapshotVerifiedClosure>,
+    dependencies: &[&CertificationPlan],
+) -> Result<solid_facts::ast::InertJavaScriptModule, ArtifactSnapshotError> {
+    let refuse = |reason: &str| {
+        ArtifactSnapshotError::ModuleClosure(format!("inert module initialization: {reason}"))
+    };
+    if transformed {
+        return Err(refuse(
+            "a transform needs independent applicability evidence",
+        ));
+    }
+    let mut esm = path.ends_with(".mjs");
+    if path.ends_with(".js") {
+        // The complete authenticated archive supplies package-scope boundaries.
+        // A nested manifest shadows the root even when it omits `type`.
+        let mut directory = path
+            .trim_start_matches("./")
+            .rsplit_once('/')
+            .map_or("", |(parent, _)| parent);
+        loop {
+            let manifest_path = if directory.is_empty() {
+                "package.json".to_owned()
+            } else {
+                format!("{directory}/package.json")
+            };
+            if let Some(bytes) = snapshot.read(&manifest_path) {
+                let manifest: serde_json::Value = serde_json::from_slice(bytes)
+                    .map_err(|_| refuse("package scope manifest is invalid JSON"))?;
+                esm = manifest.get("type").and_then(serde_json::Value::as_str) == Some("module");
+                break;
+            }
+            if directory.is_empty() {
+                break;
+            }
+            directory = directory.rsplit_once('/').map_or("", |(parent, _)| parent);
+        }
+    }
+    if !esm {
+        return Err(refuse(
+            "selected runtime has no supported ESM loading premise",
+        ));
+    }
+    let bytes = snapshot
+        .read(path)
+        .ok_or_else(|| refuse("runtime bytes absent from snapshot"))?;
+    let source = std::str::from_utf8(bytes).map_err(|_| refuse("runtime is not UTF-8"))?;
+    let strict = solid_facts::ast::inert_javascript_module(source);
+    if let Ok(proof) = strict {
+        return Ok(proof);
+    }
+    let strict_reason = strict
+        .err()
+        .map(|error| error.to_string())
+        .unwrap_or_else(|| "runtime is not an inert JavaScript module".into());
+    let Some(closure) = closure else {
+        return Err(refuse(&strict_reason));
+    };
+    if !inert_external_reexports_are_closed(source, path, closure, dependencies) {
+        return Err(refuse(&strict_reason));
+    }
+    solid_facts::ast::inert_javascript_module_with_export_all(source)
+        .map_err(|_| refuse(&strict_reason))
+}
+
+/// A runtime `export * from "package"` has no local execution of its own,
+/// but it is inert only when the exact external child edge is already part of
+/// the authenticated closure and that child proves an empty runtime surface.
+/// Relative, namespace, unresolved, and non-inert targets remain fail-closed.
+fn inert_external_reexports_are_closed(
+    source: &str,
+    path: &str,
+    closure: &SnapshotVerifiedClosure,
+    dependencies: &[&CertificationPlan],
+) -> bool {
+    let Ok(facts) = solid_facts::ast::extract(path.to_owned(), source) else {
+        return false;
+    };
+    let mut runtime_reexport = false;
+    for export in facts.module_level_exports() {
+        if export.kind != solid_facts::ast::ExportKind::All || export.type_only {
+            continue;
+        }
+        runtime_reexport = true;
+        let Some(module) = export.module.as_deref() else {
+            return false;
+        };
+        if module.starts_with('.') || module.starts_with('#') || export.namespace.is_some() {
+            return false;
+        }
+        if !closure
+            .manifest()
+            .dependencies
+            .iter()
+            .any(|dependency| dependency.specifier == module)
+        {
+            return false;
+        }
+        let Some(dependency) = dependencies
+            .iter()
+            .find(|dependency| dependency.import_request.specifier == module)
+        else {
+            return false;
+        };
+        let Some(_initialization) = dependency.verified_initialization.as_ref() else {
+            return false;
+        };
+        let Some(case) = dependency.selected_candidate.artifact_cases().first() else {
+            return false;
+        };
+        if case.initialization
+            != Some(solid_reactive_ir::contract_semantics::ModuleInitializationClaim::Inert)
+            || !case.exports.is_empty()
+        {
+            return false;
+        }
+    }
+    runtime_reexport
 }
 
 /// The dependency-composition inputs the verified module closure's accepted
@@ -1080,9 +1239,10 @@ pub enum RecipeGatingError {
 /// derives the gated plan from it, and graph composition
 /// (`dependencies::authenticate_dependency_receipt`) re-derives it from the
 /// accepted proposal and the withheld records to prove that what a dependency's
-/// receipt certifies is exactly this and nothing else. Only `creates` is a
-/// domain recipe gating withholds; a record naming any other domain is refused
-/// rather than applied.
+/// receipt certifies is exactly this and nothing else. The domains recipe
+/// gating withholds are exactly `ClaimDomain::PROPOSABLE`; a record naming any
+/// other is refused rather than applied, because a domain nothing proposes
+/// cannot have been gated.
 pub(crate) fn withheld_weakening(
     candidate: &NormalizedContract,
     withheld: &[WithheldClosure],
@@ -1092,6 +1252,7 @@ pub(crate) fn withheld_weakening(
         let domain = match closure.domain.as_str() {
             "creates" => ClaimDomain::Creates,
             "returns" => ClaimDomain::Returns,
+            "reads" => ClaimDomain::Reads,
             _ => {
                 return Err(RecipeGatingError::UnknownDomain {
                     artifact_case: closure.artifact_case.clone(),
@@ -1235,10 +1396,12 @@ impl CertificationPlan {
             &self.verified_resolution,
             &self.verified_closure,
             &self.verified_exports,
+            self.verified_initialization.as_ref(),
             &demand_graph,
         );
         Ok(RecipeGatedPlan {
             plan: Self {
+                verified_initialization: self.verified_initialization.clone(),
                 snapshot: self.snapshot.clone(),
                 verified_resolution: self.verified_resolution.clone(),
                 verified_closure: self.verified_closure.clone(),
@@ -1300,7 +1463,10 @@ struct RegistryVersion {
 
 #[derive(Deserialize)]
 struct RegistryDistribution {
-    integrity: String,
+    // Historical, unselected releases may only publish a SHA-1 shasum. They
+    // supply no archive authority; the exact selected release must still have
+    // canonical SHA-512 integrity before an archive can be authenticated.
+    integrity: Option<String>,
     tarball: String,
 }
 
@@ -1521,6 +1687,7 @@ fn artifact_witness_bindings(
     resolution: &SnapshotVerifiedResolution,
     closure: &SnapshotVerifiedClosure,
     exports: &SnapshotVerifiedExports,
+    initialization: Option<&solid_facts::ast::InertJavaScriptModule>,
     graph: &ProofDemandGraph,
 ) -> Vec<WitnessBinding> {
     let runtime_digest = snapshot
@@ -1618,9 +1785,19 @@ fn artifact_witness_bindings(
                 ),
                 ProofFamily::ModuleClosure => (
                     ProofWitnessVariant::ModuleClosure,
-                    certification_evidence_root(
-                        "module-closure",
-                        [closure.manifest().digest.as_str()],
+                    initialization.map_or_else(
+                        || {
+                            certification_evidence_root(
+                                "module-closure",
+                                [closure.manifest().digest.as_str()],
+                            )
+                        },
+                        |proof| {
+                            certification_evidence_root(
+                                "module-closure-with-inert-javascript-v1",
+                                [closure.manifest().digest.as_str(), proof.source_sha256()],
+                            )
+                        },
                     ),
                     {
                         let mut sites = closure
@@ -1647,6 +1824,14 @@ fn artifact_witness_bindings(
                             .collect::<Vec<_>>();
                         if sites.is_empty() {
                             sites.push("module-closure:empty".into());
+                        }
+                        if let Some(proof) = initialization {
+                            sites.push(format!(
+                                "initialization:inert:{}:{}:{}",
+                                resolution.runtime_path(),
+                                proof.source_sha256(),
+                                proof.statement_count()
+                            ));
                         }
                         sites
                     },
@@ -2356,19 +2541,30 @@ fn resolve_snapshot_export(
             } else {
                 active.remove("types");
             }
-            let selected = select_target(
-                target,
-                snapshot,
-                axis,
-                entrypoint,
-                capture.as_deref(),
-                &active,
-                &pointer,
-                vec![ResolutionTraceStep {
-                    condition: "subpath".into(),
-                    target: entrypoint.into(),
-                }],
-            )
+            let select = |mjs_source_fallback| {
+                select_target(
+                    target,
+                    snapshot,
+                    axis,
+                    entrypoint,
+                    capture.as_deref(),
+                    &active,
+                    &pointer,
+                    vec![ResolutionTraceStep {
+                        condition: "subpath".into(),
+                        target: entrypoint.into(),
+                    }],
+                    mjs_source_fallback,
+                )
+            };
+            let selected = match select(false) {
+                Err(TargetSelectionError::DeclarationsNotFound(_))
+                    if axis == ResolutionAxis::Declarations =>
+                {
+                    select(true)
+                }
+                result => result,
+            }
             .map_err(TargetSelectionError::into_snapshot_error)?;
             if snapshot.read(&selected.path).is_none() {
                 return resolution_mismatch(format!(
@@ -2437,6 +2633,7 @@ fn select_target(
     conditions: &BTreeSet<&str>,
     pointer: &str,
     steps: Vec<ResolutionTraceStep>,
+    mjs_source_fallback: bool,
 ) -> Result<SelectedTarget, TargetSelectionError> {
     match target {
         ExportTarget::Null => Err(TargetSelectionError::Refusal(format!(
@@ -2450,11 +2647,13 @@ fn select_target(
             let path =
                 validate_target_string(&selected).map_err(TargetSelectionError::InvalidTarget)?;
             let path = if axis == ResolutionAxis::Declarations {
-                declaration_candidate(snapshot, &path).ok_or_else(|| {
-                    TargetSelectionError::DeclarationsNotFound(format!(
-                        "no declaration target exists for {path:?}"
-                    ))
-                })?
+                declaration_candidate_with_source(snapshot, &path, mjs_source_fallback).ok_or_else(
+                    || {
+                        TargetSelectionError::DeclarationsNotFound(format!(
+                            "no declaration target exists for {path:?}"
+                        ))
+                    },
+                )?
             } else {
                 path
             };
@@ -2493,6 +2692,7 @@ fn select_target(
                     conditions,
                     &format!("{pointer}/{index}"),
                     next_steps,
+                    mjs_source_fallback,
                 ) {
                     Ok(selected) => return Ok(selected),
                     Err(
@@ -2551,6 +2751,7 @@ fn select_target(
                     conditions,
                     &format!("{pointer}/{}", pointer_segment(condition)),
                     next_steps,
+                    mjs_source_fallback,
                 ) {
                     Err(TargetSelectionError::ConditionsUnmatched(_)) => continue,
                     Err(error @ TargetSelectionError::DeclarationsNotFound(_)) => {
@@ -2669,6 +2870,14 @@ fn validate_target_segments(relative: &str, rendered: &str) -> Result<(), Artifa
 }
 
 fn declaration_candidate(snapshot: &ArtifactSnapshot, path: &str) -> Option<String> {
+    declaration_candidate_with_source(snapshot, path, true)
+}
+
+fn declaration_candidate_with_source(
+    snapshot: &ArtifactSnapshot,
+    path: &str,
+    mjs_source_fallback: bool,
+) -> Option<String> {
     const DECLARATIONS: [&str; 3] = [".d.ts", ".d.mts", ".d.cts"];
     if DECLARATIONS
         .iter()
@@ -2679,7 +2888,8 @@ fn declaration_candidate(snapshot: &ArtifactSnapshot, path: &str) -> Option<Stri
     let extension = node_path_extension(path);
     let stem = &path[..path.len() - extension.len()];
     if let Some((declaration_extension, source_fallback)) = match extension {
-        ".mjs" | ".mts" => Some((".d.mts", false)),
+        ".mjs" => Some((".d.mts", mjs_source_fallback)),
+        ".mts" => Some((".d.mts", false)),
         ".cjs" | ".cts" => Some((".d.cts", false)),
         ".js" | ".jsx" | ".ts" | ".tsx" => Some((".d.ts", true)),
         _ => None,
@@ -2816,7 +3026,12 @@ fn select_registry_metadata(
             "selected registry record identity disagrees with its version key".into(),
         ));
     }
-    validate_integrity_shape(&selected.dist.integrity)?;
+    let integrity = selected.dist.integrity.as_deref().ok_or_else(|| {
+        ArtifactSnapshotError::InvalidProvenance(
+            "selected registry record has no archive integrity".into(),
+        )
+    })?;
+    validate_integrity_shape(integrity)?;
     let tarball_prefix = format!("{}/", archive.registry_origin);
     if !selected.dist.tarball.starts_with(&tarball_prefix)
         || selected.dist.tarball.contains(['?', '#'])
@@ -2826,7 +3041,7 @@ fn select_registry_metadata(
         ));
     }
     Ok(RegistrySelection {
-        integrity: selected.dist.integrity.clone(),
+        integrity: integrity.to_owned(),
         tarball: selected.dist.tarball.clone(),
     })
 }
@@ -3142,6 +3357,179 @@ mod tests {
         published_from_bytes(archive_bytes(files))
     }
 
+    #[test]
+    fn inert_initialization_requires_the_nearest_authenticated_esm_scope() {
+        let check = |nested: Option<&[u8]>, runtime: &str, source: &[u8], transformed| {
+            let mut files: Vec<(&str, &[u8])> = vec![
+                (
+                    "package/package.json",
+                    br#"{"name":"fixture-package","version":"1.2.3","type":"module"}"#,
+                ),
+                (runtime, source),
+            ];
+            if let Some(nested) = nested {
+                files.push(("package/dist/package.json", nested));
+            }
+            let snapshot = ArtifactSnapshot::from_published(
+                &published_archive(&files),
+                SnapshotLimits::policy_2(),
+            )
+            .unwrap();
+            super::verify_inert_module_snapshot(
+                &snapshot,
+                runtime.strip_prefix("package/").unwrap(),
+                transformed,
+                None,
+                &[],
+            )
+        };
+        assert!(check(None, "package/dist/empty.js", b"export {};", false).is_ok());
+        assert!(
+            check(
+                Some(br#"{"type":"module"}"#),
+                "package/dist/empty.js",
+                b"",
+                false
+            )
+            .is_ok()
+        );
+        for nested in [br#"{"type":"commonjs"}"#.as_slice(), b"{}", b"{"] {
+            assert!(check(Some(nested), "package/dist/empty.js", b"", false).is_err());
+        }
+        assert!(check(Some(b"{}"), "package/dist/empty.mjs", b";", false).is_ok());
+        assert!(check(None, "package/dist/empty.cjs", b"", false).is_err());
+        assert!(check(None, "package/dist/empty.js", b"", true).is_err());
+        for source in [
+            b"register();".as_slice(),
+            b"import './effect.js';",
+            b"declare const x: number;",
+            b"export const x = 1;",
+        ] {
+            assert!(check(None, "package/dist/empty.js", source, false).is_err());
+        }
+    }
+
+    #[test]
+    fn inert_initialization_receipt_loads_only_for_the_exact_proved_case() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3","type":"module","exports":{".":{"types":"./index.d.ts","import":"./index.js"}}}"#;
+        let issuer =
+            ConfiguredReceiptIssuer::persistent_local("inert-initialization", [83; 32]).unwrap();
+        for source in [b"export {};".as_slice(), b"register();"] {
+            let archive = published_archive(&[
+                ("package/package.json", manifest),
+                ("package/index.js", source),
+                ("package/index.d.ts", b"export {};"),
+            ]);
+            let (request, resolved) = test_package_resolution(
+                &archive,
+                "fixture-package",
+                "1.2.3",
+                "/project/node_modules/fixture-package",
+                manifest,
+                &["import"],
+                &[],
+                &[],
+                "/project/src/app.ts",
+            );
+            let (package, mut case) =
+                crate::artifact_resolution::proposal_identity(&resolved).unwrap();
+            case.initialization =
+                Some(solid_reactive_ir::contract_semantics::ModuleInitializationClaim::Inert);
+            let candidate =
+                solid_reactive_ir::contract_semantics::ContractProposal::new(package, vec![case])
+                    .normalize()
+                    .unwrap();
+            let proposal = crate::contract_document::encode(
+                &candidate,
+                &crate::contract_document::SidecarDigests::default(),
+                false,
+            )
+            .unwrap();
+            if source == b"export {};" {
+                let proof = solid_facts::ast::inert_javascript_module("export {};").unwrap();
+                let generated =
+                    crate::encode_inert_entrypoint_workflow(&resolved, &proof, false).unwrap();
+                assert_eq!(proposal, generated.document);
+                let other_bytes = solid_facts::ast::inert_javascript_module(";").unwrap();
+                assert!(
+                    crate::encode_inert_entrypoint_workflow(&resolved, &other_bytes, false)
+                        .is_err()
+                );
+                let (package, absent) =
+                    crate::artifact_resolution::proposal_identity(&resolved).unwrap();
+                let absent = solid_reactive_ir::contract_semantics::ContractProposal::new(
+                    package,
+                    vec![absent],
+                )
+                .normalize()
+                .unwrap();
+                assert!(matches!(
+                    solid_reactive_ir::contract_semantics::proof::policy2_closed_claims_root(&absent, &absent.artifact_cases()[0].id),
+                    Err(solid_reactive_ir::contract_semantics::proof::ReceiptValidationError::NoClosedClaims)
+                ));
+            }
+            let plan = super::plan_certification_with_dependencies(
+                &mut CertificationPlanningTransaction::new(),
+                CertificationRequest::new(candidate, request, resolved.clone()),
+                UntrustedArtifactEnvelope::Published(archive),
+                &[],
+            );
+            if source == b"register();" {
+                assert!(
+                    plan.is_err(),
+                    "an empty export census cannot prove inert evaluation"
+                );
+                continue;
+            }
+            let plan = plan.unwrap();
+            assert!(plan.verified_initialization.is_some());
+            let finalized = plan
+                .certify_value_only(&proposal, &pin, &issuer, 1, None)
+                .unwrap();
+            let load = |main: &[u8], import: &ResolvedImport| {
+                crate::contract_interface::load_authenticated_policy2_contract(
+                    main,
+                    finalized.receipt(),
+                    import,
+                    finalized.bindings(),
+                    super::Policy2ReceiptProvenance::PersistentLocal {
+                        trust_store: finalized.trust_configuration().trust_store(),
+                        scope: issuer.scope(),
+                    },
+                )
+            };
+            load(finalized.canonical_main(), &resolved)
+                .expect("ordinary consumer accepts the proved initialization");
+            let mut other_importer = resolved.clone();
+            other_importer.importer = "/project/src/other.ts".into();
+            assert!(load(finalized.canonical_main(), &other_importer).is_err());
+            let mut document: serde_json::Value =
+                serde_json::from_slice(finalized.canonical_main()).unwrap();
+            // Canonical encoding uses an explicit cases array.
+            document["entrypoints"]["."]["cases"][0]
+                .as_object_mut()
+                .unwrap()
+                .remove("initialization");
+            let changed = crate::contract_document::decode(&serde_json::to_vec(&document).unwrap())
+                .unwrap()
+                .normalize()
+                .unwrap();
+            let changed = crate::contract_document::encode(
+                &changed,
+                &crate::contract_document::SidecarDigests::default(),
+                false,
+            )
+            .unwrap();
+            assert!(
+                load(&changed, &resolved).is_err(),
+                "removing the positive claim invalidates its receipt"
+            );
+        }
+    }
+
     fn published_archive_for(
         name: &str,
         version: &str,
@@ -3405,6 +3793,49 @@ mod tests {
             ArtifactSnapshot::from_published(&mixed, SnapshotLimits::policy_2()),
             Err(ArtifactSnapshotError::ManifestIdentity(_))
         ));
+    }
+
+    #[test]
+    fn registry_integrity_is_required_on_the_exact_selected_release() {
+        let bytes = archive_bytes(&fixture_files());
+        let integrity = format!("sha512-{}", STANDARD.encode(Sha512::digest(&bytes)));
+        for (selected_dist, historical_dist, accepted) in [
+            (
+                format!(r#""integrity":"{integrity}","#),
+                String::new(),
+                true,
+            ),
+            (
+                String::new(),
+                format!(r#""integrity":"{integrity}","#),
+                false,
+            ),
+            (r#""integrity":null,"#.into(), String::new(), false),
+            (r#""integrity":"sha1-old","#.into(), String::new(), false),
+            (
+                format!(r#""integrity":"{integrity}","#),
+                format!(r#""integrity":null,"integrity":"{integrity}","#),
+                false,
+            ),
+        ] {
+            let metadata = format!(
+                r#"{{"versions":{{"0.1.0":{{"name":"fixture-package","version":"0.1.0","dist":{{{historical_dist}"shasum":"old","tarball":"https://registry.npmjs.org/old.tgz"}}}},"1.2.3":{{"name":"fixture-package","version":"1.2.3","dist":{{{selected_dist}"tarball":"https://registry.npmjs.org/fixture-package/-/fixture-package-1.2.3.tgz"}}}}}}}}"#
+            ).into_bytes();
+            let input = PublishedArchive::new(
+                "https://registry.npmjs.org",
+                "fixture-package",
+                "1.2.3",
+                metadata,
+                bytes.clone(),
+            )
+            .unwrap();
+            let result = ArtifactSnapshot::from_published(&input, SnapshotLimits::policy_2());
+            assert_eq!(
+                result.is_ok(),
+                accepted,
+                "selected integrity {selected_dist}, historical {historical_dist}: {result:?}"
+            );
+        }
     }
 
     #[test]
@@ -4057,6 +4488,53 @@ mod tests {
     }
 
     #[test]
+    fn declaration_conditions_use_mjs_source_only_after_exhausting_declarations() {
+        let manifest: SnapshotPackageManifest = serde_json::from_str(
+            r#"{"name":"source-subject","version":"1.0.0","exports":{".":{"import":"./index.mjs","types":"./missing.d.ts"}}}"#,
+        ).unwrap();
+        let conditions = BTreeSet::from(["import"]);
+        let snapshot = declaration_snapshot(&[
+            ("package/index.mjs", b"export const value = 1;"),
+            ("package/index.d.ts", b"export declare const wrong: string;"),
+        ]);
+        let selected = resolve_snapshot_export(
+            &snapshot,
+            &manifest,
+            ".",
+            &conditions,
+            ResolutionAxis::Declarations,
+        )
+        .unwrap();
+        assert_eq!(selected.path, "index.mjs");
+        assert_eq!(selected.trace.branch, "/exports/./import");
+        let absent =
+            declaration_snapshot(&[("package/index.d.ts", b"export declare const wrong: string;")]);
+        assert!(
+            resolve_snapshot_export(
+                &absent,
+                &manifest,
+                ".",
+                &conditions,
+                ResolutionAxis::Declarations,
+            )
+            .is_err()
+        );
+        let blocked: SnapshotPackageManifest = serde_json::from_str(
+            r#"{"name":"source-subject","version":"1.0.0","exports":{".":{"import":"./index.mjs","types":null}}}"#,
+        ).unwrap();
+        assert!(
+            resolve_snapshot_export(
+                &snapshot,
+                &blocked,
+                ".",
+                &conditions,
+                ResolutionAxis::Declarations,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn declaration_candidates_follow_the_selected_module_format() {
         for (runtime_extension, declaration_extension) in [
             (".mjs", ".d.mts"),
@@ -4097,7 +4575,7 @@ mod tests {
 
     #[test]
     fn declaration_candidates_preserve_source_fallbacks() {
-        for extension in [".js", ".jsx", ".ts", ".tsx"] {
+        for extension in [".mjs", ".js", ".jsx", ".ts", ".tsx"] {
             let path = format!("dist/fallback{extension}");
             let package_path = format!("package/{path}");
             let snapshot =
@@ -4120,7 +4598,10 @@ mod tests {
                     b"export declare const value: 1;",
                 ),
             ]);
-            assert_eq!(declaration_candidate(&snapshot, &path), None);
+            assert_eq!(
+                declaration_candidate(&snapshot, &path),
+                (extension == ".mjs").then_some(path)
+            );
         }
         for extension in [".cjs", ".cts"] {
             let path = format!("dist/index{extension}");
@@ -4612,10 +5093,9 @@ mod tests {
     // plan matched that shared root ("multiple installation identities"), which
     // sank every multi-case package (corvu, corvu-next, @solid-devtools/logger,
     // and every multi-case solid-primitives). `snapshot_root` is a content hash,
-    // so all matching plans materialize byte-identical sources: the resolver
-    // must bind the first materialized owner, not refuse.
-    #[test]
-    fn implementation_location_binds_first_owner_for_shared_snapshot_root() {
+    // so repeated plans of the same installation are legitimate. Different
+    // installations must not replace the current plan's own implementation.
+    fn implementation_location_fixture(root: &str) -> CertificationPlan {
         let manifest = br#"{"name":"fixture-package","version":"1.2.3","exports":{".":{"types":"./types/index.d.ts","import":"./dist/index.js","default":"./dist/index.js"}}}"#;
         let runtime = b"export function make(callback) { callback(); return () => {}; }";
         let declarations = b"export declare function make(callback: () => void): () => void;";
@@ -4626,7 +5106,6 @@ mod tests {
         ]);
         let snapshot =
             ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
-        let root = "/project/node_modules/fixture-package";
         let package_manifest = resolved_file(root, "package.json", manifest);
         let runtime_file = resolved_file(root, "dist/index.js", runtime);
         let declaration_file = resolved_file(root, "types/index.d.ts", declarations);
@@ -4721,11 +5200,16 @@ mod tests {
         let candidate = ContractProposal::new(package, vec![artifact_case])
             .normalize()
             .unwrap();
-        let plan = plan_certification(
+        plan_certification(
             CertificationRequest::new(candidate, request, resolved),
             UntrustedArtifactEnvelope::Published(archive),
         )
-        .unwrap();
+        .unwrap()
+    }
+
+    #[test]
+    fn implementation_location_accepts_repeated_plans_of_one_installation() {
+        let plan = implementation_location_fixture("/project/node_modules/fixture-package");
         // The runtime export must expose a span for the implementation-location
         // resolver to have anything to bind; otherwise this test would trivially
         // pass on the early `Ok(None)` and never reach the multiplicity path.
@@ -4755,6 +5239,27 @@ mod tests {
             super::type_facts::export_implementation_location_for_test(&[&plan], &plan, "make")
                 .unwrap()
                 .is_some()
+        );
+    }
+
+    #[test]
+    fn implementation_location_prefers_its_own_installation_over_identical_bytes() {
+        let plan = implementation_location_fixture("/project/node_modules/fixture-package");
+        let other = implementation_location_fixture(
+            "/project/node_modules/parent/node_modules/fixture-package",
+        );
+        assert_eq!(plan.snapshot_root(), other.snapshot_root());
+        let location = super::type_facts::export_implementation_location_for_test(
+            &[&other, &plan],
+            &plan,
+            "make",
+        )
+        .unwrap()
+        .unwrap();
+        assert!(
+            !location.path.contains("/parent/node_modules/"),
+            "the current plan's own implementation must not move to another installation: {}",
+            location.path
         );
     }
 
@@ -5208,6 +5713,196 @@ mod tests {
             specifier, "./node_modules/dependency-package/lib/value.js",
             "the first materialized copy of the owning snapshot root must be bound"
         );
+    }
+
+    #[test]
+    fn dependency_namespace_subject_requires_its_replayed_owner() {
+        fn namespace_plan(
+            name: &str,
+            dependency: Option<&CertificationPlan>,
+            marker: &str,
+        ) -> CertificationPlan {
+            let manifest = format!(
+                r#"{{"name":"{name}","version":"1.0.0","exports":{{".":{{"types":"./index.d.ts","import":"./index.js"}}}}}}"#
+            );
+            let entry = if dependency.is_some() {
+                "export { VALUE } from 'namespace-owner';"
+            } else {
+                "export * as VALUE from './module.js';"
+            };
+            let runtime = format!("export const member = '{marker}';");
+            let declarations = format!("export declare const member: '{marker}';");
+            let archive = published_archive_for(
+                name,
+                "1.0.0",
+                &[
+                    ("package/package.json", manifest.as_bytes()),
+                    ("package/index.js", entry.as_bytes()),
+                    ("package/index.d.ts", entry.as_bytes()),
+                    ("package/module.js", runtime.as_bytes()),
+                    ("package/module.d.ts", declarations.as_bytes()),
+                ],
+            );
+            let root = format!("/project/node_modules/{name}");
+            let owner = "/project/node_modules/namespace-owner";
+            let dependencies = dependency.into_iter().collect::<Vec<_>>();
+            let (request, mut resolved) = test_package_resolution(
+                &archive,
+                name,
+                "1.0.0",
+                &root,
+                manifest.as_bytes(),
+                &["import"],
+                &[(
+                    "VALUE",
+                    ("module.js", runtime.as_bytes()),
+                    ("module.d.ts", declarations.as_bytes()),
+                    owner,
+                )],
+                &dependencies,
+                "/project/src/app.ts",
+            );
+            let binding = resolved.exports.get_mut("VALUE").unwrap();
+            binding.runtime.export_name = "*".into();
+            binding.declarations.export_name = "*".into();
+            let (package, mut case) =
+                crate::artifact_resolution::proposal_identity(&resolved).unwrap();
+            case.exports.insert(
+                "VALUE".into(),
+                ExportSemantics {
+                    identity: ExportIdentity {
+                        entrypoint: ".".into(),
+                        public_name: "VALUE".into(),
+                        runtime: ExportTargetIdentity {
+                            module: case.runtime.clone(),
+                            export_name: "VALUE".into(),
+                        },
+                        declarations: ExportTargetIdentity {
+                            module: case.declarations.clone(),
+                            export_name: "VALUE".into(),
+                        },
+                    },
+                    shape: ValueShape::Plain,
+                    stability: StabilityKnowledge::Unknown,
+                    call: CallSemantics::new(
+                        CallClaims::default(),
+                        vec![],
+                        vec![],
+                        vec![],
+                        GuardPartition::default(),
+                    ),
+                },
+            );
+            super::plan_certification_with_dependencies(
+                &mut CertificationPlanningTransaction::new(),
+                CertificationRequest::new(
+                    ContractProposal::new(package, vec![case])
+                        .normalize()
+                        .unwrap(),
+                    request,
+                    resolved,
+                ),
+                UntrustedArtifactEnvelope::Published(archive),
+                &dependencies,
+            )
+            .unwrap()
+        }
+        let owner = namespace_plan("namespace-owner", None, "original");
+        let parent = namespace_plan("namespace-consumer", Some(&owner), "original");
+        let changed = namespace_plan("namespace-owner", None, "changed");
+        let path = "/private/project/node_modules/namespace-owner/module.d.ts";
+        let name = "\"/private/project/node_modules/namespace-owner/module\"";
+        let accepts =
+            |dependencies: &[&CertificationPlan], export: &str, name: &str, path: &str| {
+                super::type_facts::authenticated_namespace_declaration_target(
+                    &parent,
+                    dependencies,
+                    export,
+                    name,
+                    path,
+                )
+            };
+        assert!(accepts(&[&owner], "VALUE", name, path));
+        assert!(!accepts(&[], "VALUE", name, path));
+        assert!(!accepts(&[&changed], "VALUE", name, path));
+        assert!(!accepts(&[&owner], "missing", name, path));
+        assert!(!accepts(&[&owner], "VALUE", "VALUE", path));
+        assert!(!accepts(
+            &[&owner],
+            "VALUE",
+            "\"/private/project/node_modules/namespace-owner/other\"",
+            path
+        ));
+        assert!(!accepts(
+            &[&owner],
+            "VALUE",
+            "\"/private/project/node_modules/other/module\"",
+            "/private/project/node_modules/other/module.d.ts"
+        ));
+    }
+
+    #[test]
+    fn a_single_conditional_case_uses_its_exact_declaration() {
+        let manifest = br#"{"name":"condition-package","version":"1.0.0","exports":{".":{"node":{"types":"./server.d.ts","import":"./server.js"},"browser":{"types":"./browser.d.ts","import":"./browser.js"},"default":{"types":"./index.d.ts","import":"./index.js"}}}}"#;
+        let runtime = b"export const VALUE = true;\n";
+        let declarations = b"export declare const VALUE: true;\n";
+        let archive = published_archive_for(
+            "condition-package",
+            "1.0.0",
+            &[
+                ("package/package.json", manifest),
+                ("package/server.js", runtime),
+                ("package/server.d.ts", declarations),
+                ("package/browser.js", runtime),
+                ("package/browser.d.ts", declarations),
+                ("package/index.js", runtime),
+                ("package/index.d.ts", declarations),
+            ],
+        );
+        let root = "/project/node_modules/condition-package";
+        for (conditions, stem, expected) in [
+            (
+                vec!["import", "node"],
+                "server",
+                "./node_modules/condition-package/server.js",
+            ),
+            (
+                vec!["import", "browser"],
+                "browser",
+                "./node_modules/condition-package/browser.js",
+            ),
+            (vec!["import"], "index", "condition-package"),
+        ] {
+            let runtime_path = format!("{stem}.js");
+            let declaration_path = format!("{stem}.d.ts");
+            let plan = plan_for_test_package(
+                &archive,
+                "condition-package",
+                "1.0.0",
+                root,
+                manifest,
+                &conditions,
+                &[(
+                    "VALUE",
+                    (&runtime_path, runtime),
+                    (&declaration_path, declarations),
+                    root,
+                )],
+                &[],
+            );
+            for force_exact in [false, true] {
+                let subject = super::type_facts::export_value_harness_subject_for_test(
+                    &plan,
+                    &[],
+                    &[&plan],
+                    &plan,
+                    "VALUE",
+                    force_exact,
+                )
+                .unwrap();
+                assert_eq!(subject, (expected.into(), "VALUE".into()), "{conditions:?}");
+            }
+        }
     }
 
     // Regression: the resolution-variant key's fourth coordinate was the
@@ -5785,6 +6480,87 @@ mod tests {
             super::certify_value_only_case_set(&[&plan], &proposal, &pin, &issuer, 1, None)
                 .map(|_| ()),
         );
+    }
+
+    #[test]
+    fn object_export_root_receipt_requires_an_unwritten_authenticated_binding() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3","type":"module","exports":{".":{"types":"./index.d.ts","import":"./index.js"}}}"#;
+        let declarations = b"export declare const value: unknown;\n";
+        for (runtime, accepted) in [
+            ("export var value = {};", true),
+            ("var value = {}; export { value };", true),
+            ("export var value = {}; value = () => {};", false),
+            (
+                "export var value = {}; function change() { value = () => {}; }",
+                false,
+            ),
+            ("export var value = () => {};", false),
+        ] {
+            let runtime = runtime.as_bytes();
+            let archive = published_archive_for(
+                "fixture-package",
+                "1.2.3",
+                &[
+                    ("package/package.json", manifest),
+                    ("package/index.js", runtime),
+                    ("package/index.d.ts", declarations),
+                ],
+            );
+            let exports: &[TestExportBinding<'_>] = &[(
+                "value",
+                ("index.js", runtime),
+                ("index.d.ts", declarations),
+                "/project/node_modules/fixture-package",
+            )];
+            let plan = plan_for_test_package_closing(
+                &archive,
+                "fixture-package",
+                "1.2.3",
+                "/project/node_modules/fixture-package",
+                manifest,
+                &["import"],
+                exports,
+                &[],
+                &|_| ValueShape::Plain,
+            );
+            let proposal = crate::contract_document::encode(
+                &plan.selected_candidate,
+                &crate::contract_document::SidecarDigests::default(),
+                false,
+            )
+            .unwrap();
+            let issuer =
+                ConfiguredReceiptIssuer::persistent_local("object-export-root", [87; 32]).unwrap();
+            let result = plan.certify_value_only(&proposal, &pin, &issuer, 1, None);
+            if !accepted {
+                assert!(
+                    result.is_err(),
+                    "unproved object root must not receive a receipt"
+                );
+                continue;
+            }
+            let finalized = result.expect("authenticated unwritten object root closes the claim");
+            let load = |import: &ResolvedImport| {
+                crate::contract_interface::load_authenticated_policy2_contract(
+                    finalized.canonical_main(),
+                    finalized.receipt(),
+                    import,
+                    finalized.bindings(),
+                    super::Policy2ReceiptProvenance::PersistentLocal {
+                        trust_store: finalized.trust_configuration().trust_store(),
+                        scope: issuer.scope(),
+                    },
+                )
+            };
+            load(&plan.resolved_import)
+                .expect("ordinary consumer accepts exact object-root receipt");
+            let mut other = plan.resolved_import.clone();
+            other.importer = "/project/src/other.ts".into();
+            assert!(load(&other).is_err());
+        }
     }
 
     /// The reachability the whole probe-harness binding exists for.
@@ -8778,10 +9554,17 @@ export const value = phantom;
     /// name as `any`, which the producer correctly refuses to call callable.
     fn callable_through_external_declaration_root()
     -> (Vec<u8>, ImportRequest, ResolvedImport, PublishedArchive) {
+        callable_through_external_declaration_root_with(
+            b"import type { Callback } from \"source-types\";\nexport declare const value: Callback;\n",
+        )
+    }
+
+    fn callable_through_external_declaration_root_with(
+        declarations: &[u8],
+    ) -> (Vec<u8>, ImportRequest, ResolvedImport, PublishedArchive) {
         let package_root = "/project/node_modules/root-package";
         let manifest = br#"{"name":"root-package","version":"1.0.0","exports":{".":{"types":"./types/index.d.ts","import":"./dist/index.js"}}}"#;
         let runtime = b"export const value = () => true;";
-        let declarations = b"import type { Callback } from \"source-types\";\nexport declare const value: Callback;\n";
         let archive = published_archive_for(
             "root-package",
             "1.0.0",
@@ -8963,6 +9746,51 @@ export const value = phantom;
     ) -> Result<Vec<super::dependencies::VerifiedGraphSourcePackage>, PublishedGraphPlanningError>
     {
         super::dependencies::verify_certification_source_packages_for_test(transaction, requests)
+    }
+
+    #[test]
+    fn declaration_sources_do_not_authorize_a_misattributed_reexport_binding() {
+        let (document, import_request, resolved, archive) =
+            callable_through_external_declaration_root_with(
+                b"export { value } from \"source-types\";\n",
+            );
+        // The real declaration lives in source-types. The supplied resolution
+        // still attributes it to the parent's re-export file. Authenticating
+        // source bytes alone must never make that wrong binding acceptable.
+        let source = || {
+            external_declaration_source(
+                "3.0.0",
+                b"export declare const value: () => boolean;\n",
+                "/project/node_modules/source-types",
+                None,
+            )
+        };
+        let mut transaction = CertificationPlanningTransaction::new();
+        assert_eq!(
+            dependencies_verify_for_test(&mut transaction, vec![source()])
+                .unwrap()
+                .len(),
+            1
+        );
+        let outcome = transaction.plan_contract_document_with_sources(
+            &document,
+            import_request,
+            resolved,
+            UntrustedArtifactEnvelope::Published(archive),
+            vec![source()],
+        );
+        let error = outcome
+            .err()
+            .expect("source authentication is not export-binding authority");
+        assert!(
+            matches!(
+                error,
+                super::CertificationPlanningError::Artifact(ArtifactSnapshotError::ExportBindings(
+                    _
+                ))
+            ),
+            "{error}"
+        );
     }
 
     fn callable_source(installed_package_root: &str) -> PublishedGraphSourceRequest {
@@ -11351,6 +12179,17 @@ export const value = phantom;
             let candidate =
                 crate::inferred_contract::normalize_inferred_contract(&inferred, &resolved)
                     .unwrap();
+            assert!(candidate.artifact_cases().iter().all(|case| {
+                case.exports.get("identity").is_some_and(|export| {
+                    matches!(
+                        export.operation_claim(
+                            solid_reactive_ir::contract_semantics::ClaimDomain::Returns
+                        ),
+                        Some(solid_reactive_ir::contract_semantics::KnowledgeSet::Complete(items))
+                            if items.len() == 1
+                    )
+                })
+            }));
             let plan = try_plan_supplied_candidate_for_test_package(
                 &archive,
                 name,
@@ -11494,7 +12333,7 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 86] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 89] = [
         "accessorTableRead",
         "arrayRestRead",
         "awaitIterateParameter",
@@ -11539,6 +12378,7 @@ export const value = phantom;
         "moduleReceiverRead",
         "nestedCallableParameterRead",
         "noRecipe",
+        "omittedBoxScale",
         "overloaded",
         "ownArrayRead",
         "ownRestSpread",
@@ -11568,7 +12408,9 @@ export const value = phantom;
         "taggedTemplate",
         "toStringTagViaCall",
         "typedCoercion",
+        "unknownBoxScale",
         "unresolved",
+        "untypedBoxScale",
         "untypedCoercion",
         "updateOnParameter",
         "viaHelperChain",
@@ -12054,7 +12896,14 @@ export const value = phantom;
             candidates_for(ClaimDomain::Creates),
             RETURNS_FIXTURE_EXPORTS
         );
-        assert_eq!(plan.probe_gate_schedule().unwrap().gates().len(), 13);
+        // And every export proposes `reads` too, since 2026-09-10: this
+        // fixture's closure installs no accessor at run time, so nothing
+        // withdraws the domain. The pair that shows the withdrawal working is
+        // `implementation-census-reads`' two entrypoints.
+        assert_eq!(candidates_for(ClaimDomain::Reads), RETURNS_FIXTURE_EXPORTS);
+        // 4 returns + 9 creates + 9 reads. Each proposed closure schedules its
+        // own mandatory contradiction veto.
+        assert_eq!(plan.probe_gate_schedule().unwrap().gates().len(), 22);
     }
 
     /// The sibling package `primitive-consumer/`, whose one export calls a real
@@ -12758,6 +13607,7 @@ export const value = phantom;
             "moduleReceiverRead",
             "nestedCallableParameterRead",
             "noRecipe",
+            "omittedBoxScale",
             "overloaded",
             "ownArrayRead",
             "ownRestSpread",
@@ -12787,6 +13637,8 @@ export const value = phantom;
             "taggedTemplate",
             "toStringTagViaCall",
             "typedCoercion",
+            "unknownBoxScale",
+            "untypedBoxScale",
             "untypedCoercion",
             "updateOnParameter",
             "viaHelperChain",
@@ -12995,7 +13847,7 @@ export const value = phantom;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
-    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 84] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 87] = [
         "accessorTableRead",
         "arrayRestRead",
         "awaitIterateParameter",
@@ -13039,6 +13891,7 @@ export const value = phantom;
         "moduleReceiverRead",
         "nestedCallableParameterRead",
         "noRecipe",
+        "omittedBoxScale",
         "overloaded",
         "ownArrayRead",
         "ownRestSpread",
@@ -13068,6 +13921,8 @@ export const value = phantom;
         "taggedTemplate",
         "toStringTagViaCall",
         "typedCoercion",
+        "unknownBoxScale",
+        "untypedBoxScale",
         "untypedCoercion",
         "updateOnParameter",
         "viaHelperChain",
@@ -13108,8 +13963,11 @@ export const value = phantom;
     /// `helperCoercion` closes since protocol 23 carries the caller's argument
     /// types to the helper as its premise; `untypedCoercion` (declared
     /// `unknown`), `helperSpreadCoercion` (a spread carries no slot) and
-    /// `helperUntypedArgument` (an `any` slot) are refused.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 41] = [
+    /// `helperUntypedArgument` (an `any` slot) are refused. Under ADR 0051,
+    /// `omittedBoxScale` closes through an explicit `never` premise in the
+    /// first leaf call, while the explicit `unknown` and `any` controls keep
+    /// their leaf coercions and are refused.
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 42] = [
         "chainCallbacks",
         "coerceBoundHelperResult",
         "coerceConditionalHelperResult",
@@ -13128,6 +13986,7 @@ export const value = phantom;
         "localPatternFromParameter",
         "memberParameterRooted",
         "noRecipe",
+        "omittedBoxScale",
         "overloaded",
         "ownArrayRead",
         "ownRestSpread",
@@ -13152,7 +14011,7 @@ export const value = phantom;
         "writtenFromUninitialized",
         "writtenJoin",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 43] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 45] = [
         ("accessorTableRead", "census"),
         ("arrayRestRead", "census"),
         ("awaitIterateParameter", "census"),
@@ -13189,6 +14048,8 @@ export const value = phantom;
         ("spreadWrittenParameter", "census"),
         ("stdlibRefInvoker", "census"),
         ("taggedTemplate", "census"),
+        ("unknownBoxScale", "census"),
+        ("untypedBoxScale", "census"),
         ("untypedCoercion", "census"),
         ("writtenAfterRead", "census"),
         ("writtenBeforeRead", "census"),
@@ -13334,24 +14195,16 @@ export const value = phantom;
         let claim = plan.probe_gate_schedule().unwrap().gates()[0]
             .semantic_claim_id()
             .to_owned();
-        assert!(evidence.independent_creates_census(&plan, &claim).is_some());
+        assert!(evidence.creates_census(&plan, &claim).is_some());
         assert!(
             evidence
-                .independent_creates_census(&plan, "claim:v1:sha256:missing")
+                .creates_census(&plan, "claim:v1:sha256:missing")
                 .is_none()
         );
         let other_plan = census_fixture_plan("noRecipe");
-        assert!(
-            evidence
-                .independent_creates_census(&other_plan, &claim)
-                .is_none()
-        );
+        assert!(evidence.creates_census(&other_plan, &claim).is_none());
         let opened = plan.recipe_gated(None).unwrap();
-        assert!(
-            evidence
-                .independent_creates_census(opened.plan(), &claim)
-                .is_none()
-        );
+        assert!(evidence.creates_census(opened.plan(), &claim).is_none());
         let demands = creates_demand_ids(&plan, "plain");
         let [demand] = demands.as_slice() else {
             panic!("one creates demand");
@@ -13717,6 +14570,68 @@ export const value = phantom;
             "coerceWrittenHelperResult",
             "coerceLibraryResult",
         ] {
+            assert_census_withholds(export, &["uncensused invoking form: coercion"]);
+        }
+    }
+
+    /// ADR 0051: an omitted helper argument narrows to explicit `never` at the
+    /// guarded leaf call. The leaf's arithmetic then has no coercion, while
+    /// the helper's returned primitive completion still clears the parent
+    /// addition. The receipt must carry both halves of that proof: the leaf's
+    /// helper-premise site for slot 1 and the parent's `primitive-coercion`
+    /// disposition. `unknown` and `any` controls keep the actual coercion and
+    /// are withheld by the census.
+    #[test]
+    fn the_probe_gate_tracer_census_certifies_an_omitted_explicit_bottom_helper() {
+        let Some((plan, outcome)) = census_certify("omittedBoxScale", None) else {
+            return;
+        };
+        let finalized = outcome.expect("an omitted explicit-bottom argument must certify creates");
+        assert!(
+            finalized.withheld_closures().is_empty(),
+            "omittedBoxScale: {:?}",
+            finalized.withheld_closures()
+        );
+        assert!(creates_is_closed_in(
+            finalized.canonical_main(),
+            "omittedBoxScale"
+        ));
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan),
+            "the synthesized veto ran"
+        );
+
+        let pin = pinned_producer_for_test().expect("checked by census_certify");
+        let evidence = plan
+            .acquire_and_verify_export_value_type_facts(&pin)
+            .expect("the same evidence the transaction acquired");
+        let demands = creates_demand_ids(&plan, "omittedBoxScale");
+        let [demand] = demands.as_slice() else {
+            panic!("one creates demand");
+        };
+        let sites = evidence
+            .witness_bindings()
+            .iter()
+            .find(|binding| binding.demand_id() == demand)
+            .expect("the creates demand has a witness")
+            .site_ids()
+            .to_vec();
+        assert!(
+            sites
+                .iter()
+                .any(|site| site.starts_with("census-premise:") && site.ends_with(":1:never")),
+            "the first leaf call must carry its explicit bottom premise: {sites:?}"
+        );
+        assert!(
+            sites.iter().any(|site| {
+                site.starts_with("census-form:")
+                    && site.contains(":coercion:reachable:primitive-coercion:")
+            }),
+            "the helper's parent addition must carry primitive-coercion: {sites:?}"
+        );
+
+        for export in ["unknownBoxScale", "untypedBoxScale"] {
             assert_census_withholds(export, &["uncensused invoking form: coercion"]);
         }
     }
@@ -14320,6 +15235,940 @@ export const value = phantom;
                 .bindings()
                 .dependency_receipts_root
         );
+    }
+
+    #[test]
+    fn dependency_census_composition_requires_a_closed_child_and_completed_veto() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let fixture =
+            repository_root().join("fixtures/package-contracts/dependency-census-composition");
+        let bytes = |file: &str| std::fs::read(fixture.join(file)).unwrap();
+        for (closed_child, run_veto, exact_export) in [
+            (true, true, true),
+            (false, true, true),
+            (true, false, true),
+            (true, true, false),
+        ] {
+            let leaf_runtime = if exact_export {
+                bytes("leaf.js")
+            } else {
+                b"export function value(input) { return input(); } export function other(input) { return input(); }".to_vec()
+            };
+            let leaf_types = if exact_export {
+                bytes("leaf.d.ts")
+            } else {
+                b"export declare function value(input: () => unknown): unknown; export declare function other(input: () => unknown): unknown;".to_vec()
+            };
+            let root_runtime = if exact_export {
+                bytes("root.js")
+            } else {
+                b"import { other as imported } from 'leaf-package'; export function value(input) { imported(input); return true; }".to_vec()
+            };
+            let (mut leaf, leaf_archive, leaf_integrity) =
+                synthetic_graph_certification_request_shaped(
+                    "leaf-package",
+                    "2.0.0",
+                    "/project/node_modules/root-package/node_modules/leaf-package",
+                    "/project/node_modules/root-package/dist/index.js",
+                    &leaf_runtime,
+                    &leaf_types,
+                    vec![],
+                    ValueShape::Callable,
+                    CallClaims {
+                        creates: if closed_child {
+                            KnowledgeSet::complete(vec![])
+                        } else {
+                            KnowledgeSet::unknown()
+                        },
+                        ..CallClaims::default()
+                    },
+                );
+            if !exact_export {
+                let mut binding = leaf.resolved_import.exports["value"].clone();
+                binding.runtime.export_name = "other".into();
+                binding.declarations.export_name = "other".into();
+                leaf.resolved_import.exports.insert("other".into(), binding);
+                let mut cases = leaf.candidate.artifact_cases().to_vec();
+                let mut other = cases[0].exports["value"].clone();
+                other.identity.public_name = "other".into();
+                other.identity.runtime.export_name = "other".into();
+                other.identity.declarations.export_name = "other".into();
+                other.call = CallSemantics::new(
+                    CallClaims::default(),
+                    vec![],
+                    vec![],
+                    vec![],
+                    GuardPartition::default(),
+                );
+                cases[0].exports.insert("other".into(), other);
+                leaf.candidate = ContractProposal::new(leaf.candidate.package().clone(), cases)
+                    .normalize()
+                    .unwrap();
+            }
+            let leaf_plan = plan_certification(
+                leaf.clone(),
+                UntrustedArtifactEnvelope::Published(leaf_archive.clone()),
+            )
+            .unwrap();
+            let edge = AcceptedDependencyEdge {
+                specifier: "leaf-package".into(),
+                package_name: "leaf-package".into(),
+                artifact_case: leaf_plan.selected_artifact_case_id().into(),
+                accepted_contract_digest: leaf_plan
+                    .demand_graph()
+                    .candidate_semantic_digest()
+                    .as_str()
+                    .into(),
+            };
+            let (root, root_archive, root_integrity) = synthetic_graph_certification_request_shaped(
+                "root-package",
+                "1.0.0",
+                "/project/node_modules/root-package",
+                "/project/src/app.ts",
+                &root_runtime,
+                &bytes("root.d.ts"),
+                vec![edge],
+                ValueShape::Callable,
+                CallClaims {
+                    creates: KnowledgeSet::complete(vec![]),
+                    ..CallClaims::default()
+                },
+            );
+            let graph = plan_published_contract_graph(
+                PublishedGraphNodeRequest::new(
+                    root,
+                    root_archive,
+                    graph_lock("root-package", "1.0.0", &root_integrity),
+                ),
+                [PublishedGraphNodeRequest::new(
+                    leaf,
+                    leaf_archive,
+                    graph_lock("leaf-package", "2.0.0", &leaf_integrity),
+                )],
+            )
+            .unwrap();
+            let scratch = TracerScratch::new("dependency-census");
+            let Some(probes) = tracer_configuration(scratch.path(), "dependency-census", &[])
+            else {
+                return;
+            };
+            let issuer =
+                ConfiguredReceiptIssuer::persistent_local("dependency-census", [53; 32]).unwrap();
+            let finalized = graph
+                .certify_value_only(&pin, &issuer, 1, run_veto.then_some(&probes))
+                .unwrap();
+            assert_eq!(
+                creates_is_closed_in(finalized.root().canonical_main(), "value"),
+                closed_child && run_veto && exact_export,
+                "closed_child={closed_child}, run_veto={run_veto}, withheld={:?}",
+                finalized.root().withheld_closures()
+            );
+            if closed_child && run_veto && exact_export {
+                assert!(finalized.root().withheld_closures().is_empty());
+                assert!(
+                    finalized.nodes().iter().all(|node| creates_is_closed_in(
+                        node.finalized().canonical_main(),
+                        "value"
+                    ))
+                );
+            } else {
+                assert!(!finalized.root().withheld_closures().is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn factory_return_composition_requires_exact_closed_identity_and_receipt() {
+        use solid_reactive_ir::contract_semantics::{
+            Cardinality, CardinalityScope, Event, Operation, OperationId, OperationKind,
+            OwnerRelation, Schedule, Tracking, Trigger, UpperBound,
+        };
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let fixture =
+            repository_root().join("fixtures/package-contracts/factory-return-composition");
+        let bytes = |file: &str| std::fs::read(fixture.join(file)).unwrap();
+        for scenario in [
+            "closed",
+            "open",
+            "unrun-veto",
+            "second",
+            "callable",
+            "mutated",
+            "other-export",
+            "other-importer",
+        ] {
+            let leaf_runtime = match scenario {
+                "second" => b"export function value(input, other) { return other; }".to_vec(),
+                "other-export" => b"export function value(input, other) { return input; } export function other(input) { return input; }".to_vec(),
+                _ => bytes("leaf.js"),
+            };
+            let leaf_types = match scenario {
+                "second" => b"export declare function value<T, U>(input: T, other: U): U;".to_vec(),
+                "other-export" => b"export declare function value<T>(input: T, other?: unknown): T; export declare function other<T>(input: T): T;".to_vec(),
+                _ => bytes("leaf.d.ts"),
+            };
+            let root_runtime = match scenario {
+                "second" => b"import { value as factory } from 'leaf-package'; const value = factory({}, () => {}); export { value };".to_vec(),
+                "callable" => b"import { value as factory } from 'leaf-package'; const value = factory(() => {}); export { value };".to_vec(),
+                "mutated" => b"import { value as factory } from 'leaf-package'; let value = factory({}); value = () => {}; export { value };".to_vec(),
+                "other-export" => b"import { other as factory } from 'leaf-package'; const value = factory({}); export { value };".to_vec(),
+                _ => bytes("root.js"),
+            };
+            let (mut leaf, leaf_archive, leaf_integrity) =
+                synthetic_graph_certification_request_shaped(
+                    "leaf-package",
+                    "2.0.0",
+                    "/project/node_modules/root-package/node_modules/leaf-package",
+                    if scenario == "other-importer" {
+                        "/project/node_modules/root-package/types/index.d.ts"
+                    } else {
+                        "/project/node_modules/root-package/dist/index.js"
+                    },
+                    &leaf_runtime,
+                    &leaf_types,
+                    vec![],
+                    ValueShape::Callable,
+                    CallClaims::default(),
+                );
+            let mut cases = leaf.candidate.artifact_cases().to_vec();
+            let id = OperationId("return-0".into());
+            cases[0].exports.get_mut("value").unwrap().call = CallSemantics::new(
+                CallClaims {
+                    returns: if scenario == "open" {
+                        KnowledgeSet::partial(vec![id.clone()]).unwrap()
+                    } else {
+                        KnowledgeSet::complete(vec![id.clone()])
+                    },
+                    ..CallClaims::default()
+                },
+                vec![Operation {
+                    id,
+                    kind: OperationKind::Return,
+                    guard: None,
+                    trigger: Some(Trigger::Event(Event::Call)),
+                    at: Some(Event::Call),
+                    schedule: Some(Schedule::SameStack),
+                    tracking: Tracking::Untracked,
+                    owner: OwnerRelation::default(),
+                    cardinality: Cardinality {
+                        scope: Some(CardinalityScope::Call),
+                        min: Some(0),
+                        max: Some(UpperBound::Many),
+                    },
+                    inputs: vec![],
+                    output: Some(ValueShape::Parameter {
+                        index: u16::from(scenario == "second"),
+                        path: vec![],
+                    }),
+                    resources: BTreeSet::new(),
+                    composed_from: None,
+                }],
+                vec![],
+                vec![],
+                GuardPartition::default(),
+            );
+            if scenario == "other-export" {
+                let mut binding = leaf.resolved_import.exports["value"].clone();
+                binding.runtime.export_name = "other".into();
+                binding.declarations.export_name = "other".into();
+                leaf.resolved_import.exports.insert("other".into(), binding);
+                let mut other = cases[0].exports["value"].clone();
+                other.identity.public_name = "other".into();
+                other.identity.runtime.export_name = "other".into();
+                other.identity.declarations.export_name = "other".into();
+                other.call = CallSemantics::new(
+                    CallClaims::default(),
+                    vec![],
+                    vec![],
+                    vec![],
+                    GuardPartition::default(),
+                );
+                cases[0].exports.insert("other".into(), other);
+            }
+            leaf.candidate = ContractProposal::new(leaf.candidate.package().clone(), cases)
+                .normalize()
+                .unwrap();
+            let leaf_plan = plan_certification(
+                leaf.clone(),
+                UntrustedArtifactEnvelope::Published(leaf_archive.clone()),
+            )
+            .unwrap();
+            let return_subject = solid_reactive_ir::contract_semantics::SemanticClaimSubject {
+                artifact_case: leaf_plan.selected_artifact_case_id().into(),
+                export: "value".into(),
+                path: solid_reactive_ir::contract_semantics::SemanticClaimPath::Domain(
+                    solid_reactive_ir::contract_semantics::ClaimPath::Call(
+                        solid_reactive_ir::contract_semantics::ClaimDomain::Returns,
+                    ),
+                ),
+            };
+            let claim = leaf_plan
+                .selected_candidate
+                .claim_id(&return_subject)
+                .unwrap();
+            let edge = AcceptedDependencyEdge {
+                specifier: "leaf-package".into(),
+                package_name: "leaf-package".into(),
+                artifact_case: leaf_plan.selected_artifact_case_id().into(),
+                accepted_contract_digest: leaf_plan
+                    .demand_graph()
+                    .candidate_semantic_digest()
+                    .as_str()
+                    .into(),
+            };
+            let (root, root_archive, root_integrity) = synthetic_graph_certification_request_shaped(
+                "root-package",
+                "1.0.0",
+                "/project/node_modules/root-package",
+                "/project/src/app.ts",
+                &root_runtime,
+                &bytes("root.d.ts"),
+                vec![edge],
+                ValueShape::Plain,
+                CallClaims::default(),
+            );
+            let graph = plan_published_contract_graph(
+                PublishedGraphNodeRequest::new(
+                    root,
+                    root_archive,
+                    graph_lock("root-package", "1.0.0", &root_integrity),
+                ),
+                [PublishedGraphNodeRequest::new(
+                    leaf,
+                    leaf_archive,
+                    graph_lock("leaf-package", "2.0.0", &leaf_integrity),
+                )],
+            )
+            .unwrap();
+            let scratch = TracerScratch::new("factory-return");
+            let Some(probes) = tracer_configuration_from(
+                &fixture,
+                scratch.path(),
+                "factory-return",
+                &[(
+                    claim.as_str(),
+                    if scenario == "second" {
+                        "identity-second.mjs"
+                    } else {
+                        "identity.mjs"
+                    },
+                )],
+            ) else {
+                return;
+            };
+            let issuer =
+                ConfiguredReceiptIssuer::persistent_local("factory-return", [54; 32]).unwrap();
+            let result = graph.certify_value_only(
+                &pin,
+                &issuer,
+                1,
+                (scenario != "unrun-veto").then_some(&probes),
+            );
+            if scenario == "closed" {
+                let finalized = result
+                    .unwrap_or_else(|error| panic!("factory identity must certify: {error:?}"));
+                assert!(finalized.root().withheld_closures().is_empty());
+                let accepted = crate::contract_document::decode(finalized.root().canonical_main())
+                    .unwrap()
+                    .normalize()
+                    .unwrap();
+                assert_eq!(accepted.artifact_cases().len(), 1);
+                assert_eq!(
+                    accepted.artifact_cases()[0].exports["value"].shape,
+                    ValueShape::Plain
+                );
+            } else {
+                assert!(
+                    result.is_err(),
+                    "unsupported factory result certified: {scenario}"
+                );
+                if scenario == "second" {
+                    assert!(
+                        format!("{:?}", result.as_ref().err().unwrap())
+                            .contains("matching object argument"),
+                        "the child must be valid; the parent lacks an object at the returned parameter slot"
+                    );
+                }
+                if scenario == "other-importer" {
+                    assert!(
+                        format!("{:?}", result.as_ref().err().unwrap())
+                            .contains("factory initializer requires one exact dependency export"),
+                        "identical artifact bytes from another importer must not satisfy this call"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn duplicate_installation_graph_contexts_preserve_exact_parameter_reads() {
+        use solid_reactive_ir::contract_semantics::{
+            Cardinality, CardinalityScope, Event, Operation, OperationId, OperationKind,
+            OwnerRelation, Schedule, Tracking, Trigger, UpperBound,
+        };
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        for mutated in [false, true] {
+            let mut graphs = Vec::new();
+            for (index, package_root) in [
+                "/project/node_modules/duplicate-package",
+                "/project/node_modules/other/node_modules/duplicate-package",
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let runtime = if mutated && index == 1 {
+                    "export const value = (input) => { input = {}; return input.size; };"
+                } else {
+                    "export const value = (input) => input.size;"
+                };
+                let importer = format!("/project/src/context-{index}.ts");
+                let (mut request, archive, _) = synthetic_graph_certification_request_shaped(
+                    "duplicate-package",
+                    "1.0.0",
+                    package_root,
+                    &importer,
+                    runtime.as_bytes(),
+                    b"export declare const value: <T>(input: T) => unknown;",
+                    vec![],
+                    ValueShape::Callable,
+                    CallClaims::default(),
+                );
+                // The duplicated implementation is an imported chunk, as in
+                // Corvu. An inline entrypoint alone does not trigger the
+                // compiler's package-module redirect.
+                let snapshot =
+                    ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+                let manifest = snapshot.read("package.json").unwrap();
+                let declarations = snapshot.read("types/index.d.ts").unwrap();
+                let entry = b"export { value } from './chunk.js';";
+                let archive = published_archive_for(
+                    "duplicate-package",
+                    "1.0.0",
+                    &[
+                        ("package/package.json", manifest),
+                        ("package/dist/index.js", entry),
+                        ("package/dist/chunk.js", runtime.as_bytes()),
+                        ("package/types/index.d.ts", declarations),
+                    ],
+                );
+                let integrity =
+                    ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2())
+                        .unwrap()
+                        .package_integrity()
+                        .to_owned();
+                request.resolved_import.package_integrity = integrity.clone();
+                request.resolved_import.runtime =
+                    resolved_file(package_root, "dist/index.js", entry);
+                request
+                    .resolved_import
+                    .exports
+                    .get_mut("value")
+                    .unwrap()
+                    .runtime
+                    .module = resolved_file(package_root, "dist/chunk.js", runtime.as_bytes());
+                request.resolved_import.closure = ClosureManifest::new(
+                    vec![
+                        closure_entry(ClosureFileRole::Manifest, "package.json", manifest),
+                        closure_entry(ClosureFileRole::ResolutionInput, "package.json", manifest),
+                        closure_entry(ClosureFileRole::Runtime, "dist/index.js", entry),
+                        closure_entry(
+                            ClosureFileRole::Runtime,
+                            "dist/chunk.js",
+                            runtime.as_bytes(),
+                        ),
+                        closure_entry(
+                            ClosureFileRole::Declaration,
+                            "types/index.d.ts",
+                            declarations,
+                        ),
+                    ],
+                    vec![],
+                    vec![],
+                )
+                .unwrap();
+                let (package, mut case) =
+                    crate::artifact_resolution::proposal_identity(&request.resolved_import)
+                        .unwrap();
+                let mut export = request.candidate.artifact_cases()[0].exports["value"].clone();
+                export.identity.runtime.module =
+                    solid_reactive_ir::contract_semantics::ArtifactIdentity {
+                        path: "./dist/chunk.js".into(),
+                        digest: solid_reactive_ir::contract_semantics::Digest::parse(format!(
+                            "sha256:{:x}",
+                            Sha256::digest(runtime.as_bytes())
+                        ))
+                        .unwrap(),
+                    };
+                case.exports.insert("value".into(), export);
+                let mut cases = vec![case];
+                cases[0].exports.get_mut("value").unwrap().call = CallSemantics::new(
+                    CallClaims {
+                        reads: KnowledgeSet::partial(vec![OperationId("read-0".into())]).unwrap(),
+                        ..CallClaims::default()
+                    },
+                    vec![Operation {
+                        id: OperationId("read-0".into()),
+                        kind: OperationKind::Read,
+                        guard: None,
+                        trigger: Some(Trigger::Event(Event::Call)),
+                        at: Some(Event::Call),
+                        schedule: Some(Schedule::SameStack),
+                        tracking: Tracking::Untracked,
+                        owner: OwnerRelation::default(),
+                        cardinality: Cardinality {
+                            scope: Some(CardinalityScope::Call),
+                            min: Some(0),
+                            max: Some(UpperBound::Many),
+                        },
+                        inputs: vec![ValueShape::Parameter {
+                            index: 0,
+                            path: vec![],
+                        }],
+                        output: None,
+                        resources: BTreeSet::new(),
+                        composed_from: None,
+                    }],
+                    vec![],
+                    vec![],
+                    GuardPartition::default(),
+                );
+                request.candidate = ContractProposal::new(package, cases).normalize().unwrap();
+                graphs.push(
+                    plan_published_contract_graph(
+                        PublishedGraphNodeRequest::new(
+                            request,
+                            archive,
+                            graph_lock("duplicate-package", "1.0.0", &integrity),
+                        ),
+                        [],
+                    )
+                    .unwrap(),
+                );
+            }
+            let issuer =
+                ConfiguredReceiptIssuer::persistent_local("duplicate-contexts", [71; 32]).unwrap();
+            if !mutated {
+                let plans = graphs
+                    .iter()
+                    .map(|graph| graph.plan(graph.root_identity()).unwrap())
+                    .collect::<Vec<_>>();
+                let shared = super::type_facts::shared_graph_export_values_for_test(&plans, &pin);
+                let error = shared
+                    .err()
+                    .expect("the fixture must expose the shared compiler collision");
+                assert!(
+                    error.to_string().contains("original-input identity"),
+                    "the shared failure must be the exact missing identity: {error}"
+                );
+            }
+            let result =
+                super::certify_published_contract_graph_case_set(&graphs, &pin, &issuer, 1, None);
+            if mutated {
+                assert!(
+                    result.is_err(),
+                    "the other installation's unwritten binding cannot prove a mutated input"
+                );
+                let error = format!("{:?}", result.err().unwrap());
+                assert!(
+                    error.contains("SourceCensus"),
+                    "different snapshot bytes must not borrow a foreign declaration: {error}"
+                );
+                let own = graphs[1].certify_value_only(&pin, &issuer, 1, None);
+                let error = format!(
+                    "{:?}",
+                    own.err()
+                        .expect("the mutated input must remain refused in its own context")
+                );
+                assert!(
+                    error.contains("original-input identity"),
+                    "the own-context refusal must bind the mutation: {error}"
+                );
+            } else {
+                let finalized = result.unwrap_or_else(|error| {
+                    panic!("each own installation must certify: {error:?}")
+                });
+                assert_eq!(finalized.len(), 2);
+                for (index, graph) in finalized.iter().enumerate() {
+                    assert_eq!(
+                        graph.root().bindings().importer,
+                        format!("/project/src/context-{index}.ts")
+                    );
+                }
+                assert_ne!(
+                    finalized[0].root().bindings().resolved_import_root,
+                    finalized[1].root().bindings().resolved_import_root
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn unwritten_parameter_read_certification_binds_published_source() {
+        use solid_reactive_ir::contract_semantics::{
+            Cardinality, CardinalityScope, Event, Operation, OperationId, OperationKind,
+            OwnerRelation, Schedule, Tracking, Trigger, UpperBound,
+        };
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let generic = "export declare function value<T>(input: T): unknown;";
+        let member = "export declare function value(input: { foo(): number }): number;";
+        let array = "export declare function value(input: number[]): number;";
+        let string = "export declare function value(input: string): string;";
+        let cases = [
+            (
+                "export async function value(input) { void input.size; await 0; }",
+                "export declare function value<T>(input: T): Promise<void>;",
+                vec![],
+                true,
+            ),
+            (
+                "export async function value(input) { input = {}; void input.size; await 0; }",
+                "export declare function value<T>(input: T): Promise<void>;",
+                vec![],
+                false,
+            ),
+            (
+                "export function value(input) { input = input.trim().replace(/x/g, ''); return input.trim(); }",
+                string,
+                vec!["trim".into()],
+                true,
+            ),
+            (
+                "export function value(input) { input = 'local'; input = input.trim(); return input; }",
+                string,
+                vec!["trim".into()],
+                false,
+            ),
+            (
+                "export function value(input) { input = (input = 'local').trim(); return input; }",
+                string,
+                vec!["trim".into()],
+                false,
+            ),
+            (
+                "export function value(input) { input = input.trim(); return input.toUpperCase(); }",
+                string,
+                vec!["toUpperCase".into()],
+                false,
+            ),
+            (
+                "export function value(input) { const size = input.length; input = input.slice(1); return size; }",
+                array,
+                vec![],
+                true,
+            ),
+            (
+                "export function value(input) { input = []; const size = input.length; return size; }",
+                array,
+                vec![],
+                false,
+            ),
+            (
+                "const local = { foo() { return 1; } }; export function value(input) { const method = input.foo; input = local; return input.foo(); }",
+                member,
+                vec!["foo".into()],
+                false,
+            ),
+            (
+                "export function value(input) { return input.size; }",
+                generic,
+                vec![],
+                true,
+            ),
+            (
+                "export function value(input) { input = {}; return input.size; }",
+                generic,
+                vec![],
+                false,
+            ),
+            (
+                "export function value(input) { return input.foo(); }",
+                member,
+                vec!["foo".into()],
+                true,
+            ),
+            (
+                "export function value(input) { input = { foo() { return 1; } }; return input.foo(); }",
+                member,
+                vec!["foo".into()],
+                false,
+            ),
+        ];
+        let loop_types =
+            "export declare function value(input: string, args?: Record<string, string>): string;";
+        let loop_read = "export function value(input, args) { if (args) for (const [key, replacement] of Object.entries(args)) input = input.replace(key, replacement); return input; }";
+        let default_read = "export function value(input) { if (input === void 0) { input = []; } return input.concat([]); }";
+        let default_types = "export declare function value(input?: number[]): number[];";
+        for (runtime, declarations, path, accepted, min) in cases.into_iter()
+            .map(|(runtime, declarations, path, accepted)| (runtime, declarations, path, accepted, 0))
+            .chain([
+                (default_read, default_types, vec!["concat".into()], true, 0),
+                (default_read, default_types, vec!["concat".into()], false, 1),
+                (default_read, default_types, vec![], false, 0),
+                ("export function value(input) { const missing = input === void 0; if (input === void 0) { input = []; } if (missing) return input.concat([]); return []; }", default_types, vec!["concat".into()], false, 0),
+                ("export function value(input) { if (input == void 0) { input = []; } return input.concat([]); }", default_types, vec!["concat".into()], false, 0),
+                ("export function value(input) { if (input === void 0) { input = []; } input = []; return input.concat([]); }", default_types, vec!["concat".into()], false, 0),
+                ("export function value(input) { if (input === void 0) { input = []; } var input = []; return input.concat([]); }", default_types, vec!["concat".into()], false, 0),
+                (loop_read, loop_types, vec!["replace".into()], true, 0),
+                (loop_read, loop_types, vec!["replace".into()], false, 1),
+                ("export function value(input, args) { input = 'local'; if (args) for (const [key, replacement] of Object.entries(args)) input = input.replace(key, replacement); return input; }", loop_types, vec!["replace".into()], false, 0),
+                ("export function value(input, args) { if (args) for (const [key, replacement] of Object.entries(args)) { input = input.trim(); input = input.replace(key, replacement); } return input; }", loop_types, vec!["replace".into()], false, 0),
+            ])
+        {
+            let (mut request, archive, integrity) = synthetic_graph_certification_request_shaped(
+                "parameter-read-package",
+                "1.0.0",
+                "/project/node_modules/parameter-read-package",
+                "/project/src/app.ts",
+                runtime.as_bytes(),
+                declarations.as_bytes(),
+                vec![],
+                ValueShape::Callable,
+                CallClaims::default(),
+            );
+            let mut cases = request.candidate.artifact_cases().to_vec();
+            cases[0].exports.get_mut("value").unwrap().call = CallSemantics::new(
+                CallClaims {
+                    reads: KnowledgeSet::partial(vec![OperationId("read-0".into())]).unwrap(),
+                    ..CallClaims::default()
+                },
+                vec![Operation {
+                    id: OperationId("read-0".into()),
+                    kind: OperationKind::Read,
+                    guard: None,
+                    trigger: Some(Trigger::Event(Event::Call)),
+                    at: Some(Event::Call),
+                    schedule: Some(Schedule::SameStack),
+                    tracking: Tracking::Untracked,
+                    owner: OwnerRelation::default(),
+                    cardinality: Cardinality {
+                        scope: Some(CardinalityScope::Call),
+                    min: Some(min),
+                        max: Some(UpperBound::Many),
+                    },
+                    inputs: vec![ValueShape::Parameter { index: 0, path }],
+                    output: None,
+                    resources: BTreeSet::new(),
+                    composed_from: None,
+                }],
+                vec![],
+                vec![],
+                GuardPartition {
+                    cases: KnowledgeSet::Unknown,
+                },
+            );
+            request.candidate = ContractProposal::new(request.candidate.package().clone(), cases)
+                .normalize()
+                .unwrap();
+            let graph = plan_published_contract_graph(
+                PublishedGraphNodeRequest::new(
+                    request,
+                    archive,
+                    graph_lock("parameter-read-package", "1.0.0", &integrity),
+                ),
+                [],
+            )
+            .unwrap();
+            let issuer =
+                ConfiguredReceiptIssuer::persistent_local("parameter-read", [58; 32]).unwrap();
+            let result = graph.certify_value_only(&pin, &issuer, 1, None);
+            if accepted {
+                result
+                    .expect("an authenticated unwritten parameter proves the read input identity");
+            } else {
+                let error = format!(
+                    "{:?}",
+                    result
+                        .err()
+                        .expect("a reassigned parameter must stay refused")
+                );
+                let expected = if min == 0 || runtime == default_read { "original-input identity" } else { "tighter operation cardinality" };
+                assert!(error.contains(expected), "{error}");
+            }
+        }
+    }
+
+    #[test]
+    fn local_literal_result_census_requires_complete_return_identity() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let fixture = repository_root().join("fixtures/package-contracts/local-literal-result");
+        for runtime in [
+            "complete.js",
+            "mixed.js",
+            "fallthrough.js",
+            "accessor.js",
+            "replaced.js",
+        ] {
+            let (request, archive, integrity) = synthetic_graph_certification_request_shaped(
+                "literal-result-package",
+                "1.0.0",
+                "/project/node_modules/literal-result-package",
+                "/project/src/app.ts",
+                &std::fs::read(fixture.join(runtime)).unwrap(),
+                &std::fs::read(fixture.join("index.d.ts")).unwrap(),
+                vec![],
+                ValueShape::Callable,
+                CallClaims {
+                    creates: KnowledgeSet::complete(vec![]),
+                    ..CallClaims::default()
+                },
+            );
+            let graph = plan_published_contract_graph(
+                PublishedGraphNodeRequest::new(
+                    request,
+                    archive,
+                    graph_lock("literal-result-package", "1.0.0", &integrity),
+                ),
+                [],
+            )
+            .unwrap();
+            let scratch = TracerScratch::new("literal-result");
+            let Some(probes) = tracer_configuration(scratch.path(), "literal-result", &[]) else {
+                return;
+            };
+            let issuer =
+                ConfiguredReceiptIssuer::persistent_local("literal-result", [57; 32]).unwrap();
+            let finalized = graph
+                .certify_value_only(&pin, &issuer, 1, Some(&probes))
+                .unwrap();
+            assert_eq!(
+                creates_is_closed_in(finalized.root().canonical_main(), "value"),
+                runtime == "complete.js",
+                "{runtime}: {:?}",
+                finalized.root().withheld_closures()
+            );
+            if runtime != "complete.js" {
+                assert!(
+                    finalized
+                        .root()
+                        .withheld_closures()
+                        .iter()
+                        .any(|closure| closure.reason.contains("uncensused invoking form")),
+                    "{runtime}: negative must reach the recorded form, not an earlier refusal"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn literal_capture_factory_census_binds_returned_body() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let fixture = repository_root().join("fixtures/package-contracts/local-literal-result");
+        for runtime in [
+            "factory.js",
+            "factory-written-capture.js",
+            "factory-written.js",
+            "factory-result-written.js",
+            "factory-object-capture.js",
+        ] {
+            let (request, archive, integrity) = synthetic_graph_certification_request_shaped(
+                "factory-result-package",
+                "1.0.0",
+                "/project/node_modules/factory-result-package",
+                "/project/src/app.ts",
+                &std::fs::read(fixture.join(runtime)).unwrap(),
+                &std::fs::read(fixture.join("index.d.ts")).unwrap(),
+                vec![],
+                ValueShape::Callable,
+                CallClaims {
+                    creates: KnowledgeSet::complete(vec![]),
+                    ..CallClaims::default()
+                },
+            );
+            let graph = plan_published_contract_graph(
+                PublishedGraphNodeRequest::new(
+                    request,
+                    archive,
+                    graph_lock("factory-result-package", "1.0.0", &integrity),
+                ),
+                [],
+            )
+            .unwrap();
+            let scratch = TracerScratch::new("factory-result");
+            let Some(probes) = tracer_configuration(scratch.path(), "factory-result", &[]) else {
+                return;
+            };
+            let issuer =
+                ConfiguredReceiptIssuer::persistent_local("factory-result", [59; 32]).unwrap();
+            let finalized = graph
+                .certify_value_only(&pin, &issuer, 1, Some(&probes))
+                .unwrap();
+            assert_eq!(
+                creates_is_closed_in(finalized.root().canonical_main(), "value"),
+                runtime == "factory.js",
+                "{runtime}: {:?}",
+                finalized.root().withheld_closures()
+            );
+        }
+    }
+
+    #[test]
+    fn optional_imported_union_premise_closes_only_primitive_helper_coercion() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let fixture =
+            repository_root().join("fixtures/package-contracts/optional-imported-premise");
+        for types in ["index.d.ts", "unknown.d.ts"] {
+            let (request, archive, integrity) = synthetic_graph_certification_request_shaped(
+                "optional-premise-package",
+                "1.0.0",
+                "/project/node_modules/optional-premise-package",
+                "/project/src/app.ts",
+                &std::fs::read(fixture.join("index.js")).unwrap(),
+                &std::fs::read(fixture.join(types)).unwrap(),
+                vec![],
+                ValueShape::Callable,
+                CallClaims {
+                    creates: KnowledgeSet::complete(vec![]),
+                    ..CallClaims::default()
+                },
+            );
+            let graph = plan_published_contract_graph(
+                PublishedGraphNodeRequest::new(
+                    request,
+                    archive,
+                    graph_lock("optional-premise-package", "1.0.0", &integrity),
+                ),
+                [],
+            )
+            .unwrap();
+            let scratch = TracerScratch::new("optional-premise");
+            let Some(probes) = tracer_configuration(scratch.path(), "optional-premise", &[]) else {
+                return;
+            };
+            let issuer =
+                ConfiguredReceiptIssuer::persistent_local("optional-premise", [61; 32]).unwrap();
+            let finalized = graph
+                .certify_value_only(&pin, &issuer, 1, Some(&probes))
+                .unwrap();
+            assert_eq!(
+                creates_is_closed_in(finalized.root().canonical_main(), "value"),
+                types == "index.d.ts",
+                "{types}: {:?}",
+                finalized.root().withheld_closures()
+            );
+            if types == "unknown.d.ts" {
+                assert!(
+                    finalized
+                        .root()
+                        .withheld_closures()
+                        .iter()
+                        .any(|closure| closure.reason.contains("coercion"))
+                );
+            }
+        }
     }
 
     #[test]

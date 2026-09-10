@@ -1,0 +1,287 @@
+{
+  "diagnostic": true,
+  "reportPath": "rust/target/ecosystem-investigations/2026-09-08-callback-retry-full.json",
+  "reportDigest": "sha256:6cc119135c9b8c4742612da6a283f3841c99c0c17ef2c125afd982f77185e3ed",
+  "metricChanged": false,
+  "newCertifiedCases": 0,
+  "rows": [
+    {
+      "probeId": "@kobalte/themes@0.0.1-next.0|solid1|only",
+      "packageRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3zInM9/node_modules/@kobalte/themes",
+      "manifestDigest": "sha256:e89aa35a3760ec63590b445cd7927796841997f038ba3b381a87be5fade287da",
+      "installedIntegrityVerified": true,
+      "class": "unavailable-published-target",
+      "timedOut": false,
+      "refusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "unavailable-published-target",
+          "reason": "resolved target <package-root>/dist/index.jsx is not a file"
+        },
+        {
+          "entrypoint": ".",
+          "conditions": [
+            "solid"
+          ],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "unavailable-published-target",
+          "reason": "resolved target <package-root>/dist/index.jsx is not a file"
+        }
+      ],
+      "manifestExports": {
+        ".": {
+          "solid": "./dist/index.jsx",
+          "import": "./dist/index.jsx",
+          "types": "./dist/index.d.ts"
+        }
+      },
+      "distFiles": [
+        "index.d.ts",
+        "index.js",
+        "index.js.map"
+      ],
+      "declarations": {
+        "path": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-3zInM9/node_modules/@kobalte/themes/dist/index.d.ts",
+        "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "probeId": "@solid-devtools/babel-plugin@0.3.1|solid1|only",
+      "packageRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-laiRGg/node_modules/@solid-devtools/babel-plugin",
+      "manifestDigest": "sha256:2168da7abdf9396929a1ccefa9c3e2df9eac87da1c54abdc8402011c16e50464",
+      "installedIntegrityVerified": true,
+      "class": "no-exported-surface",
+      "timedOut": false,
+      "refusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/index.js has no runtime ESM exports"
+        }
+      ],
+      "distFiles": [
+        "index.d.ts",
+        "index.js"
+      ],
+      "declarations": {
+        "path": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-laiRGg/node_modules/@solid-devtools/babel-plugin/dist/index.d.ts",
+        "digest": "sha256:26229a5f2c38e64b52892ec9cabe33d342318c63f4ff9e16957e9d0ff31fd3b2"
+      }
+    },
+    {
+      "probeId": "@solid-devtools/ext-adapter@0.17.0|solid1|only",
+      "packageRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-v6vCRm/node_modules/@solid-devtools/ext-adapter",
+      "manifestDigest": "sha256:f142be211f33cf867b909c14222c7a3e638372e56f36269477210ab744ad1baf",
+      "installedIntegrityVerified": true,
+      "class": "no-exported-surface",
+      "timedOut": false,
+      "refusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "runtime-module",
+          "reason": "solid-checker-rust: emit package contract: entry file <package-root>/dist/index.js has no runtime ESM exports"
+        }
+      ],
+      "distFiles": [
+        "index.cjs",
+        "index.d.ts",
+        "index.js"
+      ],
+      "declarations": {
+        "path": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-v6vCRm/node_modules/@solid-devtools/ext-adapter/dist/index.d.ts",
+        "digest": "sha256:01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+      }
+    },
+    {
+      "probeId": "@solid-primitives/animation@1.0.0-next.1|solid2|floor",
+      "packageRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-8llpes/node_modules/@solid-primitives/animation",
+      "manifestDigest": "sha256:b863cac817fed21c7786ef97675045d91bfe7e5040e63a796a2344a5e10e49d7",
+      "installedIntegrityVerified": true,
+      "class": "unavailable-published-target",
+      "timedOut": false,
+      "refusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "unavailable-published-target",
+          "reason": "resolved target <package-root>/dist/index.js is not a file"
+        }
+      ],
+      "manifestExports": {
+        "import": {
+          "@solid-primitives/source": "./src/index.ts",
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.js"
+        }
+      },
+      "distFiles": null,
+      "declarations": null
+    },
+    {
+      "probeId": "@solid-primitives/animation@1.0.0-next.1|solid2|head",
+      "packageRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-mQEmyS/node_modules/@solid-primitives/animation",
+      "manifestDigest": "sha256:b863cac817fed21c7786ef97675045d91bfe7e5040e63a796a2344a5e10e49d7",
+      "installedIntegrityVerified": true,
+      "class": "unavailable-published-target",
+      "timedOut": false,
+      "refusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "unavailable-published-target",
+          "reason": "resolved target <package-root>/dist/index.js is not a file"
+        }
+      ],
+      "manifestExports": {
+        "import": {
+          "@solid-primitives/source": "./src/index.ts",
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.js"
+        }
+      },
+      "distFiles": null,
+      "declarations": null
+    },
+    {
+      "probeId": "@solid-primitives/composites@1.1.1|solid1|only",
+      "packageRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-AmCGBH/node_modules/@solid-primitives/composites",
+      "manifestDigest": "sha256:ff16a789c3d126a10d2ca6e1d4062b542d7de27a6375f62d458dcb19803ecd8c",
+      "installedIntegrityVerified": true,
+      "class": "unavailable-published-target",
+      "timedOut": false,
+      "refusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "unavailable-published-target",
+          "reason": "resolved target <package-root>/dist/index.cjs is not a file"
+        }
+      ],
+      "distFiles": null,
+      "declarations": null
+    },
+    {
+      "probeId": "@solid-primitives/context@0.3.2|solid1|only",
+      "packageRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-ZaYmcw/node_modules/@solid-primitives/context",
+      "manifestDigest": "sha256:6989ddd0a46a3296931cb36549d5efc7fad00a0aa1134a7c8567f308de52a0ea",
+      "installedIntegrityVerified": true,
+      "class": "missing-closure-module",
+      "timedOut": false,
+      "refusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "unsupported-artifact-shape",
+          "reason": "local closure module ../node_modules/solid-js/types/reactive/signal.js from <package-root>/dist/index.d.ts was not found"
+        }
+      ],
+      "manifestExports": {
+        "import": {
+          "@solid-primitives/source": "./src/index.ts",
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.js"
+        }
+      },
+      "distFiles": [
+        "index.d.ts",
+        "index.js"
+      ],
+      "declarations": {
+        "path": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-ZaYmcw/node_modules/@solid-primitives/context/dist/index.d.ts",
+        "digest": "sha256:cc78c544e75b320ca1e7e7b69decf97b463595dc5eb7a482230c94feddd0f333"
+      }
+    },
+    {
+      "probeId": "@solid-primitives/workers@0.4.3|solid1|only",
+      "packageRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-IxHfNU/node_modules/@solid-primitives/workers",
+      "manifestDigest": "sha256:29bf9054f003cf84c99697184a3a02da914aff5901c4ca040823023ca3e44f22",
+      "installedIntegrityVerified": true,
+      "class": "missing-closure-module",
+      "timedOut": false,
+      "refusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "published-artifact",
+          "applicability": "unsupported-artifact-shape",
+          "reason": "local closure module ./types.js from <package-root>/dist/index.d.ts was not found"
+        }
+      ],
+      "manifestExports": {
+        "import": {
+          "@solid-primitives/source": "./src/index.ts",
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.js"
+        }
+      },
+      "distFiles": [
+        "index.d.ts",
+        "index.js",
+        "utils.d.ts",
+        "utils.js"
+      ],
+      "declarations": {
+        "path": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-IxHfNU/node_modules/@solid-primitives/workers/dist/index.d.ts",
+        "digest": "sha256:1ce74277a3d198671dadee9ccd38cc7d229fc61a4f6ffad215deeac2e236aca7"
+      }
+    },
+    {
+      "probeId": "@tanstack/ai-solid-ui@0.7.20|solid1|only",
+      "packageRoot": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Gz9Ft2/node_modules/@tanstack/ai-solid-ui",
+      "manifestDigest": "sha256:0c78b2bf677d2b8791d6526c64923c754a81ab8394530cf845e7d36740f29117",
+      "installedIntegrityVerified": true,
+      "class": "dependency-contract-obligation",
+      "timedOut": false,
+      "refusals": [
+        {
+          "entrypoint": ".",
+          "conditions": [],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/ai-solid has no exact runtime binding for export useChat"
+        },
+        {
+          "entrypoint": ".",
+          "conditions": [
+            "solid"
+          ],
+          "stage": "artifact-case",
+          "class": "dependency-composition",
+          "applicability": "runtime-module",
+          "reason": "accepted dependency @tanstack/ai-solid has no exact runtime binding for export useChat"
+        }
+      ],
+      "manifestExports": {
+        ".": {
+          "solid": "./src/index.ts",
+          "types": "./src/index.ts",
+          "import": "./src/index.ts"
+        }
+      },
+      "distFiles": [
+        "esm"
+      ],
+      "declarations": null
+    }
+  ]
+}

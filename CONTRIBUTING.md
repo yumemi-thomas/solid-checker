@@ -30,6 +30,79 @@ Full verification keeps its Rust artifacts in `rust/target/verify` with debug
 symbols and incremental object caches disabled. This bounds the disk cost of
 the feature matrix without changing ordinary development and test profiles.
 
+The `verify` profile optimizes the `sha2` dependency: certification repeatedly
+hashes the Node, verifier and Type Facts executable images, and unoptimized
+compression dominated the tracer runtime. All hash checks still run, and the
+checker retains development-profile assertions. On the development host the
+unchanged generated-census test fell from 173.96s to 38.71s with this setting;
+these are test execution times, excluding compilation. The test still covers
+every generated candidate and its intentional timeout cases.
+
+Verification computes certification pins before Clippy and feature checks, and
+passes its profile to both bundle-conformance drivers. It therefore avoids
+switching from unpinned to pinned compilation within a run and avoids starting
+a separate debug build for conformance.
+
+For a scheduling comparison, run
+`SOLID_CHECKER_RUST_TEST_RUNNER=nextest make verify`. The checked-in
+`scripts/nextest.toml` uses eight test workers and writes individual durations
+to `rust/target/nextest/verify/junit.xml`. The nextest path explicitly runs
+doctests afterward; the built-in runner remains available through
+`SOLID_CHECKER_RUST_TEST_RUNNER=test`.
+With optimized hashing, one backend-suite comparison measured Cargo at 43.42s
+and nextest at 41.01s (426 tests passed in each). That small difference does
+not justify changing the default runner; use nextest when per-test timings
+help identify the next bottleneck.
+
+Verification runs the Go race suite and Rust workspace suite concurrently,
+after preflight and oracle provisioning. There is still only one Cargo process;
+both suites must pass before verification advances, and all test processes stop
+before performance measurements. Each run writes separate logs and a status/timing
+summary to `rust/target/verify-logs/run-*`. Interruption stops the test process
+groups, including their descendants. Defaults are `GOMAXPROCS=4` and
+`RUST_TEST_THREADS=8`; explicit environment values take precedence.
+Use `SOLID_CHECKER_VERIFY_PARALLEL=0 make verify` for sequential execution on
+constrained machines or to diagnose contention. An uncached comparison on the
+development host completed both suites in 50.04s (Go 50.04s, Rust 46.96s), versus
+roughly 90–110s sequentially. Go's normal test cache remains enabled; that
+comparison explicitly used `go test -race -count=1` to avoid cached timings.
+
+## Focused tooling loop
+
+```sh
+make verify-fast
+make test-focused TEST=census_parameter_premise_refusal_is_diagnostic_only
+make test-focused TEST=contract_certification::type_facts::tests::census_parameter_premise_refusal_is_diagnostic_only TEST_EXACT=1
+make ecosystem-package PACKAGE=@solid-primitives/utils
+```
+
+`verify-fast` checks formatting and compiles/lints every Rust target, including
+test-only code, before running any tests. It supplies the certification pins;
+it is a preflight, not a handoff gate. `verify-delta` now runs its universal
+checks before its selected tests too, and supplies current certification pins
+to every Cargo invocation. Full `verify` also checks Rust targets before the
+Go race tests.
+
+`test-focused` runs library tests in `solid-facts-backend` by default; use
+`TEST_PACKAGE=solid-reactive-ir` (or another exact crate) to change the owner.
+It checks the producer stamp, compiles and lists matching tests, refuses an
+empty selection, and runs with the certification pins and test environment.
+It does not install packages. For tests that read the audited runtime archive,
+provision it once with `make tsc-oracle-provision`; missing external artifacts
+remain failures. Run the related positive and negative filters during editing,
+then coverage and the full handoff checks required for the change.
+
+`ecosystem-package` builds the release checker and measures every manifest
+probe of the exact package, with certification recipes, full dependency graph
+rows, and retained audit sidecars. Reports go to a new directory under
+`rust/target/ecosystem-investigations`; each result's `retainedArtifacts` names
+its temporary project and output directory. `ECOSYSTEM_PROFILE=debug` selects
+a debug build for investigation, whose timings are not release measurements.
+Per-package refusals remain report data, as in the full runner; a zero command
+exit means the investigation ran, not that the package certified. A filtered
+report cannot establish corpus-wide regression status. Keep `make verify` and
+`make ecosystem-regression` as the required handoff checks.
+
 ## Performance regressions
 
 `make verify-performance` certifies repository-owned invariants over a

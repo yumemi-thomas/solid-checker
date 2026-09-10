@@ -965,6 +965,7 @@ function describeScope(scope) {
   for (const family of scope.families ?? []) filters.push(`family ${family}`);
   for (const target of scope.solidTargets ?? []) filters.push(`solid${target}`);
   if (scope.probeIds?.length) filters.push(`${scope.probeIds.length} exact probe id(s)`);
+  if (scope.packages?.length) filters.push(`packages ${scope.packages.join(", ")}`);
   return (
     `PARTIAL -- ${filters.join(", ")} (${ran} probes run). ` +
     "Not comparable to a full-corpus run."
@@ -1007,6 +1008,14 @@ export function buildReport({
     checker: {
       nativeBin: checker?.nativeBin ?? null,
       typeFactsBin: checker?.typeFactsBin ?? null,
+      // Proof configuration belongs to the measurement: changing recipes can
+      // change claims even when package versions and coverage are unchanged.
+      ...(checker && Object.hasOwn(checker, "probeRecipeCorpus")
+        ? { probeRecipeCorpus: checker.probeRecipeCorpus }
+        : {}),
+      ...(checker?.entrypointRecovery
+        ? { entrypointRecovery: checker.entrypointRecovery }
+        : {}),
       // The registry cache certification children were allowed to read, or
       // null when every registry byte was fetched fresh. Recorded so a wall
       // time can be read knowing whether it includes registry latency.
@@ -1037,6 +1046,7 @@ export function buildReport({
       families: scope?.families ?? [],
       solidTargets: scope?.solidTargets ?? [],
       probeIds: scope?.probeIds ?? [],
+      ...(scope?.packages?.length ? { packages: scope.packages } : {}),
       includeSupplemental: scope?.includeSupplemental ?? false,
       probesRun: everyResult.length
     },
