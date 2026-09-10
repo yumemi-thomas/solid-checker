@@ -283,6 +283,40 @@ export function recipeGaps(material, { domains } = {}) {
     .filter(entry => typeof entry.semanticClaimId === "string" && typeof entry.export === "string");
 }
 
+/// Why an asked-for domain got nothing, when the answer is in the material.
+///
+/// "Nothing to do" has two very different causes and an author cannot tell
+/// them apart from silence. Either the domain is withheld for a reason a
+/// recipe does not address — a census refusal has no proposed closure to veto
+/// — or the domain has **no candidate at all**, which is what a closure
+/// hazard produces: `runtime-accessor-installation` withdraws `reads` from
+/// every export in a file before planning, so the domain never reaches a
+/// gate and nothing about it appears here.
+///
+/// Measured on `seroval@1.5.6`, where the second case is the whole story: the
+/// package's certified contract closes `creates` and `returns` and never
+/// states `reads`, because the bundle names `Object.defineProperty` (see
+/// `2026-09-10-reads-veto-observation-design.md` § 23).
+export function unservedDomainReport(material, domains) {
+  if (!domains?.length) return [];
+  const withheld = material.withheldClosures.filter(entry => entry && typeof entry === "object");
+  return domains.flatMap(domain => {
+    const mentions = withheld.filter(entry => entry.domain === domain);
+    if (!mentions.length) {
+      return [
+        `  ${domain}: no candidate at all in this material. Either the domain is already`,
+        `    closed, or none was planned -- a closure hazard withdraws a domain before`,
+        `    planning, and no recipe can create a candidate. Read the contract document.`
+      ];
+    }
+    const reasons = [...new Set(mentions.map(entry => entry.reason))];
+    return [
+      `  ${domain}: withheld, but for ${reasons.length === 1 ? "a reason" : "reasons"} no recipe addresses:`,
+      ...reasons.map(reason => `    ${reason.length > 120 ? `${reason.slice(0, 117)}...` : reason}`)
+    ];
+  });
+}
+
 function readManifest(path) {
   if (!existsSync(path)) {
     return { format: FORMAT, schemaVersion: SCHEMA_VERSION, policy: DEFAULT_POLICY, recipes: [] };
@@ -404,6 +438,7 @@ export function main(argv = process.argv.slice(2), log = console.log) {
   const gaps = recipeGaps(material, { domains: options.domains });
   if (!gaps.length) {
     log(`no candidate in ${basename(options.input)} is withheld for want of a recipe`);
+    for (const line of unservedDomainReport(material, options.domains)) log(line);
     return 0;
   }
   // The bare specifier every emitted module imports. Graph lanes name the

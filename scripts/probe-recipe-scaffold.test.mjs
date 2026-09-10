@@ -26,7 +26,8 @@ import {
   manifestEntry,
   moduleName,
   moduleSource,
-  recipeGaps
+  recipeGaps,
+  unservedDomainReport
 } from "./probe-recipe-scaffold.mjs";
 
 const CLAIM = `claim:v1:sha256:${"9e82b17c".repeat(8)}`;
@@ -280,6 +281,28 @@ describe("probe-recipe-scaffold cannot certify by omission", () => {
     main(["--plan", plan, "--corpus", corpus], silent);
     const [module] = readdirSync(corpus).filter(name => name.endsWith(".mjs"));
     assert.match(readFileSync(join(corpus, module), "utf8"), /from "seroval"/);
+  });
+
+  test("says why an asked-for domain got nothing", () => {
+    // "Nothing to do" has two causes an author cannot tell apart from
+    // silence, and on `seroval@1.5.6` both occur at once: `creates` is
+    // withheld on a census refusal no recipe addresses, and `reads` has no
+    // candidate at all because the bundle names `Object.defineProperty` and
+    // the closure hazard withdraws the domain before planning.
+    const material = {
+      withheldClosures: [
+        gap({ domain: "creates", export: "resolvePlugins", reason: "census refused: uncensused invoking form" })
+      ]
+    };
+    assert.deepEqual(unservedDomainReport(material, ["creates"]).length, 2);
+    assert.match(unservedDomainReport(material, ["creates"])[1], /census refused/);
+
+    const reads = unservedDomainReport(material, ["reads"]).join(" ");
+    assert.match(reads, /no candidate at all/);
+    assert.match(reads, /closure hazard withdraws a domain before/);
+    // Nothing is claimed when no domain was asked for: the report answers a
+    // question about a named domain and inventing one would be noise.
+    assert.deepEqual(unservedDomainReport(material, []), []);
   });
 
   test("--dry-run writes nothing", () => {

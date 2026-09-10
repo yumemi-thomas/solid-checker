@@ -1256,3 +1256,104 @@ the fixture's tracer tests assemble their own corpus from the modules and the
 live claim ids — and nothing checked it. Fixed, and
 `ecosystem-probe-recipes.test.mjs` now checks the envelope of every
 checked-in fixture manifest, which is where the class was invisible.
+
+## 23. Using the scaffold on seroval: there is no `reads` candidate, and there should not be
+
+- **Asked:** run `probe-recipe-scaffold.mjs` on `seroval@1.5.6`'s `reads`
+  candidate — the one domain
+  [the returns recipe](2026-09-10-real-package-returns-recipe.md) § 5 left as
+  "the whole remaining gap" on `createReference`.
+- **Answer:** there is no such candidate. The scaffold emits nothing, which
+  is correct, and the reason is not a missing recipe.
+
+### 23.1 What the tool says
+
+~~~
+$ bun scripts/probe-recipe-scaffold.mjs --audit …/certification-audit.json \
+    --corpus … --domain reads --specifier seroval
+no candidate in certification-audit.json is withheld for want of a recipe
+  reads: no candidate at all in this material. …
+~~~
+
+The same audit under `--domain creates` reports the census refusal on
+`resolvePlugins`, and under `--domain returns` emits the scaffold for the
+claim the hand recipe later filled. So all three of the domain's states are
+distinguishable from the same material, which is what the run was for.
+
+### 23.2 The retained certification agrees
+
+The catalog at `/private/tmp/solid-checker-rc7-reproduction/seroval-consumer-certification`
+holds the real contract document its receipt binds. Five summaries:
+
+| summary | `closed` | states `reads` |
+| --- | --- | --- |
+| `…f8be3897` (`createReference`) | `["creates", "returns"]` | no |
+| `…d8e909ab`, `…f22a4831` | `["creates"]` | no |
+| `…5ba387bc`, `…ee9d83c3` | — | no |
+
+`reads` is not closed, not open-with-items, not withheld. It is absent: no
+candidate was ever planned for it.
+
+### 23.3 Why: six hazard sites, and they are not all false positives
+
+`runtime-accessor-installation` is a fact about a **file**, so one site
+withdraws `reads` from every export in it. Running the four rules of
+`syntaxHazards` over the certified artifact case
+(`dist/esm/development/index.mjs`, 4209 lines) finds six:
+
+| site | what it installs |
+| --- | --- |
+| ×4 `Object.defineProperty(globalThis‖window‖self‖global, REFERENCES_KEY, {value: …})` | a **data** property on the global, one per environment branch |
+| `Object.defineProperty(object, key, {value, configurable, enumerable})` in `assignStringProperty` | a **data** property |
+| `Object.defineProperties(result, Object.getOwnPropertyDescriptors(fields))` in `deserializeDictionary` | **whatever the deserialized input describes** |
+
+Five of the six are provably data properties, and a read through a data
+property runs no code — so on those the hazard is an over-approximation of
+the member-name rule. The sixth is not. `deserializeDictionary` copies own
+property descriptors off an object the deserializer built from its input, and
+a descriptor can carry a getter. seroval is a deserializer; installing
+arbitrary descriptors is the job.
+
+Across the whole package (both formats, 26 sites) the CJS cases add the
+sharper case. esbuild's CJS prelude is
+
+~~~js
+var __defProp = Object.defineProperty;
+… (e, r) => { for (var t in r) __defProp(e, t, { get: r[t], enumerable: true }); }
+~~~
+
+— a real accessor installation reached through an **alias**, which no rule
+keyed on `Object.defineProperty(` as a call would see. Only the bare-member
+rule catches it, at the point the intrinsic is named. That is the rule
+earning its conservatism.
+
+### 23.4 What this settles
+
+**Narrowing the hazard to spare literal `{value: …}` descriptors would not
+unblock seroval.** It clears 20 of the package's 26 sites and leaves the four
+`defineProperties` and the two aliased references — so the domain stays
+withdrawn, correctly. A refinement that *did* unblock it would need dataflow
+from the installing expression to each read's receiver, which § 10 already
+recorded this pipeline does not have.
+
+So `reads` on seroval is not a recipe gap and not a tooling gap. It is the
+right answer for a package that installs the property descriptors its input
+describes.
+
+**Where a first real `reads` recipe could exist.** Scanning the retained
+`node_modules` for hazard sites, four of ten packages are clean —
+`@solid-primitives/memo`, `@solid-primitives/trigger`,
+`@solid-primitives/utils` and `csstype` — against `solid-js` (144 sites, 140
+provable accessors), `@solidjs/web` (162), `@solidjs/signals` (76),
+`seroval` (26), `typescript` (17) and `seroval-plugins` (2). The population
+where `reads` can close is small unbundled packages, not bundled ones; that
+is a claim about ten packages in one tree, and the ecosystem number is not
+measured.
+
+### 23.5 One caveat the run demonstrated
+
+The retained audit predates the `reads` admission, which moved every claim
+digest in this package. The scaffold copied its `returns` claim id verbatim —
+`…9e82b17c` — while the checked-in hand recipe now addresses `…f1b996ab`. The
+tool is exactly as fresh as the material it is given, and a scaffold generated
+from a stale plan addresses nothing. Regenerate the plan first.
