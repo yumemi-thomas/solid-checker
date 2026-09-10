@@ -45,6 +45,7 @@
     "external-reexport",
     "function-supertype-kind",
     "implementation-census-creates",
+    "implementation-census-reads",
     "implementation-census-returns",
     "json-import",
     "late-types-condition",

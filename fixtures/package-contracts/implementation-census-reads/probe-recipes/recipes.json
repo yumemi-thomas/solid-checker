@@ -1,0 +1,33 @@
+{
+  "format": "solid-checker-probe-recipe-corpus",
+  "schemaVersion": 1,
+  "policy": 2,
+  "recipes": [
+    {
+      "claimId": "claim:v1:sha256:f9081d068794ace9d8d2b2f5074f771b40ac8c45d80ab351e00f86f451b061b8",
+      "module": "plain-arithmetic.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": { "marker": "read-operation", "class": "call" },
+      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "coverageLimitations": [
+        "Finite samples over a pure arithmetic export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this package only: the observation counts `ownProxy`'s trap, which is every reactive-shaped source this module owns"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:702d9185c580d7dd053fa3753a7cb09316db4886cfc2ad4227fd7840fff3c5db",
+      "module": "reads-own-proxy.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": { "marker": "read-operation", "class": "call" },
+      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "coverageLimitations": [
+        "Positive contradiction: one call is enough to falsify `reads: []`, so no exhaustiveness is claimed or needed",
+        "The recipe asserts its own observation fired, so a fixture edit that removes the trap fails the recipe instead of silently passing the gate"
+      ]
+    }
+  ]
+}
