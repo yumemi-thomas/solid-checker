@@ -12313,6 +12313,18 @@ export const value = phantom;
 
     /// Whether the canonical main a receipt binds closes `creates` for
     /// `export` in its one artifact case.
+    fn reads_is_closed_in(canonical_main: &[u8], export: &str) -> bool {
+        let normalized = crate::contract_document::decode(canonical_main)
+            .expect("a canonical main decodes")
+            .normalize()
+            .expect("a canonical main normalizes");
+        let case = &normalized.artifact_cases()[0];
+        case.exports[export]
+            .operation_claim(ClaimDomain::Reads)
+            .expect("reads is an operation domain")
+            .is_closed()
+    }
+
     fn creates_is_closed_in(canonical_main: &[u8], export: &str) -> bool {
         let normalized = crate::contract_document::decode(canonical_main)
             .expect("a canonical main decodes")
@@ -12482,6 +12494,162 @@ export const value = phantom;
             &[(closed_export, ClaimDomain::Creates)],
             &|_| ValueShape::Callable,
         )
+    }
+
+    fn reads_census_fixture() -> std::path::PathBuf {
+        repository_root().join("fixtures/package-contracts/implementation-census-reads")
+    }
+
+    /// The `.` entrypoint's exports — the five whose reads the census can
+    /// decide. `./owned`'s three are deliberately absent: that closure builds
+    /// a `Proxy`, so its `reads` never becomes a candidate at all.
+    const READS_FIXTURE_EXPORTS: [&str; 5] = [
+        "invokesCallerAccessor",
+        "plainArithmetic",
+        "readsCallerElement",
+        "readsCallerMember",
+        "readsOwnLiteral",
+    ];
+
+    fn reads_census_fixture_plan(closed: &str) -> CertificationPlan {
+        let fixture = reads_census_fixture();
+        let read = |name: &str| std::fs::read(fixture.join(name)).expect("fixture file");
+        let manifest = read("package.json");
+        let (index, index_types) = (read("index.js"), read("index.d.ts"));
+        let (owned, owned_types) = (read("owned.js"), read("owned.d.ts"));
+        let name = "implementation-census-reads-package";
+        // Every published file, not only the entry's: the manifest names
+        // `./owned`, and a resolution that cannot see it is not this package.
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", index.as_slice()),
+                ("package/index.d.ts", index_types.as_slice()),
+                ("package/owned.js", owned.as_slice()),
+                ("package/owned.d.ts", owned_types.as_slice()),
+            ],
+        );
+        let root = "/project/node_modules/implementation-census-reads-package";
+        let bindings = READS_FIXTURE_EXPORTS.map(|export| {
+            (
+                export,
+                ("index.js", index.as_slice()),
+                ("index.d.ts", index_types.as_slice()),
+                root,
+            )
+        });
+        plan_for_test_package_closing(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[(closed, ClaimDomain::Reads)],
+            &|_| ValueShape::Callable,
+        )
+    }
+
+    /// A `reads` closure carried all the way to a receipt: proposed, planned,
+    /// censused, put through its mandatory contradiction veto, and bound.
+    ///
+    /// Until this ran, `reads` closed at *proposal* time only — the domain was
+    /// proposable and the census decided it, but no policy-2 receipt had ever
+    /// bound one and the veto ADR 0006 schedules for every closed domain had
+    /// never executed for this one.
+    #[test]
+    fn a_reads_closure_reaches_a_receipt_through_its_mandatory_veto() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("reads-receipt");
+        let plan = reads_census_fixture_plan("plainArithmetic");
+        let schedule = plan.probe_gate_schedule().unwrap();
+        assert_eq!(
+            schedule.gates().len(),
+            1,
+            "one reads candidate, one mandatory veto"
+        );
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        let Some(configuration) = tracer_configuration_from(
+            &reads_census_fixture(),
+            scratch.path(),
+            "reads-receipt",
+            &[(claim_id.as_str(), "plain-arithmetic.mjs")],
+        ) else {
+            return;
+        };
+        let finalized = tracer_certify(&plan, &pin, &configuration)
+            .expect("the census proved the closure and the recipe did not contradict it");
+        assert!(
+            finalized.withheld_closures().is_empty(),
+            "nothing is withheld: {:?}",
+            finalized.withheld_closures()
+        );
+        assert!(
+            reads_is_closed_in(finalized.canonical_main(), "plainArithmetic"),
+            "the receipt binds a document whose reads is closed"
+        );
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan),
+            "and the gate that closure scheduled actually ran"
+        );
+    }
+
+    /// The other half, and the reason the fixture has two entrypoints: a
+    /// closure that installs an accessor at run time never reaches the census
+    /// at all. No candidate, no gate, nothing to bind.
+    ///
+    /// `./owned`'s real bytes, planned as a synthetic package's root, because
+    /// `plan_for_test_package_closing` resolves `.` and nothing else.
+    #[test]
+    fn an_accessor_installing_closure_never_plans_a_reads_candidate() {
+        let fixture = reads_census_fixture();
+        let owned = std::fs::read(fixture.join("owned.js")).expect("owned runtime");
+        let owned_types = std::fs::read(fixture.join("owned.d.ts")).expect("owned declarations");
+        let manifest = br#"{"name":"reads-owned","version":"1.0.0","type":"module","exports":{".":{"types":"./index.d.ts","import":"./index.js"}}}"#;
+        let archive = published_archive_for(
+            "reads-owned",
+            "1.0.0",
+            &[
+                ("package/package.json", manifest),
+                ("package/index.js", owned.as_slice()),
+                ("package/index.d.ts", owned_types.as_slice()),
+            ],
+        );
+        let root = "/project/node_modules/reads-owned";
+        let bindings = ["observedReads", "readsOwnProxy", "readsOwnProxyElement"].map(|export| {
+            (
+                export,
+                ("index.js", owned.as_slice()),
+                ("index.d.ts", owned_types.as_slice()),
+                root,
+            )
+        });
+        let plan = plan_for_test_package_closing(
+            &archive,
+            "reads-owned",
+            "1.0.0",
+            root,
+            manifest,
+            &["import"],
+            &bindings,
+            &[("readsOwnProxy", ClaimDomain::Reads)],
+            &|_| ValueShape::Callable,
+        );
+        assert!(
+            plan.verified_closure.manifest().installs_runtime_accessor(),
+            "the closure states the installation: {:?}",
+            plan.verified_closure.manifest().hazards
+        );
+        assert!(
+            plan.probe_gate_schedule().unwrap().gates().is_empty(),
+            "so the proposed reads closure is withdrawn before any gate"
+        );
     }
 
     /// The census fixture planned from the bytes the **generator** emitted for

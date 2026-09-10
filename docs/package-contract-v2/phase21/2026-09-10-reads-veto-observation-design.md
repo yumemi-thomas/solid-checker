@@ -634,10 +634,7 @@ returns fixture's gate count goes 13 → 22 (4 returns + 9 creates + 9 reads).
 
 ### Still open
 
-- **`reads` closes at *proposal* time only.** Certification runs
-  `census_reads_domain` and a mandatory veto per proposed closure; no
-  end-to-end policy-2 certification of a `reads` closure has been run, and no
-  hand recipe addresses one. The corpus proves the proposal, not the receipt.
+- ~~`reads` closes at proposal time only.~~ **Closed by § 12.**
 - **The refusal is closure-granular.** Per-export attribution needs dataflow
   from the installing expression to each read's receiver.
 - **The set is my enumeration.** § 9's table is the contract; a shape missing
@@ -645,3 +642,58 @@ returns fixture's gate count goes 13 → 22 (4 returns + 9 creates + 9 reads).
 - **The dual census stands.** Two independent syntax censuses that must agree
   byte for byte, now mirrored a fourth time. `verify_snapshot_closure` catches
   a disagreement, but only for a package something actually certifies.
+
+## 12. A `reads` closure reaches a receipt (2026-09-10)
+
+§ 11 left the domain closing at *proposal* time only. It now closes at
+certification: `a_reads_closure_reaches_a_receipt_through_its_mandatory_veto`
+plans `implementation-census-reads`' `.` entrypoint with `plainArithmetic`'s
+`reads` closed, schedules the one mandatory veto that closure demands, runs
+`plain-arithmetic.mjs` against the real artifact through the pinned harness,
+and asserts three things: nothing withheld, `reads` closed in the canonical
+main the receipt binds, and a probe-gate root that is not the empty one.
+
+Its pair, `an_accessor_installing_closure_never_plans_a_reads_candidate`,
+plans `./owned`'s real bytes as a synthetic package's root — because
+`plan_for_test_package_closing` resolves `.` and nothing else — and asserts no
+gate is scheduled at all.
+
+### One defect the admission had, and how it stayed hidden
+
+`withheld_weakening` mapped `creates` and `returns` and refused everything
+else by name. With `Reads` proposable, every recipe-gated plan carrying a
+reads candidate failed `UnknownDomain { domain: "reads" }` — five existing
+tests plus both new ones.
+
+**`cargo test -p solid-facts-backend --lib` did not show it.** Those tests
+return early when the binary was compiled without the certification pins, so
+the runs that gated § 11 reported green while asserting nothing about the
+gate. `make test-rust` carries `CERTIFICATION_ENV` and
+`SOLID_CHECKER_EXPECT_PROBE_PINS=1`, which turns the early return into a
+failure; under it the suite was red. AGENTS.md documents this trap and it
+still cost a commit — the fix is folded into the admission commit rather than
+appended, because a commit that fails the pinned suite is not green.
+
+The tell was visible and I nearly missed it: the first run of the new test
+passed **in 0.00s**.
+
+### What the recipe stopped needing
+
+`plain-arithmetic.mjs` used to import `observedReads` and compare the proxy
+trap's counter before and after the sample, because that counter was its
+author's only way to claim the sample had observed every reactive-shaped
+source the module owns. After the split it cannot — `observedReads` lives in
+`./owned` — and it no longer needs to: the closure states syntactically that
+`./index.js` installs no accessor, so there is no trap to count. The hazard
+does the work the counter used to, and the recipe is now what a veto should
+be: sample the export, emit only on contradiction.
+
+### Still open
+
+- The refusal is closure-granular.
+- The nine shapes are one enumeration, mirrored by hand across two ASTs.
+- No *real* package has had a `reads` closure certified. seroval cannot: its
+  development bundle carries `defineProperty` ×7, `__proto__` ×2,
+  `__defineGetter__` ×1 and `Object.create` ×2, so it sits in the 69% § 8
+  measured as refused. The next real target has to come from the 273 clean
+  packages, and has to be one a consumer actually imports.

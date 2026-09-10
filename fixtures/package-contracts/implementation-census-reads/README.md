@@ -44,14 +44,17 @@ in it. The proxy therefore lives in `./owned`, with its own closure. Splitting
 per *export* would need dataflow from the installing expression to each read's
 receiver, which nothing in this pipeline has.
 
-**The rows above are the intent, not the current behavior.** `reads` is not in
-`ClaimDomain::PROPOSABLE` yet, so nothing proposes the domain and both
-entrypoints emit `closed: ["creates"]`. The blocker is not the census — that
-exists — but that the closure hazard census is written twice, over two
-different ASTs, and both must agree byte for byte; see § 10 of the design.
-The probe recipes' `claimId`s below are stale for the same reason: the split
-moved every claim in this fixture, and re-reading them needs a run that
-proposes the domain.
+The rows above are the current behavior, not an intent. `reads` is in
+`ClaimDomain::PROPOSABLE`, the census decides it, and
+`a_reads_closure_reaches_a_receipt_through_its_mandatory_veto` carries
+`plainArithmetic`'s closure through its gate to a policy-2 receipt using
+`probe-recipes/plain-arithmetic.mjs`.
+
+`probe-recipes/recipes.json` is **not** what that test reads: it plans the
+package itself and asks the schedule for the live claim id, because the ids
+are content digests and the split moved every one of them. The manifest is
+kept as the hand-authored record of which module addresses which claim; treat
+its ids as stale until a run reprints them.
 
 ## No `solid-js` import, deliberately
 
