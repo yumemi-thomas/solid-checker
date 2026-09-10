@@ -1582,3 +1582,75 @@ certifier and, implicitly, the `"creates"` literal in the generator's record.
 A third copy was about to be written. `ClaimDomain::wire_name` is now the one
 mapping and the certifier delegates to it, because a name that drifts between
 producer and consumer is the dual-census failure in miniature (§ 10).
+
+## 26. The dependency-graph lane on `@solid-primitives/memo`: a silent no-op
+
+§ 24 said certifying memo's three dependencies "could unblock memo's *other*
+domains" through the graph lane. Tried it.
+
+`--dependency-graph-lane` **changed nothing**. Both runs publish the same
+contract document (`e2976f1d…`), the same zero closure candidates, the same
+zero withheld closures; the audits differ only in a scratch temp path, and
+`graphPreparation` carries no `partialProposalFrontier`, so the lane never
+engaged at all.
+
+### 26.1 Why: the lane keys on a refusal memo does not produce
+
+`preparedGraphForPartialProposal` gates on
+`partialProposalHasDependencyFrontier(audit.refusals)`, which needs a
+**non-empty** `refusals` array carrying an exact `dependency-composition`
+class. memo's `refusals` is `[]`. Its artifact case generates perfectly well
+— it just generates an empty contract.
+
+The same underlying fact has two representations, and the lane sees one:
+
+| representation | when | lane fires |
+| --- | --- | --- |
+| artifact-case refusal, class `dependency-composition` | the case **cannot generate** | yes |
+| `UnacceptedExternalDependency` closure hazard | the case generates, every domain open | **no** |
+
+memo is the second, and that is plausibly the more common shape for a small
+well-formed package: nothing about its bytes is malformed, it simply calls
+into packages this build has no contract for. The flag was accepted and
+ignored without a word, which is the part worth fixing whatever is decided
+about the routing.
+
+### 26.2 And extending the trigger would not unblock `reads`
+
+Worth settling before anyone builds it. Two of memo's three dependencies —
+`solid-js` and `@solidjs/web` — are **primitive-defining packages** under the
+v2 dialect (`solid_2.rs`'s `primitive_defining_packages`). Generating either
+selects `GenerationScope::DialectDefiningPackage`, whose
+`publishes_bootstrapped_reactive_domains()` is false: callbacks, reads,
+creates and cleanups are withheld wholesale (ADR 0017, ADR 0005). So even a
+fully certified `solid-js` would state nothing about `reads`, and memo's
+`reads` could not compose through it.
+
+The graph lane is therefore the wrong instrument here twice over: it does not
+fire, and it would not help if it did.
+
+### 26.3 The tension the new records make visible
+
+One export, `createPureReaction`, now carries both channels for the same
+import:
+
+~~~
+dialect-silent                  solid-js  runWithOwner    …/dist/index.js:1433:1544
+dialect-silent                  solid-js  createReaction  …/dist/index.js:1459:1543
+unaccepted-external-dependency                            ./dist/index.js:solid-js
+~~~
+
+The walk asked the *dialect* about `solid-js`'s primitives and named the two
+it had nothing to say about; the closure declares the whole package opaque
+and opens every domain regardless. ADR 0008's Pinned section already records
+this interaction — "opens every domain of that artifact case whatever the
+walk found" — so it is expected rather than newly broken. What is new is
+that it is now countable per export and per domain, which is what would let
+somebody decide whether a core-runtime import should be an opaque frontier
+at all.
+
+**Not decided here.** Whether `record_opaque_frontier` should exempt a
+`core_runtime_contract_reference` specifier is a question about where the
+trust boundary sits, not a cleanup: the dialect's primitive recognition and
+a contract's authority over an archive's bytes are different questions, and
+they could legitimately both hold.
