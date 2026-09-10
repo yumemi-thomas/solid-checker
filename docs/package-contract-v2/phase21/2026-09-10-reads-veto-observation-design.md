@@ -1116,3 +1116,43 @@ handful of runs is not a mechanism, and I have repeatedly written it up as
 one. The instruments were the right response and they are what caught this;
 the discipline still missing is writing the control **before** the conclusion,
 not after.
+
+## 21. Fixed: the fallback re-gated an already-weakened plan
+
+The bisect that mattered was not case count. It was **`probes`**.
+
+`certify_value_only_case_set` falls back to per-plan certification when a
+candidate withheld for want of a recipe could be served by a synthesized
+veto. That fallback was handed `gated.plan()` — the plan whose candidates the
+gating weakening had already opened. `certify_value_only` re-gates what it is
+given, found no candidate left, bound nothing, and had nothing to withhold
+either. Every proposed closure vanished with no record.
+
+The same mistake sat in the incomplete-gate fallback beside it. Both now take
+the original plan.
+
+Without a probe configuration the fallback is never reached — every candidate
+is withheld for want of a recipe and the batch finalizes that honestly. That
+is exactly why § 20's control passed while asserting nothing: it called the
+batch with `None`. Supplying an empty corpus, as every real run does,
+reproduced the loss in a unit test in seconds.
+
+| | before | after |
+| --- | --- | --- |
+| synthetic two-case, probes supplied | 2 given, 0 bound, 0 withheld | 2 given, accounted |
+| `@corvu/utils` `./dom`, two cases | 18 given, 0 bound, 0 withheld | 18 given, **12 withheld, 6 bound** |
+
+Six bound is exactly twice the single-case result, which is the answer the
+one-case runs said it should be all along.
+
+### On how this was found
+
+Five wrong conclusions preceded it, all the same shape — a correlation across
+a few runs written up as a mechanism. What ended it was not a better guess.
+It was the four audit markers, which turned "a closure went missing" into
+"18 given, 0 accounted", and then a unit test that reproduced the same
+signature in seconds instead of a two-minute certification.
+
+The one discipline that would have saved most of it: the control before the
+conclusion. § 20 already said so and § 20's own control was still vacuous
+until its `probes` argument was checked.

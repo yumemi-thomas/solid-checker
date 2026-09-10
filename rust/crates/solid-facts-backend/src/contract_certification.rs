@@ -817,18 +817,28 @@ pub fn certify_value_only_case_set(
     gated
         .iter()
         .zip(evidence)
-        .map(|(gated, evidence)| {
+        .zip(plans.iter())
+        .map(|((gated, evidence), original)| {
             let plan = gated.plan();
             // A candidate withheld for want of a recipe may be served by a
             // synthesized veto, which needs this plan re-gated: the per-plan
             // loop does that.
+            //
+            // It re-gates the **original**, not `gated.plan()`. The gated
+            // plan has already had its candidates opened by the weakening
+            // that produced it, so re-gating it derives nothing, binds
+            // nothing, and — because there is no candidate left to withhold —
+            // records nothing either. Handing it back here published
+            // contracts whose every proposed closure had silently vanished:
+            // `docs/precision-backlog.md` § "A certified contract can be
+            // weaker than the proposal it came from".
             if probes.is_some()
                 && gated.withheld().iter().any(|record| {
                     record.reason == WITHHELD_CLOSURE_NO_RECIPE
                         && evidence.call_signatures(&record.export).is_some()
                 })
             {
-                return individually(plan);
+                return individually(original);
             }
             // Each alternative artifact case derives, runs, and authenticates
             // its own veto set; a batch never shares one plan's probe
@@ -836,7 +846,7 @@ pub fn certify_value_only_case_set(
             let probe_gates = match finalization::authenticate_probe_gates(plan, probes, pin) {
                 Ok(gates) => gates,
                 Err(error) if incomplete_gate_withholding(plan, &error).is_some() => {
-                    return individually(plan);
+                    return individually(original);
                 }
                 Err(error) => return Err(error),
             };
@@ -12564,13 +12574,25 @@ export const value = phantom;
             false,
         )
         .expect("encode the candidate");
+        // A probe configuration, not `None`. With no probes every candidate
+        // is withheld for want of a recipe and the accounting balances
+        // trivially — which is how the first version of this test passed
+        // while asserting nothing. An empty corpus is what the real runs
+        // supply, and it is what enables the synthesized-veto fallback the
+        // batch takes for a no-recipe candidate.
+        let scratch = TracerScratch::new("case-set-closure");
+        let Some(configuration) =
+            tracer_configuration_from(&reads_census_fixture(), scratch.path(), "case-set", &[])
+        else {
+            return;
+        };
         let Ok(finalized) = super::certify_value_only_case_set(
             &[&solid, &default],
             &proposal,
             &pin,
             &issuer,
             1,
-            None,
+            Some(&configuration),
         ) else {
             // A refusal is an accounted outcome: nothing is published, so no
             // closure is silently lost. Only a *certified* set can lose one.

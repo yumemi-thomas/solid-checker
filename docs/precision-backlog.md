@@ -19603,9 +19603,9 @@ pin moved.
 - `@solid-primitives/visibility-observer@2.0.1`: recorded above (artifact-case
   declaration selection); open.
 
-### A certified contract can be weaker than the proposal it came from, silently (2026-09-10)
+### A certified contract can be weaker than the proposal it came from, silently (2026-09-10, fixed)
 
-**Open defect, product-visible.** Certification can drop a proposed closure
+**Was a product-visible defect; fixed the same day — see the end of this entry.** Certification can drop a proposed closure
 without recording it anywhere. The accepted document simply leaves the domain
 open, and nothing distinguishes that from a domain the proposal never closed.
 
@@ -19660,11 +19660,27 @@ synthetic two-case set and the accounting balances, so the correlation is not
 the mechanism. Whatever `@corvu/utils` does differently, it is not simply
 having two artifact cases.
 
-Reproduction of the *symptom*: `contract certify … --entrypoint ./dom` with
-and without `--conditions solid`, reading `closureCandidates`,
-`withheldClosures` and `certifiedClosures` from the audit. The invariant those
-three fields express — every candidate is bound or named — is pinned by the
-test above, which will catch this class of loss wherever it is introduced.
+**Fixed (2026-09-10).** `certify_value_only_case_set` falls back to
+per-plan certification for a candidate a synthesized veto could serve, and it
+handed that fallback `gated.plan()` — the plan whose candidates the gating
+weakening had *already* opened. Re-gating it derived nothing, so it bound
+nothing and, with no candidate left to withhold, recorded nothing either. The
+fallback now takes the original plan.
+
+Two fallbacks had the bug: the synthesized-veto one and the incomplete-gate
+one. Both are corrected.
+
+After: `@corvu/utils@0.4.2` `./dom` two-case certifies 18 derived, 12
+withheld, 6 bound — balanced, and exactly twice the single-case result.
+
+The variable was never the case count. It was `probes: Some(…)`: without a
+probe configuration every candidate is withheld for want of a recipe and the
+fallback is never reached, which is why the first version of the regression
+test passed while asserting nothing.
+
+Pinned by `a_case_set_accounts_for_every_closure_candidate_it_was_given`,
+which asserts the invariant directly — every candidate a certification is
+given is bound in the receipt or named in a withheld record.
 
 Full investigation, including two wrong hypotheses and three misread
 measurements:
