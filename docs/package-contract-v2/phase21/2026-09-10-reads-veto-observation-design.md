@@ -938,3 +938,57 @@ round of reading the code and guessing — that is what produced the two
 corrections above, and the rule this document keeps relearning is that a
 boundary you cannot see through is a boundary to instrument, not to reason
 across.
+
+## 17. The Rust-side mirror, and the exact boundary
+
+`solid-checker-rust` now emits `solid-checker:closure-candidates=` — one line
+per certified artifact case, naming every closure candidate the planner
+derived, before any gating. The CLI sums them across cases into the audit's
+`closureCandidates`. Both certify paths emit it; the single-case one was
+instrumented first and reported nothing for `@corvu/utils`, because a
+two-case entrypoint takes the other.
+
+Three boundaries, one run:
+
+| | |
+| --- | --- |
+| proposal states closed (rows) | 10 |
+| planner derived closure candidates | **18** (9 per case × 2) |
+| withheld by gating | 0 |
+| accepted document closures | **0** |
+
+And the candidates are exactly the right ones:
+
+~~~
+afterPaint            Domain(Call(Creates)), Domain(Call(Reads))
+callEventHandler      Domain(Call(Reads))
+combineStyle          Domain(Call(Creates)), Domain(Call(Reads))
+contains              Domain(Call(Creates)), Domain(Call(Reads))
+sortByDocumentPosition Domain(Call(Creates)), Domain(Call(Reads))
+~~~
+
+### What this settles
+
+Every earlier explanation is dead. The proposal carries the closures, the
+planner derives call-domain candidates from them, gating withholds none, and
+the receipt binds a document that closes nothing. The loss is **after
+candidate derivation and outside the withholding mechanism**.
+
+A correction to § 14 and § 16 while here: the audit's `demandPlans` come from
+the CLI's *separate* `contract plan-demands` invocation, not from the certify
+transaction. "Zero domain-exhaustiveness demands" was a fact about that other
+call, and I read it as a fact about certification. The candidate count above
+is the first number in this investigation that is actually about the run that
+issued the receipt.
+
+### The remaining question, stated as a question
+
+`inspect_candidates` derives a candidate by calling `open_proposed_closure()`,
+which *weakens* the claim — the candidate universe is built by opening the
+closures it enumerates. Something must close them again for a proven
+candidate, and seroval's document shows that something works there.
+
+So: what re-closes a proven candidate, and why does it not fire here? That is
+one more instrument — record the canonical main's closed set beside the
+candidate set — and deliberately **not** another guess. Two guesses in this
+document were wrong and a third would cost more than the measurement.

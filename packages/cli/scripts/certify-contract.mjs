@@ -670,6 +670,38 @@ function certificationPlannings(generated, artifactSnapshot, options = null) {
 /// already says the withheld domains are open.
 export const WITHHELD_CLOSURE_MARKER = "solid-checker:withheld-closure=";
 
+const CLOSURE_CANDIDATE_MARKER = "solid-checker:closure-candidates=";
+
+/// What the planner derived from the proposal, before gating.
+///
+/// The third of three answers a lost closure needs: `plannedProposal` says
+/// what the proposal offered, this says what the planner made of it, and
+/// `withheldClosures` says what gating took away. Diagnostic only.
+export function closureCandidatesFromNativeOutput(stdout) {
+  // One line per certified artifact case, so this sums rather than takes the
+  // first: a multi-case entrypoint that derived candidates for one case and
+  // none for another must not read as either extreme.
+  const perCase = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(CLOSURE_CANDIDATE_MARKER)) continue;
+    try {
+      const record = JSON.parse(trimmed.slice(CLOSURE_CANDIDATE_MARKER.length));
+      if (record && typeof record === "object" && typeof record.count === "number") {
+        perCase.push(record);
+      }
+    } catch {
+      // Malformed is not a record.
+    }
+  }
+  if (!perCase.length) return null;
+  return {
+    cases: perCase.length,
+    count: perCase.reduce((total, record) => total + record.count, 0),
+    candidates: perCase.flatMap(record => record.candidates ?? []).slice(0, 64)
+  };
+}
+
 export function withheldClosuresFromNativeOutput(stdout) {
   const records = [];
   for (const line of String(stdout ?? "").split("\n")) {
@@ -1626,7 +1658,8 @@ async function executePreparedPublishedGraphs({
   return {
     authority: "native-certification-complete",
     catalogRoot,
-    withheldClosures: withheldClosuresFromNativeOutput(child.stdout)
+    withheldClosures: withheldClosuresFromNativeOutput(child.stdout),
+    closureCandidates: closureCandidatesFromNativeOutput(child.stdout)
   };
 }
 
@@ -2800,7 +2833,8 @@ async function executeNativeCertification({
   return {
     authority: "native-certification-complete",
     catalogRoot,
-    withheldClosures: withheldClosuresFromNativeOutput(child.stdout)
+    withheldClosures: withheldClosuresFromNativeOutput(child.stdout),
+    closureCandidates: closureCandidatesFromNativeOutput(child.stdout)
   };
 }
 
@@ -3249,7 +3283,8 @@ function writeSuccessAudit(
   stageDurationsMs,
   graphPreparation = null,
   withheldClosures = [],
-  plannedProposal = null
+  plannedProposal = null,
+  closureCandidates = null
 ) {
   if (!path) return;
   const output = resolve(path);
@@ -3274,6 +3309,10 @@ function writeSuccessAudit(
     // What the planned proposal offered, so a document that closes nothing
     // can be told apart from a proposal that offered nothing.
     plannedProposal,
+    // What the planner derived from that proposal, before gating. With
+    // `plannedProposal` above and `withheldClosures`, the three together say
+    // where a closure went.
+    closureCandidates,
     demandPlans: demandPlans.map(plan => ({
       policyDigest: plan.policyDigest,
       candidateSemanticDigest: plan.candidateSemanticDigest,
@@ -3388,6 +3427,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
   // it — reused from disk or regenerated here. Read for the audit only.
   let plannedProposalPath = null;
   let withheldClosures = [];
+  let closureCandidates = null;
   const stageDurationsMs = {};
   let certified = false;
   const measure = async (stage, operation) => {
@@ -3549,6 +3589,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
           withheldClosures = Array.isArray(witnesses?.withheldClosures)
             ? witnesses.withheldClosures
             : [];
+          closureCandidates = witnesses?.closureCandidates ?? null;
           return { authority: "rust", witnesses };
         })
       },
@@ -3611,7 +3652,8 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       stageDurationsMs,
       { ...(graphPreparation ?? {}), reusedProposal },
       withheldClosures,
-      plannedProposalPath ? plannedClosureSummary(plannedProposalPath) : null
+      plannedProposalPath ? plannedClosureSummary(plannedProposalPath) : null,
+      closureCandidates
     );
     certified = true;
   } catch (error) {

@@ -1125,6 +1125,7 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
             probes,
         )
         .map_err(|error| format!("policy-2 proof finalization failed: {error}"))?;
+    report_closure_candidates(&plan);
     report_withheld_closures(None, &finalized)?;
     let trust_bytes =
         solid_facts_backend::encode_policy2_trust_configuration(finalized.trust_configuration())
@@ -1172,6 +1173,34 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
 /// into the certification audit's `withheldClosures`; the accepted contract
 /// itself already says the domain is open, so nothing here is authority.
 const WITHHELD_CLOSURE_MARKER: &str = "solid-checker:withheld-closure=";
+
+/// One stdout line naming every closure candidate the *planner* derived from
+/// the proposal, before any gating.
+///
+/// The mirror of `plannedProposal` in the CLI's audit, and it exists for the
+/// same reason: a certified document that closes nothing can mean the
+/// proposal offered nothing, that the planner derived no candidate from what
+/// it offered, or that gating withheld them. The first is answered on the CLI
+/// side and the third by `withheldClosures`; this answers the second, which
+/// was the one boundary nothing could see through. Diagnostic only.
+const CLOSURE_CANDIDATE_MARKER: &str = "solid-checker:closure-candidates=";
+
+fn report_closure_candidates(plan: &solid_facts_backend::CertificationPlan) {
+    let candidates = plan
+        .candidates()
+        .closure_candidates()
+        .iter()
+        .map(|closure| {
+            serde_json::json!({
+                "artifactCase": closure.artifact_case,
+                "export": closure.export,
+                "path": format!("{:?}", closure.path),
+            })
+        })
+        .collect::<Vec<_>>();
+    let record = serde_json::json!({ "count": candidates.len(), "candidates": candidates });
+    println!("{CLOSURE_CANDIDATE_MARKER}{record}");
+}
 
 fn report_withheld_closures(
     node: Option<&solid_facts_backend::CanonicalDependencyNodeIdentity>,
@@ -1344,6 +1373,7 @@ fn execute_contract_case_set_certification(
     for ((plan, artifact_case_id, resolved_import_root, importer, specifier), finalized) in
         plans.into_iter().zip(finalized)
     {
+        report_closure_candidates(&plan);
         report_withheld_closures(None, &finalized)?;
         let current_trust = solid_facts_backend::encode_policy2_trust_configuration(
             finalized.trust_configuration(),
