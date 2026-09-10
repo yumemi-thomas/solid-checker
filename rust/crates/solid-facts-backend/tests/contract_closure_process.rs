@@ -105,10 +105,58 @@ fn absolutize(import: &mut serde_json::Value, project: &Path) {
 /// Runs the fixture under a freshly minted policy-2 receipt, optionally
 /// reopening one claim domain first, and returns the findings.
 fn findings_under_a_minted_receipt(label: &str, reopen: Option<&str>) -> Vec<serde_json::Value> {
+    mint_and_analyze(FIXTURE, label, reopen).expect("the reference fixture mints")
+}
+
+/// Every fixture tree that ships an accepted catalog and is analyzable — the
+/// population whose imports could demand a contract domain at all.
+fn catalog_bearing_fixtures() -> Vec<String> {
+    fn walk(directory: &Path, found: &mut Vec<PathBuf>) {
+        let Ok(entries) = fs::read_dir(directory) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                continue;
+            }
+            if path
+                .join(".solid-checker/accepted-contracts.json")
+                .is_file()
+                && path.join("tsconfig.json").is_file()
+            {
+                found.push(path.clone());
+            }
+            walk(&path, found);
+        }
+    }
+    let root = repository_root();
+    let mut found = Vec::new();
+    walk(&root.join("fixtures"), &mut found);
+    let mut relative = found
+        .iter()
+        .filter_map(|path| path.strip_prefix(&root).ok())
+        .map(|path| path.to_string_lossy().replace('\\', "/"))
+        .collect::<Vec<_>>();
+    relative.sort();
+    relative
+}
+
+/// Mints a policy-2 receipt over a fixture's own accepted catalog and returns
+/// the findings the checker then produces.
+///
+/// The authorization is replaced and nothing else: the catalog's `import`
+/// block is reused verbatim, so this swaps an obsolete policy-1 receipt for a
+/// test-scoped policy-2 one without touching the resolution the fixture pins.
+fn mint_and_analyze(
+    fixture: &str,
+    label: &str,
+    reopen: Option<&str>,
+) -> Result<Vec<serde_json::Value>, String> {
     let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("caller guards on the producer");
 
     let project = temporary_directory(label).join("consumer");
-    copy_tree(&repository_root().join(FIXTURE), &project);
+    copy_tree(&repository_root().join(fixture), &project);
     // The catalog reader canonicalizes every path it rebases, and the receipt
     // binds the importer it will compute. On macOS `env::temp_dir()` is a
     // symlink (`/var` -> `/private/var`), so an uncanonicalized root here binds
@@ -121,11 +169,22 @@ fn findings_under_a_minted_receipt(label: &str, reopen: Option<&str>) -> Vec<ser
     let catalog_path = project.join(".solid-checker/accepted-contracts.json");
     let catalog: serde_json::Value =
         serde_json::from_slice(&fs::read(&catalog_path).unwrap()).unwrap();
-    let entry = &catalog["contracts"][0];
-    assert_eq!(
-        entry["status"], "obsolete-policy1",
-        "fixture is expected to start from the obsolete state this test replaces"
-    );
+    let contracts = catalog["contracts"].as_array().expect("a contracts array");
+    if contracts.len() != 1 {
+        // `publish_policy2_catalog` writes a catalog holding exactly one
+        // contract, so a fixture pinning several cannot be minted through the
+        // public publication path. Reported rather than worked around: a
+        // hand-assembled multi-entry catalog would be this test asserting its
+        // own idea of the on-disk shape.
+        return Err(format!(
+            "catalog publishes {} contracts; publication writes one",
+            contracts.len()
+        ));
+    }
+    let entry = &contracts[0];
+    if entry["status"] != "obsolete-policy1" {
+        return Err(format!("catalog status is {}", entry["status"]));
+    }
     let mut import = entry["import"].clone();
     absolutize(&mut import, &project);
     let resolved: ResolvedImport = serde_json::from_value(import).unwrap();
@@ -231,13 +290,91 @@ fn findings_under_a_minted_receipt(label: &str, reopen: Option<&str>) -> Vec<ser
         ])
         .output()
         .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    if !output.status.success() {
+        return Err(format!(
+            "analysis refused: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
 
-    decode_findings(&output.stdout)
+    Ok(decode_findings(&output.stdout))
+}
+
+/// The policy-2 fixture corpus: every catalog-bearing fixture that can be
+/// minted, minted.
+///
+/// Before this, all twenty accepted catalogs in the tree carried
+/// `obsolete-policy1` receipts, which are rejected before any claim is read —
+/// so the corpus contained no call site at which a contract domain was ever
+/// demanded, and the findings-delta measurement could only use one retained
+/// real consumer. See
+/// `docs/package-contract-v2/phase21/2026-09-10-reads-demand-population.md`.
+///
+/// What this asserts is narrow and deliberate: each fixture either mints and
+/// analyzes, or reports why it cannot. It does not pin per-fixture findings —
+/// those belong to the snapshots, which record the *obsolete* state and are
+/// not what this replaces.
+#[test]
+fn the_catalog_bearing_fixtures_mint_a_policy_2_corpus() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let fixtures = catalog_bearing_fixtures();
+    assert!(
+        fixtures.len() >= 16,
+        "the catalog-bearing population should not shrink silently: {fixtures:?}"
+    );
+    let mut minted = Vec::new();
+    let mut unminted = Vec::new();
+    for (index, fixture) in fixtures.iter().enumerate() {
+        let label = format!("policy2-corpus-{index}");
+        match mint_and_analyze(fixture, &label, None) {
+            Ok(findings) => {
+                let obsolete = findings.iter().any(|finding| {
+                    finding["message"]
+                        .as_str()
+                        .is_some_and(|message| message.contains("obsolete-policy1"))
+                });
+                assert!(
+                    !obsolete,
+                    "{fixture}: minted catalog still reports the obsolete-policy rejection"
+                );
+                let mut rules = findings
+                    .iter()
+                    .map(|finding| finding["rule"].as_str().unwrap_or("?").to_owned())
+                    .collect::<Vec<_>>();
+                rules.sort();
+                minted.push((fixture.clone(), rules));
+            }
+            Err(reason) => unminted.push((fixture.clone(), reason)),
+        }
+    }
+    let incomplete = |rule: &String| rule.contains("package-contract-incomplete");
+    let uncertifiable = minted
+        .iter()
+        .flat_map(|(_, rules)| rules)
+        .filter(|rule| incomplete(rule))
+        .count();
+    let proven = minted
+        .iter()
+        .flat_map(|(_, rules)| rules)
+        .filter(|rule| !incomplete(rule))
+        .count();
+    println!(
+        "policy-2 corpus: {} minted, {} unminted; {proven} rule findings, {uncertifiable} SC9005",
+        minted.len(),
+        unminted.len()
+    );
+    for (fixture, rules) in &minted {
+        println!("  minted   {fixture}  [{}]", rules.join(", "));
+    }
+    for (fixture, reason) in &unminted {
+        println!("  unminted {fixture}  {reason}");
+    }
+    assert!(
+        minted.len() >= 12,
+        "most of the population should mint; unminted={unminted:?}"
+    );
 }
 
 fn rules(findings: &[serde_json::Value]) -> Vec<&str> {
