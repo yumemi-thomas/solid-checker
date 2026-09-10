@@ -747,3 +747,79 @@ rather than a premise the producer cannot supply: the shapes it decides are
 empty completion and parameter identity, and nothing else. Extending it is a
 census question with no proxy-shaped hole underneath it, which makes it a
 smaller problem than `reads` was.
+
+## 14. A real package certifies and silently loses every closure (2026-09-10)
+
+§ 13 said the clean set's blocker is `returns`. Testing that against a real
+package found something else first, and it is a defect rather than a limit.
+
+### What the generator proposes
+
+`@corvu/utils@0.4.2` is in the accessor-free set. Generated against the exact
+published archive from the registry cache, its `./dom` entrypoint proposes
+closures for every export in both artifact cases:
+
+~~~
+case 0  ./dist/dom/index.js    contains  closed=["reads","creates"]  reads=["read-0"]
+case 1  ./dist/dom/index.jsx   contains  closed=["reads","creates"]  reads=["read-0"]
+~~~
+
+Twelve exports across the package close both `creates` and `reads` — the first
+time `reads` has closed for a real published package anywhere.
+
+Note the shape: `contains` reads `.contains` off parameter 0, so its `reads`
+is a **complete positive** (`Complete([read-0])`), not an absence proof. The
+domain is closed over exactly one operation.
+
+### What certification produces
+
+Certified with the test-scoped issuer and an empty recipe corpus so ADR 0036
+synthesis can run:
+
+| | |
+| --- | --- |
+| status | `certified` |
+| withheld closures | **0** |
+| refusals | **0** |
+| `domain-exhaustiveness` demands planned | **0** |
+| `closed` arrays in the accepted document | **0** (the proposal had 5) |
+
+The same run reusing the closure-carrying proposal via `--proposal`, bound to
+certify's own certification importer, is identical: nothing withheld, nothing
+planned, nothing closed.
+
+**Control.** This afternoon's `seroval@1.5.6` accepted document, produced by
+the same command, carries 3 `closed` arrays. So an accepted contract *can*
+carry closure; corvu's were dropped.
+
+### Why this matters more than the missing verdict
+
+Every closure vanished between proposal and receipt with **no withheld record
+and no refusal**. That is exactly the failure mode `WithheldClosure` exists to
+prevent: a domain that cannot be proved is supposed to be named, not to
+disappear. A consumer reading this catalog cannot tell the difference between
+"the census refused this" and "nobody asked".
+
+### The named suspect, not yet confirmed
+
+The two documents differ in the *shape* of what they close. seroval's
+surviving closures are `creates: []` — an absence — and `returns: ["return"]`
+whose single operation the returns census decides by name. corvu's `reads` is
+a complete positive over an arbitrary operation the census has no rule for.
+
+`census_creates_domain` and `census_reads_domain` both refuse a candidate
+whose claim enumerates any operation ("a … closure candidate must enumerate no
+operation"). If a complete-positive claim is therefore never a *candidate*,
+then nothing plans it, nothing withholds it, and the generator's `closed`
+marker is dropped at normalization with nobody accountable for it.
+
+That is a hypothesis with a clear test: plan a document whose only closure is
+a complete positive and assert either a candidate or a withheld record exists.
+It has not been run.
+
+### What it blocks
+
+The clean-verdict experiment. `contains` has no callback and SC9005's
+predicate is exactly `reads ∧ (returns ∧ demanded) ∧ creates`, so a consumer
+that discards its result should certify clean. It cannot be tried until a
+certified document actually carries the closures its proposal offered.
