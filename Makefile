@@ -121,6 +121,15 @@ test-cli:
 
 # Exact/filter-based library tests, with the same certification inputs as the
 # full suite. The driver rejects missing or empty selections before testing.
+# Enables the repository's tracked git hooks. `core.hooksPath` is local
+# config, so a repository cannot turn its own hooks on — every clone runs this
+# once. The only hook today refuses a commit staging a file over 5 MB.
+hooks:
+	git config core.hooksPath .githooks
+	@echo "git hooks enabled from .githooks"
+
+.PHONY: hooks
+
 .PHONY: test-focused
 test-focused: export TEST := $(TEST)
 test-focused: export TEST_EXACT := $(if $(TEST_EXACT),$(TEST_EXACT),0)

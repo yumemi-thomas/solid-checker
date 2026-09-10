@@ -12,6 +12,19 @@ compiler owns execution semantics, and TypeScript-Go owns checker facts.
 - Bun 1.4.0 (published packages remain compatible with Node.js)
 - `jq`
 
+## First clone: enable the git hooks
+
+~~~sh
+make hooks
+~~~
+
+`core.hooksPath` is local config, so a repository cannot turn its own hooks
+on. The only hook refuses a commit that stages a file over 5 MB, with an
+allowlist for the benchmark artifacts this repository knowingly tracks. It
+exists because bulk measurement transcripts have twice been large enough to
+matter and once reached shared history by accident; `.gitignore` matches
+names, and size is the property that actually decides.
+
 ## Common commands
 
 ```sh
