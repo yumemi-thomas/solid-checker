@@ -189,7 +189,38 @@ fn mint_and_analyze(
     absolutize(&mut import, &project);
     let resolved: ResolvedImport = serde_json::from_value(import).unwrap();
     let document = project.join(entry["document"].as_str().unwrap());
-    if let Some(domain) = reopen {
+    // `"<domain>-items"` strips the domain's positive operations instead of
+    // reopening it: the claim stays closed, but over nothing. Reopening and
+    // stripping are different questions — one removes the proof that an
+    // enumeration is complete, the other removes the enumeration — and
+    // conflating them is how a measurement of the first got reported as the
+    // second.
+    if let Some(domain) = reopen.and_then(|value| value.strip_suffix("-items")) {
+        let mut contract: serde_json::Value =
+            serde_json::from_slice(&fs::read(&document).unwrap()).unwrap();
+        for summary in contract["summaries"].as_object_mut().unwrap().values_mut() {
+            let call = summary["call"].as_object_mut().expect("a call object");
+            let removed = call
+                .get(domain)
+                .and_then(|items| items.as_array())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str().map(str::to_owned))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            call.insert(domain.to_owned(), serde_json::json!([]));
+            if let Some(operations) = call.get_mut("operations").and_then(|v| v.as_array_mut()) {
+                operations.retain(|operation| {
+                    operation["id"]
+                        .as_str()
+                        .is_none_or(|id| !removed.iter().any(|name| name == id))
+                });
+            }
+        }
+        fs::write(&document, serde_json::to_vec(&contract).unwrap()).unwrap();
+    } else if let Some(domain) = reopen {
         // Reopening one domain in the fixture's own document is how this file
         // asks whether *partial* closure is worth anything: every sibling
         // domain stays closed and usable.
@@ -314,13 +345,19 @@ fn mint_and_analyze(
     Ok(decode_findings(&output.stdout))
 }
 
-/// How many of the corpus's projects actually consult a `reads` projection.
+/// Separates two things a contract's `reads` claim carries, because
+/// conflating them produced a wrong answer once already: the **items** it
+/// enumerates, and the **proof that the enumeration is complete**.
 ///
 /// The question behind it: `reads` cannot close in bulk — no synthesized veto
 /// can observe a read of a source the export owns, so every closure needs a
-/// hand recipe. If few consumers ever demand the domain, scoping the
-/// obligation is cheaper than serving it; if most do, the recipes have to be
-/// made mechanical instead.
+/// hand recipe. If what rules actually need is the items, and only SC9005
+/// needs the completeness, then scoping that one obligation delivers every
+/// rule its facts without a single recipe.
+///
+/// Reopening the domain drops the completeness and keeps the items; stripping
+/// the operations drops the items and keeps the closure. Measuring both is
+/// what tells them apart.
 ///
 /// Measured by difference. Each project is analyzed twice against its own
 /// minted catalog, once as the contract stands and once with `reads` reopened
@@ -329,7 +366,7 @@ fn mint_and_analyze(
 /// report that a claim is open, so reopening one always moves it and it says
 /// nothing about whether a *rule's proof* depended on the claim.
 #[test]
-fn how_many_corpus_projects_consult_a_reads_projection() {
+fn reads_completeness_is_demanded_only_by_sc9005_while_its_items_feed_rules() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
@@ -347,12 +384,23 @@ fn how_many_corpus_projects_consult_a_reads_projection() {
     let mut consulted = Vec::new();
     let mut indifferent = Vec::new();
     let mut inert = Vec::new();
+    let mut consumes_items = Vec::new();
     for (index, fixture) in catalog_bearing_fixtures().iter().enumerate() {
         let closed = mint_and_analyze(fixture, &format!("reads-closed-{index}"), None);
         let reopened = mint_and_analyze(fixture, &format!("reads-open-{index}"), Some("reads"));
+        let stripped = mint_and_analyze(
+            fixture,
+            &format!("reads-items-{index}"),
+            Some("reads-items"),
+        );
         let (Ok(closed), Ok(reopened)) = (closed, reopened) else {
             continue;
         };
+        if let Ok(stripped) = stripped
+            && proven(&closed) != proven(&stripped)
+        {
+            consumes_items.push(fixture.clone());
+        }
         // The control for the whole measurement. Reopening `reads` must move
         // *something*, or the mutation did not take and the project would
         // read as indifferent for the wrong reason. SC9005 is what must move:
@@ -388,6 +436,13 @@ fn how_many_corpus_projects_consult_a_reads_projection() {
     );
     for fixture in &inert {
         println!("  excluded    {fixture}");
+    }
+    println!(
+        "reads items: {} project(s) change when the read operations are removed",
+        consumes_items.len()
+    );
+    for fixture in &consumes_items {
+        println!("  consumes    {fixture}");
     }
     for (fixture, before, after) in &consulted {
         println!("  consults    {fixture}  {before} -> {after} rule findings");

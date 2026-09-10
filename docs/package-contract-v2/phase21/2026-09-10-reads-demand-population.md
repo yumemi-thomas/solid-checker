@@ -113,17 +113,48 @@ because no synthesized veto can observe a read of a source the export owns —
 is demanded by exactly one rule, and that rule demands it of every import
 regardless of what the consumer does.
 
-### What it does not settle
+## 6. The matrix tension, resolved — and it was my measurement, not the matrix
 
-Thirteen synthetic fixtures with hand-written contracts. A real consumer may
-consult the projection where these do not — the retained `seroval` case
-reported `reactiveReads`, though that too was SC9005 and therefore the same
-single consumer.
+The paragraph that stood here said the result sat in tension with the
+[demand matrix](../2026-09-09-rule-demand-proposal.md) § 1.2, which marks
+`reads` required for five rules, three of which fire in this corpus without
+moving. The matrix is right. The measurement above answers a narrower
+question than the words I attached to it.
 
-And it sits in tension with the [demand matrix](../2026-09-09-rule-demand-proposal.md)
-§ 1.2, which marks `reads` required for `strict-read-untracked`,
-`components-return-once`, `prefer-for`, `prefer-show` and
-`reactive-dispatch-unresolved`. Three of those fire in this corpus and none
-of them moved. Either the matrix records a demand the implementation does not
-make, or these fixtures do not exercise the path that makes it. Worth
-resolving before the matrix is quoted again — including by me.
+**A `reads` claim carries two separable things**: the operations it
+enumerates, and the proof that the enumeration is complete. *Reopening* the
+domain drops the completeness and leaves the items in place. So a rule that
+consumes a read operation still receives it from a reopened claim, and
+"nothing moved" says only that nothing depends on the *closure*.
+
+Measured the other way — strip the read operations and leave the domain
+closed — **exactly the two fixtures that state a positive read operation
+change**: `package-consumer` and `package-parameter-member-consumer`. The
+other eleven enumerate no reads, so there is nothing to remove.
+
+| what is removed | projects whose rule findings change |
+| --- | --- |
+| the completeness proof (domain reopened) | **0 of 13** |
+| the read operations (items stripped) | **2 of 2 that have any** |
+
+So: **rules consume `reads` items; only SC9005 consumes `reads`
+completeness.**
+
+### Why this makes the case stronger, not weaker
+
+The information rules need arrives whether or not the domain is closed. What
+cannot be obtained in bulk — completeness, which needs a hand recipe per
+export because no synthesized veto can observe an owned read — is demanded by
+exactly one rule, and that rule demands it of every import regardless of what
+the consumer does.
+
+A contract stating `reads` items without closing the domain would therefore
+serve every rule in this corpus completely, and cost only SC9005. That is a
+sharper target than "scope the demand": it is one conjunct, in one predicate.
+
+### What it still does not settle
+
+Thirteen synthetic fixtures with hand-written contracts, and only two of them
+state a read operation at all — a thin basis for the second row of that
+table. A real consumer may differ; the retained `seroval` case reported
+`reactiveReads`, though that too was SC9005 and so the same single consumer.
