@@ -4096,14 +4096,20 @@ run moves no row and certifies the same 5,187 closures. Only the text changed.
 | --- | --- | --- |
 | **122** | **32** | the producer offered no subject derivation |
 
-There is no second row. Not one of the 122 is an ADR 0034 boundary case — not a
-written parameter, not a module-level receiver, not a nested callable's own
-parameter, not a setter. In every one of them `subject_root` is empty, which for
-the current producer means the subject is neither parameter-rooted nor a local
-literal result, so no derivation was emitted at all.
+There is no second row: in every one of the 122, `subject_root` is empty, so no
+derivation was emitted at all.
 
 § 56.3 framed this as choosing which premise to review next. That framing was
-wrong: there is nothing to review, because nothing was offered.
+wrong in one direction — there is nothing to *review*, because nothing was
+offered.
+
+**But the sentence that followed here was wrong in the other.** It read the
+empty root as proof that none of the 122 is an ADR 0034 boundary case — "not a
+written parameter, not a module-level receiver". That does not follow, and § 58
+falsifies it directly: a written parameter is *absent from*
+`parameterSubjectRootsLocked`' map, so it produces no root at all rather than a
+parameter root that then fails. A written parameter and a subject that was never
+a parameter arrive here identically.
 
 ### 57.3 Withdrawn: the producer already attempts that derivation
 
@@ -4145,3 +4151,102 @@ so it is a protocol change rather than a message change.
 
 Until then no premise can be proposed honestly. § 57.3's first version proposed
 one anyway and was wrong about the code it named.
+
+## 58. Reading the 122 from the registry cache (2026-09-11)
+
+### 58.1 The sources were already on disk
+
+§ 57.4 said sizing needed a producer protocol change. It does not, for a first
+pass: `rust/target/registry-cache/v1` holds every package tarball the corpus
+installed, content-addressed, 827 of them. The refusal names a path and a byte
+span, so the subject expression can be read directly — no network, no wire
+field.
+
+**With one real limit.** The report records `installedVersions` for the probed
+package and `solid-js` only, not for transitive dependencies, and most of these
+forms are *in* transitive dependencies. Matching a tarball by name alone picks
+an arbitrary version, and a version that differs by a byte shifts every offset.
+So each extraction is checked against the recorded node kind — a
+`SpreadAssignment` must start with `...`, an `ElementAccessExpression` must end
+in `]`, and so on — and only sites that pass are counted.
+
+| | claims |
+| --- | --- |
+| aligned and read | **68** |
+| misaligned (version drift) | 51 |
+| file absent from every cached tarball | 3 |
+
+Everything below is over the 68. It is a sample, not the population, and it is
+not a parse — the classification is a regex over the extracted text and a 140-byte
+window before it.
+
+### 58.2 The 122 are 75 code sites, and the subjects are simple
+
+The 122 claims collapse to **75 distinct (package, file, span) sites**: the same
+code refused in several packages that vendor it, and the two largest sites
+account for 24 claims between them.
+
+Subject shape, over the 68:
+
+| claims | subject |
+| --- | --- |
+| 49 | a plain identifier |
+| 16 | a property chain (`window.navigator.userAgentData`) |
+| 2 | a call result |
+| 1 | an element-access chain |
+
+And the 49 plain identifiers, by what the window shows of their binding:
+
+| claims | binding |
+| --- | --- |
+| 22 | no binding visible in the window |
+| **17** | **a written binding** |
+| 10 | parameter-shaped, no write seen |
+
+So these are not exotic expressions. They are ordinary names, and the question
+is what the name is bound to — which is a *binding* premise, not an
+expression-walking one.
+
+### 58.3 The most repeated site, and a candidate it suggests
+
+The single most repeated shape is this, refused in four packages that each
+vendor a copy:
+
+~~~js
+if (typeof b === "string") { b = stringStyleToObject(b); }
+return { ...a, ...b };
+~~~
+
+`b` is a parameter, so it would root — except it is written, and
+`parameterSubjectRootsLocked` admits only unwritten parameters. The written-binding
+leg that would rescue it refuses on purpose, and says why in the code:
+
+> Only a caller-provenance root propagates through a local binding. An own
+> literal roots a direct reference alone (ADR 0044): what one of its properties
+> *holds* is an arbitrary value, so `const item = table[key]` names nothing this
+> premise can speak for.
+
+That reasoning is about a property *read off* an own literal, and it is right
+about that. It does not cover this shape. Here every value written to `b` is
+either the caller's own argument or the result of `stringStyleToObject` — a
+declaration in this artifact's own runtime source, which is exactly what
+`localLiteralResultLocked` already premises for a subject that *is* the call.
+The premise exists on both sides; it simply does not propagate through a
+binding.
+
+**The candidate, stated as a candidate:** let the local-literal-result premise
+join through a written binding, when every value written to it is itself either
+caller-rooted or a local-literal result. It is consistent with ADR 0044's stated
+boundary, it reaches the most repeated site in the corpus, and it needs no new
+observation — only a join the producer does not currently perform.
+
+### 58.4 What this still does not establish
+
+How many of the 122 it would reach. 54 of them could not be read at all, the 22
+"no binding visible" are a window artifact rather than a finding, and nothing
+here is a parse. A number needs the producer to report which leg it fell off,
+which is still the clean route and still a protocol change.
+
+Two claims in § 57 were wrong and are corrected above: § 57.3 (the producer does
+attempt `own-literal`) and § 57.2's "not a written parameter" (17 of the 68 are
+written bindings, and the most repeated site is a written parameter).
