@@ -3499,8 +3499,71 @@ writing anything.
 ### 49.6 Two things this run surfaced and did not investigate
 
 - **76 distinct claims whose veto ran and failed** (54 `vetoUnreproducible`,
-  53 `vetoThrew` by row). A recipe exists for each and it broke. That is a
-  correctness signal rather than backlog, and nothing here looked at it.
+  53 `vetoThrew` by row). Characterized in § 50, which corrects this entry:
+  none of them is a hand-authored recipe, and none is a correctness problem.
 - **461 claims carry no dependency node** — the largest single group, the
   row's own package rather than a dependency. Uncharacterised, and 30% of the
   total, so the top-20 table above should not be planned against until it is.
+
+## 50. The 76 failing vetoes are not broken recipes
+
+§ 49.6 flagged 76 distinct claims whose veto "ran and failed" and called it a
+correctness signal. Characterized, the framing was wrong on the first word:
+**none of them is a hand-authored recipe.** The corpus holds 19 recipes and
+none appears here. All 76 are ADR 0036 *synthesized* vetoes, and every one
+failed on a property of the artifact or the harness rather than on anything
+about the observation.
+
+### 50.1 Five causes
+
+| cause | distinct claims | rows | packages |
+| --- | --- | --- | --- |
+| TypeScript source under `node_modules` | 35 | 35 | `@kobalte/utils`, root |
+| custom export condition | 20 | 45 | `@tanstack/query-core` |
+| export-condition binding | 9 | 9 | `component-register` |
+| missing package in the probe workspace | 9 | 15 | root |
+| `.jsx` extension | 3 | 3 | `@kobalte/core`, root |
+
+- **TypeScript under `node_modules`** — *"Stripping types is currently
+  unsupported for files under node_modules, for
+  `…/node_modules/@kobalte/utils/src/index.ts`"*. Exactly the trap
+  `kobalte-utils-noop.mjs` documented in 2026-09-04: the package's artifact
+  cases are `.ts` source files, the private workspace puts them under
+  `node_modules`, and the pinned interpreter will not strip types there. Known
+  and not a defect.
+- **Custom export condition** — *"export condition
+  `"@tanstack/custom-condition"` is not a plain condition name, so it cannot be
+  given to the pinned interpreter"*. Node's `--conditions` takes plain names;
+  a scoped one cannot be passed. Refusing is right.
+- **Missing package in the probe workspace** — *"Cannot find package
+  `'seroval'` imported from `…/node_modules/solid-js/web/dist/server.js`"*.
+  This is the one that looks like a defect rather than a limit, and it carries
+  its own clue: the probe resolved `solid-js`' **server** entry, whose runtime
+  dependency the workspace does not carry. Whether the bug is the missing
+  dependency or the condition resolution that reached a server build is not
+  established here.
+
+### 50.2 Why this is a capability gap and not a correctness one
+
+An incomplete veto **withholds** its candidate — the same outcome as having no
+recipe at all, pinned by
+`a_recipe_that_throws_withholds_its_candidate_rather_than_certifying_it`. So
+none of these 76 certified anything it should not have. Every one is
+fail-closed.
+
+What they cost is closure: a synthesized veto that ran and did not contradict
+would have closed its domain on the census alone, with **no hand authoring**.
+
+### 50.3 What that changes about the § 49 bill
+
+The 76 are not part of the 1,515. They are a separate population with a much
+better ratio:
+
+| | distinct claims | what unblocks them |
+| --- | --- | --- |
+| `no recipe in corpus` | 1,515 | one hand-written observation each |
+| veto did not complete | **76** | **three or four harness fixes** |
+
+Two of the five causes are interpreter limits that are honest refusals. The
+other three — 38 claims between them — are harness work, and the missing-package
+one is the only place in this document where something still looks like a bug.
