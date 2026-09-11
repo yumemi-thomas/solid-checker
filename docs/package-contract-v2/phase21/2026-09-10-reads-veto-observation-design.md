@@ -5215,3 +5215,88 @@ That is a decision about whether ~14 claims justifies an audit and a schema
 change, and it is the user's. The correction above is what it should be made
 on: § 66.3 said 62, § 69 said 62 across three stages, and the measured answer is
 14 plus an unscoped audit of Solid 1.x for the other 37.
+
+## 71. The negative authority covers 28% of the corpus, and decays to nothing on every release (2026-09-12)
+
+Building stage 1 meant establishing, first, that a source root is the *only*
+thing standing between the axiom tier and the three claims whose rows already
+exist. It is not, and finding out what else stands there is worth more than the
+stage.
+
+### 71.1 The audited pin and the installed corpus have already diverged
+
+`audited_archive_for_snapshot` matches name, **version**, integrity and
+`package.json` digest, field by field. The Solid 2 authority pins exactly one
+version — `2.0.0-rc.3` — for all three archives. What the corpus installs:
+
+| probe rows | solid-js |
+| --- | --- |
+| 117 | **2.0.0-rc.3** — the audited pin |
+| 111 | 2.0.0-rc.0 |
+| 17 | 2.0.0-beta.19 |
+| 2 | 2.0.0-rc.2 |
+| 168 | 1.9.14 (Solid 1.x — empty authority, § 70.1) |
+
+So the negative authority can answer for **117 of 415 rows, 28%**. The other 72%
+fail the identity gate before any row is consulted — 130 Solid 2 rows on an
+unaudited prerelease, and every Solid 1.x row on a dialect with no archives at
+all.
+
+This is not a defect in the gate. Binding version and integrity exactly is what
+makes a row a claim about *bytes* rather than about a name, and § 27's own
+comment is explicit that a name-only predicate may not stop withholding. The
+gate is right. The **pin** is the problem.
+
+### 71.2 It is the recipe treadmill again, in another subsystem
+
+§ 64.5 recorded that probe-recipe `claimId`s are content digests, so every
+package release orphans its recipes, and that nothing automates the re-point.
+The negative authority has the same shape and a worse blast radius: it is pinned
+to one prerelease of one package, and **a single Solid release takes it from 28%
+to 0%** until someone re-audits — archives re-pinned by integrity and manifest
+digest, and every row's citations re-read against the new bytes, because a row
+is only granted when every audited condition closes the domain empty.
+
+Nobody had noticed, because the failure is silent in exactly the way § 65's was:
+an unmatched identity produces a refusal, refusals are the normal state of a
+withheld claim, and no gate reports "the authority answered for nothing today".
+
+`RC3_CORE_PRIMITIVES_AUDIT` was hand work — 23 rows read out of audited contract
+documents and five out of the archive's runtime bytes by hand. Repeating that on
+every prerelease is not a plan.
+
+### 71.3 What this does to §§ 69–70's stages
+
+Stage 1 was costed at 3 claims (§ 70.2). Those three sit on
+`@solid-primitives/lifecycle`, `/scheduled` and `/websocket`, each of which
+appears twice in the corpus — once on rc.0 and once on rc.3 — so at most the
+rc.3 halves could ever close, and `@solidjs/signals` is not even a tracked
+install in those projects; it is reached transitively through solid-js, so its
+own version follows.
+
+Stage 1 therefore buys **at most three claims, on the half of the corpus that
+happens to match a pin that will be stale at the next release**. It is a real
+prerequisite for stages 2 and 3 and it is not wrong — but building certification
+plumbing across the trust boundary for that is not a defensible unit of work,
+and saying so is more useful than a commit that looks like progress.
+
+### 71.4 What is worth doing instead
+
+The leverage is not another row or another stage. It is that the authority's
+coverage is 28% and structurally decaying, and there are three shapes of answer,
+none of them scoped here:
+
+- **Widen the pin.** Audit each prerelease the corpus actually installs. Honest,
+  and it is the treadmill.
+- **Derive the rows instead of auditing them.** The 23 of 28 rows already read
+  out of `pkg/contracts/bundled/solid-v2/*.json` came from *contract documents* —
+  documents this system generates. A row derived from a certified contract of
+  the runtime itself, rather than transcribed by hand, would move with the
+  version. It also raises ADR 0005 objection 5 squarely, which is why the tier
+  already refuses when the certified artifact is itself audited.
+- **Accept the coverage.** State that the axiom tier serves one audited release
+  and that everything else is withheld, and stop treating the resulting refusals
+  as a backlog.
+
+The third is what the code does today. What it has not done is say so out loud
+with a number attached, which is what this section is for.
