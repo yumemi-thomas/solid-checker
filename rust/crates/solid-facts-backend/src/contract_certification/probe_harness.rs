@@ -209,7 +209,7 @@ use crate::{
 /// The startup/frame protocol Rust and the worker agree on. Bumping this
 /// invalidates every harness manifest digest, because the worker carries the
 /// string too.
-pub(crate) const PROBE_WORKER_PROTOCOL: &str = "solid-checker-runtime-probe-v6";
+pub(crate) const PROBE_WORKER_PROTOCOL: &str = "solid-checker-runtime-probe-v7";
 
 const STARTUP_FORMAT: &str = "solid-checker-probe-worker-startup";
 const RECIPE_CORPUS_FORMAT: &str = "solid-checker-probe-recipe-corpus";
@@ -3037,15 +3037,17 @@ impl PrivateProbeWorkspace {
             .stdout(Stdio::null())
             .stderr(Stdio::piped());
         command.env_clear();
-        // Only what Node needs to start plus the recipe path and this launch's
-        // nonce. `PATH` is deliberately absent: the worker is launched by
-        // absolute path and must not be able to find anything by name.
+        // Only what Node needs to start plus this launch's nonce, which binds
+        // the process the harness spawned. The recipe path is *not* here: it
+        // is per session and travels in the session frame (protocol v7), so a
+        // worker can be booted before its session is chosen. `PATH` is
+        // deliberately absent: the worker is launched by absolute path and
+        // must not be able to find anything by name.
         command.env("HOME", &self.directory);
         command.env("TMPDIR", &self.directory);
         command.env("LANG", "C");
         command.env("LC_ALL", "C");
         command.env("NODE_OPTIONS", "");
-        command.env("SOLID_CHECKER_PROBE_RECIPE", module);
         command.env("SOLID_CHECKER_PROBE_NONCE", &nonce);
 
         let (child, report) = spawn_reporting_worker(&mut command)?;
@@ -3066,6 +3068,12 @@ impl PrivateProbeWorkspace {
         if let Some(mut stdin) = worker.take_stdin() {
             let mut session: serde_json::Value = serde_json::from_slice(session_bytes)
                 .map_err(|error| ProbeHarnessError::Protocol(error.to_string()))?;
+            // Protocol v7: the recipe module travels in the session frame, not
+            // in the environment. The environment is fixed at spawn, and a
+            // pre-booted worker is spawned before its session is chosen; the
+            // nonce stays an environment value because it binds the process,
+            // which is known at spawn.
+            session["recipe"] = serde_json::Value::String(module.to_string_lossy().into_owned());
             if let Some(execution) = &self.execution {
                 session["execution"] = serde_json::to_value(execution)
                     .map_err(|error| ProbeHarnessError::Protocol(error.to_string()))?;

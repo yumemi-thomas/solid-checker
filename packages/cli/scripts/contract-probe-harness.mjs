@@ -105,7 +105,7 @@ const FRAME_LIST = Symbol("solid-checker-probe-frame-list");
 
 // Shared by the worker and audit callers. Rust separately pins this protocol
 // and the complete interpreted image before a certification launch.
-export const PROBE_WORKER_PROTOCOL = "solid-checker-runtime-probe-v6";
+export const PROBE_WORKER_PROTOCOL = "solid-checker-runtime-probe-v7";
 
 /// An empty frame object: own string keys, no prototype.
 export function createFrameRecord() {

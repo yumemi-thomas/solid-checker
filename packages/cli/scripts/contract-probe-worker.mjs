@@ -84,7 +84,11 @@ const processId = process.pid;
 const nodeVersion = process.version;
 const nodePlatform = process.platform;
 const nodeArchitecture = process.arch;
-const recipePath = process.env.SOLID_CHECKER_PROBE_RECIPE;
+// The launch nonce stays in the environment: it binds this *process* to the
+// harness that spawned it, which is true from the moment it boots and is what
+// the startup frame below answers with. The recipe module does not — it is
+// per *session*, and a worker is allowed to be booted before its session
+// exists (the pre-boot pool), so it arrives in the session frame instead.
 const nonce = process.env.SOLID_CHECKER_PROBE_NONCE ?? "";
 const stdin = process.stdin;
 // Captured too: the failure path runs *after* the package was imported, and a
@@ -179,6 +183,13 @@ const session = parse(input);
 // taken afterwards would report whatever it left behind.
 const sessionId = adoptFrameValue(session.id);
 const environment = adoptFrameValue(session.mode.environment);
+// Read here for the same reason as those two, and fails closed: a frame that
+// names no recipe cannot be run, and must never fall back to an environment
+// value a pooled worker would have inherited from an earlier session.
+const recipePath = asString(session.recipe ?? "");
+if (recipePath === "") {
+  throw new ErrorConstructor("probe session frame names no recipe module");
+}
 // What the plan's own specifier resolves to in this realm, observed *before*
 // the recipe — and therefore the package — is imported.
 //

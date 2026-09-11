@@ -103,8 +103,7 @@ async function runSession(session, baseDirectory) {
         TMPDIR: tmpdir(),
         LANG: "C",
         LC_ALL: "C",
-        NODE_OPTIONS: "",
-        SOLID_CHECKER_PROBE_RECIPE: module
+        NODE_OPTIONS: ""
       },
       stdio: ["pipe", "pipe", "pipe", "pipe"]
     });
@@ -161,7 +160,10 @@ async function runSession(session, baseDirectory) {
       }
       resolveRun(run);
     });
-    child.stdin.end(`${JSON.stringify(session)}\n`);
+    // Protocol v7: the recipe module travels in the session frame rather than
+    // the environment, so the certification path can boot a worker before its
+    // session is chosen. Both launchers must agree on the frame.
+    child.stdin.end(`${JSON.stringify({ ...session, recipe: module })}\n`);
   });
 }
 
