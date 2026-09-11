@@ -464,6 +464,61 @@ func (p *project) parameterSubjectRootsLocked(implementation *ast.Node) *paramet
 			derivation: typefacts.SubjectRootParameterDefault,
 		}
 	}
+	// ADR 0091: a parameter the body **writes**, every value of which is the
+	// caller's argument at this very slot. ADR 0050 made this argument for a
+	// local binding; a parameter is the same question with one extra source
+	// that is the caller's by construction — the slot itself.
+	//
+	// Run after the seed so a source naming another parameter already
+	// resolves. Sources rooted at a *different* slot refuse: the value is the
+	// caller's either way, but the receipt names one slot and naming the wrong
+	// one would say the caller passed something it did not.
+	for index, parameter := range parameters {
+		declaration := parameter.AsParameterDeclaration()
+		name := parameter.Name()
+		if declaration == nil || name == nil || declaration.DotDotDotToken != nil ||
+			!ast.IsIdentifier(name) || parameter.Initializer() != nil {
+			continue
+		}
+		symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(name))
+		if symbol == nil {
+			continue
+		}
+		if _, taken := roots.bySymbol[symbol]; taken {
+			continue
+		}
+		if !p.parameterIsWrittenLocked(implementation, index, symbol) {
+			continue
+		}
+		// Pending before the sources resolve, so `current = current.parent`
+		// reads as the co-inductive self-reference ADR 0050 admits rather than
+		// as an unrooted name.
+		roots.pending[symbol] = struct{}{}
+		sources, enumerated := p.parameterValueSourcesLocked(implementation, symbol)
+		// `parameterIsWrittenLocked` said this binding is written, so a source
+		// list that saw no write is the two predicates disagreeing, not a
+		// parameter with nothing assigned to it. Admitting on an empty list
+		// would root a binding whose every write went unenumerated, which is
+		// the one way this join can be unsound; refuse instead.
+		admitted := enumerated && len(sources) > 0
+		for _, source := range sources {
+			root := p.subjectRootLocked(source, roots)
+			if root == nil || root.parameter == nil ||
+				root.derivation != typefacts.SubjectRootParameter ||
+				(*root.parameter != index && *root.parameter != selfRootIndex) {
+				admitted = false
+				break
+			}
+		}
+		delete(roots.pending, symbol)
+		if admitted {
+			roots.bySymbol[symbol] = subjectRoot{
+				index:      index,
+				derivation: typefacts.SubjectRootParameter,
+			}
+		}
+	}
+
 	// ADR 0090: a parameter whose default is a data-only literal. Run after
 	// both passes above so a slot either of them already took keeps its
 	// stronger, purely caller-rooted reading; this one is a join over two arms
@@ -1093,6 +1148,52 @@ func (p *project) bindingValueSourcesLocked(
 		node.ForEachChild(func(child *ast.Node) bool { visit(child); return !ok })
 	}
 	visit(sourceFile.AsNode())
+	if !ok {
+		return nil, false
+	}
+	return sources, true
+}
+
+// parameterValueSourcesLocked answers every expression whose value a parameter
+// binding can hold *after* its slot — the right-hand side of each plain
+// assignment to it within the declaration being censused — or `false` when any
+// write is a shape this premise cannot enumerate.
+//
+// The parameter's own slot is not a source here: it is the caller's argument by
+// construction, and the caller is the one provenance this premise is about. The
+// refusing shapes mirror ADR 0050's for a local binding, and for the same
+// reason: a compound assignment, an update expression, a destructuring target
+// and a `for…of`/`for…in` head each refuse the whole binding rather than being
+// skipped, because a skipped write is a value nobody enumerated.
+func (p *project) parameterValueSourcesLocked(
+	implementation *ast.Node, symbol *ast.Symbol,
+) ([]*ast.Node, bool) {
+	var sources []*ast.Node
+	ok := true
+	var visit func(*ast.Node)
+	visit = func(node *ast.Node) {
+		if node == nil || !ok {
+			return
+		}
+		if ast.IsIdentifier(node) && !ast.IsPartOfTypeNode(node) &&
+			isAssignmentTargetIdentifier(node) &&
+			p.assignedBindingSymbol(p.formChecker(), node) == symbol {
+			parent := node.Parent
+			if parent == nil || !ast.IsBinaryExpression(parent) {
+				ok = false
+				return
+			}
+			binary := parent.AsBinaryExpression()
+			if binary == nil || binary.Left != node || binary.OperatorToken == nil ||
+				nodeKindName(binary.OperatorToken) != "EqualsToken" {
+				ok = false
+				return
+			}
+			sources = append(sources, binary.Right)
+		}
+		node.ForEachChild(func(child *ast.Node) bool { visit(child); return !ok })
+	}
+	visit(implementation)
 	if !ok {
 		return nil, false
 	}

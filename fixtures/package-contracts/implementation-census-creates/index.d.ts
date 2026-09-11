@@ -139,3 +139,11 @@ export declare function defaultedFromModuleValue(source?: any): unknown;
 export declare function defaultedLiteralWithAccessor(source?: any): unknown;
 export declare function defaultedThenWritten(source?: any, replacement?: any): unknown;
 export declare function defaultedPropertyBinding(source?: any): unknown;
+// ADR 0091: a written parameter whose every value is the caller's argument at
+// this slot. The controls keep two slots, a module value, an unpremised call
+// result and a destructuring write refusing.
+export declare function writtenParameterLoop(current: any): unknown;
+export declare function writtenParameterTwoSlots(first: any, second: any, flag: any): unknown;
+export declare function writtenParameterModuleValue(source: any, flag: any): unknown;
+export declare function writtenParameterCallResult(source: any): unknown;
+export declare function writtenParameterDestructured(source: any, other: any): unknown;

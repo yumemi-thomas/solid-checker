@@ -4355,3 +4355,69 @@ Three claims state no reason at all. The producer computes one only when
 `accessorFormSubjectExpression` yields a subject, and these forms yield none —
 so the vocabulary is complete for the forms it reaches and silent for the rest.
 That is the honest direction (silence, not a guess) and it is 2.5% of the class.
+
+## 61. ADR 0091, and the instrument earning its keep twice (2026-09-11)
+
+§ 60.2 put `written-parameter` at 30 claims across 18 packages — the widest leg
+with a premise already available, because ADR 0050 had made exactly this
+argument for a *local* binding and left it standing on parameters. ADR 0091
+lifts it: a written parameter roots at its own slot when every value assigned
+to it is rooted at that same slot.
+
+Measured against § 60's run:
+
+| | before | after |
+| --- | --- | --- |
+| accessor-class claims | 118 | **114** |
+| `written-parameter` | 30 | **26** |
+| certified closures | 5,190 | **5,192** |
+| every other leg | — | unchanged |
+| rows moved | — | 1, gaining |
+
+### 61.1 The negative result is the useful one
+
+Four of thirty. **Twenty-six written parameters have a value the join cannot
+call the caller's**, and § 58.3 already read what they are:
+
+~~~js
+if (typeof b === "string") { b = stringStyleToObject(b); }
+~~~
+
+`stringStyleToObject(b)` is a call into this artifact's own runtime source. The
+premise for that value exists — `localLiteralResultLocked` — and it does not
+reach here, because `LocalLiteralResultPremise` names one call and this binding
+has two provenances. That is the same wire-shape obstacle § 59 recorded, now
+with a number on it: **26 claims, not a guess.**
+
+### 61.2 What two ADRs in a row have shown
+
+ADR 0090 moved 4 claims, ADR 0091 moved 4 more. The accessor class has gone
+122 → 114 across two handshake bumps. That is a modest return, and the honest
+reading is not that the premises were wrong but that **the class was never one
+problem.** Its legs are five different questions, and the two that were
+answerable with existing machinery were the two smallest:
+
+| claims | leg | what it needs |
+| --- | --- | --- |
+| 41 | `local-binding` | unexamined |
+| 36 | `module-binding` | unexamined; concentrated in 8 packages |
+| 26 | `written-parameter` | a joined local-literal-result premise — a wire shape |
+| 5 | `call-result` | ADR 0048's boundary, deliberate |
+| 3 | *(not stated)* | an instrument gap (§ 60.4) |
+
+The instrument is what makes that table sayable. Before protocol 48 the same
+114 claims read as one undifferentiated refusal, and the only way to choose was
+to extract tarballs and run regexes over byte spans — which is how § 58 arrived
+at a directionally-right answer it could not check. Two runs have now each
+ended with a measured target list instead of a reading, and one of them ended
+with a measured *dead end*, which is the more valuable of the two.
+
+### 61.3 One hole this closed on the way
+
+The join asks two different predicates about the same binding:
+`parameterIsWrittenLocked` says it is written, and the source collector
+enumerates the writes. If they ever disagree — written, but no source seen —
+admitting would root a binding whose every write went unenumerated. An empty
+source list therefore refuses rather than reading as "nothing is assigned", and
+`writtenParameterDestructured` pins it: a destructuring assignment the
+collector refuses, on a parameter the write predicate calls written.

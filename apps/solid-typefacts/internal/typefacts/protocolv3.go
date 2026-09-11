@@ -4,7 +4,21 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 48: an accessor form that roots no subject may
+// TypeFactsHandshakeProtocol is 49: the `parameter` derivation widens to a
+// parameter the body **writes**, when every value assigned to it is rooted at
+// that same slot (ADR 0091). ADR 0050 made this argument for a local binding;
+// a parameter is the same question with one source that is the caller's by
+// construction, the slot itself. No flow analysis is involved: if every value
+// the binding can hold is the caller's, whichever one it holds at the read is
+// the caller's. The sources are the right-hand side of every plain assignment
+// within the censused declaration; a self-reference is admitted co-inductively;
+// a compound assignment, an update expression, a destructuring target and a
+// `for…of`/`for…in` head refuse the whole binding rather than being skipped;
+// sources rooted at two different slots refuse because the receipt names one;
+// and a binding the write predicate calls written but for which no source was
+// enumerated refuses, because the two predicates disagreeing is the one way
+// this join could be unsound.
+// Protocol 48: an accessor form that roots no subject may
 // say **why**, in `subjectRootRefusal` over a closed vocabulary whose default
 // is `unclassified-subject`. It is a diagnostic and never a premise — nothing
 // may be admitted on its account — and it is stated only where `subjectRoot`
@@ -268,8 +282,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 48
-	TypeFactsSchemaSHA256             = "sha256:fd314227dd6ee49ac6f2ee14da9362ee5ea9da5e0abbe1b1773acad5e25ad5fb"
+	TypeFactsHandshakeProtocol uint64 = 49
+	TypeFactsSchemaSHA256             = "sha256:e0bb7773def83efd493facb895b475212ddcfacfb86a8a6d9c278e6078f8fb37"
 )
 
 type ServiceHandshake struct {

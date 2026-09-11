@@ -12480,7 +12480,7 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 94] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 99] = [
         "accessorTableRead",
         "arrayRestRead",
         "awaitIterateParameter",
@@ -12574,6 +12574,11 @@ export const value = phantom;
         "writtenFromTwoSlots",
         "writtenFromUninitialized",
         "writtenJoin",
+        "writtenParameterCallResult",
+        "writtenParameterDestructured",
+        "writtenParameterLoop",
+        "writtenParameterModuleValue",
+        "writtenParameterTwoSlots",
         "writtenTableRead",
     ];
 
@@ -14138,6 +14143,11 @@ export const value = phantom;
             "writtenFromTwoSlots",
             "writtenFromUninitialized",
             "writtenJoin",
+            "writtenParameterCallResult",
+            "writtenParameterDestructured",
+            "writtenParameterLoop",
+            "writtenParameterModuleValue",
+            "writtenParameterTwoSlots",
             "writtenTableRead",
         ];
         let plan = census_generated_fixture_plan();
@@ -14499,7 +14509,7 @@ export const value = phantom;
         "writtenFromUninitialized",
         "writtenJoin",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 48] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 52] = [
         ("accessorTableRead", "census"),
         ("arrayRestRead", "census"),
         ("awaitIterateParameter", "census"),
@@ -14547,6 +14557,10 @@ export const value = phantom;
         ("writtenByDestructuring", "census"),
         ("writtenFromModuleValue", "census"),
         ("writtenFromTwoSlots", "census"),
+        ("writtenParameterCallResult", "census"),
+        ("writtenParameterDestructured", "census"),
+        ("writtenParameterModuleValue", "census"),
+        ("writtenParameterTwoSlots", "census"),
         ("writtenTableRead", "census"),
     ];
     const CENSUS_FIXTURE_GENERATED_RETURNS_CLOSED: [&str; 11] = [
@@ -15447,6 +15461,50 @@ export const value = phantom;
             ),
         ] {
             assert_census_withholds(export, needles);
+        }
+    }
+
+    /// ADR 0091: a parameter the body **writes**, every value of which is the
+    /// caller's argument at this very slot. ADR 0050 made this argument for a
+    /// local binding; a parameter is the same question with one extra source
+    /// that is the caller's by construction — the slot itself. No flow
+    /// sensitivity is involved: if every value the binding can hold is the
+    /// caller's, whichever one it holds at the read is the caller's.
+    #[test]
+    fn the_probe_gate_tracer_census_closes_a_written_parameter_whose_values_are_rooted() {
+        let export = "writtenParameterLoop";
+        let Some((plan, outcome)) = census_certify(export, Some("root-closure.mjs")) else {
+            return;
+        };
+        let finalized = outcome.unwrap_or_else(|error| {
+            panic!("{export}: a rooted written parameter certifies: {error}")
+        });
+        assert!(finalized.withheld_closures().is_empty());
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan)
+        );
+        assert!(creates_is_closed_in(finalized.canonical_main(), export));
+    }
+
+    /// ADR 0091's boundary. Each of these has a value the join cannot call the
+    /// caller's at this slot, and each must still refuse: a second slot (the
+    /// receipt names one), a value this module made, the result of a call this
+    /// build does not premise, and a compound assignment — which refuses the
+    /// whole binding rather than being skipped, because a skipped write is a
+    /// value nobody enumerated.
+    #[test]
+    fn the_probe_gate_tracer_census_refuses_a_written_parameter_with_an_unrooted_value() {
+        for export in [
+            "writtenParameterTwoSlots",
+            "writtenParameterModuleValue",
+            "writtenParameterCallResult",
+            "writtenParameterDestructured",
+        ] {
+            assert_census_withholds(
+                export,
+                &["uncensused invoking form: property-access-unknown-accessor"],
+            );
         }
     }
 

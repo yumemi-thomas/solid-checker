@@ -1062,3 +1062,58 @@ export function defaultedPropertyBinding(source = { inner: untypedRegistry }) {
   const held = source.inner;
   return held.value;
 }
+
+// ---------------------------------------------------------------------------
+// ADR 0091: a parameter the body writes, every value of which is the caller's
+// argument at this very slot. ADR 0050 made this argument for a local binding;
+// a parameter is the same question with one source that is the caller's by
+// construction — the slot itself.
+// ---------------------------------------------------------------------------
+
+// The loop shape written onto the parameter rather than onto a local. Its only
+// assigned value is a read chain through the parameter itself, which is the
+// chain rule ADR 0034 already applies. **Certifies.**
+export function writtenParameterLoop(current) {
+  while (current.parent) {
+    current = current.parent;
+  }
+  return current.value;
+}
+
+// A written parameter whose assigned value is a *different* slot. The value is
+// the caller's either way, but the receipt names one slot and naming either
+// would say the caller passed something it did not. **Refuses.**
+export function writtenParameterTwoSlots(first, second, flag) {
+  if (flag) {
+    first = second;
+  }
+  return first.value;
+}
+
+// A written parameter assigned a value this module made. The join holds only
+// when every source is the caller's. **Refuses.**
+export function writtenParameterModuleValue(source, flag) {
+  if (flag) {
+    source = untypedRegistry;
+  }
+  return source.value;
+}
+
+// A written parameter assigned the result of a call this build does not
+// premise. **Refuses.**
+export function writtenParameterCallResult(source) {
+  source = JSON.parse(source.text);
+  return source.value;
+}
+
+// A **destructuring** assignment to the parameter. The write is not a plain
+// `=` whose right-hand side this premise can enumerate, so the whole binding
+// refuses rather than the write being skipped — a skipped write is a value
+// nobody enumerated, which is the one way this join could be unsound.
+// `other` is an unwritten parameter, so the destructuring's own accessor form
+// is dispositioned and this export's only refusal is the one under test.
+// **Refuses.**
+export function writtenParameterDestructured(source, other) {
+  ({ value: source } = other);
+  return source.value;
+}

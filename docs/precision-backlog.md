@@ -19712,3 +19712,27 @@ family can be sized without a protocol change. Excluded here deliberately:
 propagation of this root through a local binding (what a property of the
 default's literal holds is an arbitrary expression of this program's), and
 every form kind but the accessor pair.
+
+## ADR 0091: a written parameter whose every value is rooted (2026-09-11)
+
+ADR 0050 rooted a local binding the file writes when every value it can hold is
+rooted, and left the same restriction standing on parameters. Protocol 48's
+`subjectRootRefusal` measured the cost: 30 accessor-class claims across 18
+packages stated `written-parameter`. ADR 0091 lifts it — a written parameter
+roots at its own slot when every assigned value is rooted at that same slot,
+with a self-reference admitted co-inductively. Handshake protocol 48 → 49,
+spelling unchanged, because a consumer that reviewed only the unwritten reading
+must refuse this one rather than read it as the weaker claim.
+
+Measured: accessor-class claims 118 → 114, `written-parameter` 30 → 26,
+certified closures 5,190 → 5,192; one row moved, gaining, nothing lost.
+
+**Remaining approximation.** 26 of the 30 have a value the join cannot call the
+caller's, and they are one shape: `b = localHelper(b)`. The premise for that
+value exists (`localLiteralResultLocked`) and cannot reach here, because
+`LocalLiteralResultPremise` names a single call while the binding has two
+provenances — the caller's argument and the call's result. Closing it needs a
+joined premise on the wire, not a producer change alone. Also excluded
+deliberately: any non-plain write (compound, update, destructuring target,
+`for…of` head) refuses the whole binding, and sources rooted at two slots refuse
+because the receipt names one.
