@@ -8373,6 +8373,20 @@ fn require_census_decides_closure(
 ///   the object the caller passed. Its companion `ParameterRootedElement` is a
 ///   *call* whose callee such a loop bound — what the caller's iterable
 ///   yielded is the caller's, exactly as a parameter callee is.
+/// * `ParameterDefaultLiteralAccessor` — ADR 0090. A parameter with a
+///   data-only literal default, never written in the body, holds exactly one
+///   of two values: the caller's argument, or the object the default
+///   expression freshly created. An accessor read is excused on each by a
+///   premise already reviewed here — `ParameterRootedAccessor`'s on the first,
+///   `OwnLiteralAccessor`'s on the second — and the two arms are exhaustive,
+///   because a defaulted parameter is the argument when it is not `undefined`
+///   and the default otherwise.
+///   It is **not** `ParameterRootedAccessor`, and the distinction is not
+///   cosmetic: only one arm is the caller's, so the receipt must not say the
+///   caller installed whatever ran. For the same reason the producer refuses
+///   to propagate this root through a local binding — what a property of the
+///   default's literal *holds* is an arbitrary expression of this program's.
+///   Its write companion is `ParameterDefaultLiteralAccessorWrite`.
 /// * `ParameterRootedAccessorWrite` — ADR 0040, the same premise in **write**
 ///   position: `axis.min = v` on a parameter-rooted receiver runs a setter the
 ///   caller installed, and a compound assignment or update runs that caller's
@@ -8389,6 +8403,8 @@ enum CensusDisposition {
     ParameterRootedAccessorWrite,
     ParameterRootedIterable,
     ParameterRootedElement,
+    ParameterDefaultLiteralAccessor,
+    ParameterDefaultLiteralAccessorWrite,
     OwnLiteralAccessor,
     OwnLiteralAccessorWrite,
     LocalLiteralResultAccessor,
@@ -8414,6 +8430,10 @@ impl CensusDisposition {
             Self::ParameterRootedAccessorWrite => "parameter-rooted-accessor-write",
             Self::ParameterRootedIterable => "parameter-rooted-iterable",
             Self::ParameterRootedElement => "parameter-rooted-element",
+            Self::ParameterDefaultLiteralAccessor => "parameter-default-literal-accessor",
+            Self::ParameterDefaultLiteralAccessorWrite => {
+                "parameter-default-literal-accessor-write"
+            }
             Self::OwnLiteralAccessor => "own-literal-accessor",
             Self::OwnLiteralAccessorWrite => "own-literal-accessor-write",
             Self::LocalLiteralResultAccessor => "local-literal-result-accessor",
@@ -8526,7 +8546,7 @@ const CENSUS_HAS_INSTANCE_SUBJECT_PROTOCOL: u64 = 31;
 
 const CENSUS_PRIMITIVE_COMPLETION_PROTOCOL: u64 = 29;
 
-/// ADR 0051: an explicit bottom type proves no object-valued completion;
+/// ADR 0090: an explicit bottom type proves no object-valued completion;
 /// an empty or missing type observation alone continues to prove nothing.
 const CENSUS_BOTTOM_TYPE_PROTOCOL: u64 = 35;
 
@@ -11301,6 +11321,29 @@ fn census_form_disposition(
                 (_, true) => CensusDisposition::ParameterRootedAccessorWrite,
                 (_, false) => CensusDisposition::ParameterRootedAccessor,
             })
+        }
+        // ADR 0090: the caller's argument, or the literal the default created.
+        // Only the accessor kinds are reviewed here; an iteration protocol or
+        // an `instanceof` over such a parameter refuses, which is the
+        // fail-closed direction for a premise whose second arm this build has
+        // only argued about for property reads.
+        "parameter-default-literal" => {
+            form.subject_parameter?;
+            if !census_form_shape_reads_the_subject(form) {
+                return None;
+            }
+            match form.kind {
+                typefacts::UncensusedInvokingFormKind::GetAccessor
+                | typefacts::UncensusedInvokingFormKind::SetAccessor
+                | typefacts::UncensusedInvokingFormKind::PropertyAccessUnknownAccessor => {
+                    Some(if form.subject_write {
+                        CensusDisposition::ParameterDefaultLiteralAccessorWrite
+                    } else {
+                        CensusDisposition::ParameterDefaultLiteralAccessor
+                    })
+                }
+                _ => None,
+            }
         }
         // ADR 0047: an `instanceof` whose constructor is the engine's own. The
         // operator's whole reach is `Symbol.hasInstance` on that constructor,

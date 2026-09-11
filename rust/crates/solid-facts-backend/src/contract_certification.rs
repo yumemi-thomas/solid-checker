@@ -12480,7 +12480,7 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 89] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 94] = [
         "accessorTableRead",
         "arrayRestRead",
         "awaitIterateParameter",
@@ -12502,6 +12502,11 @@ export const value = phantom;
         "defaultedFromDefaulted",
         "defaultedFromModuleValue",
         "defaultedFromParameter",
+        "defaultedListRead",
+        "defaultedLiteralWithAccessor",
+        "defaultedOptionsRead",
+        "defaultedPropertyBinding",
+        "defaultedThenWritten",
         "destructureModuleValue",
         "destructureParameter",
         "helperCoercion",
@@ -14063,6 +14068,11 @@ export const value = phantom;
             "defaultedFromDefaulted",
             "defaultedFromModuleValue",
             "defaultedFromParameter",
+            "defaultedListRead",
+            "defaultedLiteralWithAccessor",
+            "defaultedOptionsRead",
+            "defaultedPropertyBinding",
+            "defaultedThenWritten",
             "destructureModuleValue",
             "destructureParameter",
             "helperCoercion",
@@ -14489,7 +14499,7 @@ export const value = phantom;
         "writtenFromUninitialized",
         "writtenJoin",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 45] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 48] = [
         ("accessorTableRead", "census"),
         ("arrayRestRead", "census"),
         ("awaitIterateParameter", "census"),
@@ -14503,6 +14513,9 @@ export const value = phantom;
         ("deep", "census"),
         ("defaultedFromDefaulted", "census"),
         ("defaultedFromModuleValue", "census"),
+        ("defaultedLiteralWithAccessor", "census"),
+        ("defaultedPropertyBinding", "census"),
+        ("defaultedThenWritten", "census"),
         ("destructureModuleValue", "census"),
         ("helperSpreadCoercion", "census"),
         ("helperUntypedArgument", "census"),
@@ -15434,6 +15447,79 @@ export const value = phantom;
             ),
         ] {
             assert_census_withholds(export, needles);
+        }
+    }
+
+    /// ADR 0090: a parameter whose default is a data-only literal holds either
+    /// the caller's argument or the object that default freshly created. An
+    /// accessor read is excused on each arm by a premise already reviewed —
+    /// ADR 0034's on the first, ADR 0044's on the second — and the two are
+    /// exhaustive, so the join needs no third answer. Both spellings the corpus
+    /// actually uses **certify**: a property read off an object default, and an
+    /// element read off an array one.
+    #[test]
+    fn the_probe_gate_tracer_census_certifies_a_data_only_literal_parameter_default() {
+        for export in ["defaultedOptionsRead", "defaultedListRead"] {
+            let Some((plan, outcome)) = census_certify(export, Some("root-closure.mjs")) else {
+                return;
+            };
+            let finalized = outcome.unwrap_or_else(|error| {
+                panic!("{export}: a literal default must certify: {error}")
+            });
+            assert!(
+                finalized.withheld_closures().is_empty(),
+                "{export}: nothing may be withheld"
+            );
+            assert_ne!(
+                finalized.bindings().probe_gate_root,
+                super::finalization::empty_probe_gate_root(&plan)
+            );
+            assert!(
+                creates_is_closed_in(finalized.canonical_main(), export),
+                "{export}: creates must close on the joined premise"
+            );
+        }
+    }
+
+    /// The boundary of ADR 0090, one premise per export. Each of these is a
+    /// spelling the join does **not** cover, and each must still refuse:
+    ///
+    /// * `defaultedLiteralWithAccessor` — the default's literal carries a
+    ///   `get` member, so the second arm is an accessor *this program*
+    ///   installed and the reason the arm was safe is gone.
+    /// * `defaultedThenWritten` — the body writes the parameter, so an assigned
+    ///   value is neither the caller's argument nor the default's literal and
+    ///   there is no second arm left to join.
+    /// * `defaultedPropertyBinding` — a local binding taken from a *property*
+    ///   of the defaulted parameter. On the default arm what a property of this
+    ///   program's literal holds is an arbitrary expression of this program's,
+    ///   which is exactly why ADR 0044 roots a direct reference alone; the
+    ///   producer refuses to propagate this root through a binding.
+    ///
+    /// `defaultedFromModuleValue` already pins the non-literal default and is
+    /// unchanged by this ADR.
+    #[test]
+    fn the_probe_gate_tracer_census_refuses_every_default_outside_the_data_only_literal() {
+        for (export, form) in [
+            // The compiler resolves `value` to the literal's own `get` member,
+            // so this one is refused as a `get-accessor` rather than as an
+            // unknown one — a different spelling of the same refusal, and
+            // asserting the exact kind is what keeps the case from passing
+            // because some *other* form happened to refuse.
+            ("defaultedLiteralWithAccessor", "get-accessor"),
+            ("defaultedThenWritten", "property-access-unknown-accessor"),
+            (
+                "defaultedPropertyBinding",
+                "property-access-unknown-accessor",
+            ),
+        ] {
+            assert_census_withholds(
+                export,
+                &[
+                    &format!("uncensused invoking form: {form}"),
+                    "the producer offered no subject derivation",
+                ],
+            );
         }
     }
 

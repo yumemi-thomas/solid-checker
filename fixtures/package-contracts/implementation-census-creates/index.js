@@ -1014,3 +1014,51 @@ export function unknownBoxScale(value, boxScale) {
 export function untypedBoxScale(value, boxScale) {
   return geometryHelper(value, 0, 1, 0, boxScale);
 }
+
+// ---------------------------------------------------------------------------
+// ADR 0090: a parameter whose default is a data-only literal.
+//
+// Such a parameter holds exactly one of two values — the caller's argument, or
+// the object the default expression freshly created — and an accessor read is
+// excused on each by a premise this census already reviewed: ADR 0034's on the
+// first, ADR 0044's on the second. The arms are exhaustive, because a defaulted
+// parameter is the argument when it is not `undefined` and the default
+// otherwise.
+// ---------------------------------------------------------------------------
+
+// The idiom the corpus is full of. `options` is the caller's object or the
+// empty one this default made; neither carries an accessor this export
+// installed. **Certifies.**
+export function defaultedOptionsRead(fetcher, options = {}) {
+  return options.delay;
+}
+
+// The same premise for an array literal default and an element read.
+// **Certifies.**
+export function defaultedListRead(items = []) {
+  return items[0];
+}
+
+// A literal default with a **getter** member. The second arm then carries an
+// accessor this program installed, so the join loses the premise that made it
+// safe. **Refuses.**
+export function defaultedLiteralWithAccessor(source = { get value() { return 1; } }) {
+  return source.value;
+}
+
+// A defaulted literal parameter the body **writes**. An assigned value is
+// neither the caller's argument nor the default's literal, so there is no
+// second arm left to join. **Refuses.**
+export function defaultedThenWritten(source = {}, replacement) {
+  source = replacement;
+  return source.value;
+}
+
+// The propagation boundary. `held` is a *property* of the defaulted parameter,
+// and on the default arm what a property of this program's literal holds is an
+// arbitrary expression of this program's — exactly the reason ADR 0044 roots a
+// direct reference alone. **Refuses.**
+export function defaultedPropertyBinding(source = { inner: untypedRegistry }) {
+  const held = source.inner;
+  return held.value;
+}

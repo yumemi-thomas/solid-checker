@@ -4,7 +4,21 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 46: original input through one local helper.
+// TypeFactsHandshakeProtocol is 47: a parameter whose default is a **data-only
+// literal** and which the body never writes may be rooted at its own slot,
+// under the new `parameter-default-literal` derivation (ADR 0090). Such a
+// parameter holds exactly one of two values — the caller's argument, or the
+// object the default expression freshly created — and an accessor read is
+// excused on each by a premise already reviewed: `parameter` on the first,
+// `own-literal` on the second. The arms are exhaustive, because a defaulted
+// parameter is the argument when it is not `undefined` and the default
+// otherwise. It is deliberately **not** spelled `parameter-default`, which is a
+// default *naming another rooted parameter* and is caller-rooted on both arms:
+// a consumer reading this one as that would say the caller installed whatever
+// ran. The producer also refuses to propagate this root through a local
+// binding, because what a property of the default's literal holds is an
+// arbitrary expression of this program's.
+// Protocol 46: original input through one local helper.
 // Protocol 44: runtime export initializer derivations
 // bind exact source chains and object arguments, without a result verdict.
 // Protocol 43: an initial read is also stated for every
@@ -246,8 +260,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 46
-	TypeFactsSchemaSHA256             = "sha256:9d490aeaeaf577fb26d14f9ab380dd9ce372b1eac3530508e97aa3447bdc86f7"
+	TypeFactsHandshakeProtocol uint64 = 47
+	TypeFactsSchemaSHA256             = "sha256:38691f487132813198e7aa119f258c60c0cea1b5aa55c615e91d015f89f8d787"
 )
 
 type ServiceHandshake struct {

@@ -19686,3 +19686,29 @@ Full investigation, including two wrong hypotheses and three misread
 measurements:
 `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
 § 14 – § 17.
+
+## ADR 0090: a data-only literal parameter default (2026-09-11)
+
+`options = {}` followed by `options.delay` refused: ADR 0034 excludes every
+defaulted parameter, and ADR 0043 relaxed the exclusion only for a default
+naming another rooted parameter. A data-only literal default is the other
+relaxation — the parameter holds the caller's argument or the object the
+default freshly created, each excused by a premise already reviewed
+(ADR 0034's, ADR 0044's), and the two arms are exhaustive.
+
+Stated as its own derivation, `parameter-default-literal`, rather than widening
+`parameter-default`: that one is caller-rooted on *both* arms, and reading this
+one as it would record "the caller installed whatever ran", which is false on
+the default arm. Handshake protocol 46 → 47.
+
+Measured: `property-access-unknown-accessor` distinct claims 122 → 118,
+census-refused 397 → 395, certified closures 5,187 → 5,190; three rows moved,
+all gaining, no status changed.
+
+**Remaining approximation.** 118 accessor-form claims still refuse, every one
+of them because the producer offered no subject derivation at all. Which leg
+each fell off is not reported across the wire, so no further premise in this
+family can be sized without a protocol change. Excluded here deliberately:
+propagation of this root through a local binding (what a property of the
+default's literal holds is an arbitrary expression of this program's), and
+every form kind but the accessor pair.

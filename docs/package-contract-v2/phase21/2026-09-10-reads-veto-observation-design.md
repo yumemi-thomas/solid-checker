@@ -4250,3 +4250,50 @@ which is still the clean route and still a protocol change.
 Two claims in § 57 were wrong and are corrected above: § 57.3 (the producer does
 attempt `own-literal`) and § 57.2's "not a written parameter" (17 of the 68 are
 written bindings, and the most repeated site is a written parameter).
+
+## 59. ADR 0090 landed, and it is small (2026-09-11)
+
+§ 58.3's candidate — letting the local-literal-result premise join through a
+written binding — **was not built, and cannot be as stated.**
+`LocalLiteralResultPremise` names one call (`Call`, `Callee`, `Allocation`,
+`Returns`). The motivating site's binding has two provenances, the caller's
+argument and one call's result, and a premise naming only the call would tell
+the verifier the subject is always that call's result. The wire has no joined
+shape, so that candidate needs a protocol change of its own.
+
+What the same reading *did* surface is a shape that needs no join at the wire
+at all. Two of the thirteen written-binding sites were not assignments:
+
+~~~js
+export function makeRetrying(fetcher, options = {}) {
+  const delay = options.delay;
+~~~
+
+`options` is a parameter with a default, which ADR 0034 excludes uniformly and
+ADR 0043 relaxed only for a default *naming another rooted parameter*. A
+data-only literal default is the other relaxation, and its two arms are each
+already reviewed — the caller's argument by ADR 0034, the freshly created
+literal by ADR 0044 — and exhaustive. ADR 0090 states it as
+`parameter-default-literal`, spelled apart from `parameter-default` because
+only one of its arms is the caller's.
+
+Measured, against § 57's run:
+
+| | before | after |
+| --- | --- | --- |
+| `property-access-unknown-accessor` claims | 122 | **118** |
+| census-refused distinct claims | 397 | **395** |
+| certified closures | 5,187 | **5,190** |
+| rows moved | — | 3, all gaining |
+| certified packages | 381 | 381 |
+
+**That is a small gain for a handshake bump, and worth saying plainly.** It is
+the first premise this arc chose from a reading of the corpus rather than from
+a prediction, and the reading covered 68 of 122 claims (§ 58.1) — so a modest
+result is what a two-of-thirteen incidence in an aligned sample should have
+predicted. It regresses nothing.
+
+The 118 that remain are undiagnosed, and § 57.4's prerequisite is unchanged:
+the producer knows which leg each subject fell off and does not report it. That
+is now the third time a premise has been sized by reading code rather than by
+measuring, and the second time the answer was "smaller than it looked".

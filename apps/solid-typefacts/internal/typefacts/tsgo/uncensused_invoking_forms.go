@@ -458,6 +458,36 @@ func (p *project) parameterSubjectRootsLocked(implementation *ast.Node) *paramet
 			derivation: typefacts.SubjectRootParameterDefault,
 		}
 	}
+	// ADR 0090: a parameter whose default is a data-only literal. Run after
+	// both passes above so a slot either of them already took keeps its
+	// stronger, purely caller-rooted reading; this one is a join over two arms
+	// and only one of them is the caller's.
+	for index, parameter := range parameters {
+		declaration := parameter.AsParameterDeclaration()
+		name := parameter.Name()
+		initializer := parameter.Initializer()
+		if declaration == nil || name == nil || initializer == nil ||
+			declaration.DotDotDotToken != nil || !ast.IsIdentifier(name) {
+			continue
+		}
+		if !ownDataOnlyLiteral(identityPreservingUnwrap(initializer)) {
+			continue
+		}
+		symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(name))
+		// Written, and the join loses its second arm: an assigned value is
+		// neither the caller's argument nor the default's literal, and this
+		// premise has nothing to say about it.
+		if symbol == nil || p.parameterIsWrittenLocked(implementation, index, symbol) {
+			continue
+		}
+		if _, taken := roots.bySymbol[symbol]; taken {
+			continue
+		}
+		roots.bySymbol[symbol] = subjectRoot{
+			index:      index,
+			derivation: typefacts.SubjectRootParameterDefaultLiteral,
+		}
+	}
 	p.rootLocalDeclarationsLocked(implementation, roots)
 	return roots
 }
@@ -724,8 +754,15 @@ func (p *project) rootLocalDeclarationsLocked(
 			// (ADR 0044): what one of its properties *holds* is an arbitrary
 			// value, so `const item = table[key]` names nothing this premise
 			// can speak for.
+			//
+			// ADR 0090's join is excluded for that same reason, and it carries
+			// a parameter slot so the check above does not catch it: on its
+			// default arm the subject is a literal *this program* wrote, whose
+			// property values are arbitrary expressions. `const d = options.delay`
+			// under `options = { delay: makeThing() }` names one of them.
 			root := p.subjectRootLocked(initializer, roots)
-			if root == nil || root.parameter == nil {
+			if root == nil || root.parameter == nil ||
+				root.derivation == typefacts.SubjectRootParameterDefaultLiteral {
 				continue
 			}
 			derived := subjectRoot{index: *root.parameter, derivation: root.derivation}
@@ -2179,7 +2216,7 @@ func (p *project) singleUnwrittenLocalInitializerLocked(name *ast.Node) *ast.Nod
 // being classified over (ADR 0045). An async function's return type is a
 // `Promise` and a generator's a `Generator`, so the completion form needs no
 // separate test: neither is a primitive. An explicit never return type states
-// that there is no normal completion, hence no object-valued one (ADR 0051).
+// that there is no normal completion, hence no object-valued one (ADR 0090).
 // This says nothing about calls executed before that non-completion; the
 // consumer must still census them before using the completion fact.
 func (p *project) primitiveCompletionLocked(implementation *ast.Node) bool {
@@ -2234,7 +2271,7 @@ func (p *project) mayBeObjectTypedLocked(value *checker.Type) bool {
 	// Distributed deliberately returns no constituents for never. The bottom
 	// flag is the affirmative fact that there can be no object-valued result,
 	// not an inference from an empty list. Keep the empty-list refusal below
-	// for every type that does not state this fact (ADR 0051, protocol 35).
+	// for every type that does not state this fact (ADR 0090, protocol 35).
 	if value.Flags()&checker.TypeFlagsNever != 0 {
 		return false
 	}

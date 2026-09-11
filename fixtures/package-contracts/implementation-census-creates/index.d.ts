@@ -68,7 +68,6 @@ export declare function defaultedFromParameter(
   axis: { min: unknown },
   sourceAxis?: { min: unknown },
 ): unknown;
-export declare function defaultedFromModuleValue(source?: any): unknown;
 export declare function defaultedFromDefaulted(
   axis: { min: unknown },
   mid?: { min: unknown },
@@ -131,3 +130,12 @@ export declare function writtenByDestructuring(source: any, other: any): unknown
 export declare function omittedBoxScale(value: number): number;
 export declare function unknownBoxScale(value: number, boxScale: unknown): number;
 export declare function untypedBoxScale(value: number, boxScale: any): number;
+// ADR 0090: a data-only literal parameter default roots the parameter at its
+// own slot. The controls keep every other spelling refusing: a literal carrying an accessor, a written parameter, and a binding
+// taken from one of the literal's properties.
+export declare function defaultedOptionsRead(fetcher: any, options?: any): unknown;
+export declare function defaultedListRead(items?: any): unknown;
+export declare function defaultedFromModuleValue(source?: any): unknown;
+export declare function defaultedLiteralWithAccessor(source?: any): unknown;
+export declare function defaultedThenWritten(source?: any, replacement?: any): unknown;
+export declare function defaultedPropertyBinding(source?: any): unknown;

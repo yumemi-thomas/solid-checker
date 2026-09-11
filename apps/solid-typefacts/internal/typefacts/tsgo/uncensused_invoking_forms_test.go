@@ -1454,6 +1454,29 @@ export function readCallerResult(transform: any, point: any): unknown {
 	return transform(point).y;
 }
 
+// ADR 0090: a parameter whose default is a data-only literal. Either arm — the
+// caller's argument or the object the default made — carries a premise this
+// census has reviewed, so the parameter roots at its own slot.
+export function defaultedLiteralRead(options: any = {}): unknown {
+	return options.delay;
+}
+
+export function defaultedLiteralElement(items: any = []): unknown {
+	return items[0];
+}
+
+// The boundary: a literal carrying a getter is an accessor this program
+// installed, and a written parameter has an arm that is neither the caller's
+// argument nor the default's literal. Neither roots.
+export function defaultedAccessorLiteralRead(source: any = { get value() { return 1; } }): unknown {
+	return source.value;
+}
+
+export function defaultedLiteralThenWritten(source: any = {}, replacement: any): unknown {
+	source = replacement;
+	return source.value;
+}
+
 export function readBoundCallerResult(transform: any, point: any): unknown {
 	const mapped = transform(point);
 	return mapped.y;
@@ -1882,6 +1905,8 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 		{"instanceOfOwnClass", typefacts.SubjectRootOwnClass},
 		{"readCallerResult", typefacts.SubjectRootParameterResult},
 		{"readBoundCallerResult", typefacts.SubjectRootParameterResult},
+		{"defaultedLiteralRead", typefacts.SubjectRootParameterDefaultLiteral},
+		{"defaultedLiteralElement", typefacts.SubjectRootParameterDefaultLiteral},
 	} {
 		transcript := implementationTranscriptFor(t, analyzer, path, subjectSource, testCase.export)
 		var stated int
@@ -1900,7 +1925,8 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 				form.SubjectRoot == typefacts.SubjectRootOwnClass
 			wantParameter := form.SubjectRoot == typefacts.SubjectRootParameter ||
 				form.SubjectRoot == typefacts.SubjectRootParameterDefault ||
-				form.SubjectRoot == typefacts.SubjectRootParameterResult
+				form.SubjectRoot == typefacts.SubjectRootParameterResult ||
+				form.SubjectRoot == typefacts.SubjectRootParameterDefaultLiteral
 			if (form.SubjectDeclaration != nil) != wantDeclaration ||
 				(form.SubjectParameter != nil) != wantParameter {
 				t.Fatalf("%s: derivation %q carries the wrong companion fact", testCase.export, form.SubjectRoot)
@@ -1912,6 +1938,18 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 		}
 		if stated == 0 {
 			t.Fatalf("%s: no form states derivation %q", testCase.export, testCase.derivation)
+		}
+	}
+
+	// ADR 0090's boundary, asserted rather than left to the positive table's
+	// silence: a literal default carrying an accessor, and a defaulted
+	// parameter the body writes, state the derivation nowhere.
+	for _, export := range []string{"defaultedAccessorLiteralRead", "defaultedLiteralThenWritten"} {
+		transcript := implementationTranscriptFor(t, analyzer, path, subjectSource, export)
+		for _, form := range transcript.UncensusedInvokingForms {
+			if form.SubjectRoot == typefacts.SubjectRootParameterDefaultLiteral {
+				t.Fatalf("%s: states %q, which this premise does not cover", export, form.SubjectRoot)
+			}
 		}
 	}
 

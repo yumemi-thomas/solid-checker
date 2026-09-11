@@ -466,7 +466,7 @@ type ExportImplementationTranscript struct {
 	// premise twin when the census was premised — is a union of primitive
 	// types alone (ADR 0045, handshake protocol 29). An explicit never type
 	// also states this fact: no normal completion can hand back an object
-	// (ADR 0051, handshake protocol 35). Missing type information cannot.
+	// (ADR 0090, handshake protocol 35). Missing type information cannot.
 	//
 	// A coercion of that value therefore reaches no `Symbol.toPrimitive`,
 	// `valueOf` or `toString` of anyone's. The completion form is covered by
@@ -678,6 +678,23 @@ const (
 	// operator runs OrdinaryHasInstance alone. SubjectDeclaration names the
 	// class, and no SubjectParameter accompanies it.
 	SubjectRootOwnClass SubjectRootDerivation = "own-class"
+	// SubjectRootParameterDefaultLiteral is ADR 0090's: a parameter with a
+	// **data-only literal** default, never written in the body. It holds
+	// exactly one of two values, and an accessor read is excused on each for a
+	// reason already reviewed: the caller's argument, which is ADR 0034's
+	// premise, or the literal the default expression freshly created, which is
+	// ADR 0044's. The two arms are exhaustive — a defaulted parameter is the
+	// argument when it is not `undefined` and the default otherwise — so the
+	// join needs no third answer.
+	//
+	// Distinct from SubjectRootParameterDefault, which is a default *naming
+	// another rooted parameter* and is therefore caller-rooted on both arms.
+	// This one is not: one of its arms is this program's own object, so a
+	// consumer that reads `parameter-default` as "the caller installed
+	// whatever is there" would be reading too much into it.
+	//
+	// The SubjectParameter is the parameter's own slot.
+	SubjectRootParameterDefaultLiteral SubjectRootDerivation = "parameter-default-literal"
 )
 
 // CoercionPremise is what one `coercion` form's clearance would rest on: the

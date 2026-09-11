@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:9d490aeaeaf577fb26d14f9ab380dd9ce372b1eac3530508e97aa3447bdc86f7";
+    "sha256:38691f487132813198e7aa119f258c60c0cea1b5aa55c615e91d015f89f8d787";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -259,7 +259,13 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // Protocol 44 adds runtime export initializer derivations. These bind source
 // subjects only; imported call behavior still requires dependency evidence.
 // Protocol 46 binds one-hop original-input helper reads.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 46;
+// Protocol 47 adds the `parameter-default-literal` subject derivation
+// (ADR 0090): a parameter with a data-only literal default that its body never
+// writes holds either the caller's argument or the object that default freshly
+// created, and an accessor read is excused on each by a derivation already
+// reviewed. Spelled apart from `parameter-default`, which is caller-rooted on
+// both arms; the root does not propagate through a local binding.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 47;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

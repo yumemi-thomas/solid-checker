@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "e2952b586cf7f47828214765bc9df2247291d9c40252bdf91d5744fe507aedae",
+            "closureSha256": "633006ea4820a62fe464b5677c4a951133bac27bd09b69024b6bc6ac02757203",
             "path": "./index.js",
-            "sha256": "e231c83f7f5aafab1a83de9f9b32307ac9f1eedf114ca6095991d5b72504548d"
+            "sha256": "9b36b3fc0258f850e4576e4119dd8998d51cfbdd7717213cd6cd5842f3ea49fd"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "8a2193f2d7eaa1d30671f60f0ae30b0ad374c20e25a86266c4f7e05f0c8f7a20"
+            "sha256": "49e01344fa0cab04732f6e7568e81a64e470b8c10878655eae6f3782cbbde6a7"
           },
           "exports": {
             "accessorTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -34,6 +34,11 @@
             "defaultedFromDefaulted": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "defaultedFromModuleValue": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "defaultedFromParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "defaultedListRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "defaultedLiteralWithAccessor": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "defaultedOptionsRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "defaultedPropertyBinding": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "defaultedThenWritten": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "destructureModuleValue": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "destructureParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "helperCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
