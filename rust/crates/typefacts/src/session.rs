@@ -4293,6 +4293,7 @@ mod tests {
             subject_parameter: None,
             subject_write: false,
             subject_root: String::new(),
+            subject_root_refusal: String::new(),
             subject_declaration: None,
             coercion_premise: None,
             local_literal_result: None,

@@ -332,6 +332,12 @@ func (p *project) uncensusedInvokingFormCensusLocked(
 					form.LocalLiteralResult = premise
 					form.SubjectWrite = write
 				}
+				// Diagnostic only, and stated only where nothing rooted: which
+				// leg the subject fell off. A consumer counts these to choose
+				// what to review next and admits nothing on their account.
+				if subject != nil {
+					form.SubjectRootRefusal = p.subjectRootRefusalLocked(implementation, subject, roots)
+				}
 			}
 			forms = append(forms, form)
 		},
@@ -876,6 +882,68 @@ func (p *project) subjectRootLocked(
 	}
 	index := root.index
 	return &resolvedSubject{parameter: &index, derivation: root.derivation}
+}
+
+// subjectRootRefusalLocked classifies **why** a subject did not root. It is a
+// diagnostic and grants nothing: it runs only after subjectRootLocked has
+// already answered nil, and no caller may admit anything on its account.
+//
+// It deliberately re-walks rather than being threaded through the rooting
+// logic. Threading a reason out of subjectRootLocked would put a diagnostic
+// concern inside the premise, where a later edit could make the reason decide
+// something; keeping it beside means the worst a drift can do is misname a
+// refusal. `everyStatedRefusalAccompaniesAnAbsentRoot` pins the one invariant
+// that matters — a form states a root or a reason, never both and never
+// neither.
+func (p *project) subjectRootRefusalLocked(
+	implementation *ast.Node, subject *ast.Node, roots *parameterSubjectRoots,
+) typefacts.SubjectRootRefusalReason {
+	if roots == nil {
+		return typefacts.SubjectRefusalArgumentsOrEval
+	}
+	node := identityPreservingUnwrap(subject)
+	for node != nil && (ast.IsPropertyAccessExpression(node) || nodeKindName(node) == "ElementAccessExpression") {
+		node = identityPreservingUnwrap(node.Expression())
+	}
+	if node == nil {
+		return typefacts.SubjectRefusalUnclassifiedSubject
+	}
+	if ast.IsCallExpression(node) {
+		return typefacts.SubjectRefusalCallResult
+	}
+	if nodeKindName(node) == "ThisKeyword" {
+		return typefacts.SubjectRefusalThisExpression
+	}
+	if !ast.IsIdentifier(node) {
+		return typefacts.SubjectRefusalNotAReference
+	}
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(node))
+	if symbol == nil {
+		return typefacts.SubjectRefusalUnclassifiedSubject
+	}
+	if symbol.Flags&ast.SymbolFlagsAlias != 0 {
+		return typefacts.SubjectRefusalImportedBinding
+	}
+	if len(symbol.Declarations) == 0 || symbol.Declarations[0] == nil {
+		return typefacts.SubjectRefusalUnclassifiedSubject
+	}
+	declaration := symbol.Declarations[0]
+	if nodeKindName(declaration) == "Parameter" {
+		// It reached here, so the roots map does not hold it. For a parameter
+		// of *this* declaration the reason is that the body writes it — an
+		// unwritten one would have rooted. A parameter of a nested callable is
+		// a different binding, and this vocabulary calls it local.
+		if declaration.Parent == implementation {
+			return typefacts.SubjectRefusalWrittenParameter
+		}
+		return typefacts.SubjectRefusalLocalBinding
+	}
+	sourceFile := ast.GetSourceFileOfNode(declaration)
+	if sourceFile != nil && declaration.Parent != nil &&
+		declaration.Parent.Parent != nil && declaration.Parent.Parent.Parent == sourceFile.AsNode() {
+		return typefacts.SubjectRefusalModuleBinding
+	}
+	return typefacts.SubjectRefusalLocalBinding
 }
 
 // subjectJoinArms answers the expressions a value-carrying join hands back —

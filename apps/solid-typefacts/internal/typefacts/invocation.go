@@ -697,6 +697,47 @@ const (
 	SubjectRootParameterDefaultLiteral SubjectRootDerivation = "parameter-default-literal"
 )
 
+// SubjectRootRefusalReason names the leg on which a subject failed to root. It
+// is diagnostic only; see UncensusedInvokingForm.SubjectRootRefusal.
+type SubjectRootRefusalReason string
+
+const (
+	// SubjectRefusalArgumentsOrEval is the whole-declaration exclusion: a body
+	// mentioning `arguments` or `eval` roots nothing at all, so this reason
+	// accompanies every form of such a declaration.
+	SubjectRefusalArgumentsOrEval SubjectRootRefusalReason = "arguments-or-eval"
+	// SubjectRefusalWrittenParameter is a parameter of this very declaration
+	// that the body writes. It is the caller's value on entry and something
+	// else afterwards, and no premise here covers the join.
+	SubjectRefusalWrittenParameter SubjectRootRefusalReason = "written-parameter"
+	// SubjectRefusalModuleBinding is a binding declared at module scope that
+	// no premise roots: not a data-only literal (ADR 0044), and not a written
+	// binding whose every value is rooted (ADR 0050).
+	SubjectRefusalModuleBinding SubjectRootRefusalReason = "module-binding"
+	// SubjectRefusalImportedBinding is a name this module imports. Whatever it
+	// holds was built elsewhere, and rooting it is a cross-module question.
+	SubjectRefusalImportedBinding SubjectRootRefusalReason = "imported-binding"
+	// SubjectRefusalLocalBinding is a local binding none of the propagation
+	// rules root — typically initialized from a call this build does not
+	// premise, or from an expression with no derivation.
+	SubjectRefusalLocalBinding SubjectRootRefusalReason = "local-binding"
+	// SubjectRefusalCallResult is a receiver chain whose innermost element is
+	// a call whose callee is not rooted at a plain parameter (ADR 0048's
+	// boundary).
+	SubjectRefusalCallResult SubjectRootRefusalReason = "call-result"
+	// SubjectRefusalThisExpression is a `this` receiver, which has no
+	// derivation in this vocabulary at all.
+	SubjectRefusalThisExpression SubjectRootRefusalReason = "this-expression"
+	// SubjectRefusalNotAReference is an innermost receiver that is not a name:
+	// a literal, a `new`, a template, a parenthesized expression this walk
+	// does not unwrap.
+	SubjectRefusalNotAReference SubjectRootRefusalReason = "not-a-reference"
+	// SubjectRefusalUnclassifiedSubject is the default, and refuses to guess:
+	// the walk fell off a leg this vocabulary does not name. A consumer must
+	// read it as "no information", never as any of the above.
+	SubjectRefusalUnclassifiedSubject SubjectRootRefusalReason = "unclassified-subject"
+)
+
 // CoercionPremise is what one `coercion` form's clearance would rest on: the
 // calls whose results the coercion applies ToPrimitive to. Every other operand
 // of the form is provably a primitive by its own type, which is why it is not
@@ -796,6 +837,20 @@ type UncensusedInvokingForm struct {
 	// consumer must refuse an own-literal subject whose declaration it cannot
 	// place there.
 	SubjectDeclaration *Location `cbor:"subjectDeclaration,omitempty" json:"subjectDeclaration,omitempty"`
+	// SubjectRootRefusal names **why** no derivation was stated, for an
+	// accessor form that carries no SubjectRoot. It is a diagnostic and never
+	// a premise: a consumer may print it, count it, and choose what to review
+	// next by it, and may not admit anything on its account. The producer
+	// states it only where SubjectRoot is empty, and the two are mutually
+	// exclusive by construction.
+	//
+	// It exists because the refusal was otherwise undifferentiated. A
+	// consumer's own message can say a form went uncensused and cannot say
+	// whether its subject was a written parameter, a module binding, an
+	// import, or a call result — so every premise in this family had to be
+	// sized by reading packages instead of by reading a run. The vocabulary is
+	// closed and its default is the honest `unclassified-subject`.
+	SubjectRootRefusal SubjectRootRefusalReason `cbor:"subjectRootRefusal,omitempty" json:"subjectRootRefusal,omitempty"`
 	// CoercionPremise, present only on a `coercion` form, states that every
 	// operand the coercion applies ToPrimitive to is either **provably a
 	// primitive** by its type or the **result of a call** to a declaration in

@@ -4,7 +4,15 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 47: a parameter whose default is a **data-only
+// TypeFactsHandshakeProtocol is 48: an accessor form that roots no subject may
+// say **why**, in `subjectRootRefusal` over a closed vocabulary whose default
+// is `unclassified-subject`. It is a diagnostic and never a premise — nothing
+// may be admitted on its account — and it is stated only where `subjectRoot`
+// is empty, so the two are mutually exclusive. It exists because a consumer's
+// own refusal cannot tell a written parameter from a module binding, an
+// import or a call result, which made every premise in this family something
+// to size by reading packages rather than by reading a run.
+// Protocol 47: a parameter whose default is a **data-only
 // literal** and which the body never writes may be rooted at its own slot,
 // under the new `parameter-default-literal` derivation (ADR 0090). Such a
 // parameter holds exactly one of two values — the caller's argument, or the
@@ -260,8 +268,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 47
-	TypeFactsSchemaSHA256             = "sha256:38691f487132813198e7aa119f258c60c0cea1b5aa55c615e91d015f89f8d787"
+	TypeFactsHandshakeProtocol uint64 = 48
+	TypeFactsSchemaSHA256             = "sha256:fd314227dd6ee49ac6f2ee14da9362ee5ea9da5e0abbe1b1773acad5e25ad5fb"
 )
 
 type ServiceHandshake struct {

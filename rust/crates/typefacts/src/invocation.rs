@@ -920,6 +920,23 @@ pub struct UncensusedInvokingForm {
     /// rather than in a declaration file or a dependency.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subject_declaration: Option<Location>,
+    /// Why no derivation was stated, for an accessor form that carries no
+    /// [`Self::subject_root`] (handshake protocol 48).
+    ///
+    /// **Diagnostic, never a premise.** Nothing may be admitted on its
+    /// account; it exists so a refusal can say which leg the subject fell off
+    /// — a written parameter, a module binding, an import, a call result —
+    /// which the consumer's own message cannot know. Sizing the next premise
+    /// in this family previously meant reading packages rather than reading a
+    /// run.
+    ///
+    /// A `String` for the same reason [`Self::subject_root`] is: a spelling a
+    /// later producer adds must arrive as an unrecognized diagnostic rather
+    /// than collapse into a reviewed one. The producer's own default is
+    /// `unclassified-subject`, which means "no information" and must not be
+    /// read as any named leg.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub subject_root_refusal: String,
     /// What a `coercion` form's clearance would rest on: every operand the
     /// coercion applies ToPrimitive to is either provably a primitive by its
     /// own type — not listed, because a primitive has nothing to reach — or the

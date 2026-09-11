@@ -4297,3 +4297,61 @@ The 118 that remain are undiagnosed, and § 57.4's prerequisite is unchanged:
 the producer knows which leg each subject fell off and does not report it. That
 is now the third time a premise has been sized by reading code rather than by
 measuring, and the second time the answer was "smaller than it looked".
+
+## 60. The instrument, built — and the 118 classified in one run (2026-09-11)
+
+### 60.1 Three sections said this was the prerequisite; it is built now
+
+§ 54.4, § 57.4 and § 59 each ended by naming the same missing thing: the
+producer knows which leg a subject's rooting fell off and does not say it
+across the wire. Handshake protocol 48 adds `subjectRootRefusal` on an
+uncensused invoking form — stated only where `subjectRoot` is empty, over a
+closed vocabulary whose default `unclassified-subject` means *no information*.
+
+**It is a diagnostic and never a premise.** Nothing is admitted on its account;
+`refuse_form` prints it and the corpus report carries it. The producer computes
+it in `subjectRootRefusalLocked`, which re-walks beside `subjectRootLocked`
+rather than being threaded through it — a diagnostic concern inside the premise
+is a thing a later edit can make decide something. The cost of walking beside is
+drift, and the one invariant that matters is pinned instead: an accessor form
+states a root **or** a reason, never both and never neither.
+
+### 60.2 All 118, on the first run
+
+| claims | pkgs | leg |
+| --- | --- | --- |
+| 41 | 19 | `local-binding` |
+| 36 | **8** | `module-binding` |
+| **30** | **18** | `written-parameter` |
+| 5 | 3 | `call-result` |
+| 3 | 3 | *(not stated)* |
+| 3 | 3 | `not-a-reference` |
+
+Behaviour-neutral by measurement: 381 packages and 5,190 closures, every
+withheld-reason count identical, **zero rows moved**.
+
+### 60.3 What it says, and what § 58 got right
+
+`written-parameter` is 30 claims across 18 packages — the `{ ...a, ...b }`
+shape of § 58.3, now counted rather than sampled. § 58's archaeology found 17
+written bindings in a 68-claim aligned sample and called it the largest
+identifiable shape; the population says 30 written parameters plus a share of
+the 41 local bindings. The sample was directionally right, at a quarter of the
+effort this took and with none of the confidence.
+
+The two larger legs are new information:
+
+- **`local-binding`, 41 claims across 19 packages** — the widest. A binding no
+  propagation rule roots, typically initialized from a call this build does not
+  premise.
+- **`module-binding`, 36 claims across 8 packages** — nearly as many claims from
+  less than half the packages, so it is concentrated: a few modules read a
+  module-scope value many times. ADR 0044 already roots a module-scope
+  *data-only literal*; these are the ones that are something else.
+
+### 60.4 The gap in the instrument
+
+Three claims state no reason at all. The producer computes one only when
+`accessorFormSubjectExpression` yields a subject, and these forms yield none —
+so the vocabulary is complete for the forms it reaches and silent for the rest.
+That is the honest direction (silence, not a guess) and it is 2.5% of the class.

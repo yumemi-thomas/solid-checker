@@ -9536,7 +9536,16 @@ fn census_transcript_calls(
     // to review next means reading the package rather than the refusal.
     let refuse_form = |form: &typefacts::UncensusedInvokingForm| {
         let subject = if form.subject_root.is_empty() {
-            "the producer offered no subject derivation".to_owned()
+            // Protocol 48: the producer says which leg it fell off. An older
+            // producer says nothing, and the sentence stays what it was.
+            if form.subject_root_refusal.is_empty() {
+                "the producer offered no subject derivation".to_owned()
+            } else {
+                format!(
+                    "the producer offered no subject derivation: {}",
+                    form.subject_root_refusal
+                )
+            }
         } else if matches!(
             form.subject_root.as_str(),
             "parameter" | "parameter-default" | "parameter-result"

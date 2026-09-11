@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:38691f487132813198e7aa119f258c60c0cea1b5aa55c615e91d015f89f8d787";
+    "sha256:fd314227dd6ee49ac6f2ee14da9362ee5ea9da5e0abbe1b1773acad5e25ad5fb";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -265,7 +265,9 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // created, and an accessor read is excused on each by a derivation already
 // reviewed. Spelled apart from `parameter-default`, which is caller-rooted on
 // both arms; the root does not propagate through a local binding.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 47;
+// Protocol 48 adds the diagnostic `subjectRootRefusal`: why an accessor form
+// rooted no subject. Never a premise; nothing is admitted on its account.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 48;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

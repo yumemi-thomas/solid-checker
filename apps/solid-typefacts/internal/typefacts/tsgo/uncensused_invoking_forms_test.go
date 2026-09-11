@@ -1941,6 +1941,35 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 		}
 	}
 
+	// Protocol 48: an accessor form states a subject root or states why it has
+	// none — never both, and never neither. This is the one invariant that
+	// keeps the diagnostic honest while it re-walks beside the premise rather
+	// than being threaded through it; a drift can then misname a refusal, but
+	// cannot make a form look rooted or make a rooted form carry an excuse.
+	for _, export := range []string{
+		"parameterRead", "ownTableRead", "defaultedLiteralRead",
+		"defaultedAccessorLiteralRead", "defaultedLiteralThenWritten",
+		"readCallerResult", "ownArrayRead", "importedTableRead",
+	} {
+		transcript := implementationTranscriptFor(t, analyzer, path, subjectSource, export)
+		for _, form := range transcript.UncensusedInvokingForms {
+			switch form.Kind {
+			case typefacts.UncensusedGetAccessor, typefacts.UncensusedSetAccessor,
+				typefacts.UncensusedPropertyAccessUnknownAccessor:
+			default:
+				continue
+			}
+			rooted := form.SubjectRoot != ""
+			excused := form.SubjectRootRefusal != ""
+			if rooted == excused {
+				t.Fatalf(
+					"%s: form at %v states root %q and refusal %q; exactly one is required",
+					export, form.Location, form.SubjectRoot, form.SubjectRootRefusal,
+				)
+			}
+		}
+	}
+
 	// ADR 0090's boundary, asserted rather than left to the positive table's
 	// silence: a literal default carrying an accessor, and a defaulted
 	// parameter the body writes, state the derivation nowhere.
