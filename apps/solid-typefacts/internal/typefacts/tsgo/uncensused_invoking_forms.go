@@ -972,33 +972,119 @@ func (p *project) subjectRootRefusalLocked(
 	if !ast.IsIdentifier(node) {
 		return typefacts.SubjectRefusalNotAReference
 	}
-	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(node))
-	if symbol == nil {
+	// The raw symbol first: `canonicalSymbol` walks the alias chain to the
+	// original declaration, so asking it about aliasing always answers no and
+	// every import would be filed as whatever it resolves to.
+	raw := p.formChecker().GetSymbolAtLocation(node)
+	if raw == nil {
 		return typefacts.SubjectRefusalUnclassifiedSubject
 	}
-	if symbol.Flags&ast.SymbolFlagsAlias != 0 {
+	if raw.Flags&ast.SymbolFlagsAlias != 0 {
 		return typefacts.SubjectRefusalImportedBinding
 	}
-	if len(symbol.Declarations) == 0 || symbol.Declarations[0] == nil {
+	symbol := p.canonicalSymbol(raw)
+	if symbol == nil || len(symbol.Declarations) == 0 || symbol.Declarations[0] == nil {
 		return typefacts.SubjectRefusalUnclassifiedSubject
 	}
 	declaration := symbol.Declarations[0]
 	if nodeKindName(declaration) == "Parameter" {
 		// It reached here, so the roots map does not hold it. For a parameter
 		// of *this* declaration the reason is that the body writes it — an
-		// unwritten one would have rooted. A parameter of a nested callable is
-		// a different binding, and this vocabulary calls it local.
+		// unwritten one would have rooted, and since ADR 0091 so would a
+		// written one whose every value is rooted. A parameter of a nested
+		// callable is a different binding entirely.
 		if declaration.Parent == implementation {
 			return typefacts.SubjectRefusalWrittenParameter
 		}
-		return typefacts.SubjectRefusalLocalBinding
+		return typefacts.SubjectRefusalNestedParameter
 	}
 	sourceFile := ast.GetSourceFileOfNode(declaration)
-	if sourceFile != nil && declaration.Parent != nil &&
-		declaration.Parent.Parent != nil && declaration.Parent.Parent.Parent == sourceFile.AsNode() {
-		return typefacts.SubjectRefusalModuleBinding
+	// Declared outside the artifact's own runtime source — a `declare const` in
+	// a typings file. Every premise in this family turns on what the artifact's
+	// own code assigned, and a typings file assigns nothing, so the scope and
+	// shape below would describe a binding none of them could reach anyway.
+	if sourceFile != nil && !p.formIsRuntimeSourceFile(sourceFile) {
+		return typefacts.SubjectRefusalAmbientDeclaration
 	}
-	return typefacts.SubjectRefusalLocalBinding
+	moduleScope := sourceFile != nil && declaration.Parent != nil &&
+		declaration.Parent.Parent != nil && declaration.Parent.Parent.Parent == sourceFile.AsNode()
+	return subjectBindingRefusal(moduleScope, p.bindingRefusalShapeLocked(symbol, declaration))
+}
+
+// bindingRefusalShape is which of ADR 0044's conditions a binding failed, as a
+// scope-independent shape. `subjectBindingRefusal` pairs it with the scope.
+type bindingRefusalShape int
+
+const (
+	bindingShapeOther bindingRefusalShape = iota
+	bindingShapeFromCall
+	bindingShapeUninitialized
+	bindingShapeAccessorLiteral
+	bindingShapeWritten
+)
+
+// bindingRefusalShapeLocked answers why ADR 0044's own-literal premise did not
+// reach a variable binding. Diagnostic only: every branch is a refusal already,
+// and this only says which one.
+func (p *project) bindingRefusalShapeLocked(
+	symbol *ast.Symbol, declaration *ast.Node,
+) bindingRefusalShape {
+	if !ast.IsVariableDeclaration(declaration) {
+		return bindingShapeOther
+	}
+	// Asked first: an assigned binding refuses whatever its initializer is, so
+	// naming the initializer would name a condition that was not the blocking
+	// one.
+	if p.symbolIsAssignedLocked(symbol, declaration) {
+		return bindingShapeWritten
+	}
+	initializer := declaration.Initializer()
+	if initializer == nil {
+		return bindingShapeUninitialized
+	}
+	unwrapped := identityPreservingUnwrap(initializer)
+	switch {
+	case unwrapped == nil:
+		return bindingShapeOther
+	case ast.IsCallExpression(unwrapped) || ast.IsNewExpression(unwrapped):
+		return bindingShapeFromCall
+	case (ast.IsObjectLiteralExpression(unwrapped) || ast.IsArrayLiteralExpression(unwrapped)) &&
+		!ownDataOnlyLiteral(unwrapped):
+		return bindingShapeAccessorLiteral
+	default:
+		return bindingShapeOther
+	}
+}
+
+func subjectBindingRefusal(
+	moduleScope bool, shape bindingRefusalShape,
+) typefacts.SubjectRootRefusalReason {
+	if moduleScope {
+		switch shape {
+		case bindingShapeFromCall:
+			return typefacts.SubjectRefusalModuleFromCall
+		case bindingShapeUninitialized:
+			return typefacts.SubjectRefusalModuleUninitialized
+		case bindingShapeAccessorLiteral:
+			return typefacts.SubjectRefusalModuleAccessorLiteral
+		case bindingShapeWritten:
+			return typefacts.SubjectRefusalModuleWritten
+		default:
+			return typefacts.SubjectRefusalModuleBinding
+		}
+	}
+	switch shape {
+	case bindingShapeFromCall:
+		return typefacts.SubjectRefusalLocalFromCall
+	case bindingShapeUninitialized:
+		return typefacts.SubjectRefusalLocalUninitialized
+	case bindingShapeAccessorLiteral:
+		return typefacts.SubjectRefusalLocalAccessorLiteral
+	case bindingShapeWritten:
+		return typefacts.SubjectRefusalLocalWritten
+	default:
+		return typefacts.SubjectRefusalLocalBinding
+	}
 }
 
 // subjectJoinArms answers the expressions a value-carrying join hands back —

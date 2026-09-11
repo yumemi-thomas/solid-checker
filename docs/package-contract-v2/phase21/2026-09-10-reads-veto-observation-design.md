@@ -4421,3 +4421,69 @@ admitting would root a binding whose every write went unenumerated. An empty
 source list therefore refuses rather than reading as "nothing is assigned", and
 `writtenParameterDestructured` pins it: a destructuring assignment the
 collector refuses, on a parameter the write predicate calls written.
+
+## 62. The two unexamined legs, split — and a bug in the instrument (2026-09-11)
+
+§ 61.2 left `local-binding` (41) and `module-binding` (36) as 77 of the 114
+accessor-class claims with nobody having looked at either. Protocol 50 splits
+them the way protocol 48 split the class itself: a binding leg now names which
+of ADR 0044's conditions it failed — assigned somewhere, uninitialized,
+initialized from a call, initialized from a literal that is not data-only —
+separately per scope, and a parameter of a callable *other* than the censused
+one is `nested-parameter` rather than a local binding.
+
+Still diagnostic, still never a premise. Behaviour-neutral by measurement: 381
+packages, 5,192 closures, zero rows moved.
+
+### 62.1 The first run was wrong, and said so by omission
+
+The refined run put `module-binding-uninitialized` at 35 claims and showed
+**no `imported-binding` row at all** — zero imports across 114 claims, in
+bundled code that reads `sharedConfig` and `isServer` from solid-js. That is
+not a plausible measurement.
+
+The cause is one line. `subjectRootRefusalLocked` asked
+`canonicalSymbol(...).Flags & SymbolFlagsAlias`, and `canonicalSymbol` *walks
+the alias chain to the original declaration* — so by the time the question was
+asked the import had become whatever it resolves to, and the answer was always
+no. A `declare const sharedConfig` in solid-js' typings then classified as a
+module-scope binding with no initializer, which is true of the declaration and
+says nothing about the code.
+
+Asked of the raw symbol instead, nine claims move to `imported-binding`. The
+same pass adds `ambient-declaration` for a binding declared outside the
+artifact's own runtime source, because no premise in this family can reach one:
+they all turn on what the artifact's own code assigned, and a typings file
+assigns nothing. It does not fire on this corpus, which is itself worth
+knowing — the remaining uninitialized module bindings are real code.
+
+### 62.2 The corrected table
+
+| claims | pkgs | leg |
+| --- | --- | --- |
+| 26 | 18 | `written-parameter` — needs a joined premise on the wire (§ 61.1) |
+| **26** | **2** | `module-binding-uninitialized` |
+| 22 | 11 | `nested-parameter` |
+| 9 | 8 | `imported-binding` |
+| 9 | 7 | `local-binding` |
+| 6 | 3 | `local-binding-from-call` |
+| 5 | 3 | `call-result` — ADR 0048's boundary, deliberate |
+| 4 | 6 | `local-binding-written` |
+| 3 | 3 | *(not stated)* — the § 60.4 instrument gap |
+| 3 | 3 | `not-a-reference` |
+| 1 | 1 | `module-binding` |
+
+### 62.3 The striking one
+
+**26 claims from two packages**, and 24 of them from `@kobalte/utils` alone.
+A module-scope binding, declared with no initializer, in the artifact's own
+runtime source, never assigned anywhere the producer can see — which is close
+to a contradiction, since such a binding holds `undefined` and a property read
+of it throws. Either the assignment is in a shape `symbolIsAssignedLocked` does
+not count, or the declaration is not what it appears to be.
+
+That is now the cheapest thing on the board: one package, one shape, 24 claims,
+and the question is answerable by reading a single file rather than by
+proposing a premise. It is *not* a premise candidate yet — it is a thing that
+does not add up, and § 58 and § 62.1 are both reminders of what happens when a
+number that does not add up gets built on.

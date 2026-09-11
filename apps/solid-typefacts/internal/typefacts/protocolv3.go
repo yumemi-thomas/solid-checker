@@ -4,7 +4,13 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 49: the `parameter` derivation widens to a
+// TypeFactsHandshakeProtocol is 50: `subjectRootRefusal`'s binding legs are
+// refined — which of ADR 0044's conditions the binding failed (from a call,
+// uninitialized, a literal that is not data-only, or assigned), separately per
+// scope, plus `nested-parameter` for a parameter of a callable other than the
+// censused one. Diagnostic only, as protocol 48 established; the coarse
+// spellings remain for a shape none of the finer readings names.
+// Protocol 49: the `parameter` derivation widens to a
 // parameter the body **writes**, when every value assigned to it is rooted at
 // that same slot (ADR 0091). ADR 0050 made this argument for a local binding;
 // a parameter is the same question with one source that is the caller's by
@@ -282,8 +288,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 49
-	TypeFactsSchemaSHA256             = "sha256:e0bb7773def83efd493facb895b475212ddcfacfb86a8a6d9c278e6078f8fb37"
+	TypeFactsHandshakeProtocol uint64 = 50
+	TypeFactsSchemaSHA256             = "sha256:8e304e85a6e1136c8e5128b4984f8090cd45adefdb0b9614313bbd3274416417"
 )
 
 type ServiceHandshake struct {

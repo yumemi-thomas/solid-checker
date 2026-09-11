@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:e0bb7773def83efd493facb895b475212ddcfacfb86a8a6d9c278e6078f8fb37";
+    "sha256:8e304e85a6e1136c8e5128b4984f8090cd45adefdb0b9614313bbd3274416417";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -269,7 +269,8 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // rooted no subject. Never a premise; nothing is admitted on its account.
 // Protocol 49 widens `parameter` to a written parameter whose every assigned
 // value is rooted at that same slot (ADR 0091).
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 49;
+// Protocol 50 refines the diagnostic `subjectRootRefusal` binding legs.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 50;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

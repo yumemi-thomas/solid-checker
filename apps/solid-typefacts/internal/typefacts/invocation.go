@@ -712,11 +712,40 @@ const (
 	SubjectRefusalWrittenParameter SubjectRootRefusalReason = "written-parameter"
 	// SubjectRefusalModuleBinding is a binding declared at module scope that
 	// no premise roots: not a data-only literal (ADR 0044), and not a written
-	// binding whose every value is rooted (ADR 0050).
+	// binding whose every value is rooted (ADR 0050). Stated when none of the
+	// finer module spellings below applies.
 	SubjectRefusalModuleBinding SubjectRootRefusalReason = "module-binding"
+	// The finer readings of a module binding, each naming *why* ADR 0044's
+	// premise did not reach it. They exist because "module-binding" alone was
+	// 36 claims across 8 packages with no way to tell which premise family
+	// could ever cover them.
+	SubjectRefusalModuleFromCall        SubjectRootRefusalReason = "module-binding-from-call"
+	SubjectRefusalModuleUninitialized   SubjectRootRefusalReason = "module-binding-uninitialized"
+	SubjectRefusalModuleAccessorLiteral SubjectRootRefusalReason = "module-binding-accessor-literal"
+	SubjectRefusalModuleWritten         SubjectRootRefusalReason = "module-binding-written"
+	// The same readings for a binding in function scope.
+	SubjectRefusalLocalFromCall        SubjectRootRefusalReason = "local-binding-from-call"
+	SubjectRefusalLocalUninitialized   SubjectRootRefusalReason = "local-binding-uninitialized"
+	SubjectRefusalLocalAccessorLiteral SubjectRootRefusalReason = "local-binding-accessor-literal"
+	SubjectRefusalLocalWritten         SubjectRootRefusalReason = "local-binding-written"
+	// SubjectRefusalNestedParameter is a parameter of a callable *other* than
+	// the one being censused — a nested arrow's own slot, say. It is a
+	// different binding from the censused declaration's parameters, and the
+	// premises in this family are all about those.
+	SubjectRefusalNestedParameter SubjectRootRefusalReason = "nested-parameter"
 	// SubjectRefusalImportedBinding is a name this module imports. Whatever it
 	// holds was built elsewhere, and rooting it is a cross-module question.
+	//
+	// Asked of the symbol **before** alias resolution: the checker's canonical
+	// symbol is the original declaration, so an import that has been resolved
+	// is indistinguishable from a local one by flags alone.
 	SubjectRefusalImportedBinding SubjectRootRefusalReason = "imported-binding"
+	// SubjectRefusalAmbientDeclaration is a binding whose declaration is not in
+	// the analyzed artifact's own **runtime source** — a `declare const` in a
+	// typings file, say. No premise in this family can reach it: they all turn
+	// on what the artifact's own code assigned, and a typings file assigns
+	// nothing.
+	SubjectRefusalAmbientDeclaration SubjectRootRefusalReason = "ambient-declaration"
 	// SubjectRefusalLocalBinding is a local binding none of the propagation
 	// rules root — typically initialized from a call this build does not
 	// premise, or from an expression with no derivation.
