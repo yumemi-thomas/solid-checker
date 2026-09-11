@@ -4,7 +4,16 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 50: `subjectRootRefusal`'s binding legs are
+// TypeFactsHandshakeProtocol is 51: a `coercion` form carries
+// `coercionSubjectRoot` and `coercionSubjectRootRefusal` — the derivation every
+// one of its ToPrimitive operands agreed on, or why they did not, with
+// `mixed-operand-roots` when each rooted but not at the same derivation. A
+// coercing operator reaches Symbol.toPrimitive, valueOf and toString on every
+// operand, so ADR 0042's argument can only reach a coercion when every operand
+// is the caller's. Diagnostic and never a premise, like protocol 48's
+// refusal, and separate from `subjectRoot` because that is an accessor's
+// receiver and a census admits it.
+// Protocol 50: `subjectRootRefusal`'s binding legs are
 // refined — which of ADR 0044's conditions the binding failed (from a call,
 // uninitialized, a literal that is not data-only, or assigned), separately per
 // scope, plus `nested-parameter` for a parameter of a callable other than the
@@ -288,8 +297,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 50
-	TypeFactsSchemaSHA256             = "sha256:8e304e85a6e1136c8e5128b4984f8090cd45adefdb0b9614313bbd3274416417"
+	TypeFactsHandshakeProtocol uint64 = 51
+	TypeFactsSchemaSHA256             = "sha256:82f5f6d09caf0bc9afa3dbb28601463d02cdd65ae5aecf08466fc8957f20f466"
 )
 
 type ServiceHandshake struct {

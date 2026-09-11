@@ -9535,7 +9535,32 @@ fn census_transcript_calls(
     // undifferentiated "uncensused invoking form", and choosing which premise
     // to review next means reading the package rather than the refusal.
     let refuse_form = |form: &typefacts::UncensusedInvokingForm| {
-        let subject = if form.subject_root.is_empty() {
+        // Protocol 51: a coercion's subject is not one receiver but every
+        // operand ToPrimitive reaches, so it is stated in its own pair of
+        // fields and printed here rather than through the accessor clause
+        // below, which would say "no subject derivation" for a form that has
+        // several. Diagnostic only: this changes which sentence a refusal
+        // carries and never whether it refuses.
+        let coercion_subject = (form.kind == typefacts::UncensusedInvokingFormKind::Coercion)
+            .then(|| {
+                if !form.coercion_subject_root.is_empty() {
+                    Some(format!(
+                        "every coerced operand rooted at {:?}",
+                        form.coercion_subject_root
+                    ))
+                } else if !form.coercion_subject_root_refusal.is_empty() {
+                    Some(format!(
+                        "the coerced operands rooted at nothing shared: {}",
+                        form.coercion_subject_root_refusal
+                    ))
+                } else {
+                    None
+                }
+            })
+            .flatten();
+        let subject = if let Some(stated) = coercion_subject {
+            stated
+        } else if form.subject_root.is_empty() {
             // Protocol 48: the producer says which leg it fell off. An older
             // producer says nothing, and the sentence stays what it was.
             if form.subject_root_refusal.is_empty() {

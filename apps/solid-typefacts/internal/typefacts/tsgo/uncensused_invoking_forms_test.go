@@ -2375,3 +2375,125 @@ func TestSubjectRootRefusalNamesTheBlockingShape(t *testing.T) {
 		}
 	}
 }
+
+const coercionSubjectSource = `const registry: any = { value: 1 };
+const otherRegistry: any = { value: 2 };
+let pending: any;
+
+export function bothParameters(left: any, right: any): unknown {
+	return left + right;
+}
+
+export function parameterAndLiteral(left: any): unknown {
+	return left + 1;
+}
+
+export function parameterAndOwnLiteral(left: any): unknown {
+	return left + registry;
+}
+
+export function twoOwnLiterals(): unknown {
+	return registry + otherRegistry;
+}
+
+export function parameterAndUninitialized(left: any): unknown {
+	return left + pending;
+}
+
+export function writtenParameterCoercion(left: any, right: any): unknown {
+	left = registry;
+	return left + right;
+}
+`
+
+// TestCoercionSubjectRootNamesWhatEveryOperandAgreedOn pins protocol 51's
+// diagnostic.
+//
+// It exists because protocol 50 shipped an eleven-way classifier whose only
+// check was that a form states a root or a refusal but never both, and it was
+// wrong twice -- once on alias resolution and once on declaration files. A
+// classifier nobody asserts against is a measurement nobody can trust, and
+// this one exists to size a premise.
+//
+// The literal case is the load-bearing one. A provably primitive operand has
+// nothing for ToPrimitive to reach, so it is skipped rather than refused;
+// refusing it would report `x + 1` -- the commonest shape there is -- as
+// `not-a-reference` and hide the family's real size behind the instrument's
+// own mistake.
+func TestCoercionSubjectRootNamesWhatEveryOperandAgreedOn(t *testing.T) {
+	analyzer, dir := markerProject(t, map[string]string{
+		"coercions.ts": coercionSubjectSource,
+	})
+	path := filepath.Join(dir, "coercions.ts")
+
+	for _, testCase := range []struct {
+		export  string
+		root    typefacts.SubjectRootDerivation
+		refusal typefacts.SubjectRootRefusalReason
+		why     string
+	}{
+		{
+			export: "bothParameters",
+			root:   typefacts.SubjectRootParameter,
+			why:    "both operands are the caller's, so whichever valueOf runs is the caller's -- ADR 0042's argument, reaching a coercion",
+		},
+		{
+			export: "parameterAndLiteral",
+			root:   typefacts.SubjectRootParameter,
+			why:    "a numeric literal is provably primitive and is skipped, not refused; this is the shape that would otherwise hide the family",
+		},
+		{
+			export:  "parameterAndOwnLiteral",
+			refusal: typefacts.SubjectRefusalMixedOperandRoots,
+			why:     "one operand is an object this program built, so its valueOf is this program's however the other rooted",
+		},
+		{
+			export: "twoOwnLiterals",
+			root:   typefacts.SubjectRootOwnLiteral,
+			why:    "operands may agree on a derivation that is not the caller's; the diagnostic states what they agreed on and grants nothing",
+		},
+		{
+			export:  "parameterAndUninitialized",
+			refusal: typefacts.SubjectRefusalModuleUninitialized,
+			why:     "the first operand that roots at nothing decides the answer, and its own leg is the informative one",
+		},
+		{
+			export:  "writtenParameterCoercion",
+			refusal: typefacts.SubjectRefusalWrittenParameter,
+			why:     "ADR 0091 roots a written parameter only when every assigned value is rooted at that slot; this one takes a module literal, so the parameter roots at nothing at all and the leg it fell off is the answer -- not the operands disagreeing, which was this case's first and wrong expectation",
+		},
+	} {
+		transcript := implementationTranscriptFor(t, analyzer, path, coercionSubjectSource, testCase.export)
+		stated := 0
+		for _, form := range transcript.UncensusedInvokingForms {
+			if form.Kind != typefacts.UncensusedCoercion {
+				continue
+			}
+			stated++
+			if form.CoercionSubjectRoot != testCase.root {
+				t.Fatalf(
+					"%s: coercionSubjectRoot %q, want %q -- %s",
+					testCase.export, form.CoercionSubjectRoot, testCase.root, testCase.why,
+				)
+			}
+			if form.CoercionSubjectRootRefusal != testCase.refusal {
+				t.Fatalf(
+					"%s: coercionSubjectRootRefusal %q, want %q -- %s",
+					testCase.export, form.CoercionSubjectRootRefusal, testCase.refusal, testCase.why,
+				)
+			}
+			// Exactly one, always: the pair is a root or a reason, never both
+			// and never neither, which is the invariant protocol 48
+			// established for the accessor fields.
+			if (form.CoercionSubjectRoot != "") == (form.CoercionSubjectRootRefusal != "") {
+				t.Fatalf(
+					"%s: states root %q and refusal %q; exactly one is required",
+					testCase.export, form.CoercionSubjectRoot, form.CoercionSubjectRootRefusal,
+				)
+			}
+		}
+		if stated == 0 {
+			t.Fatalf("%s: no coercion form recorded, so the case asserts nothing", testCase.export)
+		}
+	}
+}

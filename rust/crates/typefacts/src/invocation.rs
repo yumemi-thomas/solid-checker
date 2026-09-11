@@ -937,6 +937,19 @@ pub struct UncensusedInvokingForm {
     /// read as any named leg.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub subject_root_refusal: String,
+    /// Protocol 51, for a `coercion` form: the derivation **every** one of its
+    /// ToPrimitive operands agreed on, or why they did not. Exactly one of the
+    /// two is ever stated.
+    ///
+    /// Diagnostic, never a premise, and deliberately not `subject_root`: that
+    /// field is an accessor's receiver, which `census_form_shape_reads_the_subject`
+    /// admits, while a coercion's operands are admitted by nothing here. They
+    /// exist so the premise ADR 0042's argument suggests for a coercion can be
+    /// sized before it is written.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub coercion_subject_root: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub coercion_subject_root_refusal: String,
     /// What a `coercion` form's clearance would rest on: every operand the
     /// coercion applies ToPrimitive to is either provably a primitive by its
     /// own type — not listed, because a primitive has nothing to reach — or the

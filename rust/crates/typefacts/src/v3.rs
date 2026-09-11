@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:8e304e85a6e1136c8e5128b4984f8090cd45adefdb0b9614313bbd3274416417";
+    "sha256:82f5f6d09caf0bc9afa3dbb28601463d02cdd65ae5aecf08466fc8957f20f466";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -270,7 +270,11 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // Protocol 49 widens `parameter` to a written parameter whose every assigned
 // value is rooted at that same slot (ADR 0091).
 // Protocol 50 refines the diagnostic `subjectRootRefusal` binding legs.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 50;
+// Protocol 51 adds the diagnostic `coercionSubjectRoot` and
+// `coercionSubjectRootRefusal`: the derivation every one of a coercion's
+// ToPrimitive operands agreed on, or why they did not. Never a premise, and
+// separate from `subjectRoot`, which is an accessor's receiver.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 51;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

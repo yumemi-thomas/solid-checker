@@ -4955,3 +4955,85 @@ That leaves § 66.4's genuinely addressable half at **16 claims**
 (`@tanstack/query-core`, a custom export condition the pinned interpreter
 refuses), and moves the § 66.3 core-runtime question — 62 claims, one root
 cause — further ahead of everything else in `creates`.
+
+## 68. The coercion premise is 13 claims, measured before it was written (2026-09-11)
+
+§ 66 put `coercion` at 44 claims across 10 packages and called it the best
+unblocked semantic target: the largest family with no trust-model argument in
+the way, and one with a precedent. `census_form_shape_reads_the_subject` already
+admits two shapes on exactly this reasoning — ADR 0047's `instanceof`, whose
+subject is the constructor whose `Symbol.hasInstance` may run, and ADR 0042's
+iteration protocol, where "the code that runs is the caller's exactly as a
+getter's is". A coercing operator applies ToPrimitive to its operands, reaching
+`Symbol.toPrimitive`, `valueOf` and `toString`, so the same argument should
+reach it.
+
+With one difference that decides the premise: a coercion has **operands**, not a
+receiver. One operand this program built is one object whose `valueOf` this
+program owns, and the form is then this program's act however the others rooted.
+So the premise can only admit a form where *every* operand is the caller's —
+structurally ADR 0091's guard, and already the shape `coercionPremiseLocked`
+uses for its own question.
+
+Protocol 51 states it as a diagnostic: `coercionSubjectRoot`, the derivation
+every operand agreed on, or `coercionSubjectRootRefusal`, why they did not.
+Measured on 418 probes:
+
+| claims | pkgs | leg |
+| --- | --- | --- |
+| **13** | **5** | every coerced operand rooted at `parameter` |
+| 8 | 3 | `nested-parameter` |
+| 7 | 3 | `written-parameter` |
+| 4 | 2 | `local-binding-written` |
+| 3 | 1 | `module-binding` |
+| 2 | 1 | `local-binding` |
+| 1 each | | `call-result`, `local-binding-from-call`, `local-binding-uninitialized`, `mixed-operand-roots` |
+
+**Thirteen, not forty-four.** The family's size was never the premise's size, and
+this is the first time in the arc that gap was measured *before* an ADR was
+written rather than discovered after. It is still the largest measured premise
+available — ADR 0090 moved 3 claims and ADR 0091 moved 2 — but it is a quarter
+of what § 66 implied, and a plan built on 44 would have been wrong.
+
+### 68.1 The instrument's own bug, caught before the run
+
+The first version refused any operand that rooted at nothing, literals included.
+`x + 1` is the commonest coercion there is, and that version would have reported
+this whole family as `not-a-reference` — a number that says more about the
+instrument than the corpus, which is exactly § 62.1's failure and § 58's before
+it.
+
+A provably primitive operand has nothing for ToPrimitive to reach, so it is now
+skipped rather than refused, using `mayBeObjectTypedLocked` — the predicate the
+classifier itself uses to decide whether to record the form at all. The
+difference between those two readings is the difference between 13 and roughly
+zero.
+
+This is the first time an instrument bug in this family was caught before the
+measurement rather than by disbelieving the measurement afterwards.
+
+### 68.2 A test, this time first
+
+Protocol 50 shipped an eleven-way classifier whose only assertion was that a
+form states a root or a refusal and never both, and § 62.1 and § 63 each found it
+wrong. `TestCoercionSubjectRootNamesWhatEveryOperandAgreedOn` pins six shapes
+before the run, including the literal case above.
+
+One of its six expectations was wrong, and the code was right:
+`writtenParameterCoercion` was predicted to report `mixed-operand-roots` on the
+theory that a written parameter roots at its assigned literal. ADR 0091 refuses
+such a parameter outright, so it roots at nothing and the answer is
+`written-parameter` — the more informative leg. The expectation was corrected,
+not the classifier.
+
+### 68.3 What it recommends
+
+Write it. 13 claims is four to six times the arc's recent rate, the argument is
+already made twice in the same function for `instanceof` and iteration, the
+"every operand" guard has a precedent in ADR 0091, and the instrument that
+sizes it is now committed. But it is 13, and this section says so in the
+sentence a plan would quote.
+
+The two legs beside it — `written-parameter` (7) and `nested-parameter` (8) —
+are the same two legs that top the accessor class (§ 62.2), which suggests one
+premise on each would pay twice. Neither is examined here.

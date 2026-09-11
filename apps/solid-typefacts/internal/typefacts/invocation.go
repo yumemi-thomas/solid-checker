@@ -740,6 +740,13 @@ const (
 	// symbol is the original declaration, so an import that has been resolved
 	// is indistinguishable from a local one by flags alone.
 	SubjectRefusalImportedBinding SubjectRootRefusalReason = "imported-binding"
+
+	// SubjectRefusalMixedOperandRoots is a coercion whose operands each rooted,
+	// but not at the same derivation. A coercing operator reaches ToPrimitive
+	// on every operand, so one operand this program built makes the form this
+	// program's act however the others rooted; "they disagreed" is the honest
+	// answer and is not any one operand's leg.
+	SubjectRefusalMixedOperandRoots SubjectRootRefusalReason = "mixed-operand-roots"
 	// SubjectRefusalAmbientDeclaration is a binding whose declaration is not in
 	// the analyzed artifact's own **runtime source** — a `declare const` in a
 	// typings file, say. No premise in this family can reach it: they all turn
@@ -893,6 +900,18 @@ type UncensusedInvokingForm struct {
 	// premise the consumer demanded that callee's census under. Absent when
 	// some operand is neither, which is every case no ADR has reviewed.
 	CoercionPremise *CoercionPremise `cbor:"coercionPremise,omitempty" json:"coercionPremise,omitempty"`
+	// CoercionSubjectRoot and CoercionSubjectRootRefusal are, for a `coercion`
+	// form, the derivation **every** one of its ToPrimitive operands agreed on,
+	// or why they did not (handshake protocol 51). Exactly one is ever stated.
+	//
+	// Diagnostic only, and deliberately separate from SubjectRoot: that field
+	// is an accessor's receiver, which `census_form_shape_reads_the_subject`
+	// admits, and a coercion's operands are neither that shape nor admitted by
+	// any premise here. These exist so the premise ADR 0042's argument suggests
+	// for a coercion can be sized before it is written. Nothing may read them
+	// as a grant.
+	CoercionSubjectRoot        SubjectRootDerivation    `cbor:"coercionSubjectRoot,omitempty" json:"coercionSubjectRoot,omitempty"`
+	CoercionSubjectRootRefusal SubjectRootRefusalReason `cbor:"coercionSubjectRootRefusal,omitempty" json:"coercionSubjectRootRefusal,omitempty"`
 	// LocalLiteralResult names a call whose every normal completion returns
 	// the same unwritten local data-only literal binding. This is a source
 	// identity fact, not a structural return-type assertion. Its callee must

@@ -318,6 +318,8 @@ func (p *project) uncensusedInvokingFormCensusLocked(
 			}
 			if kind == typefacts.UncensusedCoercion {
 				form.CoercionPremise = p.coercionPremiseLocked(node)
+				form.CoercionSubjectRoot, form.CoercionSubjectRootRefusal =
+					p.coercionSubjectRootLocked(implementation, node, roots)
 			}
 			if _, _, subject := p.accessorFormSubjectParameterLocked(node, kind, roots); subject != nil {
 				form.SubjectParameter = subject.parameter
@@ -2267,6 +2269,63 @@ func (p *project) unaryFormLocked(
 // Every operand must be covered or nothing is stated: a premise that named
 // some operands and left others unexplained would read as a claim about the
 // whole form.
+// coercionSubjectRootLocked asks of a coercion form the question ADR 0034 asks
+// of a getter, as a diagnostic and nothing more.
+//
+// A coercing operator applies ToPrimitive to **every** one of its operands, and
+// ToPrimitive reaches `Symbol.toPrimitive`, `valueOf` and `toString` on
+// whichever of them is an object. So the argument ADR 0042 makes for an
+// iterated value — "the code that runs is the caller's exactly as a getter's
+// is" — can only reach a coercion when every operand is the caller's. One
+// operand this program built is one object whose `valueOf` this program owns,
+// and the form is then this program's act however the other operand rooted.
+//
+// That is why this states a derivation only when the operands **agree** on one,
+// and otherwise names why they did not. It grants nothing either way: no
+// premise reads these fields, and `census_form_shape_reads_the_subject` does
+// not admit a coercion. They exist so the size of the premise can be measured
+// before it is written rather than after (§ 66).
+func (p *project) coercionSubjectRootLocked(
+	implementation *ast.Node, node *ast.Node, roots *parameterSubjectRoots,
+) (typefacts.SubjectRootDerivation, typefacts.SubjectRootRefusalReason) {
+	operands := coercionOperands(node)
+	if len(operands) == 0 {
+		return "", ""
+	}
+	agreed := typefacts.SubjectRootDerivation("")
+	for _, operand := range operands {
+		// A provably primitive operand is skipped rather than refused. It has
+		// nothing for ToPrimitive to reach, so it cannot make the form this
+		// program's act and must not be counted as unrooted — `x + 1` is the
+		// common shape, and refusing on the literal would have reported this
+		// whole family as `not-a-reference` and hidden its real size. Same
+		// predicate the classifier itself uses.
+		if node := identityPreservingUnwrap(operand); node != nil &&
+			!p.mayBeObjectTypedLocked(p.formChecker().GetTypeAtLocation(node)) {
+			continue
+		}
+		root := p.subjectRootLocked(operand, roots)
+		if root == nil {
+			// The first operand that roots at nothing decides the answer, and
+			// its leg is the informative one: a form is refused by its weakest
+			// operand, not by the count of them.
+			return "", p.subjectRootRefusalLocked(implementation, operand, roots)
+		}
+		if agreed == "" {
+			agreed = root.derivation
+			continue
+		}
+		if agreed != root.derivation {
+			return "", typefacts.SubjectRefusalMixedOperandRoots
+		}
+	}
+	// Every operand was provably primitive, so the classifier and this walk
+	// disagree about whether there was anything to coerce. State nothing
+	// rather than an agreement reached over no operands, exactly as
+	// `coercionPremiseLocked` refuses the same disagreement.
+	return agreed, ""
+}
+
 func (p *project) coercionPremiseLocked(node *ast.Node) *typefacts.CoercionPremise {
 	operands := coercionOperands(node)
 	if len(operands) == 0 {
