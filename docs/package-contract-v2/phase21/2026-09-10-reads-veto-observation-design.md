@@ -1941,3 +1941,86 @@ Four options, none of them mine to take unilaterally:
 Until one is chosen the pin stays where it is, and § 29's thirteen
 certification fixes stay unpinned — with the detection hole § 29.3 already
 named.
+
+## 31. Batching the synthesized vetoes: why the obvious form is not available
+
+§ 30.4 proposed "batching synthesized vetoes per artifact case instead of per
+claim" as the option that keeps § 29's gains. That proposal was
+under-informed. Mapping it found the real constraint.
+
+### 31.1 Launches cannot be shared, by design
+
+The cost is launches, and launches are `sessions`:
+
+~~~
+targets  = one per subject (artifact case × export × domain)
+sessions = targets × modes × policy.repeat_runs
+launches = one per session, sequential
+~~~
+
+`launch_every_session` is sequential deliberately — "without the intermediate
+census session N could tamper with what session N+1 reads and restore it
+before the final check" — and one workspace materialization already covers
+the whole batch, so per-batch setup is amortised.
+
+Two claims cannot simply share one launch. `isolation_collisions` flags any
+two runs sharing a process, realm or module instance, and a collision
+**refuses the mode**: *"repeat runs reused process, realm, or module-instance
+state"*. That check exists precisely to catch a shared realm, so smuggling a
+shared launch past it would defeat the property it guards.
+
+Emitting one module for an export's several domains does not help on its own
+either: the two manifest entries would differ only in `expectedEvent.marker`,
+but sessions are keyed per claim, so the launch count is unchanged.
+
+### 31.2 So the literal form is a gate-model change
+
+Fewer launches requires fewer *targets*: a gate would have to become **one
+isolated observation of one export that can falsify several of its claims**,
+instead of one per claim. That is a coherent model — one run of the samples
+really does observe `creates`, `returns` and `reads` at once, and the
+generated module already computes all three observations in one body — but
+it is not an optimisation. It changes:
+
+- **what a gate attests**, from one claim to several, and therefore
+  `probe_gate_root` — **every policy-2 receipt in the repository moves**;
+- **what a hand recipe addresses**, because the corpus is claim-keyed
+  (`recipe_for(claim_id)`) and every checked-in recipe, plus the scaffold
+  emitted in § 22, names one claim;
+- **withheld attribution**, since `incomplete_gate_withholding` maps a gate
+  back to exactly one `WithheldClosure` today.
+
+Sizing, from the regenerated fixture corpus: 201 summaries carry proposed
+closures, 151 of them close two or three domains. 395 gates would become
+201 — **49% fewer launches**, roughly 527 s → ~265 s. Real, and still 1.8×
+over the 150 s ceiling.
+
+### 31.3 The better lever: overlap the boot, keep the isolation
+
+Per-launch cost is process spawn plus Node boot plus import plus run plus
+census. The sequencing requirement is only that **session N+1 must not read
+the workspace until N's census has passed** — not that N+1's interpreter
+cannot already be running. A pre-booted worker that has been handed no
+session yet has read nothing.
+
+So a small pool of pre-booted workers, each handed exactly one session after
+the preceding census and each still getting its own fresh process and realm,
+amortises boot latency **without weakening isolation and without changing
+what a gate means**. Receipts move only through the harness image digest,
+which any harness change moves anyway — not through a semantic change to
+what a gate attests.
+
+It needs a `PROBE_WORKER_PROTOCOL` bump (the worker must wait for its session
+rather than receive it at spawn) and is confined to the harness launcher and
+worker.
+
+### 31.4 Recommendation
+
+Do § 31.3 first: it is confined, it preserves the isolation argument intact,
+and it does not touch the claim-keyed recipe model that § 22's scaffold and
+every checked-in recipe depend on. Measure, then decide whether § 31.2's
+gate-model change is still worth a repository-wide receipt migration for the
+remaining factor.
+
+Neither is started. § 30's budget breach stands, and the pin stays where it
+is.
