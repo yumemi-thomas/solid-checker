@@ -42,6 +42,31 @@ an error or a timeout). None of them fails the row; a *contradiction* still
 does. Re-read the ids from a run's `…certification-audit.json`
 `withheldClosures` array after any generator change.
 
+## A module and its entry must agree on the event, and nothing used to check
+
+`event_matches` requires the emitted event's **marker and class** to equal the
+entry's `expectedEvent`. Disagree on either and no event ever matches — and the
+failure is silent and fails *open*: a run that completes without a matching
+event is a `CleanNonObservation`, which **satisfies** the mandatory gate, so the
+closure certifies on the census alone. A recipe mistyped in one character stops
+being able to veto and nothing says so.
+
+`scripts/ecosystem-probe-recipes.test.mjs` now checks the agreement statically,
+for this corpus and the fixture corpora. What it cannot check is whether the
+emit is *reached*: a recipe whose emit sits behind a condition that never holds
+fails the same way, and only a run that contradicts something finds it.
+
+A module that deliberately cannot emit says so, with a coverage limitation
+opening `NEVER EMITS:`. The waiver is checked in both directions — a module
+that declares it and *does* emit fails too, because a stale declaration would
+waive the marker check for a recipe whose marker later drifts.
+
+**Every `reads` recipe in this corpus carries that declaration, and that is the
+finding rather than the convention.** All five can only ever yield a clean
+non-observation; all fourteen `creates`/`returns` recipes can emit. That split
+is § 6 measured instead of argued: an unenumerated read is a read of a source
+the export *owns*, and that is the half no recipe can instrument.
+
 ## Adding one
 
 `scripts/probe-recipe-scaffold.mjs` writes the transcription. Point it at a

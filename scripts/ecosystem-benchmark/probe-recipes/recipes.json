@@ -337,7 +337,7 @@
       "coverageLimitations": [
         "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
         "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
-        "The recipe's own getter proves the observation apparatus is live on every run; the read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+        "NEVER EMITS: The recipe's own getter proves the observation apparatus is live on every run; the read it counts is the caller's under ADR 0034 and is deliberately not emitted"
       ]
     },
     {
@@ -358,7 +358,8 @@
       ],
       "coverageLimitations": [
         "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
-        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count"
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: this candidate's proposal names an operation, so it is not the empty closure PROPOSABLE admits and no recipe can serve it. The module is kept because without it the candidate reports `no recipe in corpus` and the census refusal underneath stays masked"
       ]
     },
     {
@@ -379,7 +380,8 @@
       ],
       "coverageLimitations": [
         "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
-        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count"
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
       ]
     },
     {
@@ -400,7 +402,8 @@
       ],
       "coverageLimitations": [
         "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
-        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count"
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: this candidate's read is `a < b`, a coercion form with no reviewed subject root, so no recipe can serve it. The module is kept for the same reason as array-equals: it unmasks the census refusal that `no recipe in corpus` would otherwise hide"
       ]
     },
     {
@@ -421,7 +424,8 @@
       ],
       "coverageLimitations": [
         "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
-        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count"
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: same as clamp -- no code path emits the expected event, so this module cannot contradict the closure and only ever yields a clean non-observation. See \u00a7 6: an unenumerated read is a read of a source the export owns, which is the half no recipe can instrument"
       ]
     }
   ]

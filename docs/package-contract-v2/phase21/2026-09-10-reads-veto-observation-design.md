@@ -4726,3 +4726,83 @@ observation is the better buy, and the re-point tooling in § 64.5 — matching
 orphaned recipes by (package, export, artifact case, domain), plus the marker
 agreement check nothing performs — is days of work that would remove the
 treadmill and close a soundness hole at the same time.
+
+## 65. Every `reads` recipe ever written is vacuous as a veto (2026-09-11)
+
+§ 64.5 named a soundness hole the corpus README had already flagged and nothing
+checked: a recipe module and its manifest entry must agree on the event, and a
+disagreement fails **open**.
+
+`event_matches` requires marker *and* class to be equal. A run that completes
+without a matching event is a `CleanNonObservation` — "a complete, isolated,
+deterministic, scenario-satisfying execution did not observe the contradiction
+the recipe was written to provoke" — and that verdict **satisfies** the
+mandatory gate. So a recipe mistyped in one character does not refuse and does
+not warn. It silently stops being able to veto, and the closure certifies on the
+census alone.
+
+`ecosystem-probe-recipes.test.mjs` now checks the agreement statically. Writing
+that check was three lines of work. Running it was the interesting part.
+
+### 65.1 What it found
+
+| recipes | can emit their expected event |
+| --- | --- |
+| 14 `creates` / `returns` | **all of them** |
+| 5 `reads` | **none of them** |
+
+Not one `reads` recipe in the corpus contains a code path that emits its
+expected marker. `clamp` says so in its own comment — *"No emit is the point:
+nothing contradicted the closure"* — and `access`'s manifest entry already said
+it: *"the read it counts is the caller's under ADR 0034 and is deliberately not
+emitted."* `arrayEquals` and `compare` are the pair `d012597a` kept precisely
+because they can never fire, so that the census refusal underneath is not masked
+by `no recipe in corpus`.
+
+This is not unsound. A vacuous recipe cannot establish closure — that is the
+implementation census's job (ADR 0008) — it can only fail to veto. But it means
+the mandatory `reads` veto, on every claim anyone has ever written a recipe for,
+is a gate that passes by construction.
+
+### 65.2 Why the split is exactly where § 6 said it would be
+
+§ 6 argued that an unenumerated read is a read of a source the export **owns**,
+and that this is the half no synthesized veto can instrument. That was a design
+claim. The five hand-written recipes are the experiment, and they agree with it:
+a human sat down to write the observation and could not construct one either.
+`access` gets closest — it installs its own getter and asserts the getter ran —
+and then deliberately does not emit, because the read it can see is the
+caller's.
+
+So the boundary is not about synthesis. It is about `reads`.
+
+### 65.3 What it does to § 64's arithmetic
+
+§ 64.4 put 41% of the reads backlog at "a human could finish these". That number
+is an upper bound in a way § 64 did not know: the five already finished by hand
+are *all* in the can-never-veto class. Finishing the other 71 the way these five
+were finished would produce 71 more gates that pass by construction.
+
+The estimate in § 64.5 — 4 to 11 person-months, recurring per release — was
+already an argument against industrialising `reads`. This makes it a stronger
+one: the deliverable that money buys may be a corpus of vetoes that cannot veto.
+
+### 65.4 The convention, and its two directions
+
+A module that deliberately cannot emit now declares it with a coverage
+limitation opening `NEVER EMITS:`, and all five `reads` recipes carry one
+stating their own reason. The waiver is checked **both** ways: a module that
+declares it and *does* emit fails too, because a stale declaration would waive
+the marker check for a recipe whose marker later drifts.
+
+It is prose rather than a manifest field on purpose — Rust mirrors the field set
+with `deny_unknown_fields`, so a new key is a wire change, and the distinction
+being recorded is a claim about the author's intent that only the author can
+make.
+
+### 65.5 What is still unchecked
+
+Whether an emit is *reached*. A recipe whose emit sits behind a condition that
+never holds at run time is the same failure with the same open verdict, and no
+static check finds it — only a run that contradicts something does. That is the
+residue, and it is named here rather than left implied.

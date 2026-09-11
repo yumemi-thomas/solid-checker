@@ -56,6 +56,14 @@ const EVENT_CLASSES = new Set([
   "response",
   "stream"
 ]);
+/// A coverage limitation opening with this declares that the module cannot
+/// emit its expected event, and that the silence is intended rather than a
+/// mistyped marker. It is prose on purpose: the manifest's field set is
+/// mirrored by a `deny_unknown_fields` struct in Rust, so a new key would be a
+/// wire change, and this distinction is a claim about the *author's* intent
+/// that only the author can make.
+const NEVER_EMITS = "NEVER EMITS:";
+
 const RECIPE_KEYS = new Set([
   "claimId",
   "module",
@@ -66,6 +74,32 @@ const RECIPE_KEYS = new Set([
   "drain",
   "coverageLimitations"
 ]);
+
+/// The events a recipe module can emit, as literal `marker`/`kind` pairs.
+///
+/// Comments are stripped first, and that is load-bearing rather than tidy: a
+/// scaffold carries its real marker *only* in a commented-out `harness.emit`
+/// line, so a scanner that read comments would call an unfinished scaffold
+/// agreed with its manifest.
+///
+/// A marker built at run time rather than written as a literal is not found
+/// here, and the caller treats that as a failure. That is the fail-closed
+/// direction: this corpus has none, and the alternative is a recipe whose
+/// ability to veto nobody can check.
+export function emittedEvents(source) {
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .map(line => line.replace(/^\s*\/\/.*$/, ""))
+    .join("\n");
+  const events = [];
+  for (const match of code.matchAll(/emit\(\s*\{([^}]*)\}/g)) {
+    const marker = match[1].match(/marker\s*:\s*"([^"]*)"/);
+    const kind = match[1].match(/kind\s*:\s*"([^"]*)"/);
+    if (marker) events.push({ marker: marker[1], kind: kind ? kind[1] : null });
+  }
+  return events;
+}
 
 const manifest = JSON.parse(
   readFileSync(join(corpusDirectory, "recipes.json"), "utf8")
@@ -247,6 +281,67 @@ describe("the checked-in fixture recipe corpora", () => {
           `${path} names a module that is not there: ${recipe.module}`
         );
       }
+    }
+  });
+
+  // The one mistake nothing caught, and the corpus README names it: a module
+  // and its manifest entry have to agree on the event, and `event_matches` in
+  // rust/crates/solid-facts-backend/src/runtime_probes.rs requires the marker
+  // *and* the class to match. Disagree on either and no emitted event ever
+  // matches the gate's expectation.
+  //
+  // That failure is silent and it fails **open**. A run that completes without
+  // a matching event is a `CleanNonObservation` -- "a complete, isolated,
+  // deterministic, scenario-satisfying execution did not observe the
+  // contradiction the recipe was written to provoke" -- which *satisfies* the
+  // mandatory gate, and the closure then certifies on the census alone. So a
+  // recipe mis-typed in one character does not refuse and does not warn: it
+  // stops being able to veto, and everything downstream reads as proven.
+  //
+  // Static agreement is checkable and this checks it. What it cannot check is
+  // whether the emit is *reached* at run time; a recipe whose emit sits behind
+  // a condition that never holds is the same failure, and only a real run that
+  // contradicts something can find that one.
+  test("emits, in every module, the event its manifest entry expects", () => {
+    for (const recipe of manifest.recipes) {
+      const source = readFileSync(join(corpusDirectory, recipe.module), "utf8");
+      const events = emittedEvents(source);
+      const agreed = events.some(
+        event =>
+          event.marker === recipe.expectedEvent.marker &&
+          event.kind === recipe.expectedEvent.class
+      );
+      const declaredSilent = recipe.coverageLimitations.some(limitation =>
+        limitation.startsWith(NEVER_EMITS)
+      );
+      if (declaredSilent) {
+        // Declared silent, so the agreement rule is waived -- but the
+        // declaration has to stay true, or it is worse than no declaration at
+        // all: it would waive the check for a recipe that *does* emit and
+        // whose marker later drifts. `access` is the real case, and its own
+        // limitation says why: the read it counts is the caller's under
+        // ADR 0034, so emitting would assert a contradiction that is not this
+        // package's.
+        assert.equal(
+          agreed,
+          false,
+          `${recipe.module} declares ${NEVER_EMITS} but does emit its expected event; remove the declaration`
+        );
+        continue;
+      }
+      assert.notEqual(
+        events.length,
+        0,
+        `${recipe.module} emits no event with a literal marker, so its gate can never match`
+      );
+      assert.equal(
+        agreed,
+        true,
+        `${recipe.module} never emits {marker: ${JSON.stringify(recipe.expectedEvent.marker)}, ` +
+          `kind: ${JSON.stringify(recipe.expectedEvent.class)}}; it emits ` +
+          `${JSON.stringify(events)}. An unmatchable gate passes, so this recipe cannot veto. ` +
+          `If the silence is deliberate, say so with a "${NEVER_EMITS}" coverage limitation.`
+      );
     }
   });
 
