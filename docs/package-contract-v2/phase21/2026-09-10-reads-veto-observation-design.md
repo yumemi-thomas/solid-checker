@@ -2962,7 +2962,7 @@ This also makes the scaffold more valuable than it looked. A throwing scaffold
 is a cheap probe for "is this candidate even a recipe's problem", and 45 of
 them cost one command.
 
-### 43.4 Reason two: the chain does not terminate at `utils`
+### 43.4 Reason two: the chain does not terminate at `utils` — WRONG, see § 44
 
 The three that *were* serviceable — `clamp`, `trueFn`, `access` — ran their
 vetoes clean and then moved to `dependencyWithheld`. `@solid-primitives/utils`'
@@ -2974,6 +2974,13 @@ anything, because every one of them that survives its census waits on a
 `solid-js` claim underneath. Recipes have to be written **bottom-up from
 `solid-js`**, and the leverage calculation in § 42.6 — one package unblocking
 many dependents — applies to `solid-js` first and to `utils` only after.
+
+> **This conclusion is withdrawn.** § 44 traces the record it rests on and
+> finds the composition check compares a claim id against a contract that
+> cannot contain it. The three candidates are not waiting on any `solid-js`
+> claim; they are failing a comparison that has no satisfying assignment.
+> Nothing here establishes a recipe ordering, and § 42.6's plan is neither
+> confirmed nor reordered by it.
 
 ### 43.5 Reason three: the diagnostic that says this names the wrong claim
 
@@ -3009,3 +3016,98 @@ Not diagnosed further here, and not fixed blind.
 The five recipes stay. Two of them can never fire and are kept deliberately,
 because their presence is what converts a masked `noRecipe` into the census
 refusal underneath it, and the README records that.
+
+## 44. The wrong claim id is not a message defect, and § 43.4 does not survive it
+
+§ 43.5 reported that `composed from a withheld dependency claim: <id> of
+solid-js` names the candidate's own claim id, and filed it as a diagnostic to
+fix. Traced, it is not a diagnostic defect. The message is printing the field
+it was given, and the field is the parent's claim id **by construction**.
+
+### 44.1 Where the id comes from
+
+`ProofDemandSubject::DependencyClosure` is built in
+`contract_semantics/certification.rs:472`:
+
+~~~rust
+for closure in &candidates.closure_candidates {
+    let semantic_claim_id = candidates.proposal.claim_id(closure)?;
+    requested.insert((ProofFamily::AcceptedDependencyComposition,
+        ProofDemandSubject::DependencyClosure {
+            dependency: dependency.clone(),
+            parent: closure.clone(),
+            semantic_claim_id: semantic_claim_id.as_str().into(),
+        }));
+}
+~~~
+
+`candidates.proposal` is *this node's* proposal and `closure` is *this node's*
+closure candidate. So the field holds the parent's claim id, deliberately, and
+neither of the two `MissingClosedClaim` sites § 43.5 named is mislabelling
+anything — they pass along what the demand carries.
+
+### 44.2 Two of its three readers agree with that; one does not
+
+| reader | reads the field as | correct |
+| --- | --- | --- |
+| `type_facts.rs:503` `creates_census(parent, claim)` | the parent's claim — finds the parent's `DomainClosure` demand by it | yes |
+| `type_facts.rs:456` `dependency_creates_claims(parent, claim)` | the parent's claim — same lookup | yes |
+| `dependencies.rs:3137` `receipt.contains_closed_claim_id(…)` | the **dependency's** claim — asks the dependency's contract for it | **no** |
+
+`NormalizedContract::claim_id` digests package identity alongside the artifact
+case, export and path, so the third comparison has no satisfying assignment:
+a `@solid-primitives/utils` claim id is never present in a `solid-js`
+contract. The condition is guarded by `independent_creates_census.is_none()`,
+so ADR 0020's live creates census is the one thing that skips it.
+
+Read together: **a `reads` or `returns` closure candidate on a node that has
+any accepted dependency cannot compose.** It survives gating, runs its
+mandatory veto, and is then withheld by a comparison that cannot succeed.
+`creates` escapes only through the ADR 0020 census. This is deduced from the
+code and consistent with all six records observed in § 43; it is not an
+exhaustive measurement, and `certifiedClosures` is `null` on all 418 rows of
+the regression report, so that field cannot corroborate it either way.
+
+### 44.3 What § 43.4 actually established
+
+Nothing. The three serviceable recipes' candidates are not waiting on a
+`solid-js` claim — no `solid-js` claim was ever identified, and none appears
+in the row's own withheld census. They are failing an unsatisfiable check.
+"Recipes have to be written bottom-up from `solid-js`" was inferred from a
+record whose content is an artifact, and it is withdrawn.
+
+§ 43.3 is unaffected: `arrayEquals` and `compare` are `census refused` on
+their own facts, and the masking argument stands.
+
+### 44.4 Why this is not fixed here
+
+The correctly shaped check already exists a few lines above, at
+`dependencies.rs:2748`: `dependency_creates_claims` returns claims filtered to
+`requirement.dependency().package` and checks
+`receipt.contains_closed_claim_id(&claim.semantic_claim_id)` with the
+*dependency's* id. That is what the doc comment at `dependencies.rs:3029`
+describes, and it is creates-only — the census emits
+`CENSUS_DEPENDENCY_CLAIM_PREFIX` sites for `creates` and for nothing else.
+
+So there are three candidate fixes and they are not equivalent:
+
+1. **Delete the check at 3137.** One line, and it *loosens a trust-boundary
+   condition*: parent closures would compose with no dependency-claim
+   requirement at all. The doc comment says this check is what makes a parent
+   that relied on a withheld dependency closure refuse on its own. Cheap and
+   wrong to do on one reader's judgment.
+2. **Carry the dependency claim the parent actually composes from**, and check
+   that. This matches the doc, matches the creates path, and is the real fix —
+   but the information does not exist for `reads`/`returns`. The census would
+   have to state, per parent closure, which dependency claims it composes
+   from, the way it already does for `creates`. That is producer/IR work, not
+   a certifier patch.
+3. **Correct the diagnostic only**, leaving the check. The reason would stop
+   claiming a dependency claim it cannot name. This contradicts the
+   instruction the defect was filed with — keep the id, an author needs it to
+   know what to write next — and the honest answer to that instruction is
+   that no such id exists to keep.
+
+(1) is a soundness decision, (2) is a feature, (3) admits the pointer is not
+available. The diagnosis is recorded here rather than any of them being taken
+unilaterally.
