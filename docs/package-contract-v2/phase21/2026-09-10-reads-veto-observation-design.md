@@ -5141,3 +5141,77 @@ that deserves an explicit yes rather than being started because it is next.
 
 § 66.3 framed all of this as a trust-model question. Only stage 1 is, and it is
 the cheap one.
+
+## 70. Stage 1 checked before it was built, and the 62 is really 14 (2026-09-12)
+
+§ 69 split the core-runtime claims into three stages and put stage 1's yield at
+3, stage 2's at "up to 19" and stage 3's at 14. Reading the gates in order
+before writing the plumbing — which is what stage 1 is — falsifies two of those
+three numbers, and for a reason neither § 66 nor § 69 had looked at.
+
+### 70.1 Solid 1.x has no negative authority at all
+
+~~~rust
+static NEGATIVE_AUTHORITY: DialectNegativeAuthority = DialectNegativeAuthority {
+    archives: &[],
+    rows: &[],
+};
+~~~
+
+That is `solid_1x.rs`. `primitive_performs_no_operation` requires the snapshot's
+audited archive to be **in** the dialect's authority, so for a Solid 1.x project
+the axiom tier can never admit anything — no source root, no authentication and
+no audit changes that, because there is nothing for the archive to be a member
+of. The Solid 2 authority is the only one with archives, and its three are all
+pinned at `2.0.0-rc.3`.
+
+### 70.2 Which means most of the 62 are out of reach of all three stages
+
+| family | claims | reachable by §69's stages |
+| --- | --- | --- |
+| **solid1** | **37** | **none** |
+| solid2 | 20 | most |
+
+And within solid2, by callee:
+
+| claims | callee | stage |
+| --- | --- | --- |
+| 6 | `solid-js :: createSignal` | 3 — condition-aware rows |
+| 3 | `solid-js :: createMemo` | 2 — audit |
+| 2 | `@solidjs/web :: createComponent` | 2 — audit |
+| 2 | `@solidjs/signals :: onCleanup` | **1 — the row already exists** |
+| 1 | `@solidjs/signals :: getOwner` | **1** |
+| 2 | `@solid-primitives/analytics :: createServerPlugin` | none — not a primitive of any dialect |
+
+So the corrected yields are **stage 1: 3, stage 2: 5, stage 3: 6** — fourteen
+claims, not sixty-two. § 69.4's "up to 19" and "14" were computed over the
+combined corpus without noticing that more than half of it runs a dialect whose
+authority is empty.
+
+### 70.3 The 37 are a different piece of work, and it has never been scoped
+
+Recovering the Solid 1.x claims means auditing Solid 1.x the way
+`RC3_CORE_PRIMITIVES_AUDIT` audited 2.0.0-rc.3: pinning archives by name,
+version, integrity and manifest digest, then establishing per export and per
+domain that every condition closes empty, with citations. That is the largest
+single thing this document has ever pointed at and it is not a premise, a
+protocol or a gate — it is an audit of another major version's published bytes,
+and it inherits every difficulty § 7.3 records, including the condition problem
+that already withholds `createSignal` on 2.x.
+
+It is also the only route to the largest block of withheld `creates` claims in
+the corpus. Naming it is the point of this section; costing it is not attempted
+here.
+
+### 70.4 What this says about stage 1
+
+Stage 1 recovers **3 claims**. It is still the cheapest end-to-end proof that
+the authentication path works, and stages 2 and 3 both depend on it — neither
+can grant a row to a snapshot the tier never reaches. But as a unit of its own
+it buys three claims for a piece of certification plumbing, and it should be
+started because stages 2 and 3 are actually intended, not because it is next.
+
+That is a decision about whether ~14 claims justifies an audit and a schema
+change, and it is the user's. The correction above is what it should be made
+on: § 66.3 said 62, § 69 said 62 across three stages, and the measured answer is
+14 plus an unscoped audit of Solid 1.x for the other 37.
