@@ -2464,3 +2464,64 @@ step that hands step one's receipt to step two.
   supplies.
 - Next: drive `--accepted-contracts` from the benchmark (or once by hand) and
   measure how many of `memo`'s seven exports close when the edge is real.
+
+## 38. Why the `memo` edge cannot be supplied: the composing lane is keyed to refusals
+
+§ 37 left the chain needing one step — hand `utils`' receipt to `memo`'s
+generation. This is why that step has no path today, and why § 26's graph-lane
+attempt was a silent no-op.
+
+### 38.1 An accepted contract is resolution-bound, not a file
+
+A catalog entry is not a contract document sitting in a directory. It carries
+`bindings` naming the exact `importer` shim path, the `specifier`, a
+`resolvedImportRoot` digest and a `semanticDigest`. Copying `utils`' certified
+document into `memo`'s catalog would forge a binding for a resolution that was
+never performed, so "supply the edge by hand" is not a file operation.
+
+### 38.2 The lane that exists for this cannot be requested
+
+`certificationLaneRequest` routes to a composing lane only when the row is
+`class: "partial-success"` **and** `partialProposalHasDependencyFrontier`
+matches — and that predicate reads *artifact-case refusals*.
+
+`memo` is `class: "success"` with **zero** refused cases. Its frontier is a
+decline census: 21 `unaccepted-external-dependency` records against
+`@solid-primitives/utils`, with all seven exports unknown in every domain. So
+the lane is never requested, and `--dependency-graph-lane` does not force it
+— the class check precedes the flag. Measured: with the flag, `memo` still
+reports `laneRequested: reused-proposal`.
+
+**This is not something § 27 introduced.** The pinned pre-exemption report
+classes `memo` `success` with zero refused cases as well, and the corpus-wide
+`partial-success` count is identical before and after (32 of 418). The lane
+policy has never covered this row. That is the explanation § 26 lacked.
+
+### 38.3 And making it requestable is not enough
+
+Extending the predicate so an explicit `--dependency-graph-lane` accepts a
+decline-based frontier was tried and **reverted**. It does route the request —
+`memo` then reports `laneRequested: published-graph` — but `contract certify`
+performs no composition: the audit records `graphPreparation: {reusedProposal:
+false}` with no `rootCases`, the run reports the `generated-proposal` lane,
+and the 21 declines and seven unknown exports are untouched.
+
+The reason is structural. The frontier-only lane *publishes the refused cases
+instead of the generated ones*. With zero refused cases there is nothing for it
+to publish, so it degenerates to generating the proposal. The lane is keyed to
+refusals end to end, not only in the benchmark's predicate.
+
+The change was reverted rather than kept: it would have made `laneRequested`
+read `published-graph` while nothing composed, which is a worse report than an
+honest `reused-proposal`.
+
+### 38.4 What would actually close it
+
+A decline-based dependency frontier needs a composing path of its own — the
+certifier would have to treat "this export's closure declined on specifier X"
+as a demand for X's accepted contract, the way it treats a refused case. That
+is a certifier change, not a benchmark one, and it is the real prerequisite for
+`memo` and for every dependent package behind the same shape.
+
+Until then: `utils` certifies with `reads` closed 99/99 (§ 37), and `memo`
+stays at zero closed domains regardless of `utils`' state.
