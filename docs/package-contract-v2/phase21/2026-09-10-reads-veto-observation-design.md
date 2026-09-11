@@ -2768,3 +2768,126 @@ never routes a decline-only frontier, so the gate exercises the path not
 taken. It establishes that the capability costs the corpus nothing while it is
 off, and nothing more. What it would cost with the lane on is unmeasured, and
 § 41.3's 59× on one row is the only number there is.
+
+## 42. The lane measured on a sample, and what is actually behind the edge
+
+§ 41.6 said the corpus number was unmeasured and one row was all there was.
+This is the measurement: a stratified sample of the decline-only population,
+run twice on the same ten probes, with and without `--dependency-graph-lane`.
+
+### 42.1 The population the new path reaches
+
+Read off the `edf1c988` regression report, 418 rows:
+
+| | rows |
+| --- | --- |
+| carrying an `unaccepted-external-dependency` frontier | 273 |
+| …whose frontier is **also** a refused artifact case (the old path) | 17 |
+| …whose frontier is **only** closure declines (the new path) | **256** |
+
+So the refusal-keyed lane could ever see 17 of them. 256 is the size of what
+was unreachable, and 247 of those rows are `class: success` — rows that look
+finished.
+
+### 42.2 The sample
+
+Ten rows, the deciles of the 256 by decline count (3 → 252; population median
+24). `@solid-primitives/memo` at 21 sits just below the middle, so the worked
+example of § 41 is a typical row rather than a favourable one. The
+250,329-decline outlier and `@kobalte/core`'s 508 entrypoints are outside the
+decile spread and were not sampled; nothing here describes them.
+
+### 42.3 Result
+
+| | control | `--dependency-graph-lane` |
+| --- | --- | --- |
+| rows certified | 10 / 10 | **10 / 10** |
+| entrypoints certified | 11 / 12 | **11 / 12** |
+| lane used | 10 reused-proposal | 8 published-graph, 2 fallback |
+| canonical graph nodes | — | 55 |
+| closure candidates | **0** | **431** |
+| certification wall | 8.5 s | **202.8 s** |
+
+**No receipt was lost.** That is the result that distinguishes this from the
+frontier-only lane on *refusal* frontiers, which trades case sets and cost the
+2026-09-03 corpus six rows. This path composes cases that generated, so there
+is nothing to trade: a preparation that fails falls back to the proposal the
+row already had.
+
+Both fallbacks did exactly that, and named why:
+
+- `@solid-primitives/keyed` — `@solid-primitives/utils is not installed above
+  …/keyed/dist/index.js`. An install-shape fact, not a semantic one.
+- `@tanstack/form-devtools` — 43 distinct specifiers, refused at a transitive
+  node: `dayjs@1.11.23` … `entry file <package-root>/dayjs.min.js has no
+  runtime ESM exports`. A fact about that publisher's bytes.
+
+### 42.4 What blocks the 431
+
+| domain | reason | n |
+| --- | --- | --- |
+| `reads` | **`noRecipe`** | 332 |
+| `creates` | `censusRefused` | 53 |
+| `returns` | **`noRecipe`** | 26 |
+| `returns` | `dependencyWithheld` | 20 |
+
+**83% of every candidate the edge exposed is blocked on a hand-authored
+recipe.** § 41.5 inferred this from `memo` alone; it holds across the sample.
+
+### 42.5 The correction this forces on § 39
+
+§ 39.4 said, and I repeated it as the session's answer: *"Hand-authored
+observations are a real cost but a small one, and they are not what is holding
+the corpus."* That was measured on a pipeline that stopped at the dependency
+edge. With the edge crossed it is wrong. Recipes are the dominant blocker
+behind it, and the corpus-wide probe-candidate count of zero (§ 39.2) was an
+artifact of where the pipeline stopped, not a property of the corpus.
+
+What survives from § 39 is the ordering: the edge had to be crossed first, and
+it still gates 256 rows. What does not survive is the conclusion about where
+the human cost sits.
+
+### 42.6 How much hand-authoring, actually
+
+The 358 `noRecipe` candidates are **160 distinct claims**, and they concentrate
+hard:
+
+| package | candidates | distinct claims |
+| --- | --- | --- |
+| `@solid-primitives/utils` | 305 | **130** |
+| `solid-js` | 26 | 3 |
+| seven others | 27 | 27 |
+
+And the claims are shared across rows — 45 of the 160 are wanted by four of the
+ten rows, 40 by two:
+
+| rows sharing a claim | claims |
+| --- | --- |
+| 4 | 45 |
+| 3 | 3 |
+| 2 | 40 |
+| 1 | 72 |
+
+So the unit of work is not "a recipe per export per package". In this sample it
+is **one package's ~130 claims unblocking 305 candidates across eight
+dependents**, because `@solid-primitives/utils` is what almost everything in
+this ecosystem imports. That is a bounded, shareable, and very unequally
+distributed cost — and it is the first time this phase has had a real number
+for it.
+
+### 42.7 Cost, and the amortization nobody has taken
+
+23.8× on certification for the sample (8.5 s → 202.8 s). Applying that
+multiplier to the 256 decline-only rows' 618 s of certification in the full
+corpus run projects **roughly four hours** for a lane-on corpus pass. Treat
+that as an order of magnitude, not a forecast: the multiplier is measured on
+median-sized rows, and the two biggest rows in the sample did not compose at
+all.
+
+The obvious lever is visible in the same numbers. Eight composing rows built
+**55 canonical nodes and ran 55 proposal generations** — about seven each, and
+most of them the *same* `@solid-primitives/utils` and `solid-js` acquisitions
+re-acquired and re-generated once per row. Nodes are shared within a graph
+(`byKey`) but nothing shares them between rows. A cross-row node cache is a
+speed lever with a measured size, unlike the concurrency guesses parked in
+§ 30.
