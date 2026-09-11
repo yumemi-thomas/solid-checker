@@ -2525,3 +2525,75 @@ is a certifier change, not a benchmark one, and it is the real prerequisite for
 
 Until then: `utils` certifies with `reads` closed 99/99 (§ 37), and `memo`
 stays at zero closed domains regardless of `utils`' state.
+
+## 39. Measured at corpus scale: the bottleneck is the dependency edge, not hand observations
+
+The question behind this whole phase is how much of certification can run
+without a person. It has been answered from one package at a time. This is the
+corpus answer, read off the 418-row report (381 rows carry a contract, 8,950
+exports between them).
+
+### 39.1 Where the domains stand
+
+| domain | exports closed | rows fully closed |
+| --- | --- | --- |
+| `reads` | 11.4% | 63 / 381 |
+| `creates` | 5.9% | 14 / 381 |
+| `returns` | 1.6% | 0 / 381 |
+| everything else | 0% | 0 / 381 |
+
+### 39.2 What is actually blocking it
+
+411,906 declined closures, by kind:
+
+| share | kind | rows affected |
+| --- | --- | --- |
+| **86.8%** | **`unaccepted-external-dependency`** | 273 |
+| 4.5% | `unresolved-callee` | 168 |
+| 3.3% | `runtime-accessor-installation` | 78 |
+| 3.0% | `refusing-callee-fixpoint` | 126 |
+| 2.2% | `dialect-silent` | 153 |
+| 0.3% | `opaque-wasm`, `mutable-unbound-global`, `nonliteral-dynamic-loading` | 7 |
+
+And the review plan — the queue of work a person would pick up — holds **3,000
+closure candidates and zero probe candidates.** Nothing in the corpus is
+currently asking for a hand-authored recipe.
+
+### 39.3 The split that matters
+
+Partitioning the rows by whether they have a dependency frontier at all:
+
+| | rows | exports | `reads` closed | rows fully closed |
+| --- | --- | --- | --- | --- |
+| with a dependency frontier | 273 | 7,720 | **4.7%** | **0 / 273** |
+| without one | 108 | 1,230 | **53.7%** | **63 / 108** |
+
+**This is a selection effect and must not be read as a forecast.** Packages
+with no dependency frontier are systematically simpler — fewer dependencies
+usually means less of everything — so 53.7% is not what the other 273 rows
+would reach if the edge were supplied. What the split does establish is that
+no row carrying a dependency frontier closes completely, in any domain,
+anywhere in the corpus.
+
+### 39.4 What this changes
+
+Every earlier statement in this document — and every answer this session gave
+— put the human cost at "one hand-authored observation per export whose
+`reads` you want closed". At corpus scale that is not the binding constraint:
+
+- `@solid-primitives/utils` closes `reads` on **99 of 99 exports with zero
+  recipes**. There is no recipe for it in the corpus at all. § 6's argument is
+  about exports that genuinely read a source they own; most exports do not,
+  and their `reads: []` is decided by the implementation census with no person
+  involved.
+- The corpus-wide probe-candidate count is **zero**.
+- 86.8% of all declines are one missing capability — the decline-based
+  dependency-edge composition § 38.4 describes.
+
+So the ranked work for human-less certification is: **the dependency edge
+first, by a wide margin**, then `unresolved-callee` and the hazard kinds.
+Hand-authored observations are a real cost but a small one, and they are not
+what is holding the corpus.
+
+§ 6 stands as a statement about what a synthesized veto can never do. It does
+not describe where the effort goes.
