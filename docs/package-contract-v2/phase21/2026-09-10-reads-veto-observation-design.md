@@ -3992,3 +3992,82 @@ been read.
 
 § 54.5's vacuity question is unchanged: the identity check of § 54.1 still has
 no established incidence on this corpus.
+
+## 56. The withheld accounting, normalized to distinct claims (2026-09-11)
+
+### 56.1 Details over-count about fivefold
+
+Every measurement in §§ 48–55 counted `withheldClosureDetails` rows. A row is
+one (package × artifact case × claim), so a claim withheld across several cases
+and several probe rows is counted several times. Ranked that way,
+`noRecipe` 9,667 dwarfs everything and `coercion` looks like the second-biggest
+census problem. Both readings are artifacts of the unit.
+
+Counted by distinct `semanticClaimId`, from the § 55 run:
+
+| bucket | details | **distinct claims** | share |
+| --- | --- | --- | --- |
+| `noRecipe` | 9,667 | **1,489** | 75% |
+| `censusRefused` | 1,859 | **397** | 20% |
+| `vetoIncomplete` | 124 | **99** | 5% |
+
+against 5,187 certified closures. And `noRecipe` splits **reads 1,411 /
+returns 78** — the `returns` half was 1,146 details, which is one claim
+repeated across 22 packages.
+
+### 56.2 The largest bucket is a decision, not a gap
+
+The 1,411 `reads` claims have no synthesized veto because
+`reviewed_observation("reads")` returns `None`, and § 4 is explicit that this
+is "a decision rather than an omission". § 3 gives the reason: `reads` is
+scoped to a source the export *owns*, a generic observation can only see the
+caller's side of that line, and the exact version means reading a minified
+reactive graph — `e.ie`, `e.o?.le`, `e.nt` — that moves between builds.
+
+Nothing since has changed that. § 55 moved the probe onto the client build
+rather than the server one, which does not make those fields any less minified.
+So the honest statement of where certification stands: **71% of the remaining
+withheld claims are hand-recipe labor by design.** That is the answer to
+"can this be human-less" for the `reads` domain, and it is no.
+
+The `returns` 78 are a different shape — a nonempty enumeration, or an export
+whose Type Facts evidence states no call signature, both of which `synthesize`
+filters out before `reviewed_observation` is consulted. Which of the two
+dominates is not answerable from the report, because a withheld claim does not
+appear in the published contract to be inspected.
+
+### 56.3 The actionable lever, sized
+
+`censusRefused` is 397 distinct claims and 99% `creates`; the `reads` census
+refuses 20 details in total, so the census that was this document's subject is
+not the one that is failing. By family:
+
+| claims | details | pkgs | family |
+| --- | --- | --- | --- |
+| **122** | 508 | **32** | `invoking-form: property-access-unknown-accessor` |
+| 50 | 122 | 12 | other |
+| 44 | 80 | 19 | callee outside artifact, not a primitive |
+| 41 | 364 | 16 | `invoking-form: coercion` |
+| 33 | 128 | 6 | no function-like declaration node |
+| 28 | 235 | 13 | binding initializer is not a function literal |
+| 21 | 63 | 2 | transcript declaration outside runtime source |
+| 17 | 96 | 15 | `invoking-form: iteration-protocol` |
+| 15 | 193 | 15 | nested callable parameter is caller-supplied |
+
+`property-access-unknown-accessor` is 31% of census-refused claims and touches
+32 packages — the widest spread in the table, and the top entry on either unit.
+`coercion` is the one the details view got most wrong: 364 details, 41 claims.
+
+By syntactic shape the 508 details are `PropertyAccessExpression` 216,
+`ElementAccessExpression` 146, `SpreadAssignment` 113, `BindingElement` 30.
+ADR 0034 already certifies a read off an *unwritten parameter*; what remains is
+its boundary — a written parameter, a module-level receiver, a nested callable's
+own parameter, a setter — which the refusal text does not distinguish, so
+choosing a premise needs a focused run rather than this report.
+
+### 56.4 What this does not say
+
+Which boundary case dominates the 122 is unmeasured, and the § 55.5
+stragglers — 99 claims across eight unrelated classes, including a
+`@tanstack/custom-condition` the harness config rejects and a `@kobalte/core`
+that cannot resolve `solid-js` at all — are still undiagnosed.
