@@ -1809,3 +1809,62 @@ roughly twenty minutes) against the pre- and post-exemption binaries, counting
 rows by outcome. That is the measurement § 27 owed and did not take. Until
 it is taken, `cf905a58` should be read as *sound but unmeasured at ecosystem
 scale* — the direction is right, the magnitude is unknown.
+
+## 29. Measured: the exemption fixes thirteen rows and regresses none
+
+§ 28 said `cf905a58` was "sound but unmeasured at ecosystem scale" and named
+`@solid-primitives/utils` as one data point that "went the wrong way". The
+measurement is now taken, and **§ 28's worry was wrong in the aggregate**.
+
+`make ecosystem-regression` — the purpose-built gate for exactly this
+question, which fails on any row the pin certified that this commit does not:
+
+~~~
+418 probes, 349 complete contracts, 32 partial          (531 s)
+certificationRegressionCount   0
+certificationFixCount         13
+regressionCount                0
+~~~
+
+Thirteen rows **gained** certification, twelve of them `refused → certified`:
+
+| row | was |
+| --- | --- |
+| `solid-js@1.9.14` (solid1) | refused |
+| `@solidjs/web@2.0.0-rc.3` (solid2) | refused |
+| `@solidjs/element@2.0.0-rc.3` (solid2) | refused |
+| `@tanstack/solid-db`, `solid-form`, `solid-hotkeys`, `solid-store` | refused |
+| `corvu@0.7.2`, `@corvu/popover`, `@corvu-next/popover` | refused |
+| `solid-devtools@0.34.5` | refused |
+| `@solid-primitives/visibility-observer@2.0.1` | refused |
+| `@kobalte/solidbase@0.6.13` | not attempted |
+
+Certification totals: 399 attempted, 381 verified, 324 complete, 57 partial,
+654 certified entrypoints.
+
+### 29.1 Not a vacuous pass
+
+The threshold is `maxCertificationRegressions: 0`, and the report records
+`baseline.provided: true`. The repository already closes the obvious hole —
+`report.test.mjs` pins that "a run that supplied no baseline **fails** the
+threshold rather than passing it silently" — so a green run here is a
+comparison that happened, not one that was skipped.
+
+### 29.2 Reconciling `utils`
+
+`@solid-primitives/utils` still refuses the manual `contract certify` of
+§ 28, and it is not in either list: it was not certifying before the
+exemption either, so nothing regressed. Its refusal is a real, named
+`recursive-value-shape` gap that the exemption **unmasked** rather than
+caused — the generator declares a returned root shape the producer's
+observation leaves open. That remains open work, and it now has thirteen
+counterexamples showing the unmasking is worth having.
+
+### 29.3 The pin is now stale in the direction that hides regressions
+
+`benchmarks/ecosystem/report.json` still records those thirteen rows as
+refused. A future change that takes one of them from certified back to
+refused would compare against the *old* pin, match it, and pass. Repinning
+with `make ecosystem-benchmark` closes that hole and locks in the gains; it
+rewrites a checked-in artifact the phase ledgers read, so it is left as a
+deliberate separate step rather than folded into this measurement.
