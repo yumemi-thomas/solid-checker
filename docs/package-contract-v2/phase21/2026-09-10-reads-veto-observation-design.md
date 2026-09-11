@@ -2266,3 +2266,60 @@ the larger lever because it divides launch *and* census, and the certification
 concurrency sweep is still free and still untested. A corpus-wide run with
 `SOLID_CHECKER_TIMINGS=1` is still the only thing that can rank the two
 bottlenecks against each other, since `solid-js` runs no probe sessions at all.
+
+## 35. Corrected: the pool is worth ~1.5% corpus-wide, not the ~16% § 34.3 claimed
+
+§ 34.3 measured the pre-boot pool on one package and reported ~16%. The
+commit that landed it (`f0de1b0e`) carries the same figure. Corpus-wide it is
+wrong, for a reason § 33.3 had already written down and this section's author
+then ignored: **no single package generalises.**
+
+### 35.1 The controlled corpus A/B
+
+Full 418-row runs, back to back, no-pool first, nothing else on the host,
+`SOLID_CHECKER_PROBE_NO_PREBOOT=1` as the control:
+
+| metric | pool | no-pool | delta |
+| --- | --- | --- | --- |
+| corpus wall | 548.0 s | 556.5 s | **−1.5%** |
+| row-time sum | 7713.0 s | 7059.0 s | **+9.3%** |
+| outcome / status / exit-status differences | — | — | **0** |
+
+### 35.2 Why the single-package figure did not transfer
+
+`@kobalte/utils` alone has the whole host to itself, so a boot started beside
+the census runs on an idle core and genuinely disappears. The benchmark runs
+20 certification children on 14 cores — one child was sampled at 606% CPU —
+so there is no idle core for the boot to hide on. It does not hide; it
+competes, which is exactly what the +9.3% row time is.
+
+This is the same saturation argument that killed the parallel-producer-session
+idea earlier in the day. It applied here too and was not applied.
+
+### 35.3 What the pool is actually worth, and why it stays on
+
+Two different cases, and both are real:
+
+- **A package certified with slack** — one package, a developer's machine, an
+  interactive `--package` run: ~16% faster, as § 34.3 measured. This is the
+  case a person waits on.
+- **The saturated corpus run** — 20-way concurrency: ~1.5% faster, at 9.3%
+  more total row CPU.
+
+It stays on by default because the case a human waits on is the one it helps,
+it is semantically neutral across 418 rows in both configurations, and
+`SOLID_CHECKER_PROBE_NO_PREBOOT=1` turns it off for a host where the extra
+CPU is not wanted. A smaller host than this 14-core one may well want it off;
+that is not measured here.
+
+§ 34.3's table stands as a measurement of the unsaturated case. It does not
+stand as the pool's value, and `f0de1b0e`'s commit message overstates it.
+
+### 35.4 What still has not been measured
+
+Unchanged and still the cheapest remaining work: the certification
+concurrency sweep — free, no code change, and now doubly motivated, since a
++9.3% row-time cost that barely moves wall is another sign that 20 slots on
+14 cores is past the useful width. And § 31.2's session count remains the
+larger lever, because it divides launch *and* census rather than trying to
+hide one behind the other.
