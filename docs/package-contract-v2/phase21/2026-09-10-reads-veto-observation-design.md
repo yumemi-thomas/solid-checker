@@ -2391,3 +2391,76 @@ The class § 27.2 flagged is **sound, and now evidenced at both layers**. The
 gap was in the evidence, not the behaviour — which is the good outcome, but
 it was not knowable without checking, and the producer-side shape that could
 have broken it was not the one § 27.2 anticipated.
+
+## 37. Corrected: `utils` certifies, its `reads` is fully closed, and the chain's real gap is the edge supply
+
+§ 28 recorded that the chain "stops at the first step" because
+`@solid-primitives/utils` refused with a `recursive-value-shape` demand on
+`createHydratableSignal`. Re-measured against the current release binary,
+**that refusal is gone.**
+
+### 37.1 `utils` certifies, with content
+
+`@solid-primitives/utils@7.0.0-next.4`, release binary, `--attempt-certification`:
+
+| | |
+| --- | --- |
+| artifact cases emitted | **3**, all three certified, **0 refused** |
+| certification | `certified` at `catalog-publication` |
+| declines | `unresolved-callee: 4` — and *nothing* else |
+| exports | 99 |
+
+The `unaccepted-external-dependency` declines are gone entirely, which is
+§ 27's exemption doing exactly what it was for.
+
+And the domain this whole phase is about:
+
+~~~
+unknownByDomain: { reads: 0, creates: 68, returns: 96, callbacks: 99, writes: 99, … }
+~~~
+
+**`reads` is unknown for zero of 99 exports** — closed across the entire
+package. That is the first real published package whose `reads` domain closes
+completely, and it is the thing § 6 onwards was built for.
+
+The three `@solid-primitives/source` entries in the report are *inapplicable*
+artifact cases, not refusals: that condition routes to sources the tarball
+does not ship, and skipping it is correct. An earlier reading of this section's
+author took `artifactCasesTotal` for the whole population and concluded the
+package had nothing to certify; it counts the *emitted* cases, and the
+inapplicable one is additional.
+
+### 37.2 `memo` is blocked by the edge, not by `utils`
+
+`@solid-primitives/memo@2.0.0-next.2` emits one real case
+(`/exports/./import/default` → `./dist/index.js`, 0 refused) and declines:
+
+~~~
+unaccepted-external-dependency: 21   unresolved-callee: 5
+dialect-silent: 4                    refusing-callee-fixpoint: 2
+~~~
+
+All seven exports remain unknown in every domain. The 21 records are the
+`@solid-primitives/utils` specifier with no accepted contract behind it.
+
+### 37.3 The gap is a missing capability, not a defect
+
+Certifying `utils` does not by itself help `memo`: the benchmark runs each
+package independently and never supplies one row's certified contract to
+another's generation. Naming both in one invocation does not change it —
+`--package @solid-primitives/utils --package @solid-primitives/memo` leaves
+`dependencyPlan: null` on both rows and `memo`'s 21 declines untouched.
+
+The generator does accept `--accepted-contracts` and
+`--proposal-dependencies`; the benchmark does not drive them. So the chain
+§ 27 proposed is sound and its first step now works — what is missing is the
+step that hands step one's receipt to step two.
+
+### 37.4 Status
+
+- § 28.1's refusal: **resolved**, and § 28 should be read through this section.
+- `utils`: certifies, `reads` closed on 99/99 exports.
+- `memo`: unchanged, waiting on an accepted edge that nothing currently
+  supplies.
+- Next: drive `--accepted-contracts` from the benchmark (or once by hand) and
+  measure how many of `memo`'s seven exports close when the edge is real.
