@@ -111,7 +111,12 @@ Options:
                           exactly the others -- so this is a choice, not a
                           strict improvement, and it is off by default. Also
                           retries a single generated case after an exact native
-                          callback-flow refusal, only in a fresh catalog
+                          callback-flow refusal, only in a fresh catalog.
+                          A root whose cases all generated but whose *closures*
+                          declined on an unaccepted external dependency has the
+                          same want with no refusal to read it off; those
+                          declines name exact cases too, and this flag composes
+                          them the same way
   --recover-entrypoints  Re-certify generated cases together with exact refused
                           dependency-composition cases. For a new value-only
                           publication, isolate proof-refused artifact cases and
@@ -1865,8 +1870,9 @@ export class RetainedCasePreparationRefusal extends Error {}
 /// `partialProposalHasDependencyFrontier` reads refused artifact *cases*; a
 /// row whose cases all resolved records the same want as
 /// `unaccepted-external-dependency` decline records instead. Reported so an
-/// audit can distinguish "no frontier" from "a frontier this lane is not
-/// shaped to compose".
+/// audit can distinguish "no frontier" from "a frontier that was composed",
+/// and so a composition that could not be prepared says which specifier it
+/// was trying to reach.
 function declinedDependencyFrontier(declinedClosures) {
   if (!Array.isArray(declinedClosures)) return null;
   const records = declinedClosures.filter(
@@ -1882,8 +1888,7 @@ function declinedDependencyFrontier(declinedClosures) {
   ].sort();
   return {
     reason:
-      "the dependency frontier is recorded as closure declines, not as refused artifact cases; " +
-      "this lane publishes refused cases and has none to publish",
+      "the dependency frontier is recorded as closure declines, not as refused artifact cases",
     declinedDependencyRecords: records.length,
     // Bounded: an audit line, not an inventory. The census sidecar holds the
     // full set for anyone who needs it.
@@ -1892,9 +1897,35 @@ function declinedDependencyFrontier(declinedClosures) {
   };
 }
 
+/// The exact artifact cases whose closures declined on an unaccepted external
+/// dependency, as `{ entrypoint, conditions }` acquisition coordinates.
+///
+/// These are cases that *generated*. Nothing about them refused, so they carry
+/// no refusal row and `recoveryGraphCases` never sees them; the want is
+/// recorded once per declined closure instead, and the same case appears in
+/// dozens of records. Deduplicated on the exact coordinate pair, with `import`
+/// folded in the way every other acquisition request here folds it, so two
+/// spellings of one selection cannot become two cases.
+export function declinedDependencyGraphCases(declinedClosures) {
+  if (!Array.isArray(declinedClosures)) return [];
+  const seen = new Map();
+  for (const record of declinedClosures) {
+    if (record?.kind !== "unaccepted-external-dependency") continue;
+    if (typeof record.entrypoint !== "string" || !Array.isArray(record.conditions)) continue;
+    if (record.conditions.some(condition => typeof condition !== "string")) continue;
+    const conditions = [...new Set([...record.conditions, "import"])].sort();
+    const key = JSON.stringify([record.entrypoint, conditions]);
+    if (!seen.has(key)) seen.set(key, { entrypoint: record.entrypoint, conditions });
+  }
+  return [...seen.values()].sort((left, right) =>
+    left.entrypoint.localeCompare(right.entrypoint) ||
+    JSON.stringify(left.conditions).localeCompare(JSON.stringify(right.conditions))
+  );
+}
+
 export async function preparedGraphForPartialProposal(
   { output, ...preparation },
-  { prepare = preparePublishedGraphFallback } = {}
+  { prepare = preparePublishedGraphFallback, prepareCases = preparePublishedGraphCases } = {}
 ) {
   const refusalPath = `${output}.refusals.json`;
   if (!existsSync(refusalPath)) return { graph: null, trace: null };
@@ -1907,18 +1938,57 @@ export async function preparedGraphForPartialProposal(
   if (!partialProposalHasDependencyFrontier(audit?.refusals)) {
     // A frontier the census records as *declines* rather than as a refused
     // artifact case. The row wants an accepted dependency contract every bit
-    // as much, but this lane publishes refused cases instead of generated
-    // ones and here there are none to publish, so it cannot answer.
+    // as much; `@solid-primitives/memo` is the worked example, one case, none
+    // refused, and every export unknown behind 21 `unaccepted-external-
+    // dependency` declines naming `@solid-primitives/utils`.
     //
-    // It still has to say so. Returning a bare `null` here is what made the
-    // graph lane a silent no-op on `@solid-primitives/memo` — the audit read
-    // exactly like a row that never wanted the lane, which is the failure
-    // this function's other exits are careful to avoid.
+    // A declined case is an *acquisition coordinate* every bit as exact as a
+    // refused one, and `preparePublishedGraphCases` is deliberately separate
+    // from the refusal-driven selector so a caller may request a case without
+    // fabricating a refusal for it. So compose: acquire, generate and certify
+    // the named dependency, then regenerate the root with that accepted
+    // contract in its private catalog, which is the entire content of the
+    // decline.
     const declined = declinedDependencyFrontier(audit?.declinedClosures);
-    if (declined) {
+    if (!declined) return { graph: null, trace: null };
+    const cases = declinedDependencyGraphCases(audit?.declinedClosures);
+    if (cases.length === 0) {
+      // Declines whose records carry no exact coordinate pair -- a census
+      // written before those fields existed. The frontier is still named,
+      // because returning a bare `null` here is what made the graph lane a
+      // silent no-op and is the failure this function's other exits are
+      // careful to avoid.
       return { graph: null, trace: { partialProposalFrontier: "declined-only", ...declined } };
     }
-    return { graph: null, trace: null };
+    try {
+      const scratch = mkdtempSync(join(preparation.scratch, "declined-frontier-"));
+      const graph = await prepareCases({
+        ...preparation,
+        scratch,
+        dependencyCases: cases
+      });
+      graph.timing.declinedDependencyFrontier = {
+        declinedDependencyRecords: declined.declinedDependencyRecords,
+        declinedDependencySpecifiers: declined.declinedDependencySpecifiers,
+        declinedDependencySpecifiersTotal: declined.declinedDependencySpecifiersTotal,
+        composedArtifactCases: cases.length
+      };
+      return { graph, trace: null };
+    } catch (error) {
+      if (error instanceof CertificationRefusal) throw error;
+      // The frontier is still named, and now the attempt is too. A row that
+      // asked for composition and did not get it must not read like a row
+      // that was never shaped to compose.
+      return {
+        graph: null,
+        trace: {
+          partialProposalFrontier: "declined-only",
+          ...declined,
+          composedArtifactCases: cases.length,
+          preparationRefusal: error?.message ?? String(error)
+        }
+      };
+    }
   }
   try {
     return { graph: await prepare({ output, ...preparation }), trace: null };

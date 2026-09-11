@@ -220,6 +220,24 @@ with a reused proposal (`@tanstack/solid-router` ×3, `@tanstack/solid-table`,
 root. Certifying both case sets into one catalog is what recovery now does, and
 it is why it, rather than the frontier-only lane, is the default.
 
+It now also routes a second shape, which has nothing to do with refused cases.
+A row can want an accepted dependency contract while every one of its artifact
+cases *generated*: the want is then recorded as `unaccepted-external-dependency`
+closure declines, which `partialProposalHasDependencyFrontier` cannot see
+because it reads artifact-case refusals. Those decline records carry exact
+`entrypoint`/`conditions` coordinates too, and `preparePublishedGraphCases` has
+always accepted coordinates rather than refusals, so the flag composes them the
+same way: acquire, generate and certify the named dependency, then regenerate
+the root behind it. Measured on `@solid-primitives/memo@2.0.0-next.2`, which
+has one case, none refused, and 21 declines naming `@solid-primitives/utils` —
+zero closure candidates become nine (seven `reads` withheld for `noRecipe`,
+two `creates` for `censusRefused`), at a cost of 291 ms → 17.3 s for the row
+and a seven-node graph. Nothing closes yet, and the row's own
+`contractContent` is byte-identical either way, because the benchmark reads
+that census from the generation pass that runs before the lane is chosen —
+read the lane's effect off `certificationAttempt.withheldClosureDetails`
+instead, which is where those nine candidates appear.
+
 ## Discovery and execution
 
 An opt-in recovery request also handles a single generated artifact case whose

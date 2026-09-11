@@ -2658,3 +2658,113 @@ must treat "this export's closure declined on specifier X" as a demand for
 X's accepted contract, the way it treats a refused case. § 39 is the argument
 for doing it — 86.8% of every decline in the corpus, and not one row carrying
 a dependency frontier closing anywhere.
+
+## 41. The dependency edge composes
+
+§ 38.4 named the missing capability and § 39 measured it at 86.8% of every
+decline in the corpus. It is built here, and it turned out to be much smaller
+than the framing suggested, because the machinery already existed and only the
+key it was looked up by was wrong.
+
+### 41.1 Why it was one derivation, not a feature
+
+`preparePublishedGraphCases` carries this comment, written long before this
+phase:
+
+> Exact case coordinates are acquisition requests, not claims that generation
+> refused them. Keep graph preparation separate from the refusal-driven lane
+> selector so a bounded investigation can request a case without fabricating a
+> refusal.
+
+That is the whole permission. The lane never needed a refusal; it needed an
+exact `(entrypoint, conditions)` pair. `recoveryGraphCases` reads those pairs
+off `audit.refusals`, and a row whose cases all *generated* has none — but
+`writeProposalRefusalAudit` records `entrypoint` and `conditions` on every
+declined-closure row too, and has since the census was introduced. The
+coordinates were in the file the whole time, under a different key.
+
+So the change is `declinedDependencyGraphCases`: the distinct coordinate pairs
+named by `unaccepted-external-dependency` declines, `import` folded in the way
+every other acquisition request here folds it, and cases whose only declines
+are of another kind excluded — `dialect-silent` must not cause an acquisition.
+`preparedGraphForPartialProposal` hands those to `preparePublishedGraphCases`
+instead of returning § 40's trace.
+
+### 41.2 Measured on `memo`
+
+Same probe, same corpus, same recipes, with and without
+`--dependency-graph-lane`:
+
+| | reused-proposal | published-graph |
+| --- | --- | --- |
+| certification status | certified | certified |
+| canonical graph nodes | — | 7 |
+| published artifacts acquired | — | 6 |
+| closure candidates, `memo` | **0** | **9** |
+| closure candidates, `utils` | — | 55 |
+| closures actually closed | 0 | **0** |
+| certification wall | 291 ms | **17,275 ms** |
+
+The nine `memo` candidates are seven `reads` and two `creates`. Nothing about
+them is a dependency any more:
+
+- the seven `reads` are withheld **`no recipe in corpus`** — ADR 0036's
+  mandatory contradiction veto, one hand-authored recipe away;
+- the two `creates` are withheld **`census refused`**, on `createSignal` and
+  `createMemo` reached through `solid-js`' declaration file.
+
+Before this change none of those nine existed. The certifier was never asked
+whether `memo`'s `reads` could close, because the closure declined at the
+dependency edge before a candidate was ever formed.
+
+### 41.3 What it costs
+
+59× on that row — 291 ms to 17.3 s, essentially all of it
+`witnessAcquisition` (283 ms to 16.0 s) for acquiring and generating six extra
+published artifacts. That is the honest price of the lane and it is why it
+stays behind the explicit flag rather than becoming the default policy. It also
+lands squarely on § 30's parked budget question: turning this on corpus-wide is
+not a 150 s decision, it is a different order of run.
+
+### 41.4 What it does not do
+
+**Nothing closed.** All 64 candidates across both packages are withheld.
+
+And the row's own `class` and `declinedClosuresByKind` are byte-identical
+between the two runs — 21 `unaccepted-external-dependency` in both. That is a
+reporting seam, not a composition failure: the benchmark reads
+`contractContent` from the generation pass, which runs *before* the lane is
+chosen, so that census can never see what the graph's regenerated root found.
+The result is not invisible — every number in § 41.2 was read off
+`certificationAttempt.withheldClosureDetails`, which the report does carry —
+but the two censuses now describe different pipelines for the same row, and
+anything reading `declinedClosuresByKind` to judge the lane will conclude it
+did nothing.
+
+### 41.5 What it changes about the answer to "how much needs a person"
+
+§ 39 concluded the dependency edge was the binding constraint and hand-authored
+observations were a small cost. Crossing the edge on one package refines that,
+and not in the comfortable direction: **behind the dependency edge is the
+recipe requirement.** `memo`'s seven `reads` candidates are blocked on
+`noRecipe` and nothing else. The corpus-wide probe-candidate count was zero
+(§ 39.2) because no row was getting far enough to want one.
+
+That does not restore § 6 to the top of the list — the edge still had to be
+crossed first, and 273 rows are still behind it — but it does mean the next
+corpus-scale measurement has to be taken *with the lane on*, and read off the
+withheld-closure census rather than `declinedClosuresByKind`, or it will keep
+reporting a recipe demand of zero for a reason that is now an artifact of
+where the pipeline stops. At 17 s a row that is a different order of run from
+the one § 30's 150 s budget describes, which is the next thing this needs.
+
+### 41.6 What the corpus says about turning it on
+
+`make ecosystem-regression` against the pinned `benchmarks/ecosystem/report.json`:
+418 probes, 349 complete contracts, 32 partial, **0 regressions and 0
+certification regressions**. That is the expected answer and it is worth
+naming why it is not evidence of anything about the lane: the default policy
+never routes a decline-only frontier, so the gate exercises the path not
+taken. It establishes that the capability costs the corpus nothing while it is
+off, and nothing more. What it would cost with the lane on is unmeasured, and
+§ 41.3's 59× on one row is the only number there is.

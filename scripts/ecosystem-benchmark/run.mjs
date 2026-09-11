@@ -706,10 +706,11 @@ export function certificationLaneRequest(result, { frontierOnly = false } = {}) 
     // frontier is a decline census, which `partialProposalHasDependencyFrontier`
     // cannot see because that reads artifact-case refusals.
     //
-    // Routing it does not make the lane able to compose — certify publishes
-    // refused cases and there are none — but it does make certify *say so*
-    // instead of exiting silently, which is the whole difference between
-    // § 26's unexplained no-op and an audit line naming the specifier.
+    // Routing it is what lets certify compose it: a declined case is an exact
+    // acquisition coordinate, so the lane acquires, generates and certifies
+    // the named dependency and regenerates the root behind it. Measured on
+    // `memo`, that turns zero closure candidates into nine -- seven `reads`
+    // withheld for `noRecipe` rather than for an unaccepted dependency.
     //
     // Only an explicit `--dependency-graph-lane` reaches this; the default
     // policy is untouched, because the frontier-only lane publishes refused
@@ -1600,7 +1601,13 @@ function usage() {
                          artifact-case sets, so this is a choice, not an
                          improvement: measured on the 2026-09-03 corpus it
                          turns six certified rows into refusals and gives two
-                         rows a certified root. Off by default
+                         rows a certified root. Off by default.
+                         Also routes a row whose cases all generated but whose
+                         closures declined on an unaccepted external
+                         dependency, which composes that dependency and
+                         regenerates the root behind it -- on
+                         @solid-primitives/memo, zero closure candidates
+                         become nine, at 291 ms -> 17.3 s for the row
   --recover-entrypoints  re-certify generated and refused dependency cases
                          together; isolate proof-refused value-only cases for
                          new publications. Preserve existing catalogs. Opt-in

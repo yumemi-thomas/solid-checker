@@ -97,6 +97,7 @@ import {
   parseCertifyArguments,
   partialProposalHasDependencyFrontier,
   preparedGraphForPartialProposal,
+  declinedDependencyGraphCases,
   RetainedCasePreparationRefusal,
   recoveryGraphCases,
   certifyRecoverableCaseSelection,
@@ -1262,6 +1263,27 @@ test("a partial proposal has a dependency frontier only when a refusal is a depe
   assert.equal(partialProposalHasDependencyFrontier("accepted dependency"), false);
 });
 
+test("a declined dependency frontier names exact cases, and nothing it cannot spell", () => {
+  // A malformed coordinate is not an acquisition request. Every one of these
+  // would otherwise become a case the graph tries to acquire, and a case
+  // acquired on a guessed coordinate is the failure the whole lane is built
+  // to avoid -- so each is dropped, and the positive row proves the drop is
+  // about the defect and not about the filter rejecting everything.
+  assert.deepEqual(declinedDependencyGraphCases(null), []);
+  assert.deepEqual(declinedDependencyGraphCases("declined"), []);
+  assert.deepEqual(
+    declinedDependencyGraphCases([
+      { kind: "unaccepted-external-dependency", conditions: [] },
+      { kind: "unaccepted-external-dependency", entrypoint: ".", conditions: null },
+      { kind: "unaccepted-external-dependency", entrypoint: ".", conditions: "import" },
+      { kind: "unaccepted-external-dependency", entrypoint: ".", conditions: [7] },
+      { kind: "unresolved-callee", entrypoint: "./refused", conditions: [] },
+      { kind: "unaccepted-external-dependency", entrypoint: "./ok", conditions: [] }
+    ]),
+    [{ entrypoint: "./ok", conditions: ["import"] }]
+  );
+});
+
 test("the partial-proposal graph lane falls back, and says so, without ever swallowing a refusal", async () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-partial-lane-"));
   const output = join(root, "solid-reactivity.json");
@@ -1307,41 +1329,124 @@ test("the partial-proposal graph lane falls back, and says so, without ever swal
       { graph: null, trace: null }
     );
 
-    // A frontier recorded as closure *declines* rather than refused cases.
-    // Preparation still cannot be attempted -- the lane publishes refused
-    // cases and there are none -- but the audit must be able to tell this
-    // apart from a row that never wanted the lane. This is the shape
-    // `@solid-primitives/memo` presents, and its silence was § 26's no-op.
+    // A frontier recorded as closure *declines* rather than refused cases --
+    // the shape `@solid-primitives/memo` presents, and the shape whose
+    // silence was § 26's no-op. The declines here carry no exact coordinate
+    // pair (a census written before those fields existed), so there is no
+    // acquisition request to make and the frontier is named instead. That
+    // naming is the floor: the audit must always be able to tell this apart
+    // from a row that never wanted the lane.
+    const declinedCensus = declined => JSON.stringify({
+      format: "solid-checker-contract-proposal-refusals",
+      refusalVersion: 1,
+      package: { name: "fixture", version: "1.0.0" },
+      refusals: [],
+      inapplicable: [],
+      declinedClosures: declined
+    });
     writeFileSync(
       `${output}.refusals.json`,
-      JSON.stringify({
-        format: "solid-checker-contract-proposal-refusals",
-        refusalVersion: 1,
-        package: { name: "fixture", version: "1.0.0" },
-        refusals: [],
-        inapplicable: [],
-        declinedClosures: [
-          { stage: "closure-proposal", export: "a", domain: "reads",
-            kind: "unaccepted-external-dependency", package: "@scope/dep" },
-          { stage: "closure-proposal", export: "b", domain: "creates",
-            kind: "unaccepted-external-dependency", package: "@scope/dep" },
-          { stage: "closure-proposal", export: "c", domain: "reads",
-            kind: "dialect-silent", package: "solid-js" }
-        ]
-      })
+      declinedCensus([
+        { stage: "closure-proposal", export: "a", domain: "reads",
+          kind: "unaccepted-external-dependency", package: "@scope/dep" },
+        { stage: "closure-proposal", export: "b", domain: "creates",
+          kind: "unaccepted-external-dependency", package: "@scope/dep" },
+        { stage: "closure-proposal", export: "c", domain: "reads",
+          kind: "dialect-silent", package: "solid-js" }
+      ])
     );
     assert.deepEqual(
-      await preparedGraphForPartialProposal({ output }, { prepare: never }),
+      await preparedGraphForPartialProposal(
+        { output },
+        { prepare: never, prepareCases: never }
+      ),
       {
         graph: null,
         trace: {
           partialProposalFrontier: "declined-only",
           reason:
-            "the dependency frontier is recorded as closure declines, not as refused artifact cases; " +
-            "this lane publishes refused cases and has none to publish",
+            "the dependency frontier is recorded as closure declines, not as refused artifact cases",
           declinedDependencyRecords: 2,
           declinedDependencySpecifiers: ["@scope/dep"],
           declinedDependencySpecifiersTotal: 1
+        }
+      }
+    );
+
+    // The same frontier with the coordinates the generator actually writes.
+    // Now it is an acquisition request: the exact `(entrypoint, conditions)`
+    // pairs the declines name, deduplicated, `import` folded in the way every
+    // other request here folds it, and the non-dependency decline's case
+    // excluded -- `./other` must not be acquired because something unrelated
+    // to a dependency declined there.
+    const composedCases = [];
+    const composed = { timing: { rootCases: 2, canonicalNodes: 5 } };
+    writeFileSync(
+      `${output}.refusals.json`,
+      declinedCensus([
+        { stage: "closure-proposal", entrypoint: ".", conditions: ["import"],
+          export: "a", domain: "reads",
+          kind: "unaccepted-external-dependency", package: "@scope/dep" },
+        { stage: "closure-proposal", entrypoint: ".", conditions: [],
+          export: "b", domain: "creates",
+          kind: "unaccepted-external-dependency", package: "@scope/dep" },
+        { stage: "closure-proposal", entrypoint: "./sub", conditions: ["node"],
+          export: "c", domain: "reads",
+          kind: "unaccepted-external-dependency", package: "@scope/other" },
+        { stage: "closure-proposal", entrypoint: "./other", conditions: ["import"],
+          export: "d", domain: "reads",
+          kind: "dialect-silent", package: "solid-js" }
+      ])
+    );
+    assert.deepEqual(
+      await preparedGraphForPartialProposal(
+        { output, scratch: root },
+        {
+          prepare: never,
+          prepareCases: async ({ dependencyCases }) => {
+            composedCases.push(dependencyCases);
+            return composed;
+          }
+        }
+      ),
+      { graph: composed, trace: null }
+    );
+    assert.deepEqual(composedCases, [[
+      { entrypoint: ".", conditions: ["import"] },
+      { entrypoint: "./sub", conditions: ["import", "node"] }
+    ]]);
+    assert.deepEqual(composed.timing.declinedDependencyFrontier, {
+      declinedDependencyRecords: 3,
+      declinedDependencySpecifiers: ["@scope/dep", "@scope/other"],
+      declinedDependencySpecifiersTotal: 2,
+      composedArtifactCases: 2
+    });
+
+    // Composition failing is a fallback to the partial proposal, exactly as a
+    // refusal-driven preparation failing is -- and it says which specifier it
+    // was reaching for, so the row does not read like one that was never
+    // shaped to compose.
+    assert.deepEqual(
+      await preparedGraphForPartialProposal(
+        { output, scratch: root },
+        {
+          prepare: never,
+          prepareCases: async () => {
+            throw new Error("registry acquisition failed for @scope/dep@1.0.0");
+          }
+        }
+      ),
+      {
+        graph: null,
+        trace: {
+          partialProposalFrontier: "declined-only",
+          reason:
+            "the dependency frontier is recorded as closure declines, not as refused artifact cases",
+          declinedDependencyRecords: 3,
+          declinedDependencySpecifiers: ["@scope/dep", "@scope/other"],
+          declinedDependencySpecifiersTotal: 2,
+          composedArtifactCases: 2,
+          preparationRefusal: "registry acquisition failed for @scope/dep@1.0.0"
         }
       }
     );
@@ -1350,20 +1455,17 @@ test("the partial-proposal graph lane falls back, and says so, without ever swal
     // above is about the dependency kind and not about declines existing.
     writeFileSync(
       `${output}.refusals.json`,
-      JSON.stringify({
-        format: "solid-checker-contract-proposal-refusals",
-        refusalVersion: 1,
-        package: { name: "fixture", version: "1.0.0" },
-        refusals: [],
-        inapplicable: [],
-        declinedClosures: [
-          { stage: "closure-proposal", export: "c", domain: "reads",
-            kind: "dialect-silent", package: "solid-js" }
-        ]
-      })
+      declinedCensus([
+        { stage: "closure-proposal", entrypoint: ".", conditions: ["import"],
+          export: "c", domain: "reads",
+          kind: "dialect-silent", package: "solid-js" }
+      ])
     );
     assert.deepEqual(
-      await preparedGraphForPartialProposal({ output }, { prepare: never }),
+      await preparedGraphForPartialProposal(
+        { output },
+        { prepare: never, prepareCases: never }
+      ),
       { graph: null, trace: null }
     );
 
