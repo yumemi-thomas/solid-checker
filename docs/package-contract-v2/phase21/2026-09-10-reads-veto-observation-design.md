@@ -4806,3 +4806,108 @@ Whether an emit is *reached*. A recipe whose emit sits behind a condition that
 never holds at run time is the same failure with the same open verdict, and no
 static check finds it — only a run that contradicts something does. That is the
 residue, and it is named here rather than left implied.
+
+## 66. The largest unexamined `creates` family is § 27's unpriced bill (2026-09-11)
+
+With `reads` decided against (§§ 64–65), the question became which `creates`
+family to work next. That needed the breakdown nobody had taken. Of 514 withheld
+`creates` claims, by distinct claim rather than by row:
+
+| claims | pkgs | family |
+| --- | --- | --- |
+| 132 | 26 | `property-access-unknown-accessor` — the accessor class of §§ 51–63 |
+| **65** | **14** | **resolved callee is not a definition — unexamined** |
+| 61 | 5 | veto did not complete (synthesized gate) |
+| 44 | 10 | coercion form — unexamined |
+| 40 | 10 | no function-like declaration node |
+| 35 | 11 | named declaration refusal |
+| 24 | 3 | domain-exhaustiveness |
+| 21 | 7 | iteration-protocol |
+| 20 | 1 | transcript at depth 0 |
+| 18 | 7 | call through a binding |
+| …13 smaller | | jsx-element, stdlib member, unresolved callee, instanceof, … |
+
+Two things fall out of the table before any investigation. The accessor class
+was the **largest** family all along, so §§ 51–63 chose their target correctly
+even though the yield per ADR was three to five claims. And `returns`, which
+§ 64.2 called the best remaining buy, is **29 claims** — that recommendation was
+made on row counts, which over-count `returns` by 94× against 15× for `creates`.
+Rows are not claims; § 56 normalized this once and it was forgotten here.
+
+### 66.1 All 65 resolve to a `.d.ts`
+
+| claims | declared in | callees |
+| --- | --- | --- |
+| 54 | `solid-js` [.d.ts] | createComponent, createMemo, createSignal, getOwner, onCleanup |
+| 7 | `@solidjs/signals` [.d.ts] | NotReadyError, getOwner, onCleanup |
+| 3 | `@solid-primitives/utils` [.d.ts] | withArrayCopy |
+| 1 | `@solidjs/web` [.d.ts] | createComponent |
+
+Every one. And the callees are core Solid vocabulary — a dependent package calls
+`createSignal`, the declaration resolves to
+`solid-js/types/reactive/signal.d.ts`, and the census refuses.
+
+A first reading of this data was wrong and is worth recording: a greedy `.*` in
+the grouping query captured the *call site* rather than the declaration, which
+made the primitives look as though they were declared inside the consuming
+`@solid-primitives/*` packages, and suggested a story about bundlers inlining
+solid-js. Checking one package's dist falsified it — `@solid-primitives/memo`
+imports `createSignal` from solid-js rather than inlining it — and reading a
+single refusal in full gave the real shape.
+
+### 66.2 Why the dialect-axiom tier declines, and why that is § 27
+
+`census_dialect_axiom_for_callee` is the tier that would admit a call to a known
+primitive. It requires the declaration's file to strip against a snapshot source
+root whose `root.dependency` is true, and then to be `read` out of that
+authenticated archive. The core runtime has neither: `module_closure.rs` clears
+the frontier for `solid-js`, `@solidjs/signals` and `@solidjs/web` precisely
+because they "have no package contract *by design*". No contract, no accepted
+edge, no authenticated archive — so the axiom tier cannot reach them, and
+`census_dependency_claim` cannot either.
+
+§ 27's own comment anticipates exactly this, in the same breath as the exemption:
+
+> every proposed closure is re-proved by the certifier's implementation census,
+> which walks the archive's own implementation and **refuses any form it cannot
+> census**.
+
+So these 62 claims are not a defect. They are the **price** of § 27 — which
+bought something much larger, since an opaque frontier for Solid "opened every
+domain of every export of any package that imports Solid at all". The trade was
+correct. What it was not, until now, is *measured*: **62 claims across 14
+packages** is what the exemption costs at current corpus scale.
+
+### 66.3 The open question, stated rather than answered
+
+Recovering them means giving the core runtime an authenticated identity the
+axiom tier can read — **without** giving it a package contract, which § 27
+withholds deliberately and `GenerationScope::DialectDefiningPackage` withholds
+again. That is a trust-model question (what authenticates the runtime, and under
+whose authority a primitive's behaviour becomes an axiom), not a premise
+question, and it is not decided here.
+
+It is, however, the best-shaped target left in `creates`: one root cause, 62
+claims, 14 packages, five callee names, and no per-package work — against the
+accessor class's three-to-five claims per ADR.
+
+### 66.4 The second-best, and it needs no trust-model argument
+
+61 claims fail at the gate rather than the census, and **they have already
+passed the census** — a synthesized veto exists and the only thing between them
+and a verdict is a probe that cannot run. Two causes, two packages:
+
+- **37** (`@kobalte/utils`): `Stripping types is currently unsupported for files
+  under node_modules` — the package ships `.ts`, and Node refuses to strip types
+  there;
+- **16** (`@tanstack/query-core`): `export condition "@tanstack/custom-condition"
+  is not a plain condition name, so it cannot be given to the pinned
+  interpreter`.
+
+Both are harness capability rather than semantics — packages that ship
+TypeScript, and packages with custom export conditions, are general shapes. Both
+nonetheless touch the pinned interpreter, which is part of the probe's
+authenticity, so neither is plumbing: "transform first" and "pass an arbitrary
+condition" are decisions about what is executed versus what ships. Whether
+either is achievable within the pins is unestablished and should be checked
+before it is planned.
