@@ -1944,6 +1944,11 @@ named.
 
 ## 31. Batching the synthesized vetoes: why the obvious form is not available
 
+> **Vindicated by § 33.** This section's premise — "the cost is launches, and
+> launches are sessions" — is correct against the release binary: launching is
+> 47.4% of a probe-gate batch. § 32 appeared to refute it, but measured a debug
+> build. Read § 33 before § 32.
+
 § 30.4 proposed "batching synthesized vetoes per artifact case instead of per
 claim" as the option that keeps § 29's gains. That proposal was
 under-informed. Mapping it found the real constraint.
@@ -2027,6 +2032,13 @@ is.
 
 ## 32. Measured: the launches are 1.3% of the cost, so the pre-boot pool is not worth building
 
+> **Superseded by § 33.** Every measurement in this section was taken against
+> a *debug* build, and the debug profile inflates the census by roughly 19×.
+> The conclusion below — that launching is 1.3% of a batch — is false for the
+> release binary the benchmark actually runs, where launching is the *largest*
+> phase. The section is kept as written because § 33 is about how it went
+> wrong; do not cite its numbers.
+
 § 31.4 recommended a pre-booted worker pool as the confined lever. Measuring
 the probe-gate batch before building it killed the proposal.
 
@@ -2087,3 +2099,101 @@ or splitting the census by what a session can actually write — is a
 security-model question and is not settled here.
 
 Nothing was built. § 30's budget breach stands.
+
+## 33. Corrected: § 32 measured a debug build, and its conclusion inverts in release
+
+§ 32 concluded that launching is 1.3% of a probe-gate batch and abandoned the
+pre-boot pool unbuilt. That conclusion is wrong. It was measured with
+`cargo test`, which is a debug build, and the debug profile distorts precisely
+the phase the comparison rested on.
+
+### 33.1 How the debug basis inflated the census
+
+Two independent factors, both hitting the census and neither hitting launches:
+
+- **`verifier-image` is a different file.** The label hashes
+  `std::env::current_exe()`. Under `cargo test` that is the *test executable*
+  — measured here at **116.3 MB** — not the 23.6 MB release
+  `solid-checker-rust` the benchmark runs. Nearly 5× the bytes.
+- **Debug SHA-256 is ~4× slower.** Per-label timings give a uniform
+  **124 MB/s** in debug (`node-executable` 112.1 MB in 905 ms; `verifier-image`
+  116.3 MB in 940 ms), against **510 MB/s** measured with `shasum` on the same
+  files on the same host.
+
+Together they inflate the census by roughly 19×, which is exactly the gap
+between § 32's 1418 ms/session and the release figure below. Launching a
+process is unaffected by the checker's build profile, so it was compared
+against a census nineteen times too expensive and looked like noise.
+
+`AGENTS.md` already carries this trap for finding *timing*, and the local
+memory note spells it out — "debug hashing made graph rows look 15× slower".
+It was not applied here.
+
+### 33.2 The release measurement
+
+`@kobalte/utils`, release binary, one package, `SOLID_CHECKER_TIMINGS=1`:
+313 probe-gate batches, 6,198 sessions, 1,043.5 s of probe-gate time.
+
+| phase | total | share | per session |
+| --- | --- | --- | --- |
+| **`launchNs`** | 495.0 s | **47.4%** | **80 ms** |
+| `censusNs` | 451.6 s | 43.3% | 73 ms |
+| `workspaceNs` | 43.4 s | 4.2% | 7 ms |
+| `pinVerificationNs` | 26.3 s | 2.5% | 4 ms |
+| `conditionsNs` | 24.2 s | 2.3% | 4 ms |
+
+Against § 32: census **1418 ms → 73 ms** per session, and launch
+**1.3% → 47.4%** of a batch. The two phases swap places.
+
+### 33.3 No single package generalises
+
+The other heaviest row behaves nothing like this one. `solid-js@1.9.14`,
+same release binary, runs **zero** probe sessions (`gateSessions: 0`,
+`gateNs` 0.18 ms) and spends **95.7%** of its certification in
+`live-export-value-acquisition-and-verification` — a sequential loop over
+35–44 plans on a single `TypeFactsCertificationSession`.
+
+So the corpus has at least two distinct bottlenecks, and a one-package
+profile — § 32's included, and both of § 33's — cannot rank them. A
+corpus-wide ranking needs one full run with `SOLID_CHECKER_TIMINGS=1`.
+
+### 33.4 What this does to the candidates
+
+- **§ 31.3 pre-boot pool — reinstated, and it is the largest measured
+  lever.** 47.4% of probe-gate time on the package that spends the most
+  time there.
+- **§ 31.2 gate-model batching — better still.** Session count multiplies
+  launch *and* census, so halving sessions takes ~45% off the harness, not
+  the ~30% § 32.2 computed against the census alone.
+- **§ 32.3 census hoisting — devalued.** It buys 43.3%, but at 73 ms/session
+  the absolute prize is far smaller than § 32.3 implied, and the
+  tamper-then-restore objection is unchanged. Not worth the security
+  argument on these numbers.
+- **Certification concurrency — untested and free.** Width computes to
+  `min(20, 14+6, 24) = 20` on this host, justified by a comment measuring
+  children that "spend most of their slot time waiting". A single
+  certification child was sampled here at **606% CPU** — about 6 of 14
+  cores — so that calibration is stale in the direction of
+  over-subscription. No code change; a sweep would settle it.
+
+### 33.5 What § 30 keeps
+
+The budget breach is real and is not a measurement artifact. Decomposing the
+pinned report against the current one, over the same 418 rows:
+
+| component | old | new | ratio | share of the increase |
+| --- | --- | --- | --- | --- |
+| install | 74.9 s | 97.4 s | 1.30× | 0% |
+| generation | 631.7 s | 857.3 s | 1.36× | 5% |
+| certification | 1373.8 s | 5733.5 s | **4.17×** | **95%** |
+
+Install time is the environmental control — no code change can move it — and
+it is flat, so no host-level slowdown explains the breach. Two further
+readings: `declinedClosures` rose 40,051 → 411,906 (10.3×) but correlates
+with added certification time at **r = 0.062**, so the records are a symptom
+of the larger closure and not its cost; and effective parallelism *fell*
+17.84× → 12.67×, which is what § 33.4's last bullet is about.
+
+§ 30's four options stand. Nothing measured so far closes a 527 s run to the
+150 s ceiling, so optimisation narrows the gap rather than removing the
+decision.
