@@ -549,6 +549,8 @@ fn watched_workspace(scratch: &Scratch) -> PrivateProbeWorkspace {
         execution: None,
         jsx_free_modules: Vec::new(),
         dependency_roots: BTreeMap::from([(WATCHED_DEPENDENCY.to_owned(), dependency.clone())]),
+        closure_dependencies: Vec::new(),
+        dependency_runtime_targets: BTreeMap::new(),
         condition_flags: vec!["--conditions=import".into()],
         watched: vec![
             (
@@ -764,7 +766,10 @@ fn a_declared_dependency_resolution_outside_the_authenticated_copy_refuses_the_g
     fs::write(&member, b"export const origin = 1;\n").expect("dependency member");
     let elsewhere = scratch.write("elsewhere/index.mjs", b"export const origin = 2;\n");
     let roots = BTreeMap::from([("dep".to_owned(), inside.clone())]);
-    let declared = ["dep".to_owned()];
+    let declared = [RequestedDependency {
+        specifier: "dep".to_owned(),
+        package_name: "dep".to_owned(),
+    }];
     let url = |path: &Path| format!("file://{}", path.display());
     let dependency = |specifier: &str, esm: &str| ReportedDependencyResolution {
         specifier: specifier.to_owned(),
@@ -785,20 +790,18 @@ fn a_declared_dependency_resolution_outside_the_authenticated_copy_refuses_the_g
         ProbeImportKind::Esm,
         &declared,
         &roots,
+        &BTreeMap::new(),
     )
     .expect("an answer inside the authenticated copy must be accepted");
 
     for (entries, fragment) in [
-        (
-            Vec::new(),
-            "declared dependency specifier(s) and it reported",
-        ),
+        (Vec::new(), "dependency specifier(s) and it reported"),
         (
             vec![
                 dependency("dep", &url(&member)),
                 dependency("dep", &url(&member)),
             ],
-            "declared dependency specifier(s) and it reported",
+            "dependency specifier(s) and it reported",
         ),
         (
             vec![dependency("other", &url(&member))],
@@ -818,6 +821,7 @@ fn a_declared_dependency_resolution_outside_the_authenticated_copy_refuses_the_g
             ProbeImportKind::Esm,
             &declared,
             &roots,
+            &BTreeMap::new(),
         )
         .expect_err("an unusable dependency resolution must refuse");
         assert!(
@@ -827,6 +831,52 @@ fn a_declared_dependency_resolution_outside_the_authenticated_copy_refuses_the_g
         );
     }
 
+    // Where this transaction certified the dependency itself, containment is
+    // not the whole check: its own plan named the exact file, so a *second*
+    // file inside the same authenticated copy is refused. This is the solid-js
+    // case — the Type Facts private program resolves with bundler conditions
+    // and lands on the client build, the probe worker is Node and lands on the
+    // server build, and both sit in the same copy.
+    let other_build = inside.join("server.mjs");
+    fs::write(&other_build, b"export const origin = 3;\n").expect("second build");
+    let certified = BTreeMap::from([("dep".to_owned(), member.clone())]);
+
+    // Accepting direction first, so the refusal below is not vacuous.
+    verify_reported_dependency_resolutions(
+        &report(vec![dependency("dep", &url(&member))]),
+        ProbeImportKind::Esm,
+        &declared,
+        &roots,
+        &certified,
+    )
+    .expect("the file the dependency's own certification selected must be accepted");
+
+    let error = verify_reported_dependency_resolutions(
+        &report(vec![dependency("dep", &url(&other_build))]),
+        ProbeImportKind::Esm,
+        &declared,
+        &roots,
+        &certified,
+    )
+    .expect_err("a different build inside the same copy must refuse");
+    assert!(
+        matches!(&error, ProbeHarnessError::ConditionMismatch(message)
+            if message.contains("a different build of")),
+        "unexpected error: {error}"
+    );
+
+    // And a specifier with no certified entry keeps containment alone: a
+    // declaration-only dependency has no runtime case the census bound, so
+    // asserting one would refuse a correct resolution.
+    verify_reported_dependency_resolutions(
+        &report(vec![dependency("dep", &url(&other_build))]),
+        ProbeImportKind::Esm,
+        &declared,
+        &roots,
+        &BTreeMap::new(),
+    )
+    .expect("without a certified entry, containment is the whole check");
+
     // A declared specifier with no placed copy at all: the workspace never
     // authenticated it, so there is nothing to compare against and the gate
     // refuses by name rather than accepting whatever the worker resolved.
@@ -835,12 +885,76 @@ fn a_declared_dependency_resolution_outside_the_authenticated_copy_refuses_the_g
         ProbeImportKind::Esm,
         &declared,
         &BTreeMap::new(),
+        &BTreeMap::new(),
     )
     .expect_err("a declared specifier with no authenticated copy must refuse");
     assert!(
         matches!(&error, ProbeHarnessError::ConditionMismatch(message)
             if message.contains("placed no authenticated copy")),
         "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn every_launch_asks_about_the_closures_edges_and_not_only_the_recipes() {
+    // The gap this closes: a synthesized veto (ADR 0036) declares
+    // `dependencySpecifiers: []`, so asking only the recipe meant 76 of the
+    // corpus's gates reported no dependency resolution at all and the
+    // containment check ran on nothing. The closure's accepted edges are what
+    // the replay proved the artifact case's modules actually import.
+    let closure = [
+        RequestedDependency {
+            specifier: "solid-js/web".to_owned(),
+            package_name: "solid-js".to_owned(),
+        },
+        RequestedDependency {
+            specifier: "solid-js".to_owned(),
+            package_name: "solid-js".to_owned(),
+        },
+    ];
+
+    // A recipe that declares nothing still asks about both edges.
+    let requested = launch_dependency_requests(&closure, &[]);
+    assert_eq!(
+        requested
+            .iter()
+            .map(|request| request.specifier.as_str())
+            .collect::<Vec<_>>(),
+        ["solid-js", "solid-js/web"],
+        "a synthesized veto must still ask about the closure's edges"
+    );
+
+    // A subpath edge keeps its own specifier and its package's name: the roots
+    // map is keyed by package, and `solid-js/web` has no root of its own.
+    let subpath = requested
+        .iter()
+        .find(|request| request.specifier == "solid-js/web")
+        .expect("the subpath edge is asked about");
+    assert_eq!(
+        subpath.package_name, "solid-js",
+        "a subpath edge resolves inside its package's copy"
+    );
+
+    // The recipe's own specifiers are added, and one an edge already covers is
+    // not asked about twice.
+    let requested =
+        launch_dependency_requests(&closure, &["seroval".to_owned(), "solid-js".to_owned()]);
+    assert_eq!(
+        requested
+            .iter()
+            .map(|request| request.specifier.as_str())
+            .collect::<Vec<_>>(),
+        ["seroval", "solid-js", "solid-js/web"],
+        "the union is asked about once each, in a stable order"
+    );
+    assert_eq!(
+        requested
+            .iter()
+            .find(|request| request.specifier == "seroval")
+            .expect("the declared specifier is asked about")
+            .package_name,
+        "seroval",
+        "a recipe declares a bare package name, so the two fields coincide"
     );
 }
 
@@ -1311,6 +1425,8 @@ fn a_repeated_watched_label_refuses_rather_than_being_merged() {
         execution: None,
         jsx_free_modules: Vec::new(),
         dependency_roots: BTreeMap::new(),
+        closure_dependencies: Vec::new(),
+        dependency_runtime_targets: BTreeMap::new(),
         condition_flags: workspace.condition_flags.clone(),
         watched: workspace.watched.clone(),
         pinned: workspace.pinned.clone(),
@@ -2034,6 +2150,7 @@ fn the_pinned_interpreter_can_select_a_target_the_artifact_case_did_not() {
             subject("dual-sync", ProbeImportKind::Esm),
             &modules.join("dual-sync/import.mjs"),
             &no_dependency_roots(),
+            &no_dependency_roots(),
         )
         .expect_err("a probe that ran against another target must refuse the gate");
         assert!(
@@ -2055,6 +2172,7 @@ fn the_pinned_interpreter_can_select_a_target_the_artifact_case_did_not() {
         subject("dual-plain", ProbeImportKind::Require),
         &modules.join("dual-plain/import.mjs"),
         &no_dependency_roots(),
+        &no_dependency_roots(),
     )
     .expect_err("a require that landed elsewhere must refuse the gate");
     assert!(
@@ -2068,6 +2186,7 @@ fn the_pinned_interpreter_can_select_a_target_the_artifact_case_did_not() {
         subject("dual-plain", ProbeImportKind::Esm),
         &modules.join("dual-plain/import.mjs"),
         &no_dependency_roots(),
+        &no_dependency_roots(),
     )
     .expect("the target the interpreter actually selected must be accepted");
     verify_reported_resolution(
@@ -2080,12 +2199,14 @@ fn the_pinned_interpreter_can_select_a_target_the_artifact_case_did_not() {
         subject("dual-plain", ProbeImportKind::Require),
         &modules.join("dual-plain/require.cjs"),
         &no_dependency_roots(),
+        &no_dependency_roots(),
     )
     .expect("the CommonJS target the interpreter actually selected must be accepted");
     verify_reported_resolution(
         Some(&reported("flagged", "esm", &flagged_esm, &flagged_require)),
         subject("flagged", ProbeImportKind::Esm),
         &modules.join("flagged/development.mjs"),
+        &no_dependency_roots(),
         &no_dependency_roots(),
     )
     .expect("a passed condition's target must be accepted");
@@ -2140,6 +2261,7 @@ fn a_run_frame_that_reports_no_resolution_refuses_the_gate() {
             report.as_ref(),
             subject("pkg", ProbeImportKind::Esm),
             expected,
+            &no_dependency_roots(),
             &no_dependency_roots(),
         )
         .expect_err("an unusable resolution report must refuse");

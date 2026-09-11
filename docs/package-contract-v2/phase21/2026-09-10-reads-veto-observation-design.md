@@ -3685,3 +3685,217 @@ along with both quote spellings Node uses and the truncated-frame cases.
 The outcome is unchanged: an incomplete veto withholds its candidate. Only the
 reason improves, and § 51.3's fixes (2) and (3) remain the ones that would
 actually close the nine claims.
+
+## 53. § 51.3's fixes (2) and (3), measured: one is unsound alone, the other is not a thing that can be done (2026-09-11)
+
+> **§ 54.3 corrects this section.** The divergence described here is real, but
+> the detection § 53.5 designs cannot reach it: solid-js is exempted by name
+> from the dependency edge set both checks key on. Read § 54 before acting on
+> § 53.5's ordering claim.
+
+§ 52.3 closed by saying fixes (2) and (3) "remain the ones that would actually
+close the nine claims". Reading what each one would do, that sentence is wrong
+about both. This section replaces it.
+
+### 53.1 The divergence is not hypothetical and not about `./web`
+
+§ 52.2 recorded the containment gap as a thing that *could* diverge quietly.
+It diverges by default, on solid-js' **main** entry, for every recipe that
+imports it. `exports["."]` in the installed copy:
+
+| condition branch | target |
+| --- | --- |
+| `worker` | `dist/server.js` |
+| `browser` | `dist/solid.js` (`dist/dev.js` under `development`) |
+| `deno` | `dist/server.js` |
+| `node` | `dist/server.js` |
+| bare `import` | `dist/solid.js` |
+
+The Type Facts private program resolves with `"moduleResolution": "bundler"`
+and, in `type_facts.rs`' own words, "no custom conditions" — so it falls past
+`worker`, `browser`, `deno` and `node` and lands on `import`: **`dist/solid.js`**.
+The probe worker is Node. Node always applies `node`. It lands on
+**`dist/server.js`**.
+
+Those are not two spellings of one build. In this copy they are 36,315 and
+59,901 bytes: the client runtime and the server runtime.
+
+`verify_reported_dependency_resolutions` passes both, because
+`path_is_inside(&resolved, root)` asks only whether the file sits in the
+authenticated copy. It does.
+
+### 53.2 So the seroval crash was the symptom, not the defect
+
+`dist/server.js` is the file that reaches `seroval`; `dist/solid.js` does not.
+The six rows of § 51 that crash with `Cannot find package 'seroval'` are not
+six rows with an incomplete dependency closure. They are six rows where **the
+probe was already loading a different build than the census read**, and the
+missing package is the only reason anyone found out.
+
+### 53.3 Fix (2) alone converts a loud crash into a silent unsound veto
+
+Fix (2) was "authenticate the dependency closure transitively". Do that and
+`seroval` is present, `dist/server.js` loads, the veto runs — and it observes
+the server runtime for a claim certified against the client runtime. The
+crash goes away and the wrong answer stays, unsigned. On the nine claims this
+was supposed to close, the loud failure is the only correct thing currently
+happening.
+
+Fix (2) is not wrong; it is out of order.
+
+### 53.4 Fix (3) as stated is not available
+
+Fix (3) was "reconsider the conditions the probe runs under". Node has no
+switch that stops it applying `node`. `--conditions` adds to the set; it does
+not replace it. The census cannot move to Node's set either — a bundler-
+resolution census is what the artifact case was selected under, and
+`needs_exact_conditions` exists precisely so a case selected under a custom
+condition is not re-chosen by the host's defaults.
+
+Nothing to implement. § 53.5 subsumes the intent.
+
+### 53.5 Two gaps, not one — and both close with data already on hand
+
+**Gap one: on most launches nothing is reported to compare.** The worker
+resolves and reports only the specifiers the *session frame* asked for, and
+`synthesized_vetoes.rs` writes
+
+~~~json
+"dependencySpecifiers": []
+~~~
+
+for every synthesized veto — which is all 76 of § 50. So on those launches no
+dependency resolution is observed at all, and `path_is_inside` never runs on
+anything. The containment check of § 52.2 is not weak on these rows; it is
+absent.
+
+That closes without touching the worker. The specifiers do not have to come
+from the recipe: `plan.verified_closure.manifest().dependencies` is the
+independently replayed set of accepted edges — "what the closure replay proved
+this artifact case's modules actually import", in
+`require_authenticated_dependency_closure`'s own words. Asking for those on
+every launch reports a resolution for every edge the package really has,
+regardless of what a recipe declared.
+
+**Gap two: the reference to compare against.** For a dependency placed from a
+`graph_dependencies` entry the reference is exact and local — that entry is a
+full `CertificationPlan`, and `verified_resolution().runtime_path()` is the
+file its own certification selected. The published-graph lane already requires
+`edge.artifact_case == identity.artifact_case`, so that plan's case is the case
+the parent's census bound. Comparing with `names_same_file`, as
+`verify_reported_resolution` already does for the subject, is the whole check.
+
+For a dependency placed from `certification_sources` there is no such
+reference, and deliberately: those are declaration-only packages that "never
+contribute a semantic claim, a dependency receipt, or a runtime module to this
+plan". The census bound no runtime case for them, so containment stays and the
+refusal text has to say which of the two checks ran.
+
+That split is also the soundness boundary. A composed dependency's *claims* are
+what the parent's closure is built from; running a different build of it makes
+the composition describe code that did not run. A declaration-only dependency
+contributes no claim, so a build mismatch there is under-specification rather
+than a false proof — worth naming, not the same defect.
+
+The ordering that follows: **identity first, then (2)**. With identity in
+place, fix (2) is safe, because a transitively authenticated dependency that
+resolves to the wrong build refuses by name instead of running.
+
+### 53.6 What it will cost
+
+This tightens a check that six or more rows currently pass. Every recipe that
+imports solid-js is a candidate to start refusing — correctly, but a refusal
+is still a lost gate. The size of that is a corpus measurement, not a
+prediction, and it is the next thing to take.
+
+## 54. Both gaps closed, measured at zero cost — and § 53's headline case is not among them (2026-09-11)
+
+### 54.1 What landed
+
+Two checks, both in `probe_harness.rs`, neither touching the worker.
+
+**Every launch asks about the closure's own edges.** `closure_dependency_requests`
+turns `plan.verified_closure.manifest().dependencies` into resolution requests
+the workspace holds for the whole transaction, and
+`launch_dependency_requests` unions them with whatever the recipe declared.
+`ResolutionSubject.dependencies` carries `RequestedDependency { specifier,
+package_name }` rather than a bare string, because an edge may name a subpath
+and `dependency_roots` is keyed by package.
+
+**A composed dependency's build is pinned, not just its copy.**
+`AuthenticatedDependency` gained `certified_entry`, set only for a
+`graph_dependencies` entry — a full plan, whose `verified_resolution()` names
+the exact runtime file its own certification selected. The workspace
+materializes that file and `verify_reported_dependency_resolutions` requires
+`names_same_file` against it, the way the subject has always been checked.
+A `certification_sources` snapshot is declaration-only, the census bound no
+runtime case for it, and containment stays.
+
+Pinned by `every_launch_asks_about_the_closures_edges_and_not_only_the_recipes`
+and by three added assertions in
+`a_declared_dependency_resolution_outside_the_authenticated_copy_refuses_the_gate`:
+the certified file accepted, a *second file inside the same copy* refused, and
+containment-only where no certified entry exists.
+
+### 54.2 Measured: three corpus runs, identical on every number
+
+`make ecosystem-regression` at HEAD, with the first check, and with both:
+
+| | packages certified | closures certified | `vetoRunRefused` |
+| --- | --- | --- | --- |
+| control | 192 | 4,478 | 0 |
+| edges asked about | 192 | 4,478 | 0 |
+| + build identity | 192 | 4,478 | 0 |
+
+No package moved. Every withheld-reason count is identical across all three —
+`noRecipe` 9,667, `censusRefused` 1,859, `vetoThrew` 66, `vetoUnreproducible`
+54, `vetoIncomplete` 19. § 53.6 predicted this would cost gates. It costs
+none.
+
+### 54.3 And that has a single explanation, which corrects § 53
+
+`module_closure.rs` does not record a dependency edge for the built-in runtime
+at all:
+
+~~~rust
+[] if solid_dialect::core_runtime_specifier(specifier) => {}
+~~~
+
+`solid-js`, `@solidjs/signals` and `@solidjs/web` — and every subpath of each,
+`solid-js/web` included — are exempted by name from the opaque frontier, and
+nothing is pushed onto `self.dependencies`. So a package that imports solid-js
+has **no accepted edge for it**, no artifact case bound for it, and no accepted
+contract for it: § 27 records why, and the reason is sound.
+
+The consequence for this section's work is exact. Both new checks key on that
+edge set. Neither can see solid-js. **The client-versus-server build divergence
+of § 53.1 — the case that motivated all of this — is not covered by what
+landed.** The zero in § 54.2 is not evidence that the divergence is absent; it
+is evidence that the instrument does not point at it.
+
+What landed is still worth having: the "nothing is reported at all" hole of
+§ 53.5 is closed for every ordinary dependency, and a composed dependency's
+build is now pinned rather than merely contained. But § 53.5's claim that this
+ordering makes fix (2) safe is **wrong as stated**, and § 53.3 stands
+unchanged: authenticating `seroval` transitively would still let `server.js`
+load with nothing noticing, because solid-js carries no edge for either check
+to reach.
+
+### 54.4 Where the real blocker now sits
+
+It is one line, and it is not a defect. The core-runtime exemption removes
+solid-js from the dependency system on purpose, because an opaque frontier for
+it is a demand that can never be met. Detecting which *build* of it a probe
+loaded therefore cannot come from the edge set, and needs a channel that does
+not exist yet — the probe reporting what it resolved for a specifier nobody
+declared. That is the loader instrumentation § 53 hoped to avoid, and it is
+now the only route left to fix (2).
+
+### 54.5 What the measurement does not establish
+
+An A/B that moves nothing cannot tell a check that always agrees from a check
+that never runs. The identity check's wiring is pinned by unit tests; its
+incidence on this corpus is not established by § 54.2, and given § 54.3 the
+likeliest reading is that it fires rarely or not at all. A test that builds a
+graph dependency and asserts a certified entry reaches the workspace would
+close that, and is not written.

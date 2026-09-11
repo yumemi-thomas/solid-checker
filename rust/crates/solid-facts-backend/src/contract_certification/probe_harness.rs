@@ -338,16 +338,39 @@ impl ProbeImportKind {
     }
 }
 
+/// One dependency specifier a launch asks the worker to resolve, paired with
+/// the authenticated package whose private copy the answer must name.
+///
+/// The two are not the same string. A recipe declares a bare package name, but
+/// an accepted closure edge's specifier may be a subpath — `solid-js/web`
+/// resolves through `solid-js`' `exports` map and its answer belongs to the
+/// `solid-js` copy. `dependency_roots` is keyed by package name, so the pair
+/// travels together rather than the lookup guessing one from the other.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct RequestedDependency {
+    specifier: String,
+    package_name: String,
+}
+
 /// What one launch has to prove it resolved: the plan's own specifier, reached
 /// the way the recipe declares it reaches its package, plus every dependency
-/// specifier the recipe declared it needs.
+/// specifier this launch asks about.
 #[derive(Clone, Copy, Debug)]
 struct ResolutionSubject<'a> {
     specifier: &'a str,
     import_kind: ProbeImportKind,
-    /// The recipe's declared dependency specifiers, each of which must resolve
-    /// *inside* that dependency's authenticated private copy.
-    dependencies: &'a [String],
+    /// Every dependency specifier whose resolution this launch requires, each
+    /// of which must resolve *inside* that dependency's authenticated private
+    /// copy.
+    ///
+    /// This is **not** only what the recipe declared. A recipe declares what
+    /// *it* imports; the package under test imports whatever its own modules
+    /// import, and a synthesized veto (ADR 0036) declares nothing at all — so
+    /// asking only the recipe left every synthesized gate reporting no
+    /// dependency resolution and the containment check running on nothing. The
+    /// independently replayed closure's accepted edges are added here, which is
+    /// the set the closure replay proved this artifact case's modules import.
+    dependencies: &'a [RequestedDependency],
 }
 
 /// The closed, sorted file list the harness source manifest covers. It must
@@ -919,10 +942,18 @@ fn launch_every_session(
                 "no private recipe module was copied for claim {claim_id}"
             ))
         })?;
+        let requested = launch_dependency_requests(
+            workspace.closure_dependencies(),
+            recipe.dependency_specifiers(),
+        );
+        let requested_specifiers = requested
+            .iter()
+            .map(|request| request.specifier.clone())
+            .collect::<Vec<_>>();
         let subject = ResolutionSubject {
             specifier,
             import_kind: recipe.import_kind(),
-            dependencies: recipe.dependency_specifiers(),
+            dependencies: &requested,
         };
         let session_bytes = runtime_probe_wire::encode_probe_session(
             session,
@@ -931,7 +962,7 @@ fn launch_every_session(
             Some(runtime_probe_wire::ProbeResolutionRequest {
                 specifier: subject.specifier,
                 import_kind: subject.import_kind.as_str(),
-                dependencies: subject.dependencies,
+                dependencies: &requested_specifiers,
             }),
         )?;
         let launch_started = Instant::now();
@@ -1072,6 +1103,58 @@ fn scheduled_import_kinds(
 /// only through a re-export chain, say), and a recipe naming one that was never
 /// authenticated would otherwise ask the worker to resolve a specifier no
 /// private copy answers and refuse as a resolution mismatch instead of by name.
+/// The accepted dependency edges of one plan's independently replayed closure,
+/// as resolution requests.
+///
+/// These are the edges `require_authenticated_dependency_closure` already
+/// requires an authenticated snapshot for, so every entry's package name has a
+/// root in `dependency_roots` by the time a launch asks about it. Sorted and
+/// deduplicated because two modules of the closure may import the same
+/// specifier and a launch should ask once.
+fn closure_dependency_requests(plan: &CertificationPlan) -> Vec<RequestedDependency> {
+    let mut requests = plan
+        .verified_closure
+        .manifest()
+        .dependencies
+        .iter()
+        .map(|edge| RequestedDependency {
+            specifier: edge.specifier.clone(),
+            package_name: edge.package_name.clone(),
+        })
+        .collect::<Vec<_>>();
+    requests.sort();
+    requests.dedup();
+    requests
+}
+
+/// One launch's resolution requests: the closure's accepted edges plus the
+/// recipe's own declared specifiers.
+///
+/// A recipe declares a bare package name, which is its own package name, so the
+/// two fields coincide there. An edge that names the same specifier is already
+/// covered and is not asked about twice.
+fn launch_dependency_requests(
+    closure_dependencies: &[RequestedDependency],
+    declared: &[String],
+) -> Vec<RequestedDependency> {
+    let mut requests = closure_dependencies.to_vec();
+    for specifier in declared {
+        if requests
+            .iter()
+            .any(|request| &request.specifier == specifier)
+        {
+            continue;
+        }
+        requests.push(RequestedDependency {
+            specifier: specifier.clone(),
+            package_name: specifier.clone(),
+        });
+    }
+    requests.sort();
+    requests.dedup();
+    requests
+}
+
 fn require_declared_dependencies_authenticated(
     schedule: &ProbeGateSchedule,
     corpus: &RecipeCorpus,
@@ -2552,12 +2635,31 @@ struct PrivateProbeWorkspace {
     execution: Option<runtime_probe_wire::InertExecutionRequest>,
     /// Where each authenticated dependency copy sits, by package name.
     ///
-    /// A recipe that declares it needs a dependency specifier has its echoed
-    /// resolution for that specifier required to name a file *inside* the
-    /// matching root ([`verify_reported_resolution`]), which is how "the
-    /// dependency import reached authenticated bytes" becomes a checked
-    /// property of the launch rather than a property of the layout.
+    /// Every dependency specifier a launch asks about — the closure's accepted
+    /// edges, plus whatever the recipe declared — has its echoed resolution
+    /// required to name a file *inside* the matching root
+    /// ([`verify_reported_resolution`]), which is how "the dependency import
+    /// reached authenticated bytes" becomes a checked property of the launch
+    /// rather than a property of the layout. The key is the package name, not
+    /// the specifier: an edge may name a subpath.
     dependency_roots: BTreeMap<String, PathBuf>,
+    /// The accepted dependency edges of the independently replayed closure, as
+    /// resolution requests every launch carries on top of its recipe's own.
+    ///
+    /// Computed once: the edges belong to the transaction, not to a session.
+    closure_dependencies: Vec<RequestedDependency>,
+    /// For each specifier whose dependency this transaction *certified*, the
+    /// exact file in its private copy that its own certification selected.
+    ///
+    /// Where an entry exists the reported resolution is required to name that
+    /// file, not merely to sit inside the copy. Containment cannot tell
+    /// `solid-js`' client build from its server build, and the Type Facts
+    /// private program resolves with bundler conditions while the probe worker
+    /// is Node, which always applies `node` — so the two land on different
+    /// files by default rather than by accident. A composed dependency's claims
+    /// are what the parent's closure is built from; running a different build
+    /// of it would make that composition describe code that did not run.
+    dependency_runtime_targets: BTreeMap<String, PathBuf>,
     /// One `--conditions=<name>` flag per requested export condition, in the
     /// order a launch passes them.
     condition_flags: Vec<String>,
@@ -2685,9 +2787,23 @@ impl PrivateProbeWorkspace {
         // segment above it, so the climb cannot leave `<private>/node_modules`
         // and never reaches the two private scopes or an ancestor's.
         let mut dependency_roots = BTreeMap::new();
+        // Keyed by *specifier*, not package name: this is the answer for the
+        // one import request the dependency's plan was certified for.
+        let mut dependency_runtime_targets = BTreeMap::new();
         for (name, dependency) in dependencies {
             let target = modules_directory.join(&dependency.directory);
             copy_snapshot_into(&target, dependency.snapshot)?;
+            if let Some(entry) = dependency.certified_entry {
+                let runtime = target.join(single_safe_relative_path(entry.runtime_path)?);
+                if !runtime.is_file() {
+                    return Err(ProbeHarnessError::Configuration(format!(
+                        "the certified entry of dependency {name:?} names {:?}, which its \
+                         authenticated copy does not carry",
+                        entry.runtime_path
+                    )));
+                }
+                dependency_runtime_targets.insert(entry.specifier.to_owned(), runtime);
+            }
             dependency_roots.insert(name.clone(), target);
         }
 
@@ -2896,6 +3012,8 @@ impl PrivateProbeWorkspace {
             execution,
             jsx_free_modules,
             dependency_roots,
+            closure_dependencies: closure_dependency_requests(plan),
+            dependency_runtime_targets,
             condition_flags: interpreter_conditions
                 .iter()
                 .map(|condition| format!("--conditions={condition}"))
@@ -2916,6 +3034,12 @@ impl PrivateProbeWorkspace {
 
     fn jsx_free_modules(&self) -> &[JsxFreeModule] {
         &self.jsx_free_modules
+    }
+
+    /// The accepted closure edges every launch asks about, on top of whatever
+    /// its own recipe declared.
+    fn closure_dependencies(&self) -> &[RequestedDependency] {
+        &self.closure_dependencies
     }
 
     fn recipe(&self, claim_id: &str) -> Option<(&Path, &str)> {
@@ -3219,6 +3343,7 @@ impl PrivateProbeWorkspace {
             subject,
             &self.runtime_target,
             &self.dependency_roots,
+            &self.dependency_runtime_targets,
         )?;
         match (&self.execution, &decoded.execution) {
             (None, None) => {}
@@ -3625,6 +3750,7 @@ fn verify_reported_resolution(
     subject: ResolutionSubject<'_>,
     expected: &Path,
     dependency_roots: &BTreeMap<String, PathBuf>,
+    dependency_runtime_targets: &BTreeMap<String, PathBuf>,
 ) -> Result<(), ProbeHarnessError> {
     let ResolutionSubject {
         specifier,
@@ -3672,7 +3798,13 @@ fn verify_reported_resolution(
             import_kind.as_str()
         )));
     }
-    verify_reported_dependency_resolutions(reported, import_kind, dependencies, dependency_roots)
+    verify_reported_dependency_resolutions(
+        reported,
+        import_kind,
+        dependencies,
+        dependency_roots,
+        dependency_runtime_targets,
+    )
 }
 
 /// Requires one echoed resolution per declared dependency specifier, in the
@@ -3685,18 +3817,20 @@ fn verify_reported_resolution(
 fn verify_reported_dependency_resolutions(
     reported: &ReportedResolution,
     import_kind: ProbeImportKind,
-    dependencies: &[String],
+    dependencies: &[RequestedDependency],
     dependency_roots: &BTreeMap<String, PathBuf>,
+    dependency_runtime_targets: &BTreeMap<String, PathBuf>,
 ) -> Result<(), ProbeHarnessError> {
     if reported.dependencies.len() != dependencies.len() {
         return Err(ProbeHarnessError::ConditionMismatch(format!(
-            "this launch asked the probe worker to resolve {} declared dependency specifier(s) \
-             and it reported {}",
+            "this launch asked the probe worker to resolve {} dependency specifier(s) and it \
+             reported {}",
             dependencies.len(),
             reported.dependencies.len()
         )));
     }
-    for (specifier, answer) in dependencies.iter().zip(&reported.dependencies) {
+    for (request, answer) in dependencies.iter().zip(&reported.dependencies) {
+        let specifier = &request.specifier;
         if &answer.specifier != specifier {
             return Err(ProbeHarnessError::ConditionMismatch(format!(
                 "the probe worker reported a dependency resolution of {:?} where this launch \
@@ -3704,10 +3838,13 @@ fn verify_reported_dependency_resolutions(
                 answer.specifier
             )));
         }
-        let root = dependency_roots.get(specifier).ok_or_else(|| {
+        // By package name, not by specifier: `solid-js/web` is an accepted edge
+        // whose answer belongs to the `solid-js` copy.
+        let root = dependency_roots.get(&request.package_name).ok_or_else(|| {
             ProbeHarnessError::ConditionMismatch(format!(
-                "the probe recipe declared dependency {specifier:?}, which this workspace placed \
-                 no authenticated copy for"
+                "this launch asked the probe worker to resolve dependency {specifier:?} of {:?}, \
+                 which this workspace placed no authenticated copy for",
+                request.package_name
             ))
         })?;
         let (observed, resolved) = match import_kind {
@@ -3734,6 +3871,22 @@ fn verify_reported_dependency_resolutions(
                  which is not inside the authenticated private copy at {root:?}: the probe would \
                  have run against bytes this transaction never authenticated",
                 import_kind.as_str()
+            )));
+        }
+        // Containment is the floor. Where this transaction certified the
+        // dependency itself, its own plan named the exact file, and *which*
+        // build inside the copy answered is then a checked property too —
+        // the same thing `verify_reported_resolution` asserts for the subject.
+        if let Some(expected) = dependency_runtime_targets.get(specifier)
+            && !names_same_file(&resolved, expected)
+        {
+            return Err(ProbeHarnessError::ConditionMismatch(format!(
+                "the probe worker resolved dependency {specifier:?} as {:?} to {observed:?}, but \
+                 the artifact case this transaction certified for it names {expected:?}: the \
+                 probe would have run against a different build of {:?} than the one whose \
+                 claims this closure composes",
+                import_kind.as_str(),
+                request.package_name
             )));
         }
     }
@@ -4045,6 +4198,26 @@ struct AuthenticatedDependency<'a> {
     /// is a different one.
     directory: PathBuf,
     snapshot: &'a super::ArtifactSnapshot,
+    /// Present only for a dependency this transaction *certified* — a
+    /// `graph_dependencies` entry, which is a full plan of its own. A
+    /// declaration-only `certification_sources` snapshot has none, and
+    /// deliberately: the census bound no runtime case for it, so there is no
+    /// answer to compare a resolution against.
+    certified_entry: Option<CertifiedDependencyEntry<'a>>,
+}
+
+/// What a composed dependency's own certification selected.
+///
+/// The specifier matters as much as the path. A plan is certified for one
+/// import request, and the published-graph lane already requires the parent's
+/// accepted edge to name that plan's artifact case. So this path is the answer
+/// for *that* specifier only — `solid-js/web` is a different edge resolving to
+/// a different file, and asserting this path for it would refuse a correct
+/// resolution.
+#[derive(Clone, Copy, Debug)]
+struct CertifiedDependencyEntry<'a> {
+    specifier: &'a str,
+    runtime_path: &'a str,
 }
 
 /// Every source or transitive graph dependency snapshot this transaction
@@ -4073,19 +4246,30 @@ fn authenticated_dependency_closure<'a>(
     graph_dependencies: &[&'a CertificationPlan],
 ) -> Result<BTreeMap<String, AuthenticatedDependency<'a>>, ProbeHarnessError> {
     let mut closure = BTreeMap::<String, AuthenticatedDependency<'_>>::new();
+    // Each snapshot travels with the certified entry it has, if any. Only a
+    // graph dependency's *own* package carries one: its plan resolved its own
+    // import request to an exact runtime file. Its declaration-only sources,
+    // and the analyzed plan's, carry none.
     let snapshots = plan
         .certification_sources
         .iter()
-        .map(|source| &source.snapshot)
+        .map(|source| (&source.snapshot, None))
         .chain(graph_dependencies.iter().flat_map(|dependency| {
-            std::iter::once(&dependency.snapshot).chain(
+            std::iter::once((
+                &dependency.snapshot,
+                Some(CertifiedDependencyEntry {
+                    specifier: dependency.import_request.specifier.as_str(),
+                    runtime_path: dependency.verified_resolution.runtime_path(),
+                }),
+            ))
+            .chain(
                 dependency
                     .certification_sources
                     .iter()
-                    .map(|source| &source.snapshot),
+                    .map(|source| (&source.snapshot, None)),
             )
         }));
-    for snapshot in snapshots {
+    for (snapshot, certified_entry) in snapshots {
         let name = snapshot.package_name().to_owned();
         let directory = safe_package_directory(&name)?;
         if name == plan.snapshot.package_name() {
@@ -4125,6 +4309,7 @@ fn authenticated_dependency_closure<'a>(
             AuthenticatedDependency {
                 directory,
                 snapshot,
+                certified_entry,
             },
         );
     }
