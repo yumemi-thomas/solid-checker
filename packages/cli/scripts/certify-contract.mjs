@@ -1859,6 +1859,39 @@ export function publishedGraphPreparationConcurrency(env = process.env) {
 /// preparation this lane has.
 export class RetainedCasePreparationRefusal extends Error {}
 
+/// The dependency frontier a closure-decline census carries, or `null` when it
+/// carries none.
+///
+/// `partialProposalHasDependencyFrontier` reads refused artifact *cases*; a
+/// row whose cases all resolved records the same want as
+/// `unaccepted-external-dependency` decline records instead. Reported so an
+/// audit can distinguish "no frontier" from "a frontier this lane is not
+/// shaped to compose".
+function declinedDependencyFrontier(declinedClosures) {
+  if (!Array.isArray(declinedClosures)) return null;
+  const records = declinedClosures.filter(
+    record => record?.kind === "unaccepted-external-dependency"
+  );
+  if (records.length === 0) return null;
+  const specifiers = [
+    ...new Set(
+      records
+        .map(record => record?.package || record?.location || "")
+        .filter(name => name !== "")
+    )
+  ].sort();
+  return {
+    reason:
+      "the dependency frontier is recorded as closure declines, not as refused artifact cases; " +
+      "this lane publishes refused cases and has none to publish",
+    declinedDependencyRecords: records.length,
+    // Bounded: an audit line, not an inventory. The census sidecar holds the
+    // full set for anyone who needs it.
+    declinedDependencySpecifiers: specifiers.slice(0, 8),
+    declinedDependencySpecifiersTotal: specifiers.length
+  };
+}
+
 export async function preparedGraphForPartialProposal(
   { output, ...preparation },
   { prepare = preparePublishedGraphFallback } = {}
@@ -1872,6 +1905,19 @@ export async function preparedGraphForPartialProposal(
     return { graph: null, trace: null };
   }
   if (!partialProposalHasDependencyFrontier(audit?.refusals)) {
+    // A frontier the census records as *declines* rather than as a refused
+    // artifact case. The row wants an accepted dependency contract every bit
+    // as much, but this lane publishes refused cases instead of generated
+    // ones and here there are none to publish, so it cannot answer.
+    //
+    // It still has to say so. Returning a bare `null` here is what made the
+    // graph lane a silent no-op on `@solid-primitives/memo` — the audit read
+    // exactly like a row that never wanted the lane, which is the failure
+    // this function's other exits are careful to avoid.
+    const declined = declinedDependencyFrontier(audit?.declinedClosures);
+    if (declined) {
+      return { graph: null, trace: { partialProposalFrontier: "declined-only", ...declined } };
+    }
     return { graph: null, trace: null };
   }
   try {

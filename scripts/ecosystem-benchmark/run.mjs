@@ -688,8 +688,38 @@ function buildResult({
 // probe ids: a row that needs an accepted contract for a dependency is exactly
 // a row the composing lane is the answer for, wherever it appears in the
 // corpus.
+/// Whether a row's closure declines name a dependency the certifier would need
+/// an accepted contract for. Read from the generation result's own decline
+/// census, which is where a frontier shows up once the case itself resolves
+/// and is therefore never refused.
+function declinedDependencyFrontier(result) {
+  const kinds = result?.contractContent?.declinedClosuresByKind;
+  return Boolean(kinds) && Number(kinds["unaccepted-external-dependency"] ?? 0) > 0;
+}
+
 export function certificationLaneRequest(result, { frontierOnly = false } = {}) {
-  if (result?.class !== "partial-success") return { lane: "reused-proposal" };
+  if (result?.class !== "partial-success") {
+    // A row can want an accepted dependency contract without refusing an
+    // artifact case. `@solid-primitives/memo` is the worked example: one case,
+    // none refused, class `success`, and all seven exports still unknown in
+    // every domain behind 21 `unaccepted-external-dependency` declines. Its
+    // frontier is a decline census, which `partialProposalHasDependencyFrontier`
+    // cannot see because that reads artifact-case refusals.
+    //
+    // Routing it does not make the lane able to compose — certify publishes
+    // refused cases and there are none — but it does make certify *say so*
+    // instead of exiting silently, which is the whole difference between
+    // § 26's unexplained no-op and an audit line naming the specifier.
+    //
+    // Only an explicit `--dependency-graph-lane` reaches this; the default
+    // policy is untouched, because the frontier-only lane publishes refused
+    // cases instead of generated ones and a measured corpus lost receipts to
+    // that trade.
+    if (frontierOnly && declinedDependencyFrontier(result)) {
+      return { lane: "published-graph" };
+    }
+    return { lane: "reused-proposal" };
+  }
   if (!partialProposalHasDependencyFrontier(result.artifactCaseRefusals)) {
     return { lane: "reused-proposal" };
   }

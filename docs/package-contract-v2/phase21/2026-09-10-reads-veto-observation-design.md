@@ -2597,3 +2597,64 @@ what is holding the corpus.
 
 § 6 stands as a statement about what a synthesized veto can never do. It does
 not describe where the effort goes.
+
+## 40. The decline-only frontier now says so
+
+§ 39 put 86.8% of all declined closures behind one missing capability. That
+capability — a composing path for decline-based dependency frontiers — is not
+built here. What is built is the part that stops the gap being invisible.
+
+### 40.1 The silence, and why it was a defect
+
+`preparedGraphForPartialProposal` returned `{ graph: null, trace: null }`
+whenever `partialProposalHasDependencyFrontier(audit.refusals)` did not match.
+For a row like `@solid-primitives/memo` — whose frontier is 21
+`unaccepted-external-dependency` *declines* and zero refused cases — that is
+an early exit with no record at all.
+
+The same function's other exits are careful about exactly this, in a comment a
+few lines below: "a lane that was requested, attempted and could not be
+prepared leaves the partial proposal as the answer — but it must leave a
+trace, or the audit reads exactly like a row that never wanted the lane."
+The early return broke that rule, and that silence *is* § 26's unexplained
+no-op.
+
+### 40.2 What it reads now
+
+`memo`, `--dependency-graph-lane`:
+
+~~~json
+{
+  "partialProposalFrontier": "declined-only",
+  "reason": "the dependency frontier is recorded as closure declines, not as refused artifact cases; this lane publishes refused cases and has none to publish",
+  "declinedDependencyRecords": 21,
+  "declinedDependencySpecifiers": ["./dist/index.js:@solid-primitives/utils"],
+  "declinedDependencySpecifiersTotal": 1
+}
+~~~
+
+The specifier and the record count, in the audit. "Why did this not close" is
+a sidecar line rather than a package to read.
+
+### 40.3 On restoring the routing § 38.3 reverted
+
+§ 38.3 reverted the benchmark change that lets an explicit
+`--dependency-graph-lane` route a decline-based frontier, because on its own
+it made `laneRequested` read `published-graph` while nothing composed — a
+report claiming a lane that never engaged.
+
+It is restored here, and the reason it is no longer the same change: with
+§ 40.1 in place, routing is what lets certify *reach the point where it can
+say why*. Without it certify is never asked and the trace never runs. The two
+halves are one change and are both gated behind the explicit flag; the default
+policy is untouched, because the frontier-only lane still publishes refused
+cases instead of generated ones.
+
+### 40.4 What this does not do
+
+It composes nothing. `memo` still has 21 declines, seven exports unknown in
+every domain, and zero closed domains. § 38.4 remains the work: the certifier
+must treat "this export's closure declined on specifier X" as a demand for
+X's accepted contract, the way it treats a refused case. § 39 is the argument
+for doing it — 86.8% of every decline in the corpus, and not one row carrying
+a dependency frontier closing anywhere.

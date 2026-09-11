@@ -1307,6 +1307,66 @@ test("the partial-proposal graph lane falls back, and says so, without ever swal
       { graph: null, trace: null }
     );
 
+    // A frontier recorded as closure *declines* rather than refused cases.
+    // Preparation still cannot be attempted -- the lane publishes refused
+    // cases and there are none -- but the audit must be able to tell this
+    // apart from a row that never wanted the lane. This is the shape
+    // `@solid-primitives/memo` presents, and its silence was § 26's no-op.
+    writeFileSync(
+      `${output}.refusals.json`,
+      JSON.stringify({
+        format: "solid-checker-contract-proposal-refusals",
+        refusalVersion: 1,
+        package: { name: "fixture", version: "1.0.0" },
+        refusals: [],
+        inapplicable: [],
+        declinedClosures: [
+          { stage: "closure-proposal", export: "a", domain: "reads",
+            kind: "unaccepted-external-dependency", package: "@scope/dep" },
+          { stage: "closure-proposal", export: "b", domain: "creates",
+            kind: "unaccepted-external-dependency", package: "@scope/dep" },
+          { stage: "closure-proposal", export: "c", domain: "reads",
+            kind: "dialect-silent", package: "solid-js" }
+        ]
+      })
+    );
+    assert.deepEqual(
+      await preparedGraphForPartialProposal({ output }, { prepare: never }),
+      {
+        graph: null,
+        trace: {
+          partialProposalFrontier: "declined-only",
+          reason:
+            "the dependency frontier is recorded as closure declines, not as refused artifact cases; " +
+            "this lane publishes refused cases and has none to publish",
+          declinedDependencyRecords: 2,
+          declinedDependencySpecifiers: ["@scope/dep"],
+          declinedDependencySpecifiersTotal: 1
+        }
+      }
+    );
+
+    // The control: declines that name no dependency stay silent, so the trace
+    // above is about the dependency kind and not about declines existing.
+    writeFileSync(
+      `${output}.refusals.json`,
+      JSON.stringify({
+        format: "solid-checker-contract-proposal-refusals",
+        refusalVersion: 1,
+        package: { name: "fixture", version: "1.0.0" },
+        refusals: [],
+        inapplicable: [],
+        declinedClosures: [
+          { stage: "closure-proposal", export: "c", domain: "reads",
+            kind: "dialect-silent", package: "solid-js" }
+        ]
+      })
+    );
+    assert.deepEqual(
+      await preparedGraphForPartialProposal({ output }, { prepare: never }),
+      { graph: null, trace: null }
+    );
+
     // A real frontier: preparation is attempted, and its result is the lane.
     writeFileSync(`${output}.refusals.json`, census([frontier]));
     const prepared = { timing: { rootCases: 1, canonicalNodes: 3 } };

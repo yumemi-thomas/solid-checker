@@ -1312,6 +1312,49 @@ test("a complete proposal is never routed away from reuse", () => {
   );
 });
 
+test("a success row whose frontier is a decline census is routed only under the explicit flag", () => {
+  // `@solid-primitives/memo`'s real shape: one artifact case, none refused,
+  // class `success`, and a dependency frontier that exists only as closure
+  // declines. Measured against the pinned pre-exemption report too, so this
+  // is a coverage gap the policy has always had rather than a regression.
+  const declineFrontier = {
+    class: "success",
+    artifactCaseRefusals: [],
+    contractContent: {
+      declinedClosuresByKind: {
+        "unaccepted-external-dependency": 21,
+        "dialect-silent": 4
+      }
+    }
+  };
+  // The default policy must not move: the frontier-only lane publishes refused
+  // cases instead of generated ones, and a measured corpus lost receipts to
+  // that trade.
+  assert.deepEqual(certificationLaneRequest(declineFrontier), {
+    lane: "reused-proposal"
+  });
+  // Asked for by name, it routes -- not because the lane can compose a
+  // decline frontier (it cannot), but so certify records why instead of
+  // exiting silently.
+  assert.deepEqual(
+    certificationLaneRequest(declineFrontier, { frontierOnly: true }),
+    { lane: "published-graph" }
+  );
+  // The control: declines that name no dependency are not a frontier, so the
+  // flag changes nothing for them.
+  assert.deepEqual(
+    certificationLaneRequest(
+      {
+        class: "success",
+        artifactCaseRefusals: [],
+        contractContent: { declinedClosuresByKind: { "dialect-silent": 4 } }
+      },
+      { frontierOnly: true }
+    ),
+    { lane: "reused-proposal" }
+  );
+});
+
 test("a partial proposal with a dependency-binding refusal is routed to a composing lane", () => {
   for (const refusal of [
     DEPENDENCY_BINDING_REFUSAL,
