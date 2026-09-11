@@ -1868,3 +1868,76 @@ refused would compare against the *old* pin, match it, and pass. Repinning
 with `make ecosystem-benchmark` closes that hole and locks in the gains; it
 rewrites a checked-in artifact the phase ledgers read, so it is left as a
 deliberate separate step rather than folded into this measurement.
+
+## 30. The repin is blocked: the exemption costs 4.5× benchmark wall time
+
+Asked to repin `benchmarks/ecosystem/report.json` with § 29's improved run.
+**Not done.** Producing the candidate to scratch first — rather than writing
+the pin and discovering this afterwards — showed why.
+
+| | pinned | candidate |
+| --- | --- | --- |
+| `durationMs` | 116,582 | **527,689** |
+| `harnessDurationMs` | 1,373,821 | **5,733,467** |
+| `generationDurationMs` | 631,684 | 857,281 |
+| verified rows | 368 | 381 |
+| certified entrypoints | 537 | **654** |
+
+`performance-budget.test.mjs` asserts the pinned report's `durationMs` is
+**strictly below 150,000 ms**. The candidate is 3.5× over it. A pin that
+fails its own budget test is worse than a stale pin, so the file is
+unchanged.
+
+### 30.1 It is not contention, and it is not the host
+
+The first measurement (§ 29, 531 s) ran while this session was also building
+and testing, so contention was the obvious suspect. The candidate run had
+the machine to itself and a warm registry cache: **527 s**. And this *is* the
+14-core authority host the 150 s budget was calibrated on — `ecosystem-
+benchmark.md` records a no-contention rerun there at 116.6 s, which is the
+current pin.
+
+### 30.2 The cause is the exemption, and the mechanism is the veto
+
+Harness time went up **4.2×** while generation time moved only 1.4×. The
+harness is the probe worker, and every closed claim domain schedules a
+**mandatory contradiction veto** — a real worker launch. The exemption
+creates far more closed domains (+117 certified entrypoints, and many more
+candidates per entrypoint), so far more gates execute.
+
+The cost therefore sits where the benefit does: this is what it costs for
+the checker to actually prove the domains the blanket frontier used to
+withdraw. It is concentrated in `creates` and `returns`, which ADR 0036
+serves with *synthesized* vetoes that launch; `reads` candidates have no
+synthesized veto and stay withheld without a launch.
+
+### 30.3 Why no gate caught it
+
+- `make verify` excludes the ecosystem benchmark entirely.
+- `make ecosystem-regression` passed, because its thresholds file carries
+  only `maxCertificationRegressions`. It measures **outcomes, not time**.
+- `performance-budget.test.mjs` reads the *pinned* report, so it cannot see
+  an unpinned regression — it only fires once somebody repins.
+
+So a change can quadruple the corpus wall time and be green on every gate
+that runs before landing. That is a gap in the gates, not only in this
+change.
+
+### 30.4 The decision this needs
+
+Four options, none of them mine to take unilaterally:
+
+1. **Accept and raise the budget.** The test comment says the budget "is the
+   ceiling the project holds itself to, not a description of the current
+   measurement" — raising it to fit a change is precisely what that sentence
+   warns against.
+2. **Optimise the gate schedule** so the extra vetoes cost less — for
+   instance batching synthesized vetoes per artifact case instead of per
+   claim, which is where the 4.2× lives.
+3. **Narrow the exemption** so fewer domains close, trading some of the
+   thirteen certification fixes back.
+4. **Revert `cf905a58`.**
+
+Until one is chosen the pin stays where it is, and § 29's thirteen
+certification fixes stay unpinned — with the detection hole § 29.3 already
+named.
