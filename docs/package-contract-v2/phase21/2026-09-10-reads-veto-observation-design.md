@@ -2024,3 +2024,66 @@ remaining factor.
 
 Neither is started. § 30's budget breach stands, and the pin stays where it
 is.
+
+## 32. Measured: the launches are 1.3% of the cost, so the pre-boot pool is not worth building
+
+§ 31.4 recommended a pre-booted worker pool as the confined lever. Measuring
+the probe-gate batch before building it killed the proposal.
+
+One batch, `implementation-census-reads`, two sessions, debug build,
+`SOLID_CHECKER_TIMINGS=1`:
+
+| phase | time | share | per session |
+| --- | --- | --- | --- |
+| `censusNs` | 2.835 s | **59.0%** | 1418 ms |
+| `workspaceNs` | 0.957 s | 19.9% | — (per batch) |
+| `pinVerificationNs` | 0.913 s | 19.0% | — (per batch) |
+| **`launchNs`** | **0.061 s** | **1.3%** | **31 ms** |
+| `conditionsNs` | 0.039 s | 0.8% | — (per batch) |
+
+**Launching is 1.3% of the batch and 2% of the per-session cost.** A pool
+that amortised Node boot perfectly would remove at most that. § 31.3 was
+optimising the one phase that costs nothing.
+
+### 32.1 What actually costs: the watched census, per session
+
+`launch_every_session` re-verifies the whole watched census after every
+session, and the census hashes the pinned images. On this host the two
+largest are the Node executable at **117 MB** and the verifier image at
+119 MB debug / 24.7 MB release. The census is parallel across labels, so it
+costs its largest input — and it pays that once per session.
+
+Per session: census 1418 ms, launch 31 ms. **The census is 98% of what a
+session costs**, and it is what makes an extra gate expensive.
+
+That also explains § 30 exactly. The exemption did not make launches
+slower; it made more *sessions*, and every session buys another full census.
+
+### 32.2 Which reframes the two candidates
+
+- **§ 31.3 pre-boot pool — abandoned.** It targets 1.3%.
+- **§ 31.2 gate-model batching — better than it looked, for a different
+  reason than given.** Halving sessions halves the *census*, not the
+  launches: 395 gates → 201 would take roughly 30% off the harness. The
+  49%-fewer-launches figure was the right arithmetic attached to the wrong
+  cost.
+
+### 32.3 The untried lever, and the reason to be careful with it
+
+The census re-hashes ~240 MB of *pinned, immutable* images between every
+pair of sessions. Hashing them once per batch instead would remove most of
+59%.
+
+It is not obviously sound, and the code says why in the sentence that
+justifies the current ordering: "without the intermediate census session N
+could tamper with what session N+1 reads and restore it before the final
+check." That is exactly the attack a once-per-batch hash reopens, and the
+Node executable is the extreme case — tampering it changes the interpreter
+the next session runs under.
+
+Whether a narrower answer exists — verifying the large pinned images
+*before each exec* rather than after each run, which is the same count;
+or splitting the census by what a session can actually write — is a
+security-model question and is not settled here.
+
+Nothing was built. § 30's budget breach stands.
