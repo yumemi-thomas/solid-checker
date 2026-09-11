@@ -4105,41 +4105,43 @@ literal result, so no derivation was emitted at all.
 § 56.3 framed this as choosing which premise to review next. That framing was
 wrong: there is nothing to review, because nothing was offered.
 
-### 57.3 The consumer side is already built
+### 57.3 Withdrawn: the producer already attempts that derivation
 
-`census_form_disposition` carries a reviewed `own-literal` arm for exactly this
-form family:
+This subsection claimed the producer "never roots an *accessor* form that way"
+and that one `own-literal` derivation in `apps/solid-typefacts` would close the
+122. **Both are wrong.** It was inferred from the assignment site —
+`uncensusedInvokingFormCensusLocked` fills `SubjectRoot` only when
+`accessorFormSubjectParameterLocked` returns a subject — without reading what
+that function does.
 
-~~~rust
-"own-literal" => {
-    …
-    Some(match (form.kind, form.subject_write) {
-        (IterationProtocol, _) => CensusDisposition::OwnLiteralIterable,
-        (_, true)  => CensusDisposition::OwnLiteralAccessorWrite,
-        (_, false) => CensusDisposition::OwnLiteralAccessor,
-    })
+It calls `subjectRootLocked` for exactly this form kind, and `subjectRootLocked`
+carries ADR 0044's own-literal leg:
+
+~~~go
+if declaration := p.ownLiteralDeclarationLocked(symbol); declaration != nil {
+    return &resolvedSubject{derivation: typefacts.SubjectRootOwnLiteral, …}
 }
 ~~~
 
-It requires `subject_declaration` to land in the artifact's own runtime source,
-and it is reachable today — for forms whose subject the producer roots that way.
+`ownLiteralDeclarationLocked` is not narrow either: a variable declaration whose
+initializer is a data-only literal and which is never assigned, or an object
+rest element, at any scope including module level. The verifier's `own-literal`
+arm and the producer's derivation are both already in place and already wired to
+accessor forms.
 
-The producer never roots an *accessor* form that way.
-`uncensusedInvokingFormCensusLocked` fills `SubjectRoot` from
-`accessorFormSubjectParameterLocked`, which yields only the parameter family,
-and otherwise falls through to `localLiteralResultLocked`. `own-literal`,
-`default-library` and `own-class` exist in `SubjectRootDerivation` and are
-emitted for other form kinds.
-
-So the next step is one derivation in `apps/solid-typefacts`, and no verifier
-change: root an accessor form's subject at `own-literal` when it is an object
-this artifact's own runtime source declares. The consumer arm, its `runtime_sources`
-containment check and its write/read split are already in place and tested.
+So the 122 are subjects that fail *every* leg — parameter family, own-literal,
+caller-supplied-callee result, and the ADR 0050 join. `subjectRootLocked`'s own
+comment names what is left: "a call result, a module binding, a nested callable's
+own parameter, a literal". Which of those, and in what proportion, is not
+recorded anywhere.
 
 ### 57.4 What is not established
 
-How many of the 122 that derivation would reach. The subjects could equally be
-imported bindings, `this`, or the result of an arbitrary expression, and the
-refusal says only that no derivation was offered — not what the subject is.
-Sizing it needs the producer to say what it saw, which is the same shape of
-instrumentation this section just added on the verifier side.
+What the 122 subjects actually are. The verifier's refusal says only that no
+derivation was offered; the producer knows which leg it fell off and does not
+say. Sizing any candidate premise needs the producer to report that — the same
+shape of instrumentation § 57.1 added on the verifier side, but across the wire,
+so it is a protocol change rather than a message change.
+
+Until then no premise can be proposed honestly. § 57.3's first version proposed
+one anyway and was wrong about the code it named.
