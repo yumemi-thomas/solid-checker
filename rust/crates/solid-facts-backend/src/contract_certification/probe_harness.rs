@@ -1247,7 +1247,16 @@ fn reproduce_artifact_cases(
 ) -> Result<ReproducedConditions, ProbeHarnessError> {
     let observed = observe_conditions(node_executable, node_sha256, requested)?;
     let requested_refusal =
-        match replay_every_artifact_case(plan, graph_dependencies, kinds, &observed, closure) {
+        match replay_every_artifact_case(plan, graph_dependencies, kinds, &observed, closure)
+            .and_then(|()| {
+                require_condition_neutral_unplanned_dependencies(
+                    plan,
+                    graph_dependencies,
+                    closure,
+                    kinds,
+                    &observed,
+                )
+            }) {
             Ok(()) => {
                 return Ok(ReproducedConditions {
                     flags: requested.to_vec(),
@@ -1302,6 +1311,96 @@ fn reproduce_artifact_cases(
         "{requested_refusal}; {}",
         attempts.join("; ")
     )))
+}
+
+/// The closure dependencies nothing else disposition, checked for condition
+/// neutrality under the set the interpreter actually applies.
+///
+/// Three mechanisms already cover the rest, and each leaves the same shape
+/// uncovered. [`refuse_unreproducible_artifact_case`] replays the *planned*
+/// cases — the root and every graph dependency.
+/// [`refuse_unreproducible_dependency_edges`] covers every **accepted edge** of
+/// those plans' closures. [`require_condition_neutral_closure`] covers
+/// everything else, but only for a condition this verifier *added*: the
+/// requested set returns before it runs, on the grounds that the per-node
+/// replay dispositions the interpreter's own defaults.
+///
+/// A package that is placed in the private workspace, carries no plan, and has
+/// no accepted edge falls through all three. The built-in runtime is exactly
+/// that shape: `module_closure.rs` records no dependency edge for `solid-js`,
+/// `@solidjs/signals` or `@solidjs/web` by design (§ 27), so nothing checks
+/// which of its builds the interpreter selects.
+///
+/// It selects a different one. `solid-js`' own `exports["."]` answers `node`
+/// with the server build and a bare `import` with the client build, and the
+/// Type Facts private program resolves with bundler conditions while this
+/// worker is Node, which always applies `node`. A clean non-observation
+/// against one of two builds does not prove a claim that is stated about
+/// neither, so this refuses rather than recording a veto that ran against a
+/// build nothing names.
+fn require_condition_neutral_unplanned_dependencies(
+    plan: &CertificationPlan,
+    graph_dependencies: &[&CertificationPlan],
+    closure: &BTreeMap<String, AuthenticatedDependency<'_>>,
+    kinds: &BTreeSet<ProbeImportKind>,
+    observed: &ObservedConditions,
+) -> Result<(), ProbeHarnessError> {
+    let mut dispositioned = BTreeSet::new();
+    for importer in std::iter::once(&plan).chain(graph_dependencies.iter()) {
+        for edge in &importer.verified_closure.manifest().dependencies {
+            dispositioned.insert(edge.package_name.as_str());
+        }
+    }
+    let reference = plan
+        .import_request
+        .export_conditions
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    for (name, dependency) in closure {
+        // A graph dependency carries a plan, and the plan's own replay already
+        // proved its case reproduces under this set.
+        if dependency.certified_entry.is_some() || dispositioned.contains(name.as_str()) {
+            continue;
+        }
+        let snapshot = dependency.snapshot;
+        let package = format!("{}@{}", snapshot.package_name(), snapshot.package_version());
+        let Some(bytes) = snapshot.read("package.json") else {
+            // No manifest is no conditional target: a package resolved by file
+            // path has nothing for a condition to move.
+            continue;
+        };
+        let fields: ConditionalManifestFields = serde_json::from_slice(bytes).map_err(|error| {
+            ProbeHarnessError::ConditionMismatch(format!(
+                "the package manifest of {package} cannot be checked for condition neutrality: \
+                 {error}"
+            ))
+        })?;
+        for kind in kinds {
+            let comparison = observed
+                .for_kind(*kind)
+                .iter()
+                .map(String::as_str)
+                .collect::<BTreeSet<_>>();
+            for (field, value) in [("exports", &fields.exports), ("imports", &fields.imports)] {
+                let super::ExportField::Present(target) = value else {
+                    continue;
+                };
+                selects_identically(target, &reference, &comparison).map_err(|divergence| {
+                    ProbeHarnessError::ConditionMismatch(format!(
+                        "the authenticated closure carries {package}, which no plan and no \
+                         accepted edge dispositions, and it is not condition neutral: {field} \
+                         {divergence}, so a {} import under the pinned interpreter's [{}] loads a \
+                         different build than the [{}] this transaction certifies against",
+                        kind.as_str(),
+                        observed.for_kind(*kind).join(","),
+                        reference.iter().copied().collect::<Vec<_>>().join(",")
+                    ))
+                })?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The planning-time replay: the root plan under every scheduled import kind,

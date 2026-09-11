@@ -3899,3 +3899,96 @@ incidence on this corpus is not established by § 54.2, and given § 54.3 the
 likeliest reading is that it fires rarely or not at all. A test that builds a
 graph dependency and asserts a certified entry reaches the workspace would
 close that, and is not written.
+
+## 55. The seroval class closes, and fix (2) was never the fix (2026-09-11)
+
+### 55.1 The machinery already existed; it was being skipped
+
+§ 54.4 concluded the only route left was instrumenting the probe loader. That
+was wrong, and the thing that makes it wrong was three functions away.
+
+ADR 0037's `reproduce_artifact_cases` already owns this problem. It knows what
+conditions the pinned interpreter applies (`observe_conditions` asks Node), and
+`require_condition_neutral_closure` already walks every `exports` and `imports`
+object in the authenticated closure — the built-in runtime included — comparing
+the target selected under the requested set against the one selected under the
+applied set. `selects_identically` is a real `PACKAGE_TARGET_RESOLVE` walk, not
+a name match.
+
+It was never reached for the common case. When the requested set reproduces
+every *planned* artifact case, `reproduce_artifact_cases` returns immediately:
+
+~~~rust
+match replay_every_artifact_case(plan, graph_dependencies, kinds, &observed, closure) {
+    Ok(()) => return Ok(ReproducedConditions { flags: requested.to_vec(), … }),
+~~~
+
+The neutrality walk runs only for a condition this verifier *adds*. The
+requested set is exempt on the grounds that ADR 0006's per-node replay
+dispositions the interpreter's own defaults — and it does, for everything that
+has a plan or an accepted edge. The built-in runtime has neither (§ 54.3), so
+nothing dispositioned it.
+
+### 55.2 What landed
+
+`require_condition_neutral_unplanned_dependencies` runs on that early-return
+path, over exactly the closure entries nothing else covers: no
+`certified_entry`, and no accepted edge in any planned closure naming them. For
+each, the manifest's `exports` and `imports` must select the same target under
+the applied set as under the requested one.
+
+For solid-js they do not, and the existing test says so in its own fixture:
+`[import]` selects the client build, `[import, module-sync, node, node-addons]`
+selects `server.js`. Pinned now by an added assertion in
+`the_neutrality_walk_admits_browser_only_where_it_moves_no_target`.
+
+### 55.3 Measured: nothing lost, the seroval class gone
+
+`make ecosystem-regression`, control versus this change, keyed on `probeId`:
+
+| | control | with the check |
+| --- | --- | --- |
+| rows moved | — | 9, all in one direction |
+| certified closure count | 5,174 | **5,187** |
+| `vetoIncomplete` | 19 | **4** |
+| details naming `seroval` | 16 | **1** |
+| `vetoRunRefused` | 0 | 0 |
+| every other reason bucket | — | identical |
+
+`@solid-primitives/cookies`, `@solid-primitives/mutable` and
+`@solid-primitives/timer` leave the incomplete-veto set entirely. No row lost a
+closure and no row moved to a refusal.
+
+The mechanism is ADR 0037 doing its job once it is asked: refusing the
+requested set makes `reproduce_artifact_cases` try `browser`, solid-js lists
+`browser` before `node`, both lead to the client build, the walk admits it —
+and `server.js`, which is the only file that reaches `seroval`, is never
+loaded.
+
+### 55.4 § 51.3's fix (2) is withdrawn, not deferred
+
+Fix (2) was "authenticate the dependency closure transitively", and every
+section since has treated it as the thing that would close these claims. It
+would have closed them the wrong way: authenticating `seroval` makes
+`server.js` *load*, which is the build nothing certifies against. § 53.3 said
+that would convert a loud crash into a silent unsound veto, and that reasoning
+survives — what it got wrong was assuming the crash had to be resolved by
+supplying the missing package. The right resolution was to stop reaching the
+file that wants it.
+
+Fix (3) — "reconsider the conditions the probe runs under" — turns out to have
+been the correct instinct after all, and § 53.4 was wrong to call it
+infeasible. It read the fix as "stop Node applying `node`", which is indeed
+impossible. The available form is "add a condition that outranks `node`", which
+is what ADR 0037 was built to do.
+
+### 55.5 What is still open
+
+One detail still names `seroval`, and six packages still carry incomplete
+vetoes — `@kobalte/core`, `@kobalte/utils`, `@solidjs/element`, `@solidjs/meta`,
+`@tanstack/solid-query`, `@tanstack/solid-query-persist-client`. Those are not
+diagnosed here; `vetoIncomplete` fell from 19 to 4, and the remainder has not
+been read.
+
+§ 54.5's vacuity question is unchanged: the identity check of § 54.1 still has
+no established incidence on this corpus.

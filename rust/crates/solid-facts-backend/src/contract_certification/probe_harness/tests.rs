@@ -2393,6 +2393,20 @@ fn the_neutrality_walk_admits_browser_only_where_it_moves_no_target() {
     ]);
     selects_identically(&solid, &development, &development_browser)
         .expect("a requested development condition is honored on both sides");
+    // And the set the interpreter applies *without* `browser` is not neutral
+    // for the same manifest: `node` wins and selects the server build where
+    // the requested `[import]` selects the client one. This is what
+    // `require_condition_neutral_unplanned_dependencies` detects for the
+    // built-in runtime, which carries no accepted edge and no plan — and
+    // detecting it is what makes ADR 0037 try `browser` at all.
+    let bare_node = conditions(&["import", "module-sync", "node", "node-addons"]);
+    let divergence = selects_identically(&solid, &reference, &bare_node)
+        .expect_err("node selects the server build where a bare import selects the client one");
+    assert!(
+        divergence.contains("server.js"),
+        "the divergence names the build the interpreter would load: {divergence}"
+    );
+
     // A `#internal` import the package resolves for itself, which `browser`
     // moves: not neutral, and the error names the key and both answers.
     let imports = export_target(r##"{"#flag": {"browser": "./b.js", "default": "./d.js"}}"##);
