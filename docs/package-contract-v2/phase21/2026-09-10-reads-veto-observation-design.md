@@ -3167,9 +3167,120 @@ The second path has never been hit in the corpus only because no row closes a
 non-proposable domain (§ 39.1: "everything else 0%"). It is not guarded
 against; it is unreached.
 
-### 45.4 Status
+### 45.4 Status — resolved in § 46
 
 The test is committed green as a characterization, asserting the current
 meaning rather than the intended one, with the defect named at the assertion
 and the three fix options left in § 44.4. Whichever is chosen, this test fails
 and has to be updated deliberately — which is the property it exists for.
+
+## 46. Fixed: the field is split, and three `reads` closures certify on a real package
+
+§ 44.4 left three options. None of them is what landed, because § 45 changed
+what the question was: the check is correct and satisfiable, and the field
+feeding it carried two different claims for three different readers.
+
+### 46.1 The change
+
+`DependencyCompositionRequirement` now has two fields instead of one:
+
+- `semantic_claim_id` — the **parent's** closure-candidate claim, which is
+  what `creates_census` and `dependency_creates_claims` resolve against the
+  parent's own `DomainClosure` demand;
+- `dependency_semantic_claim_id` — the **dependency's** claim this
+  requirement demands closed in the dependency's receipt.
+
+Demand planning sets the first and leaves the second `None`. The receipt check
+reads the second, so it no longer compares a parent claim against a dependency
+contract.
+
+**Planning naming no dependency claim is a fact about the domains, not a gap.**
+`creates` is the one domain whose census follows callees, so it is the one
+whose closure a dependency can contradict — and it names its dependency claims
+exactly, through `dependency_creates_claims`, checked against the same receipt
+by the caller. `census_reads_domain` and `census_returns_domain` both state in
+their own doc comments that they have no callee walk: a `reads` claim is about
+accesses in the export's own body, and a read reached through a caller-supplied
+value is the caller's (ADR 0034). There is no dependency claim for those
+domains to name.
+
+### 46.2 The attempt that was wrong, and the test that caught it
+
+The first cut guarded the existing condition on "is this id closed in the
+dependency's accepted contract", as a proxy for "is this a dependency claim".
+`one_dependency_receipt_cannot_exchange_callbacks_for_throws` failed
+immediately, and correctly: a claim can belong to the dependency and *not* be
+closed, which is exactly the case that test exercises, so the proxy would have
+disabled the check for the case it exists to catch. Splitting the field says
+what the proxy was approximating.
+
+### 46.3 Two tests were green for the wrong reason
+
+`dependency_composition_requires_the_receipt_to_close_the_exact_claim`
+asserted its refusal through the planning path, where the comparison could
+never have succeeded — so it never tested "the leaf did not close the claim".
+It now asserts against a real dependency claim, which is what its name always
+meant.
+
+§ 45's characterization test inverts into the property it was pinning the
+absence of: planning names the parent's claim and no dependency claim, and
+composition **accepts** a dependency that closed what it was asked for.
+
+### 46.4 Measured: the first `reads` closures on a real published package
+
+The four rows sharing `@solid-primitives/utils@7.0.0-next.4`'s `.` case,
+`--dependency-graph-lane`, with the § 43 recipes:
+
+| | before | after |
+| --- | --- | --- |
+| `dependencyWithheld` per row | 6 | **0** |
+| total withheld per row | 55 / 55 / 55 / 60 | 49 / 49 / 49 / 54 |
+
+Nothing reappeared under another reason. In the published contract:
+
+| export | closed | recipe |
+| --- | --- | --- |
+| `clamp` | **`reads`**, `creates` | written |
+| `trueFn` | **`reads`**, `creates` | written |
+| `access` | **`reads`**, `creates` | written |
+| `arrayEquals` | `creates` | written; census refuses `reads` |
+| `compare` | — | written; census refuses `reads` |
+| `afterPaint`, `withAccess` | `creates`, `returns` | none |
+| `handleDiffArray` | `returns` | none |
+| `noop` | `creates` | none |
+
+§ 12's "Still open" recorded that no *real* package had ever had a `reads`
+closure certified. That is no longer true.
+
+**The negative controls are what make it a result rather than a loosening.**
+`arrayEquals` and `compare` carry recipes and still do not close `reads`,
+because their census refuses (§ 43.3), and that refusal is now visible in the
+contract rather than masked. `noop` is the sharpest: `() => void 0`, trivially
+read-free, closes `creates`, and does **not** close `reads` — because nobody
+wrote it a recipe. The mandatory veto is intact, and `noop` is precisely where
+an over-permissive fix would have shown.
+
+### 46.5 Corpus
+
+`make ecosystem-regression`: **0 regressions, 0 certification regressions**,
+381 rows certified, unchanged. Corpus-wide withheld closures fall from 11,833
+to **11,665** across the same 132 rows, and `dependencyWithheld` disappears
+from the reason census entirely.
+
+That last number is the honest measure of what the defect was costing, and it
+is smaller than it looks: the default policy does not route the graph lane, so
+only the 41 rows that compose could move at all. What a lane-on corpus pass
+now yields is unmeasured — § 42.7's four-hour estimate still stands in front
+of it.
+
+### 46.6 What is still open
+
+- `§ 43.3`'s masking result is unchanged: `no recipe in corpus` is reported
+  before a census refusal underneath it, so § 42.4's 358 remains an upper
+  bound on recipe-serviceable candidates.
+- `certifiedClosures` and `closureCandidates` are `null` on every row of the
+  benchmark report, so corpus-scale closure yield still cannot be read off it
+  — every number in § 46.4 came from the published contract in the run's own
+  catalog.
+- The recipe cost is unchanged and now has a measured unit: three recipes,
+  three closures, on one artifact case shared by four rows.

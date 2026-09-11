@@ -2557,7 +2557,16 @@ pub struct DependencyCompositionRequirement {
     demand_id: String,
     dependency: DependencyDemandInput,
     parent_export: Option<String>,
+    /// The **parent's** own closure-candidate claim id, which is what
+    /// `creates_census` and `dependency_creates_claims` resolve against the
+    /// parent's `DomainClosure` demand.
     semantic_claim_id: Option<String>,
+    /// The **dependency's** claim this requirement demands closed in the
+    /// dependency's receipt. Demand planning names none -- see the condition
+    /// in `authenticate_dependency_receipt` for why that is correct rather
+    /// than missing -- so today only a caller that has a real dependency
+    /// claim in hand sets it.
+    dependency_semantic_claim_id: Option<String>,
 }
 
 impl DependencyCompositionRequirement {
@@ -2579,6 +2588,11 @@ impl DependencyCompositionRequirement {
     #[must_use]
     pub fn semantic_claim_id(&self) -> Option<&str> {
         self.semantic_claim_id.as_deref()
+    }
+
+    #[must_use]
+    pub fn dependency_semantic_claim_id(&self) -> Option<&str> {
+        self.dependency_semantic_claim_id.as_deref()
     }
 
     #[must_use]
@@ -2605,6 +2619,7 @@ impl DependencyCompositionSchedule {
                         dependency: dependency.clone(),
                         parent_export: None,
                         semantic_claim_id: None,
+                        dependency_semantic_claim_id: None,
                     })
                 }
                 ProofDemandSubject::DependencyClosure {
@@ -2616,6 +2631,7 @@ impl DependencyCompositionSchedule {
                     dependency: dependency.clone(),
                     parent_export: Some(parent.export.clone()),
                     semantic_claim_id: Some(semantic_claim_id.clone()),
+                    dependency_semantic_claim_id: None,
                 }),
                 _ => Err(DependencyCompositionError::InvalidDemand),
             })
@@ -3026,8 +3042,13 @@ impl VerifiedDependencyComposition {
 ///    between gating and issuance substituted another.
 ///
 /// A parent demand that *relied* on a withheld closure still refuses on its
-/// own: a `DependencyClosure` requirement names the semantic claim id, and the
-/// receipt's contract no longer contains it (`MissingClosedClaim`).
+/// own, and `creates` is the domain where that can happen: its census follows
+/// callees, so `dependency_creates_claims` names the dependency claims the
+/// parent composed from and the caller checks each against this receipt
+/// (`MissingClosedClaim`). The claim-id condition inside this function is a
+/// second, narrower guard for callers that name a dependency claim directly;
+/// see the comment at it for why a planning-built `DependencyClosure`
+/// requirement deliberately does not reach it.
 /// ADR 0020 adds one independent premise: a live-verified creates census of
 /// the exact parent demand can prove that claim without any dependency
 /// semantic assumption. Receipt identity and weakening still authenticate,
@@ -3134,7 +3155,34 @@ fn authenticate_dependency_receipt(
     {
         return Err(DependencyReceiptCompositionError::TrustMismatch);
     }
-    if let Some(semantic_claim_id) = requirement.semantic_claim_id()
+    // Reads the *dependency's* claim, which is a different field from the
+    // parent's claim the census lookups use.
+    //
+    // They used to be one field, and that was the defect measured in § 44-45
+    // of `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`.
+    // Demand planning fills a `DependencyClosure` subject's claim id from the
+    // *parent's* own proposal over the parent's own closure candidate, which
+    // is what `creates_census` and `dependency_creates_claims` both want --
+    // and this condition then asked the *dependency's* receipt to contain it.
+    // `NormalizedContract::claim_id` digests package identity, so that
+    // comparison had no satisfying assignment: every closure candidate on a
+    // node with a dependency was refused here, and the refusal named the
+    // parent's own claim as the dependency claim it was waiting for.
+    //
+    // Splitting the field is what makes each reader's meaning explicit.
+    // Planning sets no dependency claim, so it does not reach this condition
+    // -- and nothing is lost by that, which is a fact about the domains
+    // rather than a concession. `creates` is the one domain whose census
+    // follows callees, so it is the one whose closure a dependency can
+    // contradict, and its dependency claims are named exactly by
+    // `dependency_creates_claims` and checked against this same receipt by
+    // the caller. `reads` and `returns` have no callee walk by construction
+    // (`census_reads_domain`, `census_returns_domain`): a `reads` claim is
+    // about accesses in the export's own body, and a read reached through a
+    // caller-supplied value is the caller's (ADR 0034), so a dependency's own
+    // reads cannot contradict it. There is no dependency claim for those
+    // domains to name, because the semantics create none.
+    if let Some(semantic_claim_id) = requirement.dependency_semantic_claim_id()
         && !receipt.contains_closed_claim_id(semantic_claim_id)
         && independent_creates_census.is_none()
     {
@@ -3160,7 +3208,7 @@ pub(super) fn authenticate_dependency_claim_for_test(
 ) -> Result<(), DependencyReceiptCompositionError> {
     let mut requirement = requirement.clone();
     requirement.parent_export = Some("test-parent".into());
-    requirement.semantic_claim_id = Some(semantic_claim_id.into());
+    requirement.dependency_semantic_claim_id = Some(semantic_claim_id.into());
     authenticate_dependency_receipt(
         parent,
         &requirement,
