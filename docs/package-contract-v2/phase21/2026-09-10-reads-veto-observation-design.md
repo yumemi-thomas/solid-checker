@@ -3111,3 +3111,65 @@ So there are three candidate fixes and they are not equivalent:
 (1) is a soundness decision, (2) is a feature, (3) admits the pointer is not
 available. The diagnosis is recorded here rather than any of them being taken
 unilaterally.
+
+## 45. Measured, not deduced: the check refuses a dependency that closed the exact claim
+
+§ 44 derived the defect from the code and flagged that it was not an
+exhaustive measurement. This measures it, in
+`a_dependency_closure_requirement_carries_the_parents_claim_the_dependency_cannot_close`
+(`contract_certification.rs`).
+
+### 45.1 What the existing suite already proved, and why it missed this
+
+`one_dependency_receipt_cannot_exchange_callbacks_for_throws` shows the
+composition check is **correct and satisfiable**: given the leaf's `callbacks`
+claim it passes, given the leaf's `throws` claim it refuses. It reaches the
+check through `authenticate_dependency_claim_for_test`, which *overwrites*
+`requirement.semantic_claim_id` with an id the test computed from
+`leaf_plan.selected_candidate`.
+
+That overwrite is the blind spot. Production never chooses the id; demand
+planning does, from the parent's own proposal. No test had ever asserted what
+the field contains when planning fills it.
+
+### 45.2 The measurement
+
+A two-node graph with callbacks closed on **both** nodes:
+
+| | |
+| --- | --- |
+| parent's callbacks claim | `claim:v1:sha256:60736bba3e03a5c5…` |
+| dependency's callbacks claim | `claim:v1:sha256:00023cbc68c1b902…` |
+| what the planned requirement carries | **the parent's** |
+| is the parent's id in the dependency's contract | **no** |
+| does the dependency's receipt close its own callbacks claim | **yes** |
+| does composition succeed | **no — `MissingClosedClaim`** |
+
+The last two rows together are the finding. The dependency closed exactly the
+domain the parent's candidate is about, published a receipt carrying that
+claim, and composition refused anyway — because the id it looks for is the
+parent's, and nothing the dependency could ever publish would contain it.
+
+### 45.3 It is not a `reads` problem
+
+The vehicle here is `callbacks`, and that widens § 44. `closure_candidates` is
+every domain the proposal closed, not the proposable three, so *any* closed
+domain on a node with an accepted dependency meets this check. The domain only
+decides what happens next:
+
+- **proposable** (`reads`, `returns`, `creates`) —
+  `composed_from_withheld_dependency` returns a record and the candidate is
+  withheld, which is what § 43 saw;
+- **anything else** — it returns `None` at the `is_proposable` guard, the
+  error propagates, and the **row refuses**.
+
+The second path has never been hit in the corpus only because no row closes a
+non-proposable domain (§ 39.1: "everything else 0%"). It is not guarded
+against; it is unreached.
+
+### 45.4 Status
+
+The test is committed green as a characterization, asserting the current
+meaning rather than the intended one, with the defect named at the assertion
+and the three fix options left in § 44.4. Whichever is chosen, this test fails
+and has to be updated deliberately — which is the property it exists for.

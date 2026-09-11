@@ -9511,6 +9511,111 @@ export const value = phantom;
         ));
     }
 
+    /// Characterizes a known defect (2026-09-11), recorded as § 44 of
+    /// `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`.
+    ///
+    /// `one_dependency_receipt_cannot_exchange_callbacks_for_throws` above
+    /// proves the composition check is correct and satisfiable — fed the
+    /// *leaf's* `callbacks` claim it passes, fed the leaf's `throws` claim it
+    /// refuses. It reaches that check through
+    /// `authenticate_dependency_claim_for_test`, which overwrites
+    /// `requirement.semantic_claim_id` with an id the test chose.
+    ///
+    /// Production never chooses it. `ProofDemandSubject::DependencyClosure`
+    /// is built in `contract_semantics::certification` from
+    /// `candidates.proposal.claim_id(closure)` over the node's *own* closure
+    /// candidate, so the requirement carries the **parent's** claim id, and
+    /// `authenticate_dependency_receipt` then asks the dependency's receipt to
+    /// contain it. `NormalizedContract::claim_id` digests package identity, so
+    /// that comparison has no satisfying assignment and every such candidate
+    /// is withheld.
+    ///
+    /// Two of the field's three readers want exactly this value —
+    /// `creates_census` and `dependency_creates_claims` resolve it against the
+    /// parent's own `DomainClosure` demand — so the field is overloaded rather
+    /// than simply wrong, and the fix is a decision rather than a rename. This
+    /// test pins the current meaning so that whichever way it is resolved, the
+    /// change is deliberate and this assertion is updated with it.
+    #[test]
+    fn a_dependency_closure_requirement_carries_the_parents_claim_the_dependency_cannot_close() {
+        let (root, leaf) =
+            two_node_published_graph_with_root_callbacks(false, false, false, true, true);
+        let graph = plan_published_contract_graph(root, [leaf]).unwrap();
+        let root_identity = graph.root_identity().clone();
+        let root_plan = graph.plan(&root_identity).unwrap();
+        let leaf_identity = graph
+            .dependency_first_identities()
+            .into_iter()
+            .find(|identity| identity.package_name == "leaf-package")
+            .unwrap()
+            .clone();
+        let leaf_plan = graph.plan(&leaf_identity).unwrap();
+        let callbacks_of = |plan: &CertificationPlan| {
+            plan.selected_candidate
+                .claim_id(&SemanticClaimSubject {
+                    artifact_case: plan.selected_artifact_case_id().into(),
+                    export: "value".into(),
+                    path: SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Callbacks)),
+                })
+                .unwrap()
+        };
+        let parent_claim = callbacks_of(root_plan);
+        let dependency_claim = callbacks_of(leaf_plan);
+        assert_ne!(
+            parent_claim, dependency_claim,
+            "claim identity binds the package, so these can never coincide"
+        );
+
+        let schedule = root_plan.dependency_composition_schedule().unwrap();
+        let closure_requirements = schedule
+            .requirements()
+            .iter()
+            .filter(|requirement| !requirement.authenticates_dependency_artifact())
+            .collect::<Vec<_>>();
+        assert!(
+            !closure_requirements.is_empty(),
+            "a closed root candidate plans at least one dependency-closure requirement"
+        );
+        for requirement in closure_requirements {
+            assert_eq!(
+                requirement.semantic_claim_id(),
+                Some(parent_claim.as_str()),
+                "the defect: the requirement names the parent's own claim"
+            );
+            assert!(
+                !leaf_plan
+                    .selected_candidate
+                    .contains_closed_claim_id(parent_claim.as_str()),
+                "and the dependency's contract cannot contain it, so the check cannot pass"
+            );
+        }
+
+        // The sharpest form of it. This fixture closes callbacks on *both*
+        // nodes, so the dependency does close the exact domain the parent's
+        // candidate is about, and its receipt carries that claim:
+        let issuer = ConfiguredReceiptIssuer::persistent_local("phase21-graph", [17; 32]).unwrap();
+        let receipt =
+            authenticated_graph_test_receipt(leaf_plan, &leaf_identity.importer, &issuer, 7);
+        assert!(
+            receipt.contains_closed_claim_id(dependency_claim.as_str()),
+            "the dependency's own receipt closes its callbacks claim"
+        );
+        // ... and composition refuses anyway, because the id it looks for is
+        // the parent's. Nothing the dependency could publish would satisfy it.
+        assert!(
+            matches!(
+                graph.authenticate_dependency_receipts(
+                    &root_identity,
+                    &[(&leaf_identity, &receipt)],
+                    &issuer,
+                    7,
+                ),
+                Err(DependencyReceiptCompositionError::MissingClosedClaim { .. })
+            ),
+            "composition refuses a dependency that closed exactly the claim it was asked for"
+        );
+    }
+
     /// The pinned Type Facts producer this build's tracers run against, by
     /// `SOLID_TYPEFACTS_BIN`. `None` when it is unset, which is the only reason
     /// a producer-driven tracer does not run.
