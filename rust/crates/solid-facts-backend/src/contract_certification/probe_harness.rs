@@ -898,7 +898,15 @@ fn launch_every_session(
     timing: &mut ProbeGateBatchTiming,
 ) -> Result<Vec<ProbeRun>, ProbeHarnessError> {
     let mut runs = Vec::with_capacity(runtime_plan.sessions().len());
-    for session in runtime_plan.sessions() {
+    let session_count = runtime_plan.sessions().len();
+    // The one worker booted ahead, under the previous session's census. At
+    // most one exists at a time, and it is dropped — killing its process
+    // group — if this function returns early.
+    let mut parked: Option<ParkedWorker> = None;
+    // An escape hatch for measuring the pool against itself, and for a host
+    // where booting alongside the census is not wanted. Unset means on.
+    let preboot = std::env::var_os("SOLID_CHECKER_PROBE_NO_PREBOOT").is_none();
+    for (index, session) in runtime_plan.sessions().iter().enumerate() {
         timing.sessions += 1;
         let claim_id = session.claim_id().as_str();
         let recipe = corpus.recipe_for(claim_id).ok_or_else(|| {
@@ -927,9 +935,16 @@ fn launch_every_session(
             }),
         )?;
         let launch_started = Instant::now();
-        let launched = workspace.launch(
-            node_executable,
-            node_version,
+        // Either the worker booted under the previous session's census, or —
+        // first session, a refused pre-boot, or the pool disabled — one is
+        // booted now. A missing parked worker is never an error: it costs the
+        // boot it was meant to hide, and nothing else.
+        let worker = match parked.take() {
+            Some(worker) => worker,
+            None => workspace.spawn_parked(node_executable, node_version)?,
+        };
+        let launched = workspace.run_parked(
+            worker,
             module,
             &session_bytes,
             session.policy().timeout_millis,
@@ -950,10 +965,33 @@ fn launch_every_session(
             }
             Err(error) => return Err(error),
         };
+        // § 31.3's pre-boot pool. The next worker boots *inside* this census
+        // rather than after it, which is the one window where nothing hostile
+        // is running: this session's process group is already dead and the
+        // next session's worker has no session, reads nothing the session
+        // names, and is blocked on `stdin` until `run_parked` writes to it.
+        // The census still stands between a run and the next read, so the
+        // ordering property `verify_unchanged` exists for is unchanged.
+        //
+        // Booting costs about as much as the census it hides inside, so the
+        // pool removes most of a launch without adding a phase.
         let census_started = Instant::now();
-        let census = workspace.verify_unchanged();
+        let (census, next) = std::thread::scope(|scope| {
+            let booting = (preboot && index + 1 < session_count)
+                .then(|| scope.spawn(|| workspace.spawn_parked(node_executable, node_version)));
+            let census = workspace.verify_unchanged();
+            // A pre-boot that failed or panicked is discarded rather than
+            // reported: the next iteration boots inline and surfaces the real
+            // error there, with the census verdict below still taking
+            // precedence over any of it.
+            let next = booting
+                .and_then(|handle| handle.join().ok())
+                .and_then(Result::ok);
+            (census, next)
+        });
         timing.census_ns += elapsed_ns(census_started);
         census?;
+        parked = next;
         runs.push(run);
     }
     Ok(runs)
@@ -2988,29 +3026,41 @@ impl PrivateProbeWorkspace {
         Ok(())
     }
 
-    /// Launches one isolated worker process and returns its single run.
+    /// Boots a worker and proves its startup frame without giving it a
+    /// session.
     ///
-    /// Rust owns the launch: the executable is the pinned Node path, the
-    /// environment is allowlisted rather than inherited, the working directory
-    /// is inside the private tree, the frames arrive on a descriptor package
-    /// code cannot reach by name, and the startup frame must echo the protocol,
-    /// this launch's nonce, and the version, platform, and architecture Rust
-    /// established before the session is written.
+    /// Rust owns the launch, of which this is the first half: the executable
+    /// is the pinned Node path, the environment is allowlisted rather than
+    /// inherited, the working directory is inside the private tree, the frames
+    /// arrive on a descriptor package code cannot reach by name, and the
+    /// startup frame must echo the protocol, this launch's nonce, and the
+    /// version, platform, and architecture Rust established — all before any
+    /// session is written.
     ///
-    /// Every exit path kills the worker's whole process group. That is what
-    /// bounds the transaction: without it a detached grandchild inheriting the
-    /// report descriptor keeps the pipe open, and a reader waiting for EOF
-    /// waits forever. No reader is joined either — a thread that may never
-    /// finish is dropped, not waited on.
-    fn launch(
+    /// Every exit path kills the worker's whole process group, a parked
+    /// worker's included. That is what bounds the transaction: without it a
+    /// detached grandchild inheriting the report descriptor keeps the pipe
+    /// open, and a reader waiting for EOF waits forever. No reader is joined
+    /// either — a thread that may never finish is dropped, not waited on.
+    ///
+    /// This is the half of a launch that does not depend on *which* session
+    /// runs: the command line carries only the batch's condition flags, and
+    /// the environment only what Node needs plus this process's nonce. Since
+    /// protocol v7 the recipe arrives in the session frame, so a worker parked
+    /// here can serve any session of this workspace.
+    ///
+    /// A parked worker has read exactly one thing out of the private tree —
+    /// the pinned worker script, which the census covers as `harness-image` —
+    /// and is then blocked on `stdin`. It runs no package code and reads
+    /// nothing a session names until [`Self::run_parked`] writes to it. That
+    /// is what makes parking one *during* the between-session census sound:
+    /// the census still stands between one session's run and the next
+    /// session's first read, which is the property the ordering exists for.
+    fn spawn_parked(
         &self,
         node_executable: &Path,
         node_version: &str,
-        module: &Path,
-        session_bytes: &[u8],
-        timeout_millis: u64,
-        subject: ResolutionSubject<'_>,
-    ) -> Result<ProbeRun, ProbeHarnessError> {
+    ) -> Result<ParkedWorker, ProbeHarnessError> {
         let epoch_nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|elapsed| elapsed.as_nanos())
@@ -3057,13 +3107,38 @@ impl PrivateProbeWorkspace {
         let diagnostics = spawn_stderr_reader(stderr);
         let receiver = spawn_report_reader(report);
 
-        let deadline = Instant::now() + Duration::from_millis(timeout_millis.max(1));
-        let startup = receive_line(
-            &receiver,
-            STARTUP_BUDGET.min(deadline.saturating_duration_since(Instant::now())),
-        )
-        .map_err(|error| worker.explain(error, &diagnostics))?;
+        let startup = receive_line(&receiver, STARTUP_BUDGET)
+            .map_err(|error| worker.explain(error, &diagnostics))?;
         verify_startup_frame(&startup, &nonce, node_version)?;
+        Ok(ParkedWorker {
+            worker,
+            diagnostics,
+            receiver,
+            process_id,
+        })
+    }
+
+    /// Gives a parked worker its session and reads the one run frame back.
+    ///
+    /// The policy timeout starts here rather than at boot. It bounds the probe
+    /// *run*, and a worker parked early must not spend a session's budget
+    /// waiting to be used; [`Self::spawn_parked`] bounds the startup frame
+    /// with `STARTUP_BUDGET` on its own.
+    fn run_parked(
+        &self,
+        parked: ParkedWorker,
+        module: &Path,
+        session_bytes: &[u8],
+        timeout_millis: u64,
+        subject: ResolutionSubject<'_>,
+    ) -> Result<ProbeRun, ProbeHarnessError> {
+        let ParkedWorker {
+            mut worker,
+            diagnostics,
+            receiver,
+            process_id,
+        } = parked;
+        let deadline = Instant::now() + Duration::from_millis(timeout_millis.max(1));
 
         if let Some(mut stdin) = worker.take_stdin() {
             let mut session: serde_json::Value = serde_json::from_slice(session_bytes)
@@ -3173,6 +3248,20 @@ impl PrivateProbeWorkspace {
 /// bounded wait in this module then depends on a process nobody is tracking.
 /// Each launch therefore gets its own process group, and dropping this kills
 /// the group.
+/// A worker that has booted and proved its startup frame but has not been
+/// given a session.
+///
+/// Holding one is holding a live process, so it must reach either
+/// [`PrivateProbeWorkspace::run_parked`] or a drop — dropping it kills the
+/// whole process group exactly as a finished run does, because `WorkerProcess`
+/// owns that behaviour.
+struct ParkedWorker {
+    worker: WorkerProcess,
+    diagnostics: mpsc::Receiver<String>,
+    receiver: mpsc::Receiver<std::io::Result<String>>,
+    process_id: u32,
+}
+
 struct WorkerProcess {
     child: Child,
     group: i32,

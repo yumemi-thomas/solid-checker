@@ -2197,3 +2197,72 @@ of the larger closure and not its cost; and effective parallelism *fell*
 § 30's four options stand. Nothing measured so far closes a 527 s run to the
 150 s ceiling, so optimisation narrows the gap rather than removing the
 decision.
+
+## 34. Built: the pre-boot pool, measured at ~16% of a certification's wall
+
+§ 33.4 reinstated § 31.3. This is it, built and A/B'd.
+
+### 34.1 What had to move first
+
+A worker could not be booted ahead because the recipe module was a
+*spawn-time environment variable*: a booted process cannot be told afterwards
+which recipe to run. Worker protocol v7 moves it into the session frame, read
+beside `id` and `mode.environment` — before the recipe, and therefore the
+package, runs — and fails closed when absent, so a pooled worker can never
+inherit an earlier session's value.
+
+The launch nonce deliberately did **not** move. It binds the *process* to the
+harness that spawned it, which is true from boot and is what the startup frame
+answers with before any session exists. A parked worker keeps exactly the
+binding it has today. An earlier draft of this section claimed the nonce would
+have to move and that its meaning would change; that was wrong, and nothing
+about what the harness proves changed here.
+
+### 34.2 Where the boot is hidden
+
+Not during the previous session's *run* — the obvious placement, and the
+unsound one. Today exactly one worker exists at a time; booting the next one
+alongside a running session would put a parked process next to hostile package
+code, which is a new surface for no reason.
+
+It is hidden inside the **between-session census** instead. In that window the
+finished session's process group is already dead and the next session's worker
+has no session, has read nothing a session names, and is blocked on `stdin`.
+`verify_unchanged` still stands between one session's run and the next
+session's first read, which is the property the ordering exists for. Parking
+changes *when a process exists*, not *when it reads*.
+
+`launch` split into `spawn_parked` (pinned Node, allowlisted environment,
+nonce, startup frame verified — all session-independent) and `run_parked`
+(writes the session, reads the one run frame). The policy timeout now starts
+at dispatch rather than at boot, so a worker parked early cannot spend a
+session's budget waiting; `spawn_parked` bounds the startup frame with
+`STARTUP_BUDGET` on its own. A refused or panicked pre-boot is discarded
+rather than reported: the next session boots inline and surfaces the real
+error there, and the census verdict always takes precedence.
+
+### 34.3 Measured
+
+`@kobalte/utils`, release binary, 313 batches / 6,198 sessions per run, both
+orders to rule out an order effect. `SOLID_CHECKER_PROBE_NO_PREBOOT=1` is the
+control.
+
+| trial | launch (pool) | launch (off) | wall (pool) | wall (off) | delta | outcome diffs |
+| --- | --- | --- | --- | --- | --- | --- |
+| pool first | 169.5 s | 498.0 s | 208.7 s | 247.7 s | −15.7% | 0 |
+| no-pool first | 155.2 s | 521.7 s | 210.2 s | 252.2 s | −16.7% | 0 |
+
+Launching falls ~68%, which is the mechanism working. The phase sum falls only
+6%, because `censusNs` now includes joining the boot thread — the boot does
+not *entirely* hide inside the census, it mostly does. End to end the
+certification is **~16% faster**, and **zero** outcomes, statuses, or exit
+statuses differ across 12,396 sessions.
+
+### 34.4 What it does not do
+
+It does not close § 30. ~16% off a 527 s run is ~440 s against a 150 s
+ceiling. The ranked remainder is unchanged from § 33.4: session count is still
+the larger lever because it divides launch *and* census, and the certification
+concurrency sweep is still free and still untested. A corpus-wide run with
+`SOLID_CHECKER_TIMINGS=1` is still the only thing that can rank the two
+bottlenecks against each other, since `solid-js` runs no probe sessions at all.
