@@ -5037,3 +5037,107 @@ sentence a plan would quote.
 The two legs beside it — `written-parameter` (7) and `nested-parameter` (8) —
 are the same two legs that top the accessor class (§ 62.2), which suggests one
 premise on each would pay twice. Neither is examined here.
+
+## 69. What recovering the 62 actually requires — § 66.3 corrected (2026-09-12)
+
+§ 66.3 said the 62 core-runtime claims need "an authenticated identity the axiom
+tier can read, **without** a package contract", and called it a trust-model
+question. That was half the answer and the less important half. Reading the tier
+to its end, and the dialect audit behind it, gives two **independent** blockers,
+and the second is the one that decides the work.
+
+### 69.1 Blocker one: no source root, so the tier never reaches its table
+
+`census_dialect_axiom_for_callee` strips the declaration's file against the
+snapshot source roots and requires `root.dependency`. Those roots come from
+`snapshot_source_roots`, which builds one per *certification plan* — the owner's
+and its dependencies'. § 27 gives the core runtime no contract and no accepted
+edge, so no plan exists for it, no root exists, and the tier returns `None`
+before it consults anything. This is the blocker § 66.3 named.
+
+### 69.2 Blocker two: the table is a **negative** one, and the rows are absent
+
+This is what § 66.3 missed. The tier does not admit "a call to a known
+primitive". It admits a call the dialect **denies** in that domain —
+`primitive_performs_no_operation`, over `NEGATIVE_ROWS`, keyed
+`(package, export, domain)` and gated on the audited archive identity.
+
+Counting the Solid 2 rows: `@solidjs/signals` carries 16 `creates` denials
+including `createSignal`, `createMemo`, `onCleanup` and `getOwner`;
+`@solidjs/web` carries 3 (`clientOnly`, `httpHeader`, `httpStatus`); **`solid-js`
+carries 9, and not one of them is any of our five callees.**
+
+The audit says why, and it is not an oversight. `solid-js/types/index.d.ts:8`
+re-**declares** `createSignal` from `./client/hydration.js` instead of
+re-exporting `@solidjs/signals`', so a `solid-js` import does not inherit that
+package's row. And for `createSignal` the withholding is a *condition* finding
+recorded in the source:
+
+> The browser bodies perform no `create` … but the `node`/`worker`/`deno`
+> body's derived overload reaches `ctx.serialize(id, deferred.promise,
+> deferStream)` … A `(package, export, domain)` row carries no condition, so the
+> row must be withheld until the table is condition-aware.
+
+So even with blocker one fixed, `createSignal` under `solid-js` recovers
+nothing. Granting it would prove a false claim under server conditions.
+
+### 69.3 The 62, by callee
+
+| claims | callee, as resolved |
+| --- | --- |
+| 14 | `solid-js :: createSignal` |
+| 6 | `solid-js :: createMemo` |
+| 6 | `solid-js :: onCleanup` |
+| 5 | `solid-js :: createComponent` |
+| 2 | `solid-js :: getOwner` |
+| 2 | `@solidjs/signals :: onCleanup` |
+| 1 | `@solidjs/signals :: getOwner` |
+| 2 | `@solidjs/web :: createComponent` |
+| 6 | three non-core callees (`withArrayCopy`, `createServerPlugin`, `registerServerFunction`) |
+
+`createSignal` is the largest single entry **and** the one that cannot be
+granted without condition-aware rows. The three `@solidjs/signals` claims are the
+opposite: their rows already exist, so blocker one alone is what withholds them.
+
+### 69.4 Three stages, each decidable on its own
+
+**Stage 1 — authenticate the core-runtime archives as snapshot-only roots.**
+Give `solid-js`, `@solidjs/signals` and `@solidjs/web` a source root bound by
+the `AuditedArchive` identity they already carry (name, version, integrity),
+with no package contract, no accepted edge and no claims derived from them. This
+does not reopen § 27: the exemption is about contracts and opaque frontiers,
+and an archive whose bytes are authenticated establishes nothing by existing.
+**Yield: 3 claims** — the `@solidjs/signals` rows that already exist. Small, and
+that is the point: it proves the path end to end before anything is audited.
+
+**Stage 2 — audit the four non-`createSignal` callees under their own package.**
+`createMemo`, `onCleanup`, `getOwner` under `solid-js` and `createComponent`
+under `solid-js`/`@solidjs/web`, each granted only if *every* audited condition
+closes the domain empty — the rule `NEGATIVE_ROWS` already states. **Yield: up
+to 19**, and less wherever a condition disagrees, which is exactly what the
+audit would be for.
+
+**Stage 3 — make the rows condition-aware.** A row gains a condition set; the
+certifier binds the artifact case's conditions and grants only a row that covers
+them. The audit names this as the blocking design, and it is the only route to
+`createSignal`. **Yield: 14**, plus it retires the "one approximation, stated
+rather than hidden" that § `NEGATIVE_ROWS` already carries about
+`browser/production`.
+
+### 69.5 What I would pick, and what is yours
+
+Stage 1 is mechanical and I would do it without asking: it is plumbing, it
+changes no claim's truth, and 3 claims is a cheap end-to-end proof.
+
+Stage 2 is an **audit**, not a code change. Its cost is reading four exports'
+published bytes across every captured condition and citing them, and its risk is
+the § 7.3 shape — a body that differs by condition and quietly makes a row
+false. It needs a reviewer who will say no.
+
+Stage 3 is the real decision: a schema change to the negative authority, a
+condition binding at the gate, and a re-reading of citations per condition. It
+buys 14 claims here and removes a standing approximation — but it is the one
+that deserves an explicit yes rather than being started because it is next.
+
+§ 66.3 framed all of this as a trust-model question. Only stage 1 is, and it is
+the cheap one.
