@@ -1699,6 +1699,10 @@ where before the frontier said "unknown". That proposal rests on the census
 refusing an unknown accessor at certification, not on the generator knowing
 anything. It is the class of case to watch.
 
+**Verified in § 36.** Both guards that class depends on now have named,
+falsifiable tests, and the generator's `reads: []` proposal was reproduced
+directly rather than assumed.
+
 ### 27.3 Measured
 
 Corpus, 97 generator fixtures:
@@ -2323,3 +2327,67 @@ concurrency sweep — free, no code change, and now doubly motivated, since a
 14 cores is past the useful width. And § 31.2's session count remains the
 larger lever, because it divides launch *and* census rather than trying to
 hide one behind the other.
+
+## 36. Verified: the § 27.2 class refuses, and the untested half was the producer
+
+§ 27.2 named a class to watch and left it as an argument: after the exemption
+a generator proposes `reads: []` for an export whose only read is a property
+access on a core-runtime import, and that is admissible *only because the
+certifier's implementation census refuses the form*. Nothing tested it.
+
+### 36.1 The proposal, reproduced
+
+A throwaway package — `import { sharedConfig } from "solid-js"` and one
+export returning `sharedConfig.hydrating`, beside an own-literal control —
+generates a contract in which **both exports share one summary**:
+
+~~~json
+"closed": ["reads", "creates"], "reads": []
+~~~
+
+with an empty refusals sidecar: no declined closure, no withheld claim. So
+the generator really does propose `reads: []` over a core-runtime value
+access, exactly as § 27.2 predicted, and treats it identically to a value the
+module built itself. The whole safety of the case is downstream of that.
+
+### 36.2 Two guards, and only one of them was tested
+
+**The census side was already covered.** `census_form_disposition`'s
+`own-literal` arm requires the subject's declaration to resolve to a path
+inside the artifact and to sit in `run.runtime_sources`; a unit test in
+`type_facts.rs` already asserts that a declaration *outside* the artifact's
+runtime source refuses, alongside no declaration at all.
+
+**The producer side was not.** The gap is subtler than § 27.2 guessed. The
+producer roots an *imported* binding as `own-literal` when its declaration
+carries a visible object literal — `importedTableRead` in the producer's own
+fixture is imported and is rooted, legitimately, because ADR 0044's premise
+is about the literal, not about where the binding came from. Nothing asserted
+what happens when the declaration has **no initializer**, which is precisely
+the shape a core-runtime package exports: `declare const sharedConfig`.
+
+Had the producer rooted that as an own literal, the form would have arrived
+at the census carrying a clearing premise, the `runtime_sources` guard is the
+only thing that would have stood between it and a certified `reads: []`, and
+no test anywhere named the situation.
+
+### 36.3 What was added
+
+`TestDeclaredImportedReceiverIsNotRootedAsAnOwnLiteral` in the producer:
+a `declare const` with no initializer, imported and read, must record an
+uncensused invoking form (so the census has something to refuse) and must
+root **none** of them. It carries its own control — `importedTableRead`, the
+imported binding that *does* have a literal and *is* rooted — so the test
+fails if the own-literal premise stops working altogether rather than
+silently proving nothing.
+
+Confirmed falsifiable: pointed at `importedTableRead` it fails with
+`a form is rooted "own-literal"; a declaration with no initializer states no
+premise`.
+
+### 36.4 Status
+
+The class § 27.2 flagged is **sound, and now evidenced at both layers**. The
+gap was in the evidence, not the behaviour — which is the good outcome, but
+it was not knowable without checking, and the producer-side shape that could
+have broken it was not the one § 27.2 anticipated.

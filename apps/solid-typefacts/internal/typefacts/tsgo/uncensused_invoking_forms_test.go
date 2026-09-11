@@ -1362,9 +1362,16 @@ func TestExportValueDemandDigestSeparatesLocalDeclarationLocations(t *testing.T)
 const subjectTableSource = `export const importedTable: any = { first: { value: 1 } };
 export let importedWrittenTable: any = { first: 1 };
 importedWrittenTable = { second: 2 };
+// The shape a core-runtime package exports: a binding this program imports
+// whose declaration carries no initializer, so there is no object literal for
+// ADR 0044's premise to have observed. The sharedConfig value solid-js
+// exports is exactly this, and a read through it is the class
+// docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md
+// § 27.2 names as the one to watch.
+export declare const declaredTable: any;
 `
 
-const subjectSource = `import { importedTable, importedWrittenTable } from "./tables.js";
+const subjectSource = `import { importedTable, importedWrittenTable, declaredTable } from "./tables.js";
 
 const registry: any = { value: 1, inner: [{ value: 2 }] };
 
@@ -1503,6 +1510,12 @@ const ownTable: any = { first: { value: 1 } };
 // in another, so the identifier at the use site binds an import.
 export function importedTableRead(key: any): unknown {
 	return importedTable[key];
+}
+
+// § 27.2's class: the receiver is imported and its declaration has no
+// initializer, so no premise ever observed how its properties were created.
+export function declaredTableRead(key: any): unknown {
+	return declaredTable[key];
 }
 
 export function importedWrittenTableRead(key: any): unknown {
@@ -2101,5 +2114,65 @@ func TestRuntimeInstalledAccessorReadsAreInvisibleToTheProducer(t *testing.T) {
 				testCase.why,
 			)
 		}
+	}
+}
+
+// § 27.2's class, pinned at the producer.
+//
+// Exempting the core runtime from the opaque frontier stopped a blanket
+// withdrawal, so a generator now proposes `reads: []` for an export whose
+// only read is a property access on a binding imported from `solid-js` —
+// `@solid-primitives/utils`' `createHydratableSignal` reading
+// `sharedConfig.hydrating` is the real instance. That proposal is admissible
+// only because the certifier's implementation census refuses the form. This
+// asserts the producer does not hand the census a premise that would clear
+// it.
+//
+// The distinction is the initializer. ADR 0044's own-literal premise is that
+// *this program* created the property with CreateDataPropertyOrThrow, which a
+// visible object literal shows; `importedTable` has one and is rooted
+// accordingly, even though it is imported. A declaration with no initializer
+// never showed anything of the kind, and the bytes behind it may be outside
+// the closure entirely. Rooting it as an own literal would clear the read at
+// certification and let `reads: []` certify over a value this program never
+// built.
+func TestDeclaredImportedReceiverIsNotRootedAsAnOwnLiteral(t *testing.T) {
+	analyzer, dir := markerProject(t, map[string]string{
+		"subjects.ts": subjectSource,
+		"tables.ts":   subjectTableSource,
+	})
+	path := filepath.Join(dir, "subjects.ts")
+
+	transcript := implementationTranscriptFor(t, analyzer, path, subjectSource, "declaredTableRead")
+	var stated int
+	for _, form := range transcript.UncensusedInvokingForms {
+		if form.SubjectRoot == "" {
+			continue
+		}
+		stated++
+		t.Errorf(
+			"declaredTableRead: a form is rooted %q; a declaration with no initializer states no premise",
+			form.SubjectRoot,
+		)
+	}
+	if len(transcript.UncensusedInvokingForms) == 0 {
+		t.Fatal("declaredTableRead: no uncensused invoking form was recorded at all, so the census has nothing to refuse")
+	}
+	if stated != 0 {
+		t.Fatalf("declaredTableRead: %d rooted form(s); want 0", stated)
+	}
+
+	// The control, in the same transcript set: an imported binding that *does*
+	// carry an object literal is still rooted, so the test above is about the
+	// missing initializer and not about the import.
+	control := implementationTranscriptFor(t, analyzer, path, subjectSource, "importedTableRead")
+	var rooted int
+	for _, form := range control.UncensusedInvokingForms {
+		if form.SubjectRoot == typefacts.SubjectRootOwnLiteral {
+			rooted++
+		}
+	}
+	if rooted == 0 {
+		t.Fatal("importedTableRead: the own-literal control is no longer rooted, so the assertion above proves nothing")
 	}
 }
