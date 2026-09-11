@@ -1125,8 +1125,8 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
             probes,
         )
         .map_err(|error| format!("policy-2 proof finalization failed: {error}"))?;
-    report_closure_candidates(&plan);
-    report_certified_closures(&finalized);
+    report_closure_candidates(None, &plan);
+    report_certified_closures(None, &finalized);
     report_withheld_closures(None, &finalized)?;
     let trust_bytes =
         solid_facts_backend::encode_policy2_trust_configuration(finalized.trust_configuration())
@@ -1195,26 +1195,63 @@ const CLOSURE_CANDIDATE_MARKER: &str = "solid-checker:closure-candidates=";
 /// withheld record, is lost outside every mechanism meant to account for it.
 const CERTIFIED_CLOSURE_MARKER: &str = "solid-checker:certified-closures=";
 
-fn report_certified_closures(finalized: &solid_facts_backend::FinalizedPolicy2Contract) {
-    let record = match solid_facts_backend::document_closed_call_domains(finalized.canonical_main())
-    {
-        Ok(rows) => serde_json::json!({
-            "count": rows.len(),
-            "closed": rows
-                .into_iter()
-                .map(|row| serde_json::json!({
-                    "artifactCase": row.artifact_case,
-                    "export": row.export,
-                    "closed": row.closed,
-                }))
-                .collect::<Vec<_>>(),
-        }),
-        Err(error) => serde_json::json!({ "unreadable": error.to_string() }),
-    };
+/// The node a graph-lane record belongs to, so a per-row census can attribute
+/// a closure to the package that carries it. `None` on the value-only lane,
+/// where every record is the root's.
+fn closure_record_node(
+    node: Option<&solid_facts_backend::CanonicalDependencyNodeIdentity>,
+) -> Option<serde_json::Value> {
+    node.map(|node| {
+        serde_json::json!({
+            "package": node.package_name,
+            "version": node.package_version,
+            "digest": node.digest(),
+        })
+    })
+}
+
+fn report_certified_closures(
+    node: Option<&solid_facts_backend::CanonicalDependencyNodeIdentity>,
+    finalized: &solid_facts_backend::FinalizedPolicy2Contract,
+) {
+    let mut record =
+        match solid_facts_backend::document_closed_call_domains(finalized.canonical_main()) {
+            Ok(rows) => {
+                // A tally beside the rows, because the consumer truncates the rows
+                // and a truncated breakdown reads as a smaller yield rather than
+                // as a partial one. Nine domains bound it, so it never truncates.
+                let mut by_domain: std::collections::BTreeMap<String, usize> =
+                    std::collections::BTreeMap::new();
+                for row in &rows {
+                    for domain in &row.closed {
+                        *by_domain.entry(domain.to_string()).or_default() += 1;
+                    }
+                }
+                serde_json::json!({
+                    "count": rows.len(),
+                    "closedByDomain": by_domain,
+                    "closed": rows
+                        .into_iter()
+                        .map(|row| serde_json::json!({
+                            "artifactCase": row.artifact_case,
+                            "export": row.export,
+                            "closed": row.closed,
+                        }))
+                        .collect::<Vec<_>>(),
+                })
+            }
+            Err(error) => serde_json::json!({ "unreadable": error.to_string() }),
+        };
+    if let (Some(object), Some(node)) = (record.as_object_mut(), closure_record_node(node)) {
+        object.insert("node".into(), node);
+    }
     println!("{CERTIFIED_CLOSURE_MARKER}{record}");
 }
 
-fn report_closure_candidates(plan: &solid_facts_backend::CertificationPlan) {
+fn report_closure_candidates(
+    node: Option<&solid_facts_backend::CanonicalDependencyNodeIdentity>,
+    plan: &solid_facts_backend::CertificationPlan,
+) {
     let candidates = plan
         .candidates()
         .closure_candidates()
@@ -1227,7 +1264,10 @@ fn report_closure_candidates(plan: &solid_facts_backend::CertificationPlan) {
             })
         })
         .collect::<Vec<_>>();
-    let record = serde_json::json!({ "count": candidates.len(), "candidates": candidates });
+    let mut record = serde_json::json!({ "count": candidates.len(), "candidates": candidates });
+    if let (Some(object), Some(node)) = (record.as_object_mut(), closure_record_node(node)) {
+        object.insert("node".into(), node);
+    }
     println!("{CLOSURE_CANDIDATE_MARKER}{record}");
 }
 
@@ -1402,8 +1442,8 @@ fn execute_contract_case_set_certification(
     for ((plan, artifact_case_id, resolved_import_root, importer, specifier), finalized) in
         plans.into_iter().zip(finalized)
     {
-        report_closure_candidates(&plan);
-        report_certified_closures(&finalized);
+        report_closure_candidates(None, &plan);
+        report_certified_closures(None, &finalized);
         report_withheld_closures(None, &finalized)?;
         let current_trust = solid_facts_backend::encode_policy2_trust_configuration(
             finalized.trust_configuration(),
@@ -1547,6 +1587,14 @@ fn execute_contract_graph_certification(
     .map_err(|error| format!("policy-2 graph trust encoding failed: {error}"))?;
     for node in finalized.nodes() {
         report_withheld_closures(Some(node.identity()), node.finalized())?;
+        // The other two halves of the accounting, which the graph lanes used
+        // to drop: without them a composed row reports what gating took away
+        // and never what the planner derived or the receipt binds, so a
+        // corpus-scale closure yield cannot be read off a run at all.
+        if let Some(node_plan) = graph.plan(node.identity()) {
+            report_closure_candidates(Some(node.identity()), node_plan);
+        }
+        report_certified_closures(Some(node.identity()), node.finalized());
         let current = solid_facts_backend::encode_policy2_trust_configuration(
             node.finalized().trust_configuration(),
         )?;
@@ -1780,6 +1828,8 @@ fn execute_contract_graph_case_set_certification(
             let node_plan = graph
                 .plan(node.identity())
                 .ok_or("finalized graph case node has no retained opaque plan")?;
+            report_closure_candidates(Some(node.identity()), node_plan);
+            report_certified_closures(Some(node.identity()), node.finalized());
             let node_root = if node.identity() == graph.root_identity() {
                 case_root.clone()
             } else {

@@ -3340,3 +3340,72 @@ The corpus-wide fraction. 53% is one artifact case of one package, and this
 document has twice extrapolated a number from a sample and been wrong. § 42.4's
 358 stays an upper bound with no fraction attached to it until a lane-on
 corpus pass measures one.
+
+## 48. The closure accounting a run reports, and the two gaps that hid it
+
+Every closure number in §§ 41–47 was read out of a run's own catalog by hand,
+because `certifiedClosures` and `closureCandidates` were `null` on all 418 rows
+of the benchmark report. That made a lane-on corpus pass pointless: it could be
+paid for and then not read. Two separate gaps produced that one `null`.
+
+### 48.1 The certifier emitted only a third of the accounting on a graph
+
+`main.rs` has four certification entry points. The two value-only ones call
+`report_closure_candidates`, `report_certified_closures` and
+`report_withheld_closures`. **Both graph ones called only the third.** So a
+composed row reported what gating took away and never what the planner derived
+or what the receipt binds — and "nothing closed" and "everything closed" were
+the same report.
+
+Both now emit all three, per node, with the node's package and version on the
+record. Attribution is the point rather than a nicety: a composed row carries
+several packages' closures, and in the worked example below they are
+`@solid-primitives/utils`' and `solid-js`'.
+
+### 48.2 The runner never read them
+
+`scripts/ecosystem-benchmark/run.mjs` reads `withheldClosures` off the audit in
+two places and nothing else. `certificationAttempt.certifiedClosures` was
+therefore **absent**, not empty — and `jq` answers `null` for a missing key
+exactly as it does for a null value.
+
+That is worth naming as a trap, because it fooled this document. § 46.5 read
+the `null` and concluded corpus-scale yield was unreadable. The conclusion was
+right and the evidence did not support it: it could not distinguish "the
+certifier emitted nothing" from "the runner never asked", and both were true.
+Fixing only the first changed nothing visible, which is what exposed the
+second.
+
+`closureAccounting` now carries both through, preserving `null` rather than
+defaulting to `{}` — an absent accounting and an empty one are different
+answers and only the audit knows which.
+
+### 48.3 A tally beside the rows
+
+`closed` is capped at 64 rows by the consumer. A corpus pass reading a domain
+breakdown off a capped list would report a *smaller yield* rather than a
+partial one, which is the failure mode this whole section is about. The record
+therefore carries `closedByDomain` as well, tallied natively and summed across
+nodes; nine domains bound it, so it never truncates.
+
+### 48.4 What a run says now
+
+`@solid-primitives/props@4.0.0-next.3`, `--dependency-graph-lane`, read
+straight off `report.json`:
+
+~~~
+certifiedClosures: { cases: 5, count: 25 }
+closed domains, by package:
+  @solid-primitives/utils  creates 24
+  @solid-primitives/utils  reads    3
+  @solid-primitives/utils  returns  3
+~~~
+
+Those three `reads` are `clamp`, `trueFn` and `access` — § 46.4's result, now
+countable from the report instead of from a hand-read catalog.
+
+### 48.5 What this unblocks
+
+The lane-on corpus pass (§ 42.7, ~4 hours). It was the only thing that could
+answer how large the recipe backlog actually is, and until now it would have
+produced a report that could not answer it.

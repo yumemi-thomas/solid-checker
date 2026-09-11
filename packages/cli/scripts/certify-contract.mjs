@@ -695,10 +695,28 @@ export function certifiedClosuresFromNativeOutput(stdout) {
     }
   }
   if (!perCase.length) return null;
+  // Summed, never truncated: `closed` below is capped, and a corpus pass that
+  // read a domain tally off a capped list would report a smaller yield rather
+  // than a partial one.
+  const closedByDomain = {};
+  for (const record of perCase) {
+    for (const [domain, count] of Object.entries(record.closedByDomain ?? {})) {
+      closedByDomain[domain] = (closedByDomain[domain] ?? 0) + count;
+    }
+  }
   return {
     cases: perCase.length,
     count: perCase.reduce((total, record) => total + (record.count ?? 0), 0),
-    closed: perCase.flatMap(record => record.closed ?? []).slice(0, 64),
+    ...(Object.keys(closedByDomain).length ? { closedByDomain } : {}),
+    // The graph lanes emit one record per *node*, so the node identity has to
+    // survive the flatten or a composed row's closures cannot be attributed to
+    // the package that carries them -- which is the whole reason to read this
+    // field at corpus scale.
+    closed: perCase
+      .flatMap(record =>
+        (record.closed ?? []).map(row => (record.node ? { ...row, node: record.node } : row))
+      )
+      .slice(0, 64),
     ...(perCase.some(record => record.unreadable)
       ? { unreadable: perCase.find(record => record.unreadable).unreadable }
       : {})
@@ -731,7 +749,13 @@ export function closureCandidatesFromNativeOutput(stdout) {
   return {
     cases: perCase.length,
     count: perCase.reduce((total, record) => total + record.count, 0),
-    candidates: perCase.flatMap(record => record.candidates ?? []).slice(0, 64)
+    candidates: perCase
+      .flatMap(record =>
+        (record.candidates ?? []).map(row =>
+          record.node ? { ...row, node: record.node } : row
+        )
+      )
+      .slice(0, 64)
   };
 }
 

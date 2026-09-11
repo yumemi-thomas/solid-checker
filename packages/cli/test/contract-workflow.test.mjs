@@ -97,6 +97,8 @@ import {
   parseCertifyArguments,
   partialProposalHasDependencyFrontier,
   preparedGraphForPartialProposal,
+  certifiedClosuresFromNativeOutput,
+  closureCandidatesFromNativeOutput,
   declinedDependencyGraphCases,
   RetainedCasePreparationRefusal,
   recoveryGraphCases,
@@ -3846,4 +3848,86 @@ test("only a content-premise disposition travels to certification as a claim", (
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("a graph lane's closure records keep the node that carries them", () => {
+  // The graph lanes emit one record per node, and used to emit none at all --
+  // a composed row reported what gating took away and never what the planner
+  // derived or the receipt bound, so corpus-scale closure yield could not be
+  // read off a run. Attribution is the point: two packages' closures in one
+  // row are not interchangeable.
+  const line = (marker, record) => `solid-checker:${marker}=${JSON.stringify(record)}`;
+  const stdout = [
+    line("closure-candidates", {
+      count: 1,
+      candidates: [{ artifactCase: "artifact-case:a", export: "clamp", path: "Call(Reads)" }],
+      node: { package: "@solid-primitives/utils", version: "7.0.0-next.4", digest: "sha256:aa" }
+    }),
+    line("closure-candidates", {
+      count: 1,
+      candidates: [{ artifactCase: "artifact-case:b", export: "mapArray", path: "Call(Reads)" }],
+      node: { package: "solid-js", version: "2.0.0-rc.0", digest: "sha256:bb" }
+    }),
+    line("certified-closures", {
+      count: 1,
+      closedByDomain: { reads: 1, creates: 1 },
+      closed: [{ artifactCase: "artifact-case:a", export: "clamp", closed: ["reads"] }],
+      node: { package: "@solid-primitives/utils", version: "7.0.0-next.4", digest: "sha256:aa" }
+    }),
+    line("certified-closures", {
+      count: 2,
+      closedByDomain: { reads: 2 },
+      closed: [{ artifactCase: "artifact-case:b", export: "mapArray", closed: ["reads"] }],
+      node: { package: "solid-js", version: "2.0.0-rc.0", digest: "sha256:bb" }
+    })
+  ].join("\n");
+
+  const candidates = closureCandidatesFromNativeOutput(stdout);
+  assert.equal(candidates.cases, 2);
+  assert.equal(candidates.count, 2);
+  assert.deepEqual(
+    candidates.candidates.map(row => [row.export, row.node.package]),
+    [["clamp", "@solid-primitives/utils"], ["mapArray", "solid-js"]]
+  );
+
+  const certified = certifiedClosuresFromNativeOutput(stdout);
+  // The tally is summed across nodes and never truncated, because `closed`
+  // below is capped at 64 rows: a corpus pass reading a domain breakdown off
+  // a capped list would report a smaller yield rather than a partial one.
+  assert.deepEqual(certified.closedByDomain, { reads: 3, creates: 1 });
+  assert.equal(certified.count, 3);
+  assert.deepEqual(certified.closed.map(row => [row.export, row.node.package]), [
+    ["clamp", "@solid-primitives/utils"],
+    ["mapArray", "solid-js"]
+  ]);
+  assert.deepEqual(certified.closed.slice(0, 1), [
+    {
+      artifactCase: "artifact-case:a",
+      export: "clamp",
+      closed: ["reads"],
+      node: { package: "@solid-primitives/utils", version: "7.0.0-next.4", digest: "sha256:aa" }
+    }
+  ]);
+
+  // The control: a record with no tally contributes none, so the field is
+  // absent rather than an empty object that would read as a measured zero.
+  assert.equal(
+    certifiedClosuresFromNativeOutput(
+      line("certified-closures", { count: 1, closed: [] })
+    ).closedByDomain,
+    undefined
+  );
+
+  // The control: the value-only lane names no node, and a row must not grow
+  // an empty one -- an absent attribution has to stay absent rather than
+  // becoming a nameless package.
+  const rootOnly = line("certified-closures", {
+    count: 1,
+    closed: [{ artifactCase: "artifact-case:a", export: "clamp", closed: ["reads"] }]
+  });
+  assert.deepEqual(certifiedClosuresFromNativeOutput(rootOnly).closed, [
+    { artifactCase: "artifact-case:a", export: "clamp", closed: ["reads"] }
+  ]);
+  assert.equal(certifiedClosuresFromNativeOutput(""), null);
+  assert.equal(closureCandidatesFromNativeOutput(""), null);
 });

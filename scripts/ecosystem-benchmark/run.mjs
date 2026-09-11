@@ -318,6 +318,24 @@ export const WITHHELD_CLOSURE_REASON_BUCKETS = Object.freeze([
   "other"
 ]);
 
+/// The closure accounting a row's audit carries, beyond what gating withheld.
+///
+/// `withheldClosures` says what was taken away. These two say what the planner
+/// derived and what the receipt actually binds, and without them a row's
+/// closure yield cannot be read off a run at all: a composed row reported only
+/// its withholdings, so "nothing closed" and "everything closed" looked
+/// identical in the report (§ 48 of
+/// `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`).
+///
+/// `null` is preserved rather than defaulted, because an absent accounting and
+/// an empty one are different answers and only the audit knows which it is.
+function closureAccounting(audit) {
+  return {
+    closureCandidates: audit?.closureCandidates ?? null,
+    certifiedClosures: audit?.certifiedClosures ?? null
+  };
+}
+
 function withheldClosureReasons(audit) {
   const counts = Object.fromEntries(WITHHELD_CLOSURE_REASON_BUCKETS.map((bucket) => [bucket, 0]));
   for (const record of Array.isArray(audit?.withheldClosures) ? audit.withheldClosures : []) {
@@ -813,6 +831,7 @@ export function readCertificationAttempt(
       withheldClosures: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures.length : 0,
       withheldClosureReasons: withheldClosureReasons(audit),
       withheldClosureDetails: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures : [],
+      ...closureAccounting(audit),
       ordinaryAnalysis: audit?.ordinaryAnalysis ?? null
     };
   }
@@ -856,7 +875,8 @@ export function readCertificationAttempt(
     refusalCountsByOwner: countBy(refusals, "owner"),
     withheldClosures: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures.length : 0,
     withheldClosureReasons: withheldClosureReasons(audit),
-    withheldClosureDetails: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures : []
+    withheldClosureDetails: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures : [],
+    ...closureAccounting(audit)
   };
 }
 

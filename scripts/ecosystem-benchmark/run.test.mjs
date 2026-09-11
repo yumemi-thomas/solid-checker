@@ -380,7 +380,14 @@ test("complete proposals retain an exact policy-2 certification refusal when att
         vetoIncomplete: 0,
         dependencyWithheld: 0,
         other: 0
-      }
+      },
+      // And names no closure accounting either, which is `null` rather than
+      // an empty tally: a run whose certifier reported nothing and a run that
+      // certified nothing are different answers, and defaulting the first to
+      // the second is what made a composed row's yield unreadable for as long
+      // as it was.
+      closureCandidates: null,
+      certifiedClosures: null
     });
   } finally {
     rmSync(temporary, { recursive: true, force: true });
