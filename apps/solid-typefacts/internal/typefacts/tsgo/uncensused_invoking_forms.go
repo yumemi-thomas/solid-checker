@@ -1000,10 +1000,18 @@ func (p *project) subjectRootRefusalLocked(
 	}
 	sourceFile := ast.GetSourceFileOfNode(declaration)
 	// Declared outside the artifact's own runtime source — a `declare const` in
-	// a typings file. Every premise in this family turns on what the artifact's
-	// own code assigned, and a typings file assigns nothing, so the scope and
-	// shape below would describe a binding none of them could reach anyway.
-	if sourceFile != nil && !p.formIsRuntimeSourceFile(sourceFile) {
+	// a typings file, or a global the program's default libraries declare.
+	// Every premise in this family turns on what the artifact's own code
+	// assigned, and a declaration file assigns nothing, so the scope and shape
+	// below would describe a binding none of them could reach anyway.
+	//
+	// `formIsRuntimeSourceFile` alone is not that question: it asks whether a
+	// file is in the *program*, which `lib.dom.d.ts` is. Without the
+	// declaration-file half, `window` classified as a module binding with no
+	// initializer — true of the declaration, and silent about the code. Every
+	// other caller of that predicate pairs the two the same way.
+	if sourceFile != nil &&
+		(sourceFile.IsDeclarationFile || !p.formIsRuntimeSourceFile(sourceFile)) {
 		return typefacts.SubjectRefusalAmbientDeclaration
 	}
 	moduleScope := sourceFile != nil && declaration.Parent != nil &&

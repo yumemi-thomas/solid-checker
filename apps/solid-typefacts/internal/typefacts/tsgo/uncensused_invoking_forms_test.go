@@ -2243,3 +2243,135 @@ func TestDeclaredImportedReceiverIsNotRootedAsAnOwnLiteral(t *testing.T) {
 		t.Fatal("importedTableRead: the own-literal control is no longer rooted, so the assertion above proves nothing")
 	}
 }
+
+const refusalSource = `import { importedWrittenTable } from "./tables.js";
+
+// Never assigned anywhere: the genuine uninitialized module binding, and the
+// leg the ecosystem corpus put at 26 claims before this test existed.
+let pending: any;
+
+const fromCall: any = makeTable();
+
+function makeTable(): any {
+	return { value: 1 };
+}
+
+export function libGlobalRead(): unknown {
+	// @ts-ignore -- unresolved on purpose: this is the shape @kobalte/utils
+	// carries, and an unresolved member is what records a form at all.
+	return window.navigator.userAgentData?.platform;
+}
+
+export function ambientRead(): unknown {
+	return ambientTable.value;
+}
+
+export function uninitializedModuleRead(): unknown {
+	return pending.value;
+}
+
+export function moduleFromCallRead(): unknown {
+	return fromCall.value;
+}
+
+// Written in its own module, so ADR 0044 refuses it and the classifier is
+// reached at all. An import the premise roots never gets here -- which is why
+// the unwritten importedTable would not have tested this leg.
+export function importedRead(): unknown {
+	return importedWrittenTable.value;
+}
+
+export function callResultRead(): unknown {
+	return makeTable().value;
+}
+`
+
+const refusalAmbientSource = `declare const ambientTable: any;
+`
+
+// TestSubjectRootRefusalNamesTheBlockingShape pins the protocol-50 diagnostic
+// against the shapes it is supposed to separate.
+//
+// It exists because of a measurement that did not add up. The ecosystem corpus
+// reported 26 `module-binding-uninitialized` claims from two packages, 24 of
+// them in `@kobalte/utils` — a module-scope binding, no initializer, assigned
+// nowhere, in the artifact's own runtime source. Such a binding holds
+// `undefined` and a property read of it throws, so 24 of them in shipped code
+// is close to a contradiction.
+//
+// Every one of those claims is `window.navigator.userAgentData?.platform`.
+// `window` is declared in `lib.dom.d.ts`, which the *program* loads — and
+// `formIsRuntimeSourceFile` asks only whether a file is in the program, not
+// whether it is runtime source. Every other caller pairs it with
+// `IsDeclarationFile`; the refusal classifier did not, so a lib global read as
+// a module binding with no initializer, which is true of the declaration and
+// says nothing about the code.
+func TestSubjectRootRefusalNamesTheBlockingShape(t *testing.T) {
+	analyzer, dir := markerProject(t, map[string]string{
+		"refusals.ts":  refusalSource,
+		"ambient.d.ts": refusalAmbientSource,
+		"tables.ts":    subjectTableSource,
+	})
+	path := filepath.Join(dir, "refusals.ts")
+
+	for _, testCase := range []struct {
+		export string
+		want   typefacts.SubjectRootRefusalReason
+		why    string
+	}{
+		{
+			export: "libGlobalRead",
+			want:   typefacts.SubjectRefusalAmbientDeclaration,
+			why:    "`window` is declared in lib.dom.d.ts: no premise in this family can reach a binding the artifact's own code never assigned, because a typings file assigns nothing",
+		},
+		{
+			export: "ambientRead",
+			want:   typefacts.SubjectRefusalAmbientDeclaration,
+			why:    "and the same holds for a `declare const` in the project's own declaration file, which is in the program but is not runtime source",
+		},
+		{
+			export: "uninitializedModuleRead",
+			want:   typefacts.SubjectRefusalModuleUninitialized,
+			why:    "the genuine leg has to survive the fix, or the correction would have traded one wrong number for another",
+		},
+		{
+			export: "moduleFromCallRead",
+			want:   typefacts.SubjectRefusalModuleFromCall,
+			why:    "a module binding initialized from a call fails ADR 0044 on the initializer, not on the assignment",
+		},
+		{
+			export: "importedRead",
+			want:   typefacts.SubjectRefusalImportedBinding,
+			why:    "asked of the raw symbol, before the alias chain is walked — § 62.1's bug was asking the canonical one",
+		},
+		{
+			export: "callResultRead",
+			want:   typefacts.SubjectRefusalCallResult,
+			why:    "ADR 0048's boundary: the subject is what a call returned, and the call is this program's own",
+		},
+	} {
+		transcript := implementationTranscriptFor(t, analyzer, path, refusalSource, testCase.export)
+		stated := 0
+		for _, form := range transcript.UncensusedInvokingForms {
+			switch form.Kind {
+			case typefacts.UncensusedGetAccessor, typefacts.UncensusedSetAccessor,
+				typefacts.UncensusedPropertyAccessUnknownAccessor:
+			default:
+				continue
+			}
+			if form.SubjectRoot != "" {
+				t.Fatalf("%s: form at %v is rooted at %q; this table is about refusals", testCase.export, form.Location, form.SubjectRoot)
+			}
+			if form.SubjectRootRefusal != testCase.want {
+				t.Fatalf(
+					"%s: refusal %q, want %q — %s",
+					testCase.export, form.SubjectRootRefusal, testCase.want, testCase.why,
+				)
+			}
+			stated++
+		}
+		if stated == 0 {
+			t.Fatalf("%s: no accessor form recorded, so the case asserts nothing", testCase.export)
+		}
+	}
+}

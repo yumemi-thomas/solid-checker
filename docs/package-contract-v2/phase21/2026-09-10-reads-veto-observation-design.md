@@ -4487,3 +4487,103 @@ and the question is answerable by reading a single file rather than by
 proposing a premise. It is *not* a premise candidate yet — it is a thing that
 does not add up, and § 58 and § 62.1 are both reminders of what happens when a
 number that does not add up gets built on.
+
+## 63. The 26 that did not add up were `window` (2026-09-11)
+
+§ 62.3 flagged `module-binding-uninitialized` — 26 claims, 2 packages, 24 of
+them `@kobalte/utils` — as a thing that does not add up rather than a premise
+candidate, because a module binding that is never assigned holds `undefined`
+and a property read of it throws. Twenty-four of those in shipped code is close
+to a contradiction.
+
+Every one of them is the same expression. The byte spans the refusals name —
+`@kobalte/utils/src/platform.ts:753..793`, `dist/index.js:4198..4238`, and the
+two in `@kobalte/core/dist/i18n` — all read:
+
+~~~ts
+window.navigator.userAgentData?.platform
+~~~
+
+The subject root is `window`, declared in `lib.dom.d.ts` as
+`declare var window: Window & typeof globalThis`. A module-scope variable
+declaration with no initializer, assigned nowhere the producer can see. The
+classification was accurate about the declaration and said nothing whatever
+about the code.
+
+### 63.1 One missing conjunct
+
+`subjectRootRefusalLocked` files a declaration as ambient when it is outside the
+artifact's own runtime source, and asked that as `!formIsRuntimeSourceFile`.
+That predicate answers whether a file is in the **program** — and the program
+loads the default libraries, so `lib.dom.d.ts` is in it. Every other caller of
+the predicate pairs it with `IsDeclarationFile`:
+
+~~~go
+if sourceFile == nil || sourceFile.IsDeclarationFile || !p.formIsRuntimeSourceFile(sourceFile) {
+~~~
+
+The refusal classifier had only the second half. Adding the first moves all 26
+to `ambient-declaration`, which is where § 62.1 put this family when it
+introduced the leg and observed — correctly, and for the wrong reason — that it
+"does not fire on this corpus".
+
+### 63.2 Measured
+
+| leg | § 62.2 | now |
+| --- | --- | --- |
+| `module-binding-uninitialized` | 26 (2 pkgs) | **0** |
+| `ambient-declaration` | 0 | **26 (2 pkgs)** |
+
+Certification cannot move: `subject_root_refusal` has exactly one consumer in
+the Rust client, the message text inside `refuse_form` in `type_facts.rs`,
+which is already on the refusing path. The ecosystem regression gate passed
+against its certification thresholds on the same run.
+
+The other legs' claim counts shift by a few against § 62.2's table, and that is
+a difference between two ad-hoc queries rather than movement. § 62.2's package
+column was itself inconsistent — it reports `local-binding-written` as 4 claims
+across 6 packages, which cannot be true — so its counts are not a baseline. The
+two legs above are the ones this run establishes, and it establishes them
+against each other in a single query.
+
+### 63.3 What this says about the instrument
+
+Three of the arc's classifications have now been wrong, and all three the same
+way: § 62.1's alias walk, this file's ambient conjunct, and § 57.3 before them.
+Each was a predicate that answered a *nearby* question convincingly. None was
+caught by a test, because until now **no test asserted a refusal reason at
+all** — protocol 50 shipped an eleven-way classifier whose only check was that
+a form states a root or a refusal but never both.
+
+`TestSubjectRootRefusalNamesTheBlockingShape` closes that. It pins six shapes,
+including the lib global that caused this, and it includes the genuine
+uninitialized module binding so the correction cannot trade one wrong number
+for another. It reproduced this bug from a four-line fixture in 0.5 s; the
+measurement that surfaced it took a seven-minute ecosystem run and a day of not
+believing it.
+
+### 63.4 What is left
+
+`ambient-declaration` is a dead end by construction, and that is the finding:
+these 26 claims are **not reachable by any premise in this family**. No
+assignment exists in the artifact's own code to observe, so ADR 0044 and its
+descendants have nothing to look at. They are correctly withheld, and the
+accessor class's addressable size drops from 114 to 88 with no work done.
+
+The board after this:
+
+| claims | pkgs | leg | status |
+| --- | --- | --- | --- |
+| 26 | 11 | `written-parameter` | § 61.1's negative result — needs a joined premise |
+| 26 | 2 | `ambient-declaration` | **unreachable by construction** |
+| 22 | 10 | `nested-parameter` | unexamined |
+| 10 | 4 | `local-binding-from-call` | ADR 0044 boundary |
+| 9 | 5 | `imported-binding` | unexamined |
+| 9 | 4 | `local-binding` | unexamined |
+| 5 | 3 | `call-result` | ADR 0048's boundary, deliberate |
+| 4 | 3 | `local-binding-written` | ADR 0050 boundary |
+| 3 | 3 | *(not stated)* | the § 60.4 instrument gap |
+| 3 | 3 | `not-a-reference` | |
+| 1 | 1 | `module-binding` | |
+
+`nested-parameter` at 22 across 10 packages is now the largest unexamined leg.
