@@ -4911,3 +4911,47 @@ authenticity, so neither is plumbing: "transform first" and "pass an arbitrary
 condition" are decisions about what is executed versus what ships. Whether
 either is achievable within the pins is unestablished and should be checked
 before it is planned.
+
+## 67. 37 of § 66.4's gate failures are impossible, not pending (2026-09-11)
+
+§ 66.4 listed the 61 gate-incomplete `creates` claims as the target needing no
+trust-model argument, with 37 of them blocked by Node's refusal to strip types
+under `node_modules`. Checking that before planning it, as § 66.4 said to:
+
+Every one of the 37 is `@kobalte/utils/src/*.ts` — 62 rows on
+`src/index.ts`, 8 on `src/number.ts`, 2 each on `src/get-scroll-parent.ts` and
+`src/polygon.ts`. The package publishes `"./src/*": "./src/*"`, so that artifact
+case's entry point *is* raw TypeScript. Its `.` entry resolves to
+`dist/index.js` and certifies fine; this is the separate case that tests what
+the `src/*` subpath does.
+
+The pinned interpreter cannot load it, and no flag changes that. Measured
+directly on Node v24.11.1 with a two-file reproduction:
+
+~~~
+Error [ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING]: Stripping types is
+currently unsupported for files under node_modules
+    at stripTypeScriptModuleTypes (node:internal/modules/typescript:183:11)
+~~~
+
+`--experimental-transform-types` throws the same error from the same line. The
+refusal is unconditional in `node:internal/modules/typescript`.
+
+So these are not pending work. Recovering them needs a loader that transforms
+the bytes before Node sees them — which changes what the probe *executes* away
+from what the package *ships*, and the whole point of the pinned interpreter is
+that those are the same thing. That is a trust-model change with a poor trade:
+a probe of transformed source proves something about the transform.
+
+What is worth fixing is the accounting. They are recorded as
+`veto did not complete`, which reads as addressable, and § 66.4 duly listed them
+as the best-shaped target left. They are better described the way a closure
+hazard is: an artifact case the pinned interpreter **cannot execute by
+construction**, for which no recipe, premise or gate exists that would change
+the answer. Until that is done, any count of "gate-incomplete" claims overstates
+the work available by 37.
+
+That leaves § 66.4's genuinely addressable half at **16 claims**
+(`@tanstack/query-core`, a custom export condition the pinned interpreter
+refuses), and moves the § 66.3 core-runtime question — 62 claims, one root
+cause — further ahead of everything else in `creates`.
