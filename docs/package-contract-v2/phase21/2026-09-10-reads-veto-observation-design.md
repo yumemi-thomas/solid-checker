@@ -4071,3 +4071,75 @@ Which boundary case dominates the 122 is unmeasured, and the § 55.5
 stragglers — 99 claims across eight unrelated classes, including a
 `@tanstack/custom-condition` the harness config rejects and a `@kobalte/core`
 that cannot resolve `solid-js` at all — are still undiagnosed.
+
+## 57. The 122 are one premise, and it is the producer's (2026-09-11)
+
+### 57.1 The refusal now names which premise it wanted
+
+§ 56.3 could not choose a premise to review because every boundary of ADR 0034
+arrived as the same sentence. `census_transcript_calls`' `refuse_form` printed
+the form kind, the node kind, the location and the reach — and not
+`subject_root`, which is the field `census_form_disposition` actually switches
+on.
+
+It prints it now, with the reason it was not enough: no derivation offered, a
+parameter-family root whose parameter the producer did not identify, a root on
+a form that does not read its subject, or a root this form has no reviewed
+disposition for. Write position is named too.
+
+Behaviour-neutral by measurement — a `make ecosystem-regression` against § 55's
+run moves no row and certifies the same 5,187 closures. Only the text changed.
+
+### 57.2 All 122, one answer
+
+| claims | pkgs | premise |
+| --- | --- | --- |
+| **122** | **32** | the producer offered no subject derivation |
+
+There is no second row. Not one of the 122 is an ADR 0034 boundary case — not a
+written parameter, not a module-level receiver, not a nested callable's own
+parameter, not a setter. In every one of them `subject_root` is empty, which for
+the current producer means the subject is neither parameter-rooted nor a local
+literal result, so no derivation was emitted at all.
+
+§ 56.3 framed this as choosing which premise to review next. That framing was
+wrong: there is nothing to review, because nothing was offered.
+
+### 57.3 The consumer side is already built
+
+`census_form_disposition` carries a reviewed `own-literal` arm for exactly this
+form family:
+
+~~~rust
+"own-literal" => {
+    …
+    Some(match (form.kind, form.subject_write) {
+        (IterationProtocol, _) => CensusDisposition::OwnLiteralIterable,
+        (_, true)  => CensusDisposition::OwnLiteralAccessorWrite,
+        (_, false) => CensusDisposition::OwnLiteralAccessor,
+    })
+}
+~~~
+
+It requires `subject_declaration` to land in the artifact's own runtime source,
+and it is reachable today — for forms whose subject the producer roots that way.
+
+The producer never roots an *accessor* form that way.
+`uncensusedInvokingFormCensusLocked` fills `SubjectRoot` from
+`accessorFormSubjectParameterLocked`, which yields only the parameter family,
+and otherwise falls through to `localLiteralResultLocked`. `own-literal`,
+`default-library` and `own-class` exist in `SubjectRootDerivation` and are
+emitted for other form kinds.
+
+So the next step is one derivation in `apps/solid-typefacts`, and no verifier
+change: root an accessor form's subject at `own-literal` when it is an object
+this artifact's own runtime source declares. The consumer arm, its `runtime_sources`
+containment check and its write/read split are already in place and tested.
+
+### 57.4 What is not established
+
+How many of the 122 that derivation would reach. The subjects could equally be
+imported bindings, `this`, or the result of an arbitrary expression, and the
+refusal says only that no derivation was offered — not what the subject is.
+Sizing it needs the producer to say what it saw, which is the same shape of
+instrumentation this section just added on the verifier side.

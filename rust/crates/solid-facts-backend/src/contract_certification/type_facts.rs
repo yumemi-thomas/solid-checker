@@ -9508,15 +9508,49 @@ fn census_transcript_calls(
     // otherwise the enumeration guarantee: the calls census records
     // `CallExpression` and `NewExpression` only, and a form it does not record
     // reaches a callable the walk below can say nothing about.
+    // The refusal names *which* premise the producer offered for the subject,
+    // and why it was not enough. Without it every boundary of ADR 0034 reads
+    // alike — a module-level receiver, a parameter the producer could not
+    // identify, and a form that never reads its subject all arrive as one
+    // undifferentiated "uncensused invoking form", and choosing which premise
+    // to review next means reading the package rather than the refusal.
     let refuse_form = |form: &typefacts::UncensusedInvokingForm| {
+        let subject = if form.subject_root.is_empty() {
+            "the producer offered no subject derivation".to_owned()
+        } else if matches!(
+            form.subject_root.as_str(),
+            "parameter" | "parameter-default" | "parameter-result"
+        ) && form.subject_parameter.is_none()
+        {
+            format!(
+                "subject root {:?}, but the producer identified no parameter",
+                form.subject_root
+            )
+        } else if !census_form_shape_reads_the_subject(form) {
+            format!(
+                "subject root {:?}, but this form does not read its subject",
+                form.subject_root
+            )
+        } else {
+            format!(
+                "subject root {:?} is not reviewed for this form",
+                form.subject_root
+            )
+        };
         format!(
-            "creates census refuses an uncensused invoking form: {} ({}) at {}:{}..{}, reach {}",
+            "creates census refuses an uncensused invoking form: {} ({}) at {}:{}..{}, reach {}, \
+             {subject}{}",
             uncensused_invoking_form_kind_name(form.kind),
             form.node_kind,
             form.location.path,
             form.location.start_byte,
             form.location.end_byte,
-            reachability_name(form.reach)
+            reachability_name(form.reach),
+            if form.subject_write {
+                " (write position)"
+            } else {
+                ""
+            }
         )
     };
     // ADR 0045: a coercion that names the calls its clearance rests on is the
