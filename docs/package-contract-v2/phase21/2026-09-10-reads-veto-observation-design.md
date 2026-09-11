@@ -2875,7 +2875,7 @@ this ecosystem imports. That is a bounded, shareable, and very unequally
 distributed cost — and it is the first time this phase has had a real number
 for it.
 
-### 42.7 Cost, and the amortization nobody has taken
+### 42.7 Cost, and the amortization nobody has taken — the four-hour figure is wrong, see § 49.1
 
 23.8× on certification for the sample (8.5 s → 202.8 s). Applying that
 multiplier to the 256 decline-only rows' 618 s of certification in the full
@@ -3308,7 +3308,7 @@ withholds exactly as no recipe does, which
 `a_recipe_that_throws_withholds_its_candidate_rather_than_certifying_it`
 pins — so the pass is free of risk as well as of hand-authoring.
 
-### 47.2 Measured
+### 47.2 Measured — the 53% is one case and not the corpus, see § 49.5
 
 45 `reads` scaffolds for `@solid-primitives/utils@7.0.0-next.4`'s `.` case,
 certified once with a scratch corpus:
@@ -3409,3 +3409,98 @@ countable from the report instead of from a hand-read catalog.
 The lane-on corpus pass (§ 42.7, ~4 hours). It was the only thing that could
 answer how large the recipe backlog actually is, and until now it would have
 produced a report that could not answer it.
+
+## 49. The corpus measured with the lane on: 1,515 recipes
+
+§ 48 made a lane-on corpus pass readable. This is it: all 418 probes,
+`--dependency-graph-lane`, the checked-in recipe corpus, the release checker.
+
+### 49.1 It took ten minutes, and § 42.7's four-hour estimate was wrong
+
+| | |
+| --- | --- |
+| wall | **610,947 ms (10 min)** |
+| certification work summed over rows | 10,806,205 ms (180 min) |
+| lanes used | 253 `published-graph`, 102 `reused-proposal`, 44 `generated-proposal` |
+
+§ 42.7 projected "roughly four hours" by taking the 23.8× per-row multiplier
+and applying it to the corpus's summed certification time. The summed time is
+right — 180 minutes — and the projection was still wrong, because **the runner
+executes rows concurrently** and the estimate silently assumed serial
+execution. On 14 cores the 180 minutes of work landed in 10 minutes of wall.
+
+The redundancy § 42.7 identified is real and unchanged: nothing shares
+canonical nodes *between* rows, so `solid-js` and `@solid-primitives/utils` are
+re-acquired and re-generated once per consuming row. It is a cost in CPU, not
+in waiting, and it is not a defect — `graphCaseSet` already shares nodes across
+roots within one transaction, and receipts are graph-root-local by design, so
+what could be shared across rows is the generation and never the receipt.
+
+### 49.2 The number
+
+Withheld candidates, **deduplicated by semantic claim id** — the unit a recipe
+addresses:
+
+| | rows | distinct claims |
+| --- | --- | --- |
+| `no recipe in corpus` — **a recipe serves these** | 22,618 | **1,515** |
+| `census refused` — no recipe serves one | 4,046 | 466 |
+| veto ran and failed | 107 | 76 |
+
+The 1,515 are 1,486 `reads` and 29 `returns`. At the ~10–30 lines a finished
+recipe runs to, that is the whole hand-authoring bill for this corpus.
+
+**Read the row counts as a warning, not a quantity.** 22,618 and 1,515 differ
+by 15× because a shared dependency's claim is withheld once per consuming row.
+Every per-row total in this document is inflated the same way.
+
+### 49.3 It concentrates, which is the part that makes it tractable
+
+64 packages hold all 1,515:
+
+| | claims | share |
+| --- | --- | --- |
+| top 5 packages | 934 | **62%** |
+| top 20 packages | 1,331 | **88%** |
+
+| package | claims |
+| --- | --- |
+| *(the row's own package, no dependency node)* | 461 |
+| `@solid-primitives/utils` | 299 |
+| `@corvu/utils` | 72 |
+| `framer-motion` | 51 |
+| `motion` | 51 |
+| `motion-dom` | 50 |
+| `@floating-ui/utils` | 44 |
+
+### 49.4 What closes today, distinct rather than per-row
+
+| domain | distinct closures |
+| --- | --- |
+| `creates` | 362 |
+| `returns` | 26 |
+| `reads` | **3** |
+
+The three `reads` are `clamp`, `trueFn` and `access` — the recipes written in
+§ 43, and the corpus's only `reads` recipes. The per-row figure for the same
+three is **300**, because `@solid-primitives/utils` is a dependency of about a
+hundred rows. That 100× gap between the same fact counted two ways is the
+single easiest mistake to make with this report.
+
+### 49.5 § 47's 53% does not survive the corpus
+
+§ 47 measured 24 of 45 candidates unserviceable on `@solid-primitives/utils`'
+`.` case and declined to extrapolate. It was right to decline: corpus-wide the
+unserviceable share is **466 / 1,981 = 23.5%**, less than half what that case
+showed. The backlog is more serviceable than the sample suggested, and the
+two-pass workflow § 47 added is what separates the two populations without
+writing anything.
+
+### 49.6 Two things this run surfaced and did not investigate
+
+- **76 distinct claims whose veto ran and failed** (54 `vetoUnreproducible`,
+  53 `vetoThrew` by row). A recipe exists for each and it broke. That is a
+  correctness signal rather than backlog, and nothing here looked at it.
+- **461 claims carry no dependency node** — the largest single group, the
+  row's own package rather than a dependency. Uncharacterised, and 30% of the
+  total, so the top-20 table above should not be planned against until it is.
