@@ -1051,3 +1051,50 @@ fn evaluation_material_integrates_with_multi_mode_phase9_sidecars() {
         Err(EvidenceSidecarError::OrphanDocument { .. })
     ));
 }
+
+/// § 51: a transitive dependency the private workspace never authenticated
+/// fails at import as a bare `ERR_MODULE_NOT_FOUND`, because
+/// `require_authenticated_dependency_closure` reads only the analyzed
+/// package's own declared dependencies. The candidate is withheld either way;
+/// this names what failed instead of echoing Node.
+#[test]
+fn a_missing_transitive_dependency_is_named_rather_than_echoed() {
+    let named = super::unresolvable_package_incompletion(
+        "Error: Cannot find package 'seroval' imported from \
+         /tmp/private/node_modules/solid-js/web/dist/server.js",
+    )
+    .expect("a missing-package throw is named");
+    assert!(
+        named.contains("\"seroval\""),
+        "it names the package: {named}"
+    );
+    assert!(
+        named.contains("authenticated dependency closure"),
+        "and says why it is absent: {named}"
+    );
+
+    // Double quotes are the other spelling Node uses.
+    assert!(
+        super::unresolvable_package_incompletion(
+            "Cannot find package \"left-pad\" imported from x"
+        )
+        .is_some_and(|named| named.contains("\"left-pad\"")),
+    );
+
+    // The controls: every other throw keeps its own text, because rewriting a
+    // throw this does not understand would replace a real diagnosis with a
+    // guess. A truncated frame names nothing, and an empty name is not a
+    // package.
+    assert_eq!(
+        super::unresolvable_package_incompletion("ReferenceError: document is not defined"),
+        None
+    );
+    assert_eq!(
+        super::unresolvable_package_incompletion("Cannot find package "),
+        None
+    );
+    assert_eq!(
+        super::unresolvable_package_incompletion("Cannot find package ''"),
+        None
+    );
+}

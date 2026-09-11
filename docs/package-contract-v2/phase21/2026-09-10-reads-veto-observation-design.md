@@ -3620,7 +3620,7 @@ that should not have.
 3. **Reconsider the conditions the probe runs under.** The affected cases name
    no `browser`, so Node's default `node` condition picks a *server* build.
 
-### 51.4 An open question, stated as a question
+### 51.4 An open question, stated as a question — answered in § 52.1
 
 (3) raises something this section does not answer and should not pretend to:
 the census analysed one resolution of `solid-js/web` and the probe loaded
@@ -3629,3 +3629,59 @@ is not established here. If they are not, a veto is observing a build the
 closure was never about — which would be a soundness question and not a
 diagnostic one. Establishing it means comparing the census's resolved entry
 against the probe's for one of these six rows, and that has not been done.
+
+## 52. § 51's question answered, and its fix (1) replaced
+
+### 52.1 The probe cannot observe a different build than the census read
+
+§ 51.4 asked whether the census and the probe might resolve `solid-js/web`
+differently, and called it a possible soundness question. **For the subject it
+is already checked.** `verify_reported_resolution` compares the worker's
+reported resolution against the artifact case with `names_same_file`, and its
+refusal text says so outright:
+
+> the probe worker resolved … to …, but the artifact case this transaction
+> certifies names …: the probe ran against a different file than the Type
+> Facts witness read
+
+So the probe cannot run against a different build of the package under test.
+The question is answered and the answer is sound.
+
+### 52.2 The gap that is real, one level down
+
+`verify_reported_dependency_resolutions` checks a declared dependency with
+`path_is_inside(&resolved, root)` — **containment in the authenticated copy,
+not file identity.** Which build *within* `solid-js` a probe resolves to is
+therefore not pinned.
+
+On these six rows that surfaced as a crash, which is loud. A package whose
+`node` and `browser` branches both resolve cleanly would diverge quietly: the
+census reads one, the probe vetoes the other, and nothing compares them. That
+is recorded here and not fixed; it is a narrower statement than § 51.4's, and
+unlike that one it is not hypothetical.
+
+### 52.3 Why § 51.3's fix (1) was not taken
+
+Fix (1) was "make the precheck match the runtime closure", i.e. walk the
+analyzed package's declared dependencies transitively. That would **refuse
+gates that work today**: what an artifact case imports is a subset of what its
+closure declares, and `web.js` needs no `seroval` even though `server.js` does.
+It trades a bad diagnostic for lost capability.
+
+What landed achieves the same intent without that trade. A worker throw whose
+summary matches `Cannot find package '<name>'` is rewritten into a named
+incompletion:
+
+> the probe worker could not resolve `"seroval"`: the private workspace carries
+> only this transaction's authenticated dependency closure, and `"seroval"` is
+> reached transitively rather than declared by the analyzed package
+
+It cannot over-refuse, because the resolution has already failed by the time it
+runs. Every other throw keeps its own text — rewriting one the classifier does
+not understand would replace a real diagnosis with a guess — and the controls
+in `a_missing_transitive_dependency_is_named_rather_than_echoed` pin that,
+along with both quote spellings Node uses and the truncated-frame cases.
+
+The outcome is unchanged: an incomplete veto withholds its candidate. Only the
+reason improves, and § 51.3's fixes (2) and (3) remain the ones that would
+actually close the nine claims.

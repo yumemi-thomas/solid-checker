@@ -946,7 +946,10 @@ fn evaluate_mode(
             verdict: ProbeTargetVerdict::Incomplete,
             incompletion: Some(summary.map_or_else(
                 || "the worker threw (no summary reported)".to_owned(),
-                |summary| format!("the worker threw: {summary}"),
+                |summary| {
+                    unresolvable_package_incompletion(&summary)
+                        .unwrap_or_else(|| format!("the worker threw: {summary}"))
+                },
             )),
         });
     }
@@ -1025,6 +1028,43 @@ fn evaluate_mode(
         verdict,
         incompletion: None,
     })
+}
+
+/// A worker throw that is really a missing authenticated dependency, named.
+///
+/// The private workspace carries this transaction's authenticated dependency
+/// closure and nothing else, and `require_authenticated_dependency_closure`
+/// checks it against the **analyzed package's own** declared dependencies --
+/// one level. A package the artifact case reaches *transitively* is neither
+/// declared by the analyzed package nor copied in, so it passes that check and
+/// then fails at import as a bare `ERR_MODULE_NOT_FOUND`.
+///
+/// Measured on six rows whose artifact cases name no conditions: Node's own
+/// `node` condition selects `solid-js/web/dist/server.js`, which imports
+/// `seroval`, which no one declared (§ 51 of
+/// `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`).
+///
+/// This names it rather than deepening the precheck, and the distinction
+/// matters: a precheck walking *declared* dependencies transitively would
+/// refuse gates that work today, because what a case imports is a subset of
+/// what its closure declares -- `web.js` needs no `seroval` even though
+/// `server.js` does. Naming the package that actually failed to resolve
+/// cannot over-refuse, because the resolution already failed.
+///
+/// The outcome is unchanged either way: an incomplete veto withholds its
+/// candidate. Only the reason improves.
+fn unresolvable_package_incompletion(summary: &str) -> Option<String> {
+    let rest = summary.split_once("Cannot find package ")?.1;
+    let quote = rest.chars().next().filter(|c| *c == '\'' || *c == '"')?;
+    let name = rest[quote.len_utf8()..].split(quote).next()?;
+    if name.is_empty() || name.len() > 214 {
+        return None;
+    }
+    Some(format!(
+        "the probe worker could not resolve {name:?}: the private workspace carries only this \
+         transaction's authenticated dependency closure, and {name:?} is reached transitively \
+         rather than declared by the analyzed package"
+    ))
 }
 
 fn refused_mode(reason: impl Into<String>) -> EvaluatedMode {
