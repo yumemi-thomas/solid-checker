@@ -3567,3 +3567,65 @@ better ratio:
 Two of the five causes are interpreter limits that are honest refusals. The
 other three — 38 claims between them — are harness work, and the missing-package
 one is the only place in this document where something still looks like a bug.
+
+## 51. The missing-package failure: the precheck is one level deep
+
+§ 50.1 left *"Cannot find package `'seroval'` imported from
+`…/node_modules/solid-js/web/dist/server.js`"* as the only thing still looking
+like a defect. It is one, and a small one, but not where the error text points.
+
+### 51.1 The mechanism, end to end
+
+`solid-js`' `./web` subpath resolves by condition:
+
+~~~json
+"node":    { "import": "./web/dist/server.js" }
+"browser": { "import": "./web/dist/web.js" }
+~~~
+
+The six affected rows — `@solid-primitives/cookies` ×2, `mutable` ×2, `timer`,
+`@solidjs/meta` — carry artifact cases whose conditions are `[]`, folded to
+`["import"]`. The probe worker is Node, so Node's own default `node` condition
+selects **`server.js`**, which imports `seroval`. `seroval` is not in the
+private workspace, and the worker throws.
+
+### 51.2 Why the gate did not refuse by name
+
+The module header states the intended behaviour: *"A dependency the analyzed
+package imports and this transaction did not authenticate refuses the gate by
+name (`require_authenticated_dependency_closure`) instead of the probe reaching
+unauthenticated bytes."* Here it did not — a raw Node error surfaced instead.
+
+`require_authenticated_dependency_closure` iterates
+`plan.verified_closure.manifest().dependencies`: the **analyzed package's own**
+declared dependencies, one level. `seroval` is not a dependency of
+`@solid-primitives/cookies`; it is a dependency of `solid-js`, which *is*
+authenticated and copied in. So the precheck passes and the runtime import
+fails one level deeper.
+
+**The precheck is one level deep; the runtime closure is not.** That is the
+defect, and it costs diagnosis rather than safety: the outcome is an incomplete
+veto either way, the candidate is withheld either way, and nothing certified
+that should not have.
+
+### 51.3 Three fixes, and they are not the same size
+
+1. **Make the precheck match the runtime closure.** Small, matches the
+   documented intent, turns a raw worker throw into a named refusal. Closes no
+   claim.
+2. **Authenticate the dependency closure transitively**, so `seroval` is
+   acquired, verified and copied. This is what would actually close the 9
+   claims — and it widens what the transaction authenticates, which is a
+   trust-scope decision rather than a bug fix.
+3. **Reconsider the conditions the probe runs under.** The affected cases name
+   no `browser`, so Node's default `node` condition picks a *server* build.
+
+### 51.4 An open question, stated as a question
+
+(3) raises something this section does not answer and should not pretend to:
+the census analysed one resolution of `solid-js/web` and the probe loaded
+whichever Node's default conditions selected. Whether those are the same bytes
+is not established here. If they are not, a veto is observing a build the
+closure was never about — which would be a soundness question and not a
+diagnostic one. Establishing it means comparing the census's resolved entry
+against the probe's for one of these six rows, and that has not been done.
