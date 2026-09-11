@@ -15,6 +15,31 @@
 // proposed a closure" from "one was proposed and later withdrawn", which are
 // different problems and only one of them is ever a recipe's.
 //
+// ## Run it twice. The second pass is what saves the work.
+//
+// More than half of what a first pass hands you can be candidates no recipe
+// can ever serve, and the first pass cannot tell you which. A candidate
+// withheld as `no recipe in corpus` is weakened out of the plan before its
+// demands are discharged, so its census never runs and a refusal underneath
+// stays masked behind the missing recipe.
+//
+// A *throwing* scaffold unmasks it: it is a recipe as far as the gate is
+// concerned, so the candidate stays in the plan, its census runs, and a
+// `census refused: …` is reported ahead of the incomplete gate. Nothing can
+// certify from it -- a throw withholds exactly as no recipe does.
+//
+//   1. scaffold every candidate into a **scratch** corpus (never the
+//      checked-in one: `ecosystem-probe-recipes.test.mjs` refuses a committed
+//      scaffold);
+//   2. certify once with `--probe-recipe-corpus <scratch>`;
+//   3. run this again against *that* audit. It prints one
+//      `unserviceable` line per candidate the census refused. Delete those
+//      modules and finish the rest.
+//
+// Measured on `@solid-primitives/utils@7.0.0-next.4`'s `.` case: 45 `reads`
+// scaffolds, of which **24 were `census refused` and 21 worth finishing**
+// (§ 47 of `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`).
+//
 // ## What is mechanical, and what is not
 //
 // A recipe is three things: a claim id, a manifest entry, and an observation.
@@ -63,6 +88,10 @@ export const SCHEMA_VERSION = 1;
 /// has a recipe, and overwriting it with a scaffold would destroy the
 /// author's work to fix a runtime failure a scaffold does not address.
 export const RECIPE_GAP_REASON = "no recipe in corpus";
+
+/// The reason a candidate carries when the implementation census refused it.
+/// No recipe serves one; `censusRefusedCandidates` reports them.
+export const CENSUS_REFUSED_PREFIX = "census refused: ";
 
 /// The default probe policy for a corpus this script creates.
 ///
@@ -288,6 +317,34 @@ export function recipeGaps(material, { domains } = {}) {
     .filter(entry => typeof entry.semanticClaimId === "string" && typeof entry.export === "string");
 }
 
+/// The candidates a recipe can never serve, from the same material.
+///
+/// `census refused: …` means the implementation census could not decide the
+/// candidate, so there is no proposed closure for a veto to contradict.
+/// Writing a recipe for one is wasted work, and the only way to *discover*
+/// that used to be to write one: a candidate withheld as
+/// `no recipe in corpus` is weakened out of the plan before its demands are
+/// discharged, so its census never runs and the refusal underneath stays
+/// masked (§ 43.3 of
+/// `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`).
+///
+/// A *throwing* scaffold unmasks it, which is the two-pass workflow in this
+/// file's header: the scaffold is a recipe as far as the gate is concerned,
+/// so the candidate stays in the plan, its census runs, and a refusal is
+/// reported ahead of the incomplete gate. Reported here so a second pass over
+/// that audit says, in one line, how much of the batch was never worth
+/// finishing.
+export function censusRefusedCandidates(material, { domains } = {}) {
+  const withheld = material?.withheldClosures;
+  if (!Array.isArray(withheld)) return [];
+  return withheld
+    .filter(entry => entry && typeof entry === "object")
+    .filter(entry => typeof entry.reason === "string" &&
+      entry.reason.startsWith(CENSUS_REFUSED_PREFIX))
+    .filter(entry => !domains?.length || domains.includes(entry.domain))
+    .filter(entry => typeof entry.export === "string");
+}
+
 export const PROPOSAL_PLAN_FORMAT = "solid-checker-contract-proposal-plan";
 
 /// Which side of the proposal/certification line a domain was lost on.
@@ -492,6 +549,22 @@ export function main(argv = process.argv.slice(2), log = console.log) {
   const options = parseArguments(argv);
   const material = JSON.parse(readFileSync(options.input, "utf8"));
   const gaps = recipeGaps(material, { domains: options.domains });
+  // Before the no-gaps exit, because that is exactly the second pass this
+  // report exists for: the scaffolds are on disk, their candidates now read
+  // `veto did not complete`, and what is left to say is which of them the
+  // census refused and nobody should finish.
+  const unserviceable = censusRefusedCandidates(material, { domains: options.domains });
+  if (unserviceable.length) {
+    log(
+      `${unserviceable.length} candidate(s) here are \`census refused\`: no recipe serves one, ` +
+        "and any module already emitted for one should be deleted."
+    );
+    for (const candidate of unserviceable) {
+      log(
+        `unserviceable  ${candidate.domain} ${candidate.export}: ${candidate.reason.slice(0, 120)}`
+      );
+    }
+  }
   if (!gaps.length) {
     log(`no candidate in ${basename(options.input)} is withheld for want of a recipe`);
     const plan = options.proposalPlan

@@ -3284,3 +3284,59 @@ of it.
   catalog.
 - The recipe cost is unchanged and now has a measured unit: three recipes,
   three closures, on one artifact case shared by four rows.
+
+## 47. Half the recipe backlog was never worth writing, and one run finds out
+
+§ 43.3 found that `no recipe in corpus` masks a census refusal underneath it,
+and could only say the real number was smaller than 358. This measures the
+fraction on one artifact case, and turns the finding into a workflow rather
+than a caveat.
+
+### 47.1 The mechanism, and why a throwing scaffold defeats it
+
+A candidate withheld as `no recipe in corpus` is weakened out of the plan by
+`CertificationPlan::recipe_gated` *before* its demands are discharged. Its
+implementation census therefore never runs, and a refusal that would have
+decided it unconditionally is never computed. That is the masking: the
+pipeline reports the first blocker it reaches, and the missing recipe is
+always reached first.
+
+A **throwing** scaffold is a recipe as far as the gate is concerned. The
+candidate stays in the plan, its census runs, and a `census refused: …`
+surfaces ahead of the incomplete gate. Nothing can certify from it — a throw
+withholds exactly as no recipe does, which
+`a_recipe_that_throws_withholds_its_candidate_rather_than_certifying_it`
+pins — so the pass is free of risk as well as of hand-authoring.
+
+### 47.2 Measured
+
+45 `reads` scaffolds for `@solid-primitives/utils@7.0.0-next.4`'s `.` case,
+certified once with a scratch corpus:
+
+| | candidates |
+| --- | --- |
+| `census refused` — no recipe can serve them | **24** |
+| `veto did not complete` — the scaffolds, worth finishing | **21** |
+
+The 24 split three ways: 10 `domain-exhaustiveness`, 8 *"a reads closure
+candidate must enumerate no operation, but the proposal names 1"*, 6
+*"reads-census premise required"*.
+
+**53% of the batch was unserviceable**, and one run with no hand-authoring
+found out. My § 43 sample put it at 2 of 5 and was too small to say so.
+
+### 47.3 What changed
+
+`probe-recipe-scaffold.mjs` now reports it. `censusRefusedCandidates` reads
+the same material `recipeGaps` does and prints one `unserviceable` line per
+candidate the census refused — before the no-gaps exit, because a second pass
+is exactly when there are no gaps left and the report is all there is to say.
+The two-pass workflow is documented in the script header and the corpus
+README.
+
+### 47.4 What it does not settle
+
+The corpus-wide fraction. 53% is one artifact case of one package, and this
+document has twice extrapolated a number from a sample and been wrong. § 42.4's
+358 stays an upper bound with no fraction attached to it until a lane-on
+corpus pass measures one.

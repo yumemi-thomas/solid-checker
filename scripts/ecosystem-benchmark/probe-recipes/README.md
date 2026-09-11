@@ -58,6 +58,16 @@ bun scripts/probe-recipe-scaffold.mjs \
   --domain reads --specifier seroval
 ~~~
 
+**Run it twice.** A first pass cannot tell you which candidates a recipe can
+serve: one withheld as `no recipe in corpus` is weakened out of the plan before
+its demands are discharged, so its census never runs and any refusal underneath
+stays masked. A throwing scaffold unmasks it — the candidate stays in the plan,
+its census runs, and a `census refused: …` is reported ahead of the incomplete
+gate. So scaffold into a **scratch** corpus, certify once against it, then run
+the scaffold again over that audit: it prints one `unserviceable` line per
+candidate nobody should finish. On `@solid-primitives/utils@7.0.0-next.4`'s `.`
+case that was 24 of 45.
+
 What it cannot write is the observation, so each emitted module **throws**
 until its `UNFINISHED` guard is deleted. That is deliberate: a recipe that
 completes without emitting its marker is a clean non-observation, and the

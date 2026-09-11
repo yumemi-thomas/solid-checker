@@ -27,6 +27,7 @@ import {
   moduleName,
   moduleSource,
   recipeGaps,
+  censusRefusedCandidates,
   unservedDomainReport,
   PROPOSAL_PLAN_FORMAT
 } from "./probe-recipe-scaffold.mjs";
@@ -350,5 +351,56 @@ describe("probe-recipe-scaffold cannot certify by omission", () => {
       true
     );
     assert.throws(() => readdirSync(corpus));
+  });
+});
+
+describe("census-refused candidates", () => {
+  // The two-pass workflow's whole payload. A candidate withheld as
+  // `no recipe in corpus` is weakened out of the plan before its demands are
+  // discharged, so its census never runs and a refusal underneath stays
+  // masked; a *throwing* scaffold keeps it in the plan and unmasks it. What
+  // the second pass over that audit has to do is say which candidates nobody
+  // should finish -- measured at 24 of 45 on one real artifact case.
+  const audit = reasons => ({
+    withheldClosures: reasons.map(([export_, domain, reason]) => ({
+      artifactCase: "artifact-case:x",
+      export: export_,
+      domain,
+      semanticClaimId: CLAIM,
+      reason
+    }))
+  });
+
+  test("names the candidates no recipe serves, and only those", () => {
+    const material = audit([
+      ["arrayEquals", "reads", "census refused: a reads closure candidate must enumerate no operation, but the proposal names 1"],
+      ["compare", "reads", "census refused: reads-census premise required: the coercion form"],
+      ["clamp", "reads", "veto did not complete: gate 7"],
+      ["trueFn", "reads", RECIPE_GAP_REASON]
+    ]);
+    assert.deepEqual(
+      censusRefusedCandidates(material).map(entry => entry.export),
+      ["arrayEquals", "compare"]
+    );
+    // The control: a gap is not a refusal, and neither is an incomplete gate.
+    // Confusing either for one would tell an author to abandon a candidate
+    // that is exactly the one worth finishing.
+    assert.deepEqual(
+      recipeGaps(material).map(entry => entry.export),
+      ["trueFn"]
+    );
+  });
+
+  test("filters by domain and tolerates material with no withheld array", () => {
+    const material = audit([
+      ["a", "reads", "census refused: x"],
+      ["b", "creates", "census refused: y"]
+    ]);
+    assert.deepEqual(
+      censusRefusedCandidates(material, { domains: ["creates"] }).map(entry => entry.export),
+      ["b"]
+    );
+    assert.deepEqual(censusRefusedCandidates({}), []);
+    assert.deepEqual(censusRefusedCandidates(null), []);
   });
 });
