@@ -4587,3 +4587,142 @@ The board after this:
 | 1 | 1 | `module-binding` | |
 
 `nested-parameter` at 22 across 10 packages is now the largest unexamined leg.
+
+## 64. A corpus recipe pass, what it measured, and two harness defects it found (2026-09-11)
+
+§ 47.4 left one thing open: "the corpus-wide fraction. 53% is one artifact case
+of one package, and this document has twice extrapolated a number from a sample
+and been wrong." § 48 removed the accounting gaps that made such a pass
+unreadable. This is the attempt, and it is a partial one — it returns a second
+sample rather than the corpus number, and the reasons are worth more than the
+number.
+
+### 64.1 Why the backlog is worth sizing at all
+
+Measured on the same run, per-node rows on both sides:
+
+| domain | closed | withheld | rate | veto |
+| --- | --- | --- | --- | --- |
+| `creates` | 10,248 | 3,880 | 72.5% | synthesized |
+| `returns` | 570 | 2,328 | 19.7% | synthesized |
+| `reads` | 60 | 17,082 | **0.35%** | none |
+
+**1,411 of 1,413 withheld `reads` claims are withheld for one reason —
+`no recipe in corpus`.** That is 71% of the entire withheld backlog blocked on
+hand-authoring rather than on any premise, ADR, or producer capability, and it
+dwarfs everything §§ 51–63 worked on.
+
+The same table answers a question this arc had not asked directly: **human-less
+contracts already exist and are the overwhelming majority.** 10,248 of 10,878
+certified closures are `creates`, closed by a veto synthesized from Type Facts
+with nobody in the loop. What is not human-less is `reads`, and § 6 argues that
+is a proof rather than a gap.
+
+### 64.2 `returns` is the headroom nobody has looked at
+
+`returns` has a synthesized veto and still closes 19.7%. 2,292 of its 2,328
+withheld rows say `no recipe in corpus` anyway, because `synthesize` admits a
+`returns` candidate only when its enumeration is **empty** — the reviewed
+observation ("any call whose result is not undefined") would falsify a contract
+that permits a value. The code says what that status is:
+
+> Nonempty enumerations require a claim-addressed recipe **until their
+> observation is reviewed here**.
+
+A pending review, not an impossibility proof. It is the one place left where a
+single piece of design work could move thousands of claims with no per-package
+authorship, and this arc has never examined it.
+
+### 64.3 Attribution: the tail of § 48.1
+
+A recipe has to name the package it imports, and the benchmark's withheld rows
+did not carry one. They span several packages: `@corvu-next/accordion`'s rows
+include `isButton` and `afterPaint`, which occur **zero times anywhere in that
+package** — they are `@corvu-next/utils`'.
+
+`report_withheld_closures` does attach `node: {package, version, digest}`, but
+only where a node identity exists, which is the dependency-graph lane. On that
+lane 51,908 of 53,492 rows are attributed. **1,030 of 1,486 `reads` recipe gaps
+(69%) can therefore be addressed; the other 456 cannot be**, and that residue is
+§ 48.1's tail: some certification paths still report a withheld closure with no
+node. Attributing them by probe id was rejected — the accordion case above is
+exactly the shape that would corrupt.
+
+### 64.4 The measurement
+
+1,030 throwing scaffolds into a scratch corpus, then certify against it. Of the
+three probes chosen for the second pass, **only one produced any classification
+at all**:
+
+| | claims | share |
+| --- | --- | --- |
+| `census refused` — no recipe can serve them | **102** | **59%** |
+| scaffold threw — a human could finish these | **71** | 41% |
+
+All 173 are `@solid-primitives/url`. `corvu` and `motion-solidjs` contributed
+nothing: both fail on a `dependency-contract-obligation` before their gates run.
+They failed **identically in the first pass**, so the scaffolds did not cause it
+— but with recipes present they emit no withheld `reads` rows at all (170 and
+239 before, zero after), and that difference is observed here without a
+mechanism, deliberately.
+
+So: 59% unserviceable, against § 47.2's 53% on a different package measured a
+different way. Two independent samples agreeing that **half to three-fifths of
+the reads backlog is work nobody should ever do**. It is still not § 47.4's
+corpus fraction, and this section does not claim it is.
+
+### 64.5 The cost, and why it recurs
+
+Applying 41% serviceable to 1,486 claims gives ~610 recipes. The only measured
+authoring data point is `d012597a` — five recipes, 215 lines, per-export
+reasoning about which reactive sources a closure owns — so 1–3 h each, and
+**600–1,800 hours, 4 to 11 person-months.**
+
+It also recurs. Claim ids are content digests, so a release orphans its
+recipes: `clamp` in `@kobalte/utils` carries three distinct claim ids and three
+separate modules across two versions. The recipe *bodies* barely differ — the
+0.9.2 and alpha `clamp` recipes are the same logic, one sample apart — so a
+version bump needs **re-pointing, not re-reasoning**. Nothing automates that
+re-point today, and the mistake it invites (a module and its manifest entry
+disagreeing on `expectedEvent.marker`) makes an unmatchable gate *pass*, which
+`ecosystem-probe-recipes.test.mjs` does not catch: it asserts only that the
+marker is a non-empty string.
+
+And a written recipe does not close a claim. `d012597a` wrote five and closed
+none. The two packages that would have tested that here fail one layer deeper.
+
+### 64.6 Two harness defects, both found by running it
+
+**The pool crashed on cleanup.** `cli-worker-pool.mjs` tolerated `ESRCH` from
+its process-group kill and rethrew everything else — but it killed from the
+child's own `exit` handler, after the child was gone, where macOS answers
+`EPERM`. The throw escaped an EventEmitter handler and killed a 9½-minute
+corpus run with no report written. The exit-handler path is now best-effort; the
+deadline kill still rethrows, because failing to signal a *live* group is real.
+
+**The pool leaked whole process trees, which was worse.** Fixing the crash did
+not fix this, and the difference was measured rather than assumed: a killed run
+left **eight orphaned workers alive for 37 minutes**, two of their children
+pinned above 200% CPU, and the run that replaced it was starved to the point of
+looking like a hang. The worker already exited on stdin EOF — the signal that
+arrives whether the runner exits, throws, or is killed — but it waited for the
+in-flight request first, and a certification runs for minutes nobody will read.
+
+It now exits immediately on EOF, and signals its own process group so the native
+children go with it; the pool tells it, through
+`SOLID_CHECKER_CLI_WORKER_GROUP_LEADER`, that `detached` made it the leader,
+because Node exposes no `getpgid` for it to check. Verified by experiment rather
+than by reading: a runner killed with a certification 51 s into its work left
+**zero** workers and zero checker processes, where the same scenario previously
+left eight of each. The pool's own test suite dropped from 32.2 s to 3.8 s — it
+had been waiting on lingering workers too.
+
+### 64.7 What this says to do
+
+Not industrialise `reads`. 4–11 person-months per snapshot, recurring per
+release, for a domain at 0.35%, where half the work is provably wasted and a
+finished recipe moves the blocker rather than removing it. § 64.2's `returns`
+observation is the better buy, and the re-point tooling in § 64.5 — matching
+orphaned recipes by (package, export, artifact case, domain), plus the marker
+agreement check nothing performs — is days of work that would remove the
+treadmill and close a soundness hole at the same time.
