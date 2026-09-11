@@ -15,8 +15,16 @@
       "importKind": "esm",
       "dependencySpecifiers": [],
       "scenario": "operation",
-      "expectedEvent": { "marker": "return-outside-identity", "class": "call" },
-      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "expectedEvent": {
+        "marker": "return-outside-identity",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
       "coverageLimitations": [
         "Seroval 1.5.6 production createPlugin; two valid plugin objects, one frozen",
         "Finite samples can contradict identity but cannot establish exhaustive returns; the authenticated census must prove closure"
@@ -28,8 +36,16 @@
       "importKind": "esm",
       "dependencySpecifiers": [],
       "scenario": "operation",
-      "expectedEvent": { "marker": "return-outside-identity", "class": "call" },
-      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "expectedEvent": {
+        "marker": "return-outside-identity",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
       "coverageLimitations": [
         "Seroval 1.5.6 development createPlugin; two valid plugin objects, one frozen",
         "Finite samples can contradict identity but cannot establish exhaustive returns; the authenticated census must prove closure"
@@ -41,8 +57,16 @@
       "importKind": "esm",
       "dependencySpecifiers": [],
       "scenario": "operation",
-      "expectedEvent": { "marker": "return-outside-identity", "class": "call" },
-      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "expectedEvent": {
+        "marker": "return-outside-identity",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
       "coverageLimitations": [
         "Seroval 1.5.6 development createReference; eleven samples crossing the primitive/object boundary, including a frozen object, a function, a symbol, -0, NaN, null, undefined, and one value re-registered under a second id",
         "Finite samples can contradict identity but cannot establish exhaustive returns; the authenticated census must prove closure"
@@ -164,8 +188,16 @@
       "importKind": "esm",
       "dependencySpecifiers": [],
       "scenario": "operation",
-      "expectedEvent": { "marker": "create-operation", "class": "call" },
-      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "expectedEvent": {
+        "marker": "create-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
       "coverageLimitations": [
         "one pinned Node build and the import artifact case; finite numeric arguments only",
         "observes added own global keys during calls, not arbitrary allocations or initialization effects",
@@ -178,8 +210,16 @@
       "importKind": "esm",
       "dependencySpecifiers": [],
       "scenario": "operation",
-      "expectedEvent": { "marker": "create-operation", "class": "call" },
-      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "expectedEvent": {
+        "marker": "create-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
       "coverageLimitations": [
         "one pinned Node build and the solid artifact case; finite numeric arguments only",
         "observes added own global keys during calls, not arbitrary allocations or initialization effects",
@@ -192,8 +232,16 @@
       "importKind": "esm",
       "dependencySpecifiers": [],
       "scenario": "operation",
-      "expectedEvent": { "marker": "create-operation", "class": "call" },
-      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "expectedEvent": {
+        "marker": "create-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
       "coverageLimitations": [
         "one Node build, one artifact case, no OS-level write denial",
         "one export-condition selection: sibling conditional targets are unprobed",
@@ -207,8 +255,16 @@
       "importKind": "esm",
       "dependencySpecifiers": [],
       "scenario": "operation",
-      "expectedEvent": { "marker": "create-operation", "class": "call" },
-      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "expectedEvent": {
+        "marker": "create-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
       "coverageLimitations": [
         "one Node build, one artifact case, no OS-level write denial",
         "one export-condition selection: sibling conditional targets are unprobed",
@@ -222,8 +278,16 @@
       "importKind": "esm",
       "dependencySpecifiers": [],
       "scenario": "operation",
-      "expectedEvent": { "marker": "create-operation", "class": "call" },
-      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "expectedEvent": {
+        "marker": "create-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
       "coverageLimitations": [
         "one Node build, one artifact case, no OS-level write denial",
         "one export-condition selection: sibling conditional targets are unprobed",
@@ -237,13 +301,127 @@
       "importKind": "esm",
       "dependencySpecifiers": [],
       "scenario": "operation",
-      "expectedEvent": { "marker": "create-operation", "class": "call" },
-      "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
+      "expectedEvent": {
+        "marker": "create-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
       "coverageLimitations": [
         "one Node build, one artifact case, no OS-level write denial",
         "one export-condition selection: sibling conditional targets are unprobed",
         "frozen intrinsic prototypes can refuse a benign package that writes to one",
         "the only create surface observable in this realm is globalThis's own key set: the worker has no DOM, so a register-delegation could not succeed here even if attempted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:584fbd4cf8a841f6eb759f67cf1e2e13519eab49ab587bec0494252c79269bd1",
+      "module": "solid-primitives-utils-access-reads-2bf41ff6.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "The recipe's own getter proves the observation apparatus is live on every run; the read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:da7666e46fc7c90fb2607598ca066b6a208f933a5308787cd986c49c8691b3bd",
+      "module": "solid-primitives-utils-array-equals-reads-2bf41ff6.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:7f52520ab89e68cb6250b7f6284c196dbebf4787464e8cb309366667ffefb1d5",
+      "module": "solid-primitives-utils-clamp-reads-2bf41ff6.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:66f2c1dbd78c6c7d35f69d2fd6866d52ba6bba3d0fc218db9ecf55da6196daba",
+      "module": "solid-primitives-utils-compare-reads-2bf41ff6.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:e08a829d9524e056986c1de93d23a65773311f7921799a1b5611670da6ba6a9a",
+      "module": "solid-primitives-utils-true-fn-reads-2bf41ff6.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count"
       ]
     }
   ]

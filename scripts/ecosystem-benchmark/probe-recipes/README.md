@@ -123,6 +123,7 @@ these domains are open, and adding recipes alone cannot certify them.
 | `seroval-create-reference-identity-development.mjs` | `seroval@1.5.6` `createReference` `returns`, published `dist/esm/development/index.mjs` | the withholding clears and `returns` closes; the consumer's SC9005 drops `returns` and keeps `reactiveReads` |
 | `kobalte-utils-alpha-clamp-import.mjs`, `kobalte-utils-alpha-clamp-solid.mjs` | `@kobalte/utils@2.0.0-alpha.0` `clamp`, published `dist/index.js`, two exact cases | census and mandatory veto complete; two creates closures certify; other domains remain open |
 | `kobalte-utils-noop.mjs` | `@kobalte/utils@0.9.2` `noop`, `./src/noop.ts` | the implementation census **proves** `creates: []`; the probe gate then refuses because the artifact case is a `.ts` file under the private workspace's `node_modules` and the pinned interpreter will not strip types there |
+| `solid-primitives-utils-{access,array-equals,clamp,compare,true-fn}-reads-2bf41ff6.mjs` | `@solid-primitives/utils@7.0.0-next.4` `reads: []`, published `.` case `2bf41ff6…` | **nothing closes.** `arrayEquals` and `compare` are `census refused` and no recipe can serve them; `clamp`, `trueFn` and `access` run clean and then wait on a withheld `solid-js` claim |
 | `solid-primitives-i18n-scoped-translator.mjs`, `solid-primitives-i18n-flatten.mjs`, `solid-primitives-i18n-chained-translator.mjs` | the three i18n creates candidates | the current row refuses first on `chainedTranslator`'s `property-access-unknown-accessor (SpreadAssignment)`; no gate executes |
 
 The clamp recipes exercise numeric boundaries and defaults and observe added
@@ -130,6 +131,30 @@ own global keys during the calls. They cannot observe arbitrary allocations,
 package initialization before recipe entry, DOM behavior, or every argument.
 No session or transcript capability reaches package code. Only the independent
 implementation census proves completeness; these finite observations can veto.
+
+The five `solid-primitives-utils-*-reads-2bf41ff6.mjs` recipes (2026-09-11)
+address `@solid-primitives/utils@7.0.0-next.4` `reads: []` claims on the
+published `.` runtime case four benchmark rows share. They are the corpus's
+first `reads` recipes for a real package, and they are short by right: the
+artifact case carries no `runtime-accessor-installation` hazard, so the census
+states syntactically that `dist/index.js` installs no accessor and there is no
+owned trap to count (§ 12 of the reads-veto design record). `access` is the
+exception and executes caller code, so it passes an accessor reading a getter
+the recipe owns, asserts the getter ran, and does not emit — the read is the
+caller's under ADR 0034, and the assertion proves the apparatus is live.
+
+**Measured outcome: none of the five closes a domain**, and two of them can
+never fire. `arrayEquals`' proposal names an operation, so it is not the empty
+closure `PROPOSABLE` admits; `compare`'s `a < b` is a coercion form with no
+reviewed subject root. Both are `census refused`, which no recipe can serve.
+They are kept anyway, deliberately: without a recipe those candidates report
+`no recipe in corpus` and the census refusal underneath stays hidden, so the
+recipe is what makes the real blocker visible. The other three — `clamp`,
+`trueFn`, `access` — run clean and then wait on a withheld `solid-js` claim,
+which is why recipe work has to go bottom-up from `solid-js` rather than
+starting at `utils`. Measured in
+`docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
+§ 43.
 
 `scripts/ecosystem-probe-recipes.test.mjs` pins the manifest's shape, that every
 declared module exists and exports `runProbeSession`, and that no module names

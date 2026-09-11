@@ -2891,3 +2891,121 @@ re-acquired and re-generated once per row. Nodes are shared within a graph
 (`byKey`) but nothing shares them between rows. A cross-row node cache is a
 speed lever with a measured size, unlike the concurrency guesses parked in
 § 30.
+
+## 43. Five recipes, measured: nothing closed, and three reasons why
+
+§ 42.6 put the recipe cost at "one shared package's ~130 claims unblocking 305
+candidates across eight dependents" and called it the first real number for it.
+This tests that number by paying a small part of it: five hand-authored `reads`
+recipes for `@solid-primitives/utils@7.0.0-next.4` on
+`artifact-case:2bf41ff69a22…`, the case four of the ten sampled rows share.
+
+The answer is **zero closed closures**, and the three reasons are each worth
+more than the recipes were.
+
+### 43.1 What was written
+
+`scripts/probe-recipe-scaffold.mjs` emitted 45 scaffolds from the `props` row's
+`certification-audit.json`; five were finished and committed. The other 40 were
+left in a scratch corpus — each throws until its `UNFINISHED` guard is deleted,
+so generating them costs nothing and certifies nothing.
+
+Four are short by right rather than by laziness: `clamp`, `compare`,
+`arrayEquals` and `trueFn` own no reactive-shaped source, and the artifact case
+carries no `runtime-accessor-installation` hazard, so § 12's argument applies —
+the census states syntactically that `dist/index.js` installs no accessor and
+there is no trap for the recipe to count. `access` is the one that earns its
+length: it executes caller code, so it is where ADR 0034's boundary sits. It
+passes an accessor reading a getter *the recipe owns*, asserts the getter ran,
+and deliberately does not emit — the assertion is what keeps it from being
+vacuous, because it proves the apparatus can see a read on every run.
+
+### 43.2 The measurement
+
+Per row, before → after (`withheldClosureReasons`):
+
+| | event-listener | pagination | props | queue |
+| --- | --- | --- | --- | --- |
+| `noRecipe` | 45 → **40** | 45 → **40** | 45 → **40** | 50 → **45** |
+| `censusRefused` | 7 → **9** | 7 → **9** | 7 → **9** | 7 → **9** |
+| `dependencyWithheld` | 3 → **6** | 3 → **6** | 3 → **6** | 3 → **6** |
+| **total withheld** | 55 → 55 | 55 → 55 | 55 → 55 | 60 → 60 |
+
+Every one of the five left `noRecipe`. Not one closed. `vetoIncomplete` stayed
+0, so no recipe threw — the three that were serviceable ran clean and were
+stopped by the *next* thing.
+
+### 43.3 Reason one: `no recipe in corpus` masks a census refusal
+
+Two of the five — `arrayEquals` and `compare` — moved to `censusRefused`:
+
+- `arrayEquals`: *"a reads closure candidate must enumerate no operation, but
+  the proposal names 1"*. `PROPOSABLE` admits the empty closure only, and this
+  one is not empty.
+- `compare`: *"the coercion form (BinaryExpression) at …index.js:2339..2344
+  (reachable) states no reviewed subject root, so whose value it reads is
+  undecided"*. `a < b` on `any`-typed parameters is an uncensused invoking
+  form.
+
+Neither refusal is new, and **no recipe could ever have served either**. They
+were reported as `noRecipe` because that is the first blocker the pipeline
+reaches; writing the recipe is what surfaced the real one.
+
+So § 42.4's headline — *83% of candidates blocked on a hand-authored recipe* —
+is an **upper bound on recipe-serviceable candidates, not a count of them**.
+Two of five here were not serviceable. Five is far too small to put a fraction
+on 358, and this document should not pretend otherwise; what is established is
+that the number is smaller than 358 and that nothing currently distinguishes
+the two populations without writing a recipe to find out.
+
+This also makes the scaffold more valuable than it looked. A throwing scaffold
+is a cheap probe for "is this candidate even a recipe's problem", and 45 of
+them cost one command.
+
+### 43.4 Reason two: the chain does not terminate at `utils`
+
+The three that *were* serviceable — `clamp`, `trueFn`, `access` — ran their
+vetoes clean and then moved to `dependencyWithheld`. `@solid-primitives/utils`'
+own `reads` closures compose from **`solid-js`** claims, and those are withheld
+too.
+
+That reorders § 42.6's plan. Writing `utils`' 130 claims first cannot close
+anything, because every one of them that survives its census waits on a
+`solid-js` claim underneath. Recipes have to be written **bottom-up from
+`solid-js`**, and the leverage calculation in § 42.6 — one package unblocking
+many dependents — applies to `solid-js` first and to `utils` only after.
+
+### 43.5 Reason three: the diagnostic that says this names the wrong claim
+
+All six `dependencyWithheld` records read:
+
+~~~
+composed from a withheld dependency claim: claim:v1:sha256:<x> of solid-js
+~~~
+
+and in all six, `<x>` is byte-identical to the withheld candidate's **own**
+`semanticClaimId` (compared on the full 64-hex digest, six of six). It cannot
+be: `NormalizedContract::claim_id` digests package identity along with the
+artifact case, export and path, so a `@solid-primitives/utils` claim and a
+`solid-js` claim cannot share an id.
+
+The message is therefore unusable exactly where it matters — it tells an author
+to go find a `solid-js` claim and hands them the `utils` claim they are already
+looking at. `composed_from_withheld_dependency`
+(`contract_certification/dependencies.rs:812`) builds the record from the
+parent coordinate and interpolates the `MissingClosedClaim`'s
+`semantic_claim_id` as the child; one of those two is not what its name says.
+Not diagnosed further here, and not fixed blind.
+
+### 43.6 What this costs the § 42 plan
+
+§ 42.6 estimated the work as ~130 claims on one package. After this:
+
+- the denominator is smaller than 358 by an unmeasured amount (§ 43.3);
+- the order is wrong — `solid-js` comes first (§ 43.4);
+- and the one diagnostic that would tell an author *which* `solid-js` claim to
+  write next currently does not (§ 43.5).
+
+The five recipes stay. Two of them can never fire and are kept deliberately,
+because their presence is what converts a masked `noRecipe` into the census
+refusal underneath it, and the README records that.
