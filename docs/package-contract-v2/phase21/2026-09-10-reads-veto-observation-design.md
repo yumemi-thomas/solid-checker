@@ -6109,3 +6109,60 @@ answer before any of them is written:
 An implicit constructor is not "no code": it is `super(...args)` when there is a
 heritage clause, and nothing otherwise. Both readings have to be stated rather
 than inherited from whichever the walk happens to produce.
+
+## 80. Withheld closures per domain, split by what is actually in the way (2026-09-12)
+
+Every measurement in §§ 73–79 counted `creates`. This is the first one that
+asks the ledger what it holds per **domain**, and what kind of blocker each
+entry has. It changes where the work should go.
+
+**"Unprovable" is a reading of the refusal text, not a field.** Nothing in the
+report says a closure can never be proven; the buckets below are a judgement
+over the refusal sentence, and the one marked *arguable* is marked because it is.
+
+| domain | certified | withheld | unproven | unprovable here | blocked on another artifact |
+| --- | --- | --- | --- | --- | --- |
+| `creates` | 5,321 (75%) | 1,743 | 1,285 | 363 | 95 |
+| `reads` | 40 (0.5%) | 8,531 | 8,531 | 0 | 0 |
+| `returns` | 285 (20%) | 1,164 | 1,164 | 0 | 0 |
+
+### 80.1 Six of the nine domains are silent
+
+`semantic-model.md` names nine claim domains. Three appear in this ledger.
+`callbacks`, `writes`, `invalidates`, `throws`, `cleanups` and `disposals`
+appear in neither the certified nor the withheld side — the corpus proposes no
+closure in them, so the question "how many are unprovable" cannot be asked of
+them at all. That is a gap in the instrument, and any statement about overall
+certification coverage that quotes only these three is quoting a third of the
+model.
+
+### 80.2 `reads` and `returns` are one problem, and it is not a premise
+
+- `reads`: **8,521 of 8,531** withheld entries are the single reason *no recipe
+  in corpus*. Ten are census refusals. Nothing is unprovable.
+- `returns`: **1,146 of 1,164** are the same reason; 18 are a veto gate that did
+  not run.
+
+9,667 withheld closures sit behind **recipe authoring**, not behind any premise
+this arc has written or could write. § 72 already found that 5 of the 19
+existing `reads` recipes are marked `NEVER EMITS:` and cannot veto anything, so
+the existing corpus is smaller than its own count suggests.
+
+### 80.3 `creates` is the only domain premise work moves, and it is the healthy one
+
+Its 1,743 withheld split:
+
+| count | blocker |
+| --- | --- |
+| 754 | a census premise gap at an invoking form — the legs §§ 76–79 rank |
+| 334 | the census cannot reach the callee's body — § 79.2's class gap is here |
+| 189 | a call through a **caller-supplied callable**: unprovable in this domain *by design*, because the semantic model puts the caller's function body outside this export's behavior and gives it to `callbacks` |
+| 174 | past the census depth bound — **arguably unproven rather than unprovable**: it is a configured bound, and raising it is an experiment, not a proof obligation |
+| 108 | a veto gate that did not run |
+| 95 | a callee outside the artifact, provable once a dependency contract is acquired and passed through `--accepted-contracts` |
+
+So the four ADRs of 2026-09-12 moved the domain that was already at 75%, by
+chipping at the 1,285 unproven in it. The 9,667 unproven in `reads` and
+`returns` — five times larger, with no premise standing in the way — had none of
+that attention. On these numbers the premise arc is the smaller half of the
+remaining work, and this section is the argument for pausing it.
