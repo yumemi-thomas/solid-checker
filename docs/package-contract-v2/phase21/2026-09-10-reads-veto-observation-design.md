@@ -6015,3 +6015,97 @@ disappearing entirely has the same cause.
 sites: no row fell, and 17 sites went away against 1 arriving. Any comparison of
 *which exports* a probe covered needs the caveat in this section; the counts do
 not.
+
+## 79. The frontier after ADR 0094, and the one coherent gap in it (2026-09-12)
+
+§ 78 left 239 withheld `creates` exports. Ranking them by **withheld closure
+entries** rather than by export count — § 78.1's lesson, applied to choosing the
+next target — and keeping only exports whose every refusal shares one family:
+
+| entries | exports | family |
+| --- | --- | --- |
+| 231 | 24 | the callee binding "is initialized by an expression that is not a function or arrow literal" |
+| 197 | 25 | `property-access-unknown-accessor (PropertyAccessExpression)`, various legs |
+| 131 | 9 | `coercion (BinaryExpression)`, operands agreeing on `module-binding` |
+| 127 | 22 | "finds no function-like declaration node" |
+| 107 | 5 | a call through a nested callable's parameter — the **callbacks domain** owns this by design |
+| 106 | 12 | `property-access-unknown-accessor (ElementAccessExpression)` / `written-parameter` |
+
+### 79.1 The top family is seven premises, not one
+
+This is the finding worth the section. Reading all 22 sites of the 231-entry
+family out of the published artifacts splits it completely:
+
+| entries | exports | the initializer actually is |
+| --- | --- | --- |
+| 60 | 2 | `const callback = callbacks[i]` — an element of an array |
+| 60 | 3 | `memoSupports(() => …)` — a call result |
+| 29 | 15 | `var X = class { … }` — a **class expression** |
+| 26 | 1 | `cubicBezier(0.33, 1.53, 0.69, 0.99)` — a call result |
+| 20 | 1 | `compress(0, 0.5, …)` — a call result |
+| 20 | 1 | `easingDefinitionToFunction(ease)` — a call result |
+| 16 | 1 | `const max = Math.max` — a default-library member alias |
+
+Nothing in it is worth more than 60, and the shapes want four different
+arguments: value tracing through an array element, value tracing through a call,
+a class callee, and an alias of a `lib` member. **A leg is a sentence the census
+prints, not a premise** — § 78 said a leg's export count is an upper bound on
+exports, and this says something sharper: a leg may not correspond to a single
+piece of work at all. The 197-entry family splits the same way, into DOM globals
+(`navigator.userLanguage`, `window.navigator.userAgentData?.platform`), the
+dialect's own `sharedConfig.hydrating`, a property write on a call result
+(`memo.toArray = …`), and ordinary local bindings.
+
+### 79.2 The gap that is coherent, and it spans two families
+
+`new X(…)` where `X` is a class **this artifact declares** refuses today, in
+either spelling and under two different sentences:
+
+```js
+export class TriggerCache { … }              // "finds no function-like declaration node"
+export class ReactiveWeakMap extends WeakMap { … }
+var LiteQueuer = class { … };                // "not a function or arrow literal"
+var Debouncer  = class { … };                // (the compiled spelling of the same thing)
+```
+
+The mechanism is `census_callee_declaration_node`: it matches the resolved
+declaration span against `source.function_nodes()`, which is
+`facts.functions` — and a class is not a function there. The resolved span is
+the class **name**, which belongs to the class node, so neither the span match
+nor the name match nor the variable-initializer fallback can reach it. The two
+sentences are the same absence seen from two directions.
+
+Measured across both families, by reading each site: **21 exports, 115 withheld
+closure entries** — `motion-dom` (`motionValue`, `animateValue`, `animateView`,
+`addStyleValue`, 20 each), all eleven `@tanstack/pacer` entry points, the three
+`@tanstack/pacer-lite` ones, `@solid-primitives/trigger::createTriggerCache`,
+both `@solid-primitives/map::createWeakMap`, and
+`@solid-primitives/i18n::proxyTranslator`. Nothing is partially blocked by it.
+
+That is the same size as ADR 0094's measured +114, and the same caveat applies
+twice over: it is an upper bound on a set that is *not* concentrated in a
+vendored library, so unlike `combineStyle` the entry count and the export count
+should move together.
+
+### 79.3 What censusing a construction actually requires
+
+Unlike the last three ADRs this is not one premise about what a single form
+reaches; it is a new *callee kind*, and it has three parts that a design has to
+answer before any of them is written:
+
+- **The constructor body**, which is an ordinary function body and the easy part.
+- **Field initializers.** `#keyTriggers = new TriggerCache(…)` runs at
+  construction, before the constructor body, and is code the artifact owns as
+  much as the constructor is. A census that walked only the constructor would be
+  silently incomplete — the exact failure mode this project calls silence.
+- **The superclass chain.** `class ReactiveWeakMap extends WeakMap` reaches
+  `WeakMap`'s constructor, which is the engine's; `extends SomeLocalClass`
+  reaches this artifact's, recursively; `extends someExpression` reaches
+  whatever that evaluates to and must refuse. The existing `own-class`
+  derivation (ADR 0047) already draws a line very close to this one — a class
+  with **no heritage clause and no computed member name** — and that line is the
+  obvious starting point rather than a new one.
+
+An implicit constructor is not "no code": it is `super(...args)` when there is a
+heritage clause, and nothing otherwise. Both readings have to be stated rather
+than inherited from whichever the walk happens to produce.
