@@ -30,6 +30,7 @@ import {
   emptyDomainCounts
 } from "./contract-content.mjs";
 import { manifestStats } from "./manifest.mjs";
+import { buildDialectAuthorityCoverage, loadAuditedArchives } from "./dialect-authority.mjs";
 
 const SCHEMA_VERSION = 1;
 
@@ -972,6 +973,21 @@ function describeScope(scope) {
   );
 }
 
+/// The authority's reach over this corpus, or why it could not be read.
+///
+/// Read failures are recorded rather than thrown: losing a whole corpus run --
+/// hours of installs and certification -- because a pin file is unreadable
+/// would be a worse outcome than a report that says so. The gate side refuses
+/// on exactly this shape, so an unreadable pin never passes as coverage; see
+/// `minAuthorityCoveredRows` in `evaluateThresholds`.
+function buildDialectAuthoritySection(results, auditedArchives) {
+  try {
+    return buildDialectAuthorityCoverage(results, auditedArchives ?? loadAuditedArchives());
+  } catch (error) {
+    return { unreadable: String(error?.message ?? error) };
+  }
+}
+
 export function buildReport({
   manifest,
   results,
@@ -979,7 +995,11 @@ export function buildReport({
   finishedAt,
   baseline = null,
   checker = null,
-  scope = null
+  scope = null,
+  // The audited-archive pins, injectable so a test can state its own. `null`
+  // reads the checked-in mirror of the dialect tables, which is what every
+  // real run does.
+  auditedArchives = null
 }) {
   const everyResult = Array.isArray(results) ? results.slice() : [];
   // Supplemental rows are unofficial forks and lookalikes. They are reported,
@@ -1079,6 +1099,12 @@ export function buildReport({
       // still the sum of the two halves, so a consumer reading only that
       // number reads what it always did.
       certification: buildCertificationSummary(allResults),
+      // What fraction of the corpus the dialect negative authority can answer
+      // about at all. Additive, and adjacent to `certification` on purpose: it
+      // is the denominator behind every `creates` claim that tier could ever
+      // close, and it decays on someone else's release schedule rather than on
+      // anything this repository does.
+      dialectNegativeAuthority: buildDialectAuthoritySection(allResults, auditedArchives),
       partialContracts: buildPartialContracts(allResults),
       // Additive: every field above and below describes generation
       // reachability, and this one alone describes the content of what was
@@ -1482,6 +1508,38 @@ function renderCombinedSection(combined) {
   );
   lines.push("");
 
+  lines.push("### Dialect negative authority");
+  lines.push("");
+  const authority = combined.dialectNegativeAuthority;
+  if (!authority) {
+    lines.push("Not measured.");
+  } else if (authority.unreadable) {
+    lines.push(`Unreadable: ${authority.unreadable}`);
+  } else {
+    const share =
+      authority.coveragePercentage === null ? "n/a" : `${authority.coveragePercentage}%`;
+    lines.push(
+      `- Rows an audited archive identity could answer about: ${authority.rowsCovered} of ${authority.rows} (${share})`
+    );
+    lines.push(
+      "  - Name and version only, so an upper bound: the certifier also binds integrity and the manifest digest."
+    );
+    for (const dialect of authority.byDialect) {
+      lines.push(
+        `- ${dialect.id}: ${dialect.rowsCovered} of ${dialect.rows} rows, ` +
+          `${dialect.auditedArchives} audited archives, ${dialect.negativeRowCount} negative rows`
+      );
+    }
+    lines.push("- Installed versions of audited packages:");
+    for (const entry of authority.installedVersions) {
+      lines.push(
+        `  - ${entry.package}@${entry.version}: ${entry.rows} ` +
+          `row${entry.rows === 1 ? "" : "s"}${entry.audited ? " (audited)" : ""}`
+      );
+    }
+  }
+  lines.push("");
+
   lines.push("### Top failure signatures");
   lines.push("");
   if (combined.topFailureSignatures.length === 0) lines.push("None.");
@@ -1719,6 +1777,44 @@ export function evaluateThresholds(report, thresholds = {}) {
         actual: baseline.certificationRegressionCount,
         maximum: maxCertificationRegressions,
         probes: baseline.certificationRegressions.map(entry => entry.probeId)
+      });
+    }
+  }
+
+  // A floor on how much of the corpus the dialect negative authority can
+  // still answer about. The authority is pinned to exact prereleases, so this
+  // number falls when the corpus moves to a release nobody has audited -- and
+  // it falls silently, because an unmatched identity is indistinguishable from
+  // any other withheld claim. A floor is what makes that a gate failure rather
+  // than a slow, invisible loss of a whole proof tier.
+  //
+  // A report that could not read the pins fails here for the same reason the
+  // baseline branch above does: silence about the authority cannot satisfy a
+  // claim about its reach.
+  const minAuthorityCoveredRows = thresholds?.global?.minAuthorityCoveredRows;
+  if (typeof minAuthorityCoveredRows === "number") {
+    const authority = report.combined?.dialectNegativeAuthority;
+    if (!authority || authority.unreadable || typeof authority.rowsCovered !== "number") {
+      failures.push({
+        scope: "global",
+        metric: "authorityCoveredRows",
+        actual: null,
+        minimum: minAuthorityCoveredRows,
+        note: authority?.unreadable
+          ? `audited archives unreadable: ${authority.unreadable}`
+          : "no authority coverage measured"
+      });
+    } else if (authority.rowsCovered < minAuthorityCoveredRows) {
+      failures.push({
+        scope: "global",
+        metric: "authorityCoveredRows",
+        actual: authority.rowsCovered,
+        minimum: minAuthorityCoveredRows,
+        // The versions the pin misses, so the failure names the re-audit it
+        // is asking for instead of only its own shortfall.
+        unaudited: (authority.installedVersions ?? [])
+          .filter(entry => !entry.audited)
+          .map(entry => `${entry.package}@${entry.version}`)
       });
     }
   }

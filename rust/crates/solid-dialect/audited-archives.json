@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "comment": "The published archives each dialect's negative claim authority was read against, mirrored out of the Rust tables so a consumer outside this crate can ask whether an installed tree is one the authority can answer about. Pinned field by field by `audited_archives_json_mirrors_the_dialect_tables` in src/lib.rs: a re-audit that changes a tuple fails that test until this file follows. Never a proof surface -- matching a tuple here says only that the identity gate in contract_certification/type_facts.rs could be reached, never that any row denies anything.",
+  "dialects": [
+    {
+      "id": "solid-v1",
+      "archives": [],
+      "negativeRowCount": 0
+    },
+    {
+      "id": "solid-v2",
+      "archives": [
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.3",
+          "integrity": "sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA==",
+          "manifestSha256": "22d27a9ebdc7b4fbfc65b9857bbea96ea60d3617697fd628b42b6e1253ffdb76"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.3",
+          "integrity": "sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg==",
+          "manifestSha256": "ee9b514b90b06b679d2376c5b5a993c0391aa66ec744e453ec3e534babd30e8e"
+        },
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.3",
+          "integrity": "sha512-pmW6bRoTvfp/rN4jN7JmLvSaoIpFt7wm0Hi3j508S/smuJqUbRg3dQEjOPTkAwHW+McYnXrMG7cJ4AMNpLevtQ==",
+          "manifestSha256": "e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b"
+        }
+      ],
+      "negativeRowCount": 47
+    }
+  ]
+}

@@ -5300,3 +5300,115 @@ none of them scoped here:
 
 The third is what the code does today. What it has not done is say so out loud
 with a number attached, which is what this section is for.
+
+## 72. The coverage is 28.7%, and now something says so every run (2026-09-12)
+
+§ 71 ended by naming three shapes of answer and observing that the code takes
+the third — serve one audited release, withhold everything else — without ever
+saying so. § 65 ended in the same place from the other side: five vetoes that
+cannot veto, and no reader of a run could tell. Both failures are the same
+failure, and it is not a wrong answer. It is a *silent* one: an unmatched
+archive identity and an unmatchable recipe gate both produce the refusal a
+withheld claim already produces, so nothing in a green run distinguishes "the
+authority answered for nothing today" from an ordinary day.
+
+This section is what was built instead of stage 1.
+
+### 72.1 The pins are published, and held to the tables
+
+`rust/crates/solid-dialect/audited-archives.json` mirrors each dialect's
+`AUDITED_ARCHIVES` and its negative row count, and
+`audited_archives_json_mirrors_the_dialect_tables` fails until a re-audit that
+changes a tuple updates it. The file exists because the question "is this
+installed tree one the authority can answer about" has consumers outside Rust
+and nothing published the answer. Both dialects appear, including the one that
+audited nothing: an absent entry would read as "not a dialect" where § 70.1's
+finding is "looked, and there is nothing to be a member of".
+
+### 72.2 The join, and what it measures
+
+`scripts/ecosystem-benchmark/lib/dialect-authority.mjs` joins those pins
+against every probe row's `installedVersions`, keyed by the row's **own**
+dialect — the identity gate admits an authority only when that authority's own
+archive list carries the exact tuple, so counting a 1.x row as covered by a
+Solid 2 pin would overstate reach the gate never grants. Measured on the pinned
+corpus:
+
+| | rows | covered |
+| --- | --- | --- |
+| solid-v1 | 168 | **0** — no archives, no rows (§ 70.1) |
+| solid-v2 | 250 | **120** |
+| corpus | 418 | **120 (28.7%)** |
+
+with every installed version of an audited name ranked beside it, so the
+versions the pin misses are named rather than implied: `solid-js@1.9.14` 168
+rows, `@solidjs/web@2.0.0-rc.0` and `solid-js@2.0.0-rc.0` 111 each,
+`2.0.0-beta.19` 17 each, `2.0.0-rc.2` two each. § 71.1 put it at 117 of 415
+counting `solid-js` alone; 120 of 418 is the same fact counting all three
+audited names and every row.
+
+**It is an upper bound and never a yield**, and the report says so where the
+number is. The join is on name and version; the gate also binds integrity and
+the archive's own manifest digest, which a run's report does not record. And a
+covered row is not an answered one — § 69.1's missing source root still sits in
+front of the table, so the tier answers nothing on this corpus today. What the
+number bounds is what any of §§ 69–70's stages could ever reach.
+
+### 72.3 The floor
+
+`minAuthorityCoveredRows: 120` in
+`scripts/ecosystem-benchmark/certification-regression-thresholds.json`, checked
+by `make ecosystem-regression`. A Solid release that moves the corpus off
+`2.0.0-rc.3` now fails that gate and prints the unaudited versions it found,
+which is the re-audit request stated as the thing it actually is. A report that
+could not read the pins fails the same threshold rather than passing as
+coverage — the same rule the baseline branch beside it already applies, because
+silence about the authority cannot satisfy a claim about its reach.
+
+The floor is a full-corpus number; a scoped run carries fewer rows and would
+fail it, which is why it lives in the regression thresholds rather than in
+`phase16-thresholds.json`.
+
+### 72.4 The recipe half
+
+The per-recipe agreement check landed in `43830a24` (§ 65). What it could not
+say is how much of the corpus is in the can-never-veto state, so the corpus
+test now pins the list: **5 of 19 recipes declare `NEVER EMITS:`**, all five
+`reads`, and 14 can still contradict something. A sixth is now a diff rather
+than a discovery, and a `creates` or `returns` recipe going silent — the case
+that would matter — cannot happen quietly.
+
+### 72.5 What is still silent
+
+- **An emit that is never reached** (§ 65.5). Unchanged: no static check finds
+  it, and only a run that contradicts something would.
+- **A hand-edited pin file.** The Rust test binds the JSON to the tables, so
+  drift fails; nothing binds the tables to the archives they were read against
+  beyond the citation tests already in `solid_2.rs`.
+- **`make verify` does not run the ecosystem gate.** The floor bites in
+  `make ecosystem-regression` only, which is the same reach every other
+  corpus-scale check here has, and the same one § 28.2 recorded.
+- **The corpus manifest carries its own copy of the pin.**
+  `scripts/ecosystem-benchmark/manifest.json` records
+  `auditedSolid2: "2.0.0-rc.3"`, which happens to equal the negative
+  authority's archives today and is a different claim — the version the corpus
+  installs as its audited target, not the bytes the rows were read against.
+  Nothing checks that the two agree, and nothing should until somebody decides
+  they must.
+
+### 72.6 The decay is not hypothetical, and the manifest is what defers it
+
+Checked against the registry on 2026-09-12: `solid-js@next` is **2.0.0-rc.8**,
+five prereleases past the audit, and `latest` is 1.9.15 against the corpus's
+1.9.14. Coverage is still 120 only because
+`scripts/ecosystem-benchmark/manifest.json` pins an exact version per probe and
+was last generated on 2026-08-26 — a fresh `make ecosystem-regression` installs
+rc.3 because the manifest says rc.3, not because rc.3 is current.
+
+So the next `make ecosystem-discover` is what takes the authority's reach to
+roughly nothing, and from now on that shows up as a failed floor naming
+`solid-js@2.0.0-rc.8` rather than as an unchanged green run. That is the whole
+point of the gate, and it also means the floor will fail on a manifest refresh
+that is otherwise entirely correct. The right response there is § 71.4's
+decision — re-audit, derive, or accept and lower the floor deliberately — not a
+quiet edit of the number.

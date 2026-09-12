@@ -1394,3 +1394,149 @@ test("the verified split counts a row with no denominator in neither half", () =
   // Never a fabricated denominator.
   assert.doesNotMatch(markdown, /null declared/);
 });
+
+// The dialect negative authority is pinned to exact audited prereleases, and
+// nothing reported how much of the corpus still installs them. A release of
+// the audited package takes its reach to nothing without failing anything:
+// an unmatched identity refuses, and a refusal is the normal state of a
+// withheld claim (docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md
+// § 71).
+const AUTHORITY_PINS = {
+  schemaVersion: 1,
+  dialects: [
+    { id: "solid-v1", archives: [], negativeRowCount: 0 },
+    {
+      id: "solid-v2",
+      archives: [
+        {
+          name: "solid-js",
+          version: "2.0.0-rc.3",
+          integrity: "sha512-pin",
+          manifestSha256: "digest"
+        }
+      ],
+      negativeRowCount: 47
+    }
+  ]
+};
+
+test("the report says how much of the corpus the negative authority can answer about", () => {
+  const results = [
+    makeResult({
+      family: "corvu",
+      package: "corvu",
+      version: "0.7.0",
+      solidTarget: "solid2",
+      class: "success",
+      installedVersions: { corvu: "0.7.0", "solid-js": "2.0.0-rc.3" }
+    }),
+    makeResult({
+      family: "corvu",
+      package: "@corvu/utils",
+      version: "0.4.2",
+      solidTarget: "solid2",
+      class: "success",
+      installedVersions: { "@corvu/utils": "0.4.2", "solid-js": "2.0.0-rc.0" }
+    }),
+    makeResult({
+      family: "kobalte",
+      package: "@kobalte/core",
+      version: "0.13.13",
+      solidTarget: "solid1",
+      class: "success",
+      installedVersions: { "@kobalte/core": "0.13.13", "solid-js": "1.9.14" }
+    })
+  ];
+  const report = buildReport({
+    manifest: makeManifest({ results }),
+    results,
+    startedAt: "2026-09-12T09:00:00.000Z",
+    finishedAt: "2026-09-12T09:01:00.000Z",
+    auditedArchives: AUTHORITY_PINS
+  });
+
+  const authority = report.combined.dialectNegativeAuthority;
+  assert.equal(authority.rows, 3);
+  assert.equal(authority.rowsCovered, 1);
+  assert.equal(authority.coveragePercentage, 33.3);
+  assert.deepEqual(
+    authority.byDialect.map(entry => [entry.id, entry.rows, entry.rowsCovered]),
+    [
+      ["solid-v1", 1, 0],
+      ["solid-v2", 2, 1]
+    ]
+  );
+
+  const markdown = renderMarkdown(report);
+  assert.match(markdown, /Rows an audited archive identity could answer about: 1 of 3 \(33\.3%\)/);
+  // The bound is stated where the number is, because a reader who takes it for
+  // a yield reads a proof claim off a version string.
+  assert.match(markdown, /upper bound/);
+  assert.match(markdown, /solid-v1: 0 of 1 rows, 0 audited archives, 0 negative rows/);
+  assert.match(markdown, /solid-js@2\.0\.0-rc\.0: 1 row$/m);
+  assert.match(markdown, /solid-js@2\.0\.0-rc\.3: 1 row \(audited\)/);
+});
+
+test("a corpus the authority cannot answer about fails the floor and names the re-audit", () => {
+  const results = [
+    makeResult({
+      family: "corvu",
+      package: "corvu",
+      version: "0.7.0",
+      solidTarget: "solid2",
+      class: "success",
+      // The whole corpus has moved past the audited prerelease -- the failure
+      // the pin has no way to notice on its own.
+      installedVersions: { corvu: "0.7.0", "solid-js": "2.0.0-rc.4" }
+    })
+  ];
+  const report = buildReport({
+    manifest: makeManifest({ results }),
+    results,
+    startedAt: "2026-09-12T09:00:00.000Z",
+    finishedAt: "2026-09-12T09:01:00.000Z",
+    auditedArchives: AUTHORITY_PINS
+  });
+
+  assert.equal(report.combined.dialectNegativeAuthority.rowsCovered, 0);
+  const refused = evaluateThresholds(report, { global: { minAuthorityCoveredRows: 1 } });
+  assert.equal(refused.ok, false);
+  assert.deepEqual(refused.failures[0], {
+    scope: "global",
+    metric: "authorityCoveredRows",
+    actual: 0,
+    minimum: 1,
+    unaudited: ["solid-js@2.0.0-rc.4"]
+  });
+  assert.equal(evaluateThresholds(report, { global: { minAuthorityCoveredRows: 0 } }).ok, true);
+});
+
+test("pins the report could not read fail the floor rather than passing as coverage", () => {
+  const results = [
+    makeResult({
+      family: "corvu",
+      package: "corvu",
+      version: "0.7.0",
+      solidTarget: "solid2",
+      class: "success",
+      installedVersions: { "solid-js": "2.0.0-rc.3" }
+    })
+  ];
+  const report = buildReport({
+    manifest: makeManifest({ results }),
+    results,
+    startedAt: "2026-09-12T09:00:00.000Z",
+    finishedAt: "2026-09-12T09:01:00.000Z",
+    auditedArchives: { schemaVersion: 1 }
+  });
+
+  assert.ok(report.combined.dialectNegativeAuthority.unreadable);
+  const markdown = renderMarkdown(report);
+  assert.match(markdown, /### Dialect negative authority\n\nUnreadable: /);
+
+  const refused = evaluateThresholds(report, { global: { minAuthorityCoveredRows: 1 } });
+  assert.equal(refused.ok, false);
+  assert.equal(refused.failures[0].metric, "authorityCoveredRows");
+  assert.equal(refused.failures[0].actual, null);
+  assert.match(refused.failures[0].note, /audited archives unreadable/);
+});

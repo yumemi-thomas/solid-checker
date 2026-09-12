@@ -3547,4 +3547,77 @@ mod tests {
         assert_eq!(call_domain_enum.len(), 9);
         assert!(call_domain_enum.contains(&"throws"));
     }
+
+    /// `audited-archives.json` mirrors what each authority audited.
+    ///
+    /// The identity gate that admits a negative row
+    /// (`contract_certification/type_facts.rs`) binds name, version, integrity
+    /// and manifest digest field by field, so an authority answers only about
+    /// the exact bytes it was read against. Which installed trees those are is
+    /// a question consumers outside this crate need — the ecosystem
+    /// benchmark's coverage gate asks it of every probe row — and nothing
+    /// published it. The file answers it, and this test is what keeps it from
+    /// drifting: a re-audit that changes a tuple, adds an archive, or moves a
+    /// row count fails here until the file follows.
+    ///
+    /// Matching a tuple in that file is never a proof. It says the identity
+    /// gate *could* be reached, and nothing about whether any row denies
+    /// anything — `primitive_performs_no_operation` still decides that, and
+    /// silence there is never "no".
+    #[test]
+    fn audited_archives_json_mirrors_the_dialect_tables() {
+        let document: serde_json::Value =
+            serde_json::from_str(include_str!("../audited-archives.json"))
+                .expect("audited-archives.json is valid JSON");
+        assert_eq!(document["schemaVersion"], 1);
+        let published = document["dialects"]
+            .as_array()
+            .expect("audited-archives.json carries a dialects array");
+        // Spelled the way the dialect assembly manifests spell it
+        // (`rust/dialects/<id>/dialect.json`), because that is the identifier
+        // every consumer outside Rust already keys on.
+        let expected = [(Version::V1, "solid-v1"), (Version::V2, "solid-v2")];
+        assert_eq!(
+            published.len(),
+            expected.len(),
+            "every dialect must publish its authority, empty or not: an absent \
+             entry and an empty one are the difference between \"never looked\" \
+             and \"looked and audited nothing\""
+        );
+        for ((version, id), entry) in expected.into_iter().zip(published) {
+            assert_eq!(entry["id"], id);
+            let authority = version.dialect().negative_claim_authority();
+            assert_eq!(
+                entry["negativeRowCount"].as_u64(),
+                Some(authority.rows.len() as u64),
+                "{id} negative row count"
+            );
+            let archives = entry["archives"]
+                .as_array()
+                .unwrap_or_else(|| panic!("{id} carries an archives array"));
+            assert_eq!(
+                archives.len(),
+                authority.archives.len(),
+                "{id} audited archive count"
+            );
+            for (audited, archive) in authority.archives.iter().zip(archives) {
+                assert_eq!(archive["name"], audited.name, "{id} archive name");
+                assert_eq!(
+                    archive["version"], audited.version,
+                    "{id} {} version",
+                    audited.name
+                );
+                assert_eq!(
+                    archive["integrity"], audited.integrity,
+                    "{id} {} integrity",
+                    audited.name
+                );
+                assert_eq!(
+                    archive["manifestSha256"], audited.manifest_sha256,
+                    "{id} {} manifest digest",
+                    audited.name
+                );
+            }
+        }
+    }
 }

@@ -19736,3 +19736,39 @@ joined premise on the wire, not a producer change alone. Also excluded
 deliberately: any non-plain write (compound, update, destructuring target,
 `for…of` head) refuses the whole binding, and sources rooted at two slots refuse
 because the receipt names one.
+
+## The dialect negative authority's reach is measured and gated (2026-09-12)
+
+The axiom tier admits a negative row only after binding the installed archive
+to an audited one field by field — name, version, integrity, manifest digest.
+The Solid 2 authority pins `2.0.0-rc.3` for all three of its archives and the
+Solid 1.x authority pins nothing at all, so the tier's reach over the ecosystem
+corpus is **120 of 418 rows (28.7%)**: 120 of 250 solid-v2 rows, 0 of 168
+solid-v1 rows. The other 130 solid-v2 rows install `2.0.0-rc.0` (111),
+`2.0.0-beta.19` (17) or `2.0.0-rc.2` (2).
+
+Nothing reported this, and the failure it hides is silent by construction: an
+unmatched identity produces the same refusal a withheld claim produces, so a
+single Solid release would take the authority from 28.7% to nothing with every
+gate green. The reach is now published
+(`rust/crates/solid-dialect/audited-archives.json`, held to the Rust tables by
+`audited_archives_json_mirrors_the_dialect_tables`), reported per run under
+`combined.dialectNegativeAuthority`, and floored at 120 by
+`minAuthorityCoveredRows` in the certification regression thresholds, whose
+failure names the unaudited versions it found.
+
+**Approximations, stated rather than hidden.** The corpus join is on name and
+version only — a report records no integrity or manifest digest — so the number
+is an upper bound on what the gate could reach, never a yield. It is also not
+an answer count: § 69.1's missing source root still stands in front of the
+table, so the tier answers nothing on this corpus today whatever the coverage
+says. Widening the pin, deriving the rows from certified contracts instead of
+transcribing them, or accepting the coverage remain the three open answers
+(`phase21/2026-09-10-reads-veto-observation-design.md` § 71.4); the code takes
+the third, and now says so with a number.
+
+The companion silence is § 65's: 5 of the corpus's 19 probe recipes declare
+`NEVER EMITS:` and cannot veto, all five in `reads`. That list is now pinned by
+`ecosystem-probe-recipes.test.mjs`, so a sixth is a decision. Unchanged: a
+recipe whose emit sits behind a condition that never holds is the same failure
+and no static check finds it.

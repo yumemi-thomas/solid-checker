@@ -345,6 +345,42 @@ describe("the checked-in fixture recipe corpora", () => {
     }
   });
 
+  // How many of this corpus's mandatory vetoes cannot veto, stated as a
+  // number rather than left to be discovered.
+  //
+  // A recipe that declares `NEVER EMITS:` is not unsound -- closure is the
+  // implementation census's job (ADR 0008), and a vacuous recipe can only fail
+  // to contradict. But its gate passes by construction, and the per-recipe
+  // check above cannot say how much of the corpus is in that state. § 65 of
+  // `phase21/2026-09-10-reads-veto-observation-design.md` found all five of
+  // them in the `reads` domain and none anywhere else, which is § 6's
+  // argument measured: an unenumerated read is a read of a source the export
+  // *owns*, and no observation from outside can see it.
+  //
+  // Pinning the list is what makes a sixth one a decision. A `creates` or
+  // `returns` recipe going silent would land here as a diff, where today the
+  // only trace is a gate that quietly stops being able to fail.
+  test("says how many of its vetoes cannot veto, and which", () => {
+    const silent = [];
+    for (const recipe of manifest.recipes) {
+      if (recipe.coverageLimitations.some(limitation => limitation.startsWith(NEVER_EMITS))) {
+        silent.push(recipe.module);
+      }
+    }
+    assert.deepEqual(silent.sort(), [
+      "solid-primitives-utils-access-reads-2bf41ff6.mjs",
+      "solid-primitives-utils-array-equals-reads-2bf41ff6.mjs",
+      "solid-primitives-utils-clamp-reads-2bf41ff6.mjs",
+      "solid-primitives-utils-compare-reads-2bf41ff6.mjs",
+      "solid-primitives-utils-true-fn-reads-2bf41ff6.mjs"
+    ]);
+    assert.equal(
+      manifest.recipes.length - silent.length,
+      14,
+      "the recipes that can still contradict something"
+    );
+  });
+
   test("holds no unfinished scaffold either", () => {
     for (const path of manifests) {
       for (const name of readdirSync(dirname(path)).filter(file => file.endsWith(".mjs"))) {

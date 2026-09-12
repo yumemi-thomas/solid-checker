@@ -67,6 +67,10 @@ non-observation; all fourteen `creates`/`returns` recipes can emit. That split
 is § 6 measured instead of argued: an unenumerated read is a read of a source
 the export *owns*, and that is the half no recipe can instrument.
 
+The five are pinned by name in that test, so a sixth silent recipe is a diff
+rather than a discovery — and a `creates` or `returns` recipe going silent,
+which is the case that would matter, cannot happen quietly.
+
 ## Adding one
 
 `scripts/probe-recipe-scaffold.mjs` writes the transcription. Point it at a
