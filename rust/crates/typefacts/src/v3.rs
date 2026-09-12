@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:82f5f6d09caf0bc9afa3dbb28601463d02cdd65ae5aecf08466fc8957f20f466";
+    "sha256:c063f621b184072a48fdc3e3a772765a590c96719b7a78fc18ca8518ca3735f9";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -274,7 +274,11 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // `coercionSubjectRootRefusal`: the derivation every one of a coercion's
 // ToPrimitive operands agreed on, or why they did not. Never a premise, and
 // separate from `subjectRoot`, which is an accessor's receiver.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 51;
+// Protocol 52 adds `coercionSubjectParameters` and makes the caller-provenance
+// derivations of `coercionSubjectRoot` a premise (ADR 0092): the slots the
+// operands rooted at, which is what a receipt names. A consumer that reviewed
+// only protocol 51 read the derivation as a diagnostic, so the number moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 52;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

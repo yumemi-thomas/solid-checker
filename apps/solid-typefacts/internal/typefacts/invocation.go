@@ -904,14 +904,25 @@ type UncensusedInvokingForm struct {
 	// form, the derivation **every** one of its ToPrimitive operands agreed on,
 	// or why they did not (handshake protocol 51). Exactly one is ever stated.
 	//
-	// Diagnostic only, and deliberately separate from SubjectRoot: that field
-	// is an accessor's receiver, which `census_form_shape_reads_the_subject`
-	// admits, and a coercion's operands are neither that shape nor admitted by
-	// any premise here. These exist so the premise ADR 0042's argument suggests
-	// for a coercion can be sized before it is written. Nothing may read them
-	// as a grant.
+	// Deliberately separate from SubjectRoot: that field is an accessor's
+	// receiver, and a coercion has operands rather than a receiver. ADR 0092
+	// grants the caller-provenance derivations here; every other spelling
+	// remains the diagnostic they were written as, and a consumer must refuse
+	// one it has not reviewed rather than read it as a weaker grant.
 	CoercionSubjectRoot        SubjectRootDerivation    `cbor:"coercionSubjectRoot,omitempty" json:"coercionSubjectRoot,omitempty"`
 	CoercionSubjectRootRefusal SubjectRootRefusalReason `cbor:"coercionSubjectRootRefusal,omitempty" json:"coercionSubjectRootRefusal,omitempty"`
+	// CoercionSubjectParameters are the slots the operands rooted at, strictly
+	// increasing and deduplicated (ADR 0092, handshake protocol 52).
+	//
+	// The companion fact of a caller-rooted CoercionSubjectRoot, and the same
+	// invariant ADR 0047 states for SubjectParameter: a derivation that names
+	// the caller's value must say **which** slot, because that is what the
+	// receipt asserts. A coercion reaches ToPrimitive on every operand, so the
+	// claim is about every slot they rooted at rather than one receiver, and
+	// the list is what a receipt names. Stated only beside a parameter
+	// derivation and never beside a refusal; empty where the agreed derivation
+	// names no slot of this declaration.
+	CoercionSubjectParameters []int `cbor:"coercionSubjectParameters,omitempty" json:"coercionSubjectParameters,omitempty"`
 	// LocalLiteralResult names a call whose every normal completion returns
 	// the same unwritten local data-only literal binding. This is a source
 	// identity fact, not a structural return-type assertion. Its callee must

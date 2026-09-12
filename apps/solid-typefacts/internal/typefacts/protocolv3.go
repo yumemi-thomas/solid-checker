@@ -4,7 +4,18 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 51: a `coercion` form carries
+// TypeFactsHandshakeProtocol is 52 (ADR 0092): a `coercion` form whose
+// operands agreed on a caller-provenance derivation also carries
+// `coercionSubjectParameters`, the slots they rooted at — strictly increasing
+// and deduplicated. Protocol 51 stated the agreement as a diagnostic; this
+// protocol makes it a premise, and a premise about the caller's value must say
+// **which** slot, which is the companion-fact invariant ADR 0047 states for
+// `subjectParameter`. A coercion reaches ToPrimitive on every operand, so the
+// claim names every slot they rooted at rather than one receiver. A consumer
+// that reviewed only protocol 51 read the derivation as a diagnostic and must
+// not begin granting it, which is why the number moves although the field is
+// additive.
+// Protocol 51: a `coercion` form carries
 // `coercionSubjectRoot` and `coercionSubjectRootRefusal` — the derivation every
 // one of its ToPrimitive operands agreed on, or why they did not, with
 // `mixed-operand-roots` when each rooted but not at the same derivation. A
@@ -297,8 +308,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 51
-	TypeFactsSchemaSHA256             = "sha256:82f5f6d09caf0bc9afa3dbb28601463d02cdd65ae5aecf08466fc8957f20f466"
+	TypeFactsHandshakeProtocol uint64 = 52
+	TypeFactsSchemaSHA256             = "sha256:c063f621b184072a48fdc3e3a772765a590c96719b7a78fc18ca8518ca3735f9"
 )
 
 type ServiceHandshake struct {

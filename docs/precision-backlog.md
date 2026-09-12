@@ -19772,3 +19772,39 @@ The companion silence is § 65's: 5 of the corpus's 19 probe recipes declare
 `ecosystem-probe-recipes.test.mjs`, so a sixth is a decision. Unchanged: a
 recipe whose emit sits behind a condition that never holds is the same failure
 and no static check finds it.
+
+## ADR 0092: a coercion whose every operand is the caller's (2026-09-12)
+
+A coercing operator applies ToPrimitive to each operand, reaching
+`Symbol.toPrimitive`, `valueOf` or `toString` — user code, exactly as a getter
+is. ADR 0092 dispositions such a form when every operand is rooted at a
+caller-provenance derivation, with the slots on the wire
+(`coercionSubjectParameters`, handshake protocol 51 → 52) because a claim about
+the caller's value must name which slot.
+
+Measured control versus change on the same machine: certified closures
+5,192 → **5,275**, coercion refusals at the `parameter` leg 13 → 4 distinct
+claims, and **no row moved** — 654 certified entrypoints, 381 verified,
+324 complete, 57 partial, 18 refused, 13 fixes and 0 regressions against the
+pin on both sides. Nine claims had their form admitted and refuse at their next
+blocker; the 83 closures are those nine across their artifact cases.
+
+**Remaining approximations.** The premise is stated for the censused export's
+own declaration and **not** for a local-recursion frame, which costs the other
+4 claims. ADR 0034 admits a frame for an accessor; this one does not follow it,
+because inside a frame the value at that slot came from a call site in this
+artifact and may be an object this program built — whose `valueOf` is then this
+program's code. Whether ADR 0034's frame case survives that argument is not
+measured anywhere and is now recorded as open. Also excluded: operands that each
+root but at *different* caller-provenance derivations (the producer states one
+agreed derivation, not a set), and the `written-parameter` (7),
+`nested-parameter` (6), `local-binding-written` (4), `module-binding` (3) and
+`local-binding` (2) legs beside it.
+
+**A gate caveat found on the way.** `make ecosystem-regression` hardcodes
+`--timeout 600`, so on a battery machine in Low Power Mode — the 2× condition
+this document already records — the two rows that always sit near the cap
+(`@kobalte/utils`, `solid-js@1.9.14`, with `@kobalte/core` at 581.6 s beside
+them) time out and the gate reports a *certification regression* for a
+wall-clock cause. Re-running `scripts/ecosystem-benchmark/run.mjs` directly with
+`--timeout 1200` is what separates the two.

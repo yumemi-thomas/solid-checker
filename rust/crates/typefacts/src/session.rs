@@ -4296,6 +4296,7 @@ mod tests {
             subject_root_refusal: String::new(),
             coercion_subject_root: String::new(),
             coercion_subject_root_refusal: String::new(),
+            coercion_subject_parameters: Vec::new(),
             subject_declaration: None,
             coercion_premise: None,
             local_literal_result: None,

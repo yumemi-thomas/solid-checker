@@ -8410,6 +8410,7 @@ enum CensusDisposition {
     LocalLiteralResultAccessor,
     LocalLiteralResultAccessorWrite,
     OwnLiteralIterable,
+    ParameterRootedCoercion,
     PrimitiveCoercion,
     ParameterRootedHasInstance,
     DefaultLibraryHasInstance,
@@ -8439,6 +8440,7 @@ impl CensusDisposition {
             Self::LocalLiteralResultAccessor => "local-literal-result-accessor",
             Self::LocalLiteralResultAccessorWrite => "local-literal-result-accessor-write",
             Self::OwnLiteralIterable => "own-literal-iterable",
+            Self::ParameterRootedCoercion => "parameter-rooted-coercion",
             Self::PrimitiveCoercion => "primitive-coercion",
             Self::ParameterRootedHasInstance => "parameter-rooted-has-instance",
             Self::DefaultLibraryHasInstance => "default-library-has-instance",
@@ -9113,7 +9115,10 @@ fn census_reads_domain(
         // literal result back until its call walk has demanded the callees'
         // transcripts; this census has no call walk, so a form it cannot
         // decide here it cannot decide at all.
-        let Some(disposition) = census_form_disposition(&run, form) else {
+        // Depth 0: this census walks the export's own implementation and
+        // recurses into nothing, so every form it sees is in the declaration
+        // whose parameters the caller filled.
+        let Some(disposition) = census_form_disposition(&run, form, 0) else {
             return Err(refuse(format!(
                 "reads-census premise required: the {} form ({}) at {}:{}..{} ({}) states no \
                  reviewed subject root, so whose value it reads is undecided",
@@ -9617,7 +9622,7 @@ fn census_transcript_calls(
         if form.reach == Reachability::Unreachable {
             continue;
         }
-        if let Some(disposition) = census_form_disposition(run, form) {
+        if let Some(disposition) = census_form_disposition(run, form, depth) {
             run.sites.push(census_form_site(form, disposition));
             continue;
         }
@@ -11324,9 +11329,18 @@ fn census_local_declaration_identity(
 fn census_form_disposition(
     run: &CensusRun<'_>,
     form: &typefacts::UncensusedInvokingForm,
+    depth: usize,
 ) -> Option<CensusDisposition> {
     if form.local_literal_result.is_some() {
         return None;
+    }
+    // ADR 0092: a coercion states its subject in its own fields, because it has
+    // operands rather than a receiver. Asked before the `subjectRoot` match and
+    // never through it: the two vocabularies are the same spellings about
+    // different things, and a coercion that somehow carried both would be a
+    // producer disagreement rather than a stronger fact.
+    if form.kind == typefacts::UncensusedInvokingFormKind::Coercion {
+        return census_coercion_disposition(form, depth);
     }
     // ADR 0043: which premise rooted the subject. An unreviewed spelling
     // refuses, so a derivation a later producer adds arrives here as a refusal
@@ -11440,6 +11454,88 @@ fn census_form_disposition(
     }
 }
 
+/// ADR 0092: a coercion every one of whose ToPrimitive operands is the
+/// caller's value.
+///
+/// The argument is ADR 0042's, applied through a different operator. A coercing
+/// operator performs ToPrimitive on each operand, which reaches
+/// `Symbol.toPrimitive`, `valueOf` and `toString` — user code, exactly as a
+/// getter is, and installed by whoever built the object. When every operand is
+/// the caller's value, every method the operator can reach was installed in the
+/// caller's own artifact and is analyzed there.
+///
+/// **Every** operand, and that is the whole difference from an accessor. A
+/// receiver is one value; operands are several, and one of them that this
+/// program built is one object whose `valueOf` this program owns, which makes
+/// the form this program's act however the others rooted. The producer states
+/// an agreed derivation or nothing, which is structurally ADR 0091's guard.
+///
+/// Four things are required, each a separate `None`:
+///
+/// 1. The form states no accessor subject. `subjectRoot`, `subjectParameter`
+///    and `subjectDeclaration` belong to a receiver; a coercion carrying one is
+///    a producer whose two walks disagree, and this side refuses rather than
+///    picking a reading.
+/// 2. The agreed derivation is one of the caller-provenance spellings ADR 0048
+///    joined for accessors — the caller's argument, the caller's argument under
+///    either branch of a default, or what a call to a caller-supplied callee
+///    handed back. Every other spelling, `own-literal` included, refuses:
+///    a value this program built is the case the premise is *about*.
+/// 3. The slots are stated, strictly increasing, and nonempty (protocol 52).
+///    A derivation that names the caller's value must say which slot, or the
+///    receipt asserts something narrower than the site.
+/// 4. The node kind is one the producer's own operand walk covers, so the
+///    "every operand" quantifier ranges over the operands the operator really
+///    has.
+fn census_coercion_disposition(
+    form: &typefacts::UncensusedInvokingForm,
+    depth: usize,
+) -> Option<CensusDisposition> {
+    // The censused export's own declaration, and not a local-recursion frame.
+    // ADR 0034 admits a frame's parameters for an accessor; this ADR does not
+    // follow it there, and the difference is what the operator reaches. A
+    // getter runs code the subject's *object* carries, and so does ToPrimitive
+    // — but inside a local frame the value at that slot was supplied by a call
+    // site in this very artifact, which may have handed it an object this
+    // program built. At depth 0 the values are the external caller's by
+    // construction. Whether the frame case holds is ADR 0034's question and it
+    // is measured nowhere; refusing it is the direction that cannot be wrong.
+    if depth != 0 {
+        return None;
+    }
+    if !form.subject_root.is_empty()
+        || form.subject_parameter.is_some()
+        || form.subject_declaration.is_some()
+    {
+        return None;
+    }
+    if !matches!(
+        form.coercion_subject_root.as_str(),
+        "parameter" | "parameter-default" | "parameter-result"
+    ) {
+        return None;
+    }
+    if form.coercion_subject_parameters.is_empty()
+        || !form
+            .coercion_subject_parameters
+            .windows(2)
+            .all(|pair| pair[0] < pair[1])
+    {
+        return None;
+    }
+    // The kinds `coercionOperands` enumerates, and no others: a kind this list
+    // does not carry is one whose operands that walk answers nothing for, so
+    // "every operand rooted" would quantify over an empty set.
+    matches!(
+        form.node_kind.as_ref(),
+        "BinaryExpression"
+            | "TemplateExpression"
+            | "PrefixUnaryExpression"
+            | "PostfixUnaryExpression"
+    )
+    .then_some(CensusDisposition::ParameterRootedCoercion)
+}
+
 /// Whether the form's kind and node kind are a shape this census has reviewed
 /// as *reading properties of its subject*. The premise is about the subject's
 /// provenance; this is the other half — that the form's reach really is the
@@ -11488,6 +11584,24 @@ fn census_form_site(
     form: &typefacts::UncensusedInvokingForm,
     disposition: CensusDisposition,
 ) -> String {
+    // ADR 0092's claim is about several slots, and the receipt names them:
+    // `parameter/0,2` says the operands rooted at slots 0 and 2, which is what
+    // the disposition asserts. Only this disposition prints it, so every other
+    // form's site — `primitive-coercion` included, which also carries no
+    // `subjectRoot` — stays byte-identical to what receipts already hold.
+    let root = if disposition == CensusDisposition::ParameterRootedCoercion {
+        format!(
+            "{}/{}",
+            form.coercion_subject_root,
+            form.coercion_subject_parameters
+                .iter()
+                .map(usize::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    } else {
+        form.subject_root.clone()
+    };
     format!(
         "census-form:{}:{}:{}:{}:{}:{}:{}",
         form.location.path,
@@ -11496,7 +11610,7 @@ fn census_form_site(
         uncensused_invoking_form_kind_name(form.kind),
         reachability_name(form.reach),
         disposition.wire_name(),
-        form.subject_root
+        root
     )
 }
 

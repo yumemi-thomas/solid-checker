@@ -1,6 +1,7 @@
 package tsgo
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/microsoft/typescript-go/shim/ast"
@@ -318,7 +319,7 @@ func (p *project) uncensusedInvokingFormCensusLocked(
 			}
 			if kind == typefacts.UncensusedCoercion {
 				form.CoercionPremise = p.coercionPremiseLocked(node)
-				form.CoercionSubjectRoot, form.CoercionSubjectRootRefusal =
+				form.CoercionSubjectRoot, form.CoercionSubjectRootRefusal, form.CoercionSubjectParameters =
 					p.coercionSubjectRootLocked(implementation, node, roots)
 			}
 			if _, _, subject := p.accessorFormSubjectParameterLocked(node, kind, roots); subject != nil {
@@ -2287,12 +2288,17 @@ func (p *project) unaryFormLocked(
 // before it is written rather than after (§ 66).
 func (p *project) coercionSubjectRootLocked(
 	implementation *ast.Node, node *ast.Node, roots *parameterSubjectRoots,
-) (typefacts.SubjectRootDerivation, typefacts.SubjectRootRefusalReason) {
+) (typefacts.SubjectRootDerivation, typefacts.SubjectRootRefusalReason, []int) {
 	operands := coercionOperands(node)
 	if len(operands) == 0 {
-		return "", ""
+		return "", "", nil
 	}
 	agreed := typefacts.SubjectRootDerivation("")
+	// The slots the operands rooted at, deduplicated and strictly increasing
+	// (ADR 0092). One slot coerced against itself -- `a + a` -- is one claim
+	// about one parameter, and a receipt that named it twice would say
+	// something the form does not.
+	slots := map[int]bool{}
 	for _, operand := range operands {
 		// A provably primitive operand is skipped rather than refused. It has
 		// nothing for ToPrimitive to reach, so it cannot make the form this
@@ -2309,21 +2315,39 @@ func (p *project) coercionSubjectRootLocked(
 			// The first operand that roots at nothing decides the answer, and
 			// its leg is the informative one: a form is refused by its weakest
 			// operand, not by the count of them.
-			return "", p.subjectRootRefusalLocked(implementation, operand, roots)
+			return "", p.subjectRootRefusalLocked(implementation, operand, roots), nil
+		}
+		if root.parameter != nil {
+			slots[*root.parameter] = true
 		}
 		if agreed == "" {
 			agreed = root.derivation
 			continue
 		}
 		if agreed != root.derivation {
-			return "", typefacts.SubjectRefusalMixedOperandRoots
+			return "", typefacts.SubjectRefusalMixedOperandRoots, nil
 		}
 	}
 	// Every operand was provably primitive, so the classifier and this walk
 	// disagree about whether there was anything to coerce. State nothing
 	// rather than an agreement reached over no operands, exactly as
 	// `coercionPremiseLocked` refuses the same disagreement.
-	return agreed, ""
+	return agreed, "", sortedSlots(slots)
+}
+
+// sortedSlots answers the parameter slots as the wire states them: strictly
+// increasing, deduplicated, and nil rather than an empty list when nothing
+// rooted at a slot of this declaration.
+func sortedSlots(slots map[int]bool) []int {
+	if len(slots) == 0 {
+		return nil
+	}
+	ordered := make([]int, 0, len(slots))
+	for slot := range slots {
+		ordered = append(ordered, slot)
+	}
+	sort.Ints(ordered)
+	return ordered
 }
 
 func (p *project) coercionPremiseLocked(node *ast.Node) *typefacts.CoercionPremise {

@@ -12480,7 +12480,7 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 99] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 103] = [
         "accessorTableRead",
         "arrayRestRead",
         "awaitIterateParameter",
@@ -12494,6 +12494,10 @@ export const value = phantom;
         "coerceHelperResult",
         "coerceLibraryResult",
         "coerceObjectHelperResult",
+        "coerceOneParameterTwice",
+        "coerceParameterAndModuleValue",
+        "coerceTwoModuleValues",
+        "coerceTwoParameters",
         "coerceWrittenHelperResult",
         "constBound",
         "cycle",
@@ -14065,6 +14069,10 @@ export const value = phantom;
             "coerceHelperResult",
             "coerceLibraryResult",
             "coerceObjectHelperResult",
+            "coerceOneParameterTwice",
+            "coerceParameterAndModuleValue",
+            "coerceTwoModuleValues",
+            "coerceTwoParameters",
             "coerceWrittenHelperResult",
             "constBound",
             "cycle",
@@ -14345,7 +14353,7 @@ export const value = phantom;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
-    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 87] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 91] = [
         "accessorTableRead",
         "arrayRestRead",
         "awaitIterateParameter",
@@ -14359,6 +14367,10 @@ export const value = phantom;
         "coerceHelperResult",
         "coerceLibraryResult",
         "coerceObjectHelperResult",
+        "coerceOneParameterTwice",
+        "coerceParameterAndModuleValue",
+        "coerceTwoModuleValues",
+        "coerceTwoParameters",
         "coerceWrittenHelperResult",
         "constBound",
         "cycle",
@@ -14459,17 +14471,27 @@ export const value = phantom;
     /// `typedCoercion`, `returnedCallbackCoercion` and `declaredMemberCoercion`
     /// close under the declared-signature premise (ADR 0038), and
     /// `helperCoercion` closes since protocol 23 carries the caller's argument
-    /// types to the helper as its premise; `untypedCoercion` (declared
-    /// `unknown`), `helperSpreadCoercion` (a spread carries no slot) and
-    /// `helperUntypedArgument` (an `any` slot) are refused. Under ADR 0051,
+    /// types to the helper as its premise; `helperSpreadCoercion` (a spread
+    /// carries no slot) and `helperUntypedArgument` (an `any` slot) are
+    /// refused. Under ADR 0092 a coercion every one of whose operands is the
+    /// caller's value closes on provenance rather than on type, which is why
+    /// `untypedCoercion` — declared `unknown`, so the form is recorded — now
+    /// closes beside `coerceTwoParameters` and `coerceOneParameterTwice`,
+    /// while `coerceParameterAndModuleValue` (the operands disagree) and
+    /// `coerceTwoModuleValues` (they agree on a derivation that is not the
+    /// caller's) are refused. The two helper cases stay refused because that
+    /// premise is stated for the censused export's own declaration and not
+    /// for a local-recursion frame. Under ADR 0051,
     /// `omittedBoxScale` closes through an explicit `never` premise in the
     /// first leaf call, while the explicit `unknown` and `any` controls keep
     /// their leaf coercions and are refused.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 42] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 45] = [
         "chainCallbacks",
         "coerceBoundHelperResult",
         "coerceConditionalHelperResult",
         "coerceHelperResult",
+        "coerceOneParameterTwice",
+        "coerceTwoParameters",
         "constBound",
         "cycle",
         "declaredMemberCoercion",
@@ -14503,13 +14525,14 @@ export const value = phantom;
         "switchBreak",
         "toStringTagViaCall",
         "typedCoercion",
+        "untypedCoercion",
         "updateOnParameter",
         "viaHelperChain",
         "whileBreak",
         "writtenFromUninitialized",
         "writtenJoin",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 52] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 53] = [
         ("accessorTableRead", "census"),
         ("arrayRestRead", "census"),
         ("awaitIterateParameter", "census"),
@@ -14519,6 +14542,8 @@ export const value = phantom;
         ("chainModuleCallbacks", "census"),
         ("coerceLibraryResult", "census"),
         ("coerceObjectHelperResult", "census"),
+        ("coerceParameterAndModuleValue", "census"),
+        ("coerceTwoModuleValues", "census"),
         ("coerceWrittenHelperResult", "census"),
         ("deep", "census"),
         ("defaultedFromDefaulted", "census"),
@@ -14551,7 +14576,6 @@ export const value = phantom;
         ("taggedTemplate", "census"),
         ("unknownBoxScale", "census"),
         ("untypedBoxScale", "census"),
-        ("untypedCoercion", "census"),
         ("writtenAfterRead", "census"),
         ("writtenBeforeRead", "census"),
         ("writtenByDestructuring", "census"),

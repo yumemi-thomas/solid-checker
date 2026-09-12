@@ -49,7 +49,8 @@ export declare function destructureModuleValue(): unknown;
 // ADR 0038: these signatures are the premise the form census classifies the
 // runtime bodies under. `typedCoercion`, `returnedCallbackCoercion` and
 // `declaredMemberCoercion` certify because of the types stated here;
-// `untypedCoercion` refuses on `unknown`. `helperCoercion` certifies because
+// `untypedCoercion` records its form on `unknown` and closes on ADR 0092's
+// provenance premise instead. `helperCoercion` certifies because
 // the argument types at its call reach the helper as the helper's premise
 // (protocol 23); `helperSpreadCoercion` (a spread carries no slot) and
 // `helperUntypedArgument` (an `any` slot) refuse at the helper.
@@ -60,6 +61,14 @@ export declare function declaredMemberCoercion(axis: { min: number; max: number 
 export declare function helperCoercion(a: number, b: number): number;
 export declare function helperSpreadCoercion(a: number, b: number): number;
 export declare function helperUntypedArgument(a: number): number;
+// ADR 0092: `unknown` is not provably a non-object, so the coercion form is
+// recorded and the premise is the one under test rather than the declared
+// type. The two module-value cases are the vacuity guard: a literal operand
+// would record no form and certify saying nothing.
+export declare function coerceTwoParameters(left: unknown, right: unknown): unknown;
+export declare function coerceOneParameterTwice(left: unknown): unknown;
+export declare function coerceParameterAndModuleValue(left: unknown): unknown;
+export declare function coerceTwoModuleValues(): unknown;
 // An immediately-invoked function expression: this census refuses it.
 export declare function iife(value: number): number;
 // ADR 0043: the root set closed under the reads the census dispositions. The

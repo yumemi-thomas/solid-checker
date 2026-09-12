@@ -950,6 +950,22 @@ pub struct UncensusedInvokingForm {
     pub coercion_subject_root: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub coercion_subject_root_refusal: String,
+    /// Protocol 52 (ADR 0092): the parameter slots a caller-rooted
+    /// [`Self::coercion_subject_root`] rooted at, strictly increasing and
+    /// deduplicated.
+    ///
+    /// The companion fact that turns that derivation from a diagnostic into a
+    /// premise, under the invariant ADR 0047 states for
+    /// [`Self::subject_parameter`]: a claim that the value is the caller's must
+    /// say **which** slot, because that is what the receipt asserts. A coercion
+    /// applies ToPrimitive to every operand, so it names every slot they rooted
+    /// at rather than one receiver — `a + a` names one slot, `a + b` two.
+    ///
+    /// Empty where the agreed derivation names no slot of this declaration, and
+    /// a consumer of the parameter derivations must refuse an empty list rather
+    /// than read it as "any slot".
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub coercion_subject_parameters: Vec<usize>,
     /// What a `coercion` form's clearance would rest on: every operand the
     /// coercion applies ToPrimitive to is either provably a primitive by its
     /// own type — not listed, because a primitive has nothing to reach — or the

@@ -51,9 +51,12 @@
 // And the premise the form census classifies under since ADR 0038: the
 // export's declared signature in `index.d.ts`. `typedCoercion`,
 // `returnedCallbackCoercion` and `declaredMemberCoercion` certify on
-// coercions that were `any` before; `untypedCoercion` (declared `unknown`) and
-// `helperCoercion` (the coercion is a helper's, which has no declaration)
-// refuse and pin the boundary.
+// coercions that were `any` before, and `helperCoercion` joined them when
+// protocol 23 carried the caller's argument types into the helper.
+// `helperSpreadCoercion` and `helperUntypedArgument` pin that boundary: the
+// premise reaches neither, and ADR 0092 does not reach them either, because
+// its provenance premise is stated for the export's own declaration and not
+// for a local-recursion frame.
 
 function never() {}
 
@@ -475,8 +478,12 @@ export function typedCoercion(min, max, v) {
   return v > max ? max : v < min ? min : v;
 }
 
-// The declared type is `unknown`, which is not provably a non-object: the
-// premise binds and the coercion stands under it. **Refuses.**
+// The declared type is `unknown`, which is not provably a non-object, so the
+// premise binds and the coercion form is recorded. It was refused until
+// ADR 0092: the recorded form's one coercible operand is the caller's value —
+// `1` is provably primitive and has nothing for ToPrimitive to reach — so
+// whatever `valueOf` runs was installed in the caller's own artifact.
+// **Certifies**, on provenance rather than on type.
 export function untypedCoercion(value) {
   return value + 1;
 }
@@ -524,6 +531,36 @@ export function helperSpreadCoercion(a, b) {
 // **Refuses.**
 export function helperUntypedArgument(a) {
   return subtract(a, JSON.parse("1"));
+}
+
+// ADR 0092: a coercion every one of whose operands is the caller's value. A
+// coercing operator applies ToPrimitive to each operand, reaching
+// `Symbol.toPrimitive`, `valueOf` and `toString` — user code, exactly as a
+// getter is — and both of these were installed in the caller's own artifact.
+// Two slots, and the receipt names both. **Certifies.**
+export function coerceTwoParameters(left, right) {
+  return left + right;
+}
+
+// The same slot on both sides. One claim about one parameter, and the receipt
+// names it once. **Certifies.**
+export function coerceOneParameterTwice(left) {
+  return left + left;
+}
+
+// One operand is a value this module built, so whatever its `valueOf` does is
+// this module's act however the other operand rooted. The operands disagree and
+// the census refuses. **Refuses.**
+export function coerceParameterAndModuleValue(left) {
+  return left + untypedRegistry;
+}
+
+// Both operands agree on a derivation, and it is not the caller's. An agreement
+// is not a grant: the premise is about the caller's values, and a value this
+// program built is the case it is *about* rather than a case it covers.
+// **Refuses.**
+export function coerceTwoModuleValues() {
+  return untypedRegistry + untypedRegistry;
 }
 
 const registryObject = { value: 1 };

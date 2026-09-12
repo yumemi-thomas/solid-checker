@@ -5412,3 +5412,79 @@ point of the gate, and it also means the floor will fail on a manifest refresh
 that is otherwise entirely correct. The right response there is § 71.4's
 decision — re-audit, derive, or accept and lower the floor deliberately — not a
 quiet edit of the number.
+
+## 73. ADR 0092 measured: 83 closures, and the depth gate priced at 4 claims (2026-09-12)
+
+§ 68.3 said "write it", with 13 in the sentence a plan would quote. It is
+written, and the two things worth recording are the number it actually moved
+and the restriction the fixture forced.
+
+### 73.1 The restriction the fixture found
+
+The premise as § 68 framed it — every ToPrimitive operand rooted at a
+caller-provenance derivation — flipped two fixture cases nobody intended:
+`helperSpreadCoercion` and `helperUntypedArgument`, the pair that pins
+ADR 0038's helper-premise boundary. Both refuse *at the helper*, and inside that
+helper the coercion's operands are the helper's own parameters.
+
+ADR 0034 admits exactly that: "a parameter binding of the censused
+declaration — the export itself, **or a `local-recursion` target frame**". So the
+flip was consistent with the accessor rule. It is not consistent with the
+coercion's own argument. At depth 0 a parameter holds what the external caller
+passed, by construction. Inside a frame the value at that slot was supplied by a
+call site *in this artifact*, which may have handed it an object this program
+built — whose `valueOf` is then this program's code, which is the case the
+premise is about rather than one it covers.
+
+ADR 0092 is therefore gated to the censused export's own declaration. Whether
+ADR 0034's frame case survives the same argument is a question this document
+records and does not answer; it is measured nowhere.
+
+### 73.2 Measured, control versus change, same machine
+
+| | control | ADR 0092 |
+| --- | --- | --- |
+| certified closures | 5,192 | **5,275** |
+| coercion refusals at the `parameter` leg | 171 details / **13 claims** | 67 details / **4 claims** |
+| certified entrypoints | 654 | 654 |
+| verified / complete / partial / refused | 381 / 324 / 57 / 18 | 381 / 324 / 57 / 18 |
+| fixes / regressions vs the pin | 13 / 0 | 13 / 0 |
+
+The control is the same tree with the consumer arm returning `None`, so the
+producer, the protocol and every other commit are held fixed. Its 5,192 is
+exactly ADR 0091's committed number, which also says the four commits since
+moved no closure.
+
+**+83 closures, and no row moved.** Nine of the thirteen claims had their
+coercion form admitted and not one of them changed a row's status or coverage:
+they refuse at their next blocker, which is §§ 42/49/69's lesson for the fourth
+time. What the 83 buys is stronger documents on rows that already certified —
+closures are per claim × artifact case, and § 56.1's roughly fivefold
+over-count is the same factor that turns 9 claims into 83 closures.
+
+**The remaining 4 are the depth gate's price**, and that is the useful half of
+the number: the restriction in § 73.1 costs four claims, stated rather than
+estimated. The rest of the family is unchanged — `written-parameter` 7,
+`nested-parameter` 6, `local-binding-written` 4, `module-binding` 3,
+`local-binding` 2, one `mixed-operand-roots`.
+
+### 73.3 A measurement trap, paid for twice
+
+The first regression run failed the gate with one certification regression
+(`@kobalte/utils`) and a second row not certifying (`solid-js@1.9.14`). Both were
+`infrastructure-failure: policy-2 certification attempt timed out`, at 626 s and
+635 s against the 600 s budget, with `@kobalte/core` at 581.6 s beside them.
+`pmset` said battery, Low Power Mode on — the 2× condition
+docs/precision-backlog.md already records. A rerun at `--timeout 1200` returned
+the control's numbers exactly.
+
+Three rows clustering at the cap on a throttled machine is the signature, and
+the lesson is the one already written down: judge a Kobalte timeout with
+`pmset -g` in hand. The new half is that `make ecosystem-regression` hardcodes
+`--timeout 600`, so on a throttled machine the gate reports a *semantic*
+regression for a *wall-clock* cause. Running `run.mjs` directly with a larger
+timeout is what separates them.
+
+And one process note, mine: the first run's report was overwritten by the
+second before the two were diffed, so the comparison had to detour through the
+2026-09-06 pin. Copy a report aside before re-running one.

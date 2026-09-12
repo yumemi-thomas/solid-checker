@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -2404,6 +2405,22 @@ export function writtenParameterCoercion(left: any, right: any): unknown {
 	left = registry;
 	return left + right;
 }
+
+export function sameParameterTwice(left: any): unknown {
+	return left + left;
+}
+
+export function templateCoercion(left: any, right: any): string {
+	return ` + "`" + `${left}${right}` + "`" + `;
+}
+
+export function unaryCoercion(value: any): unknown {
+	return -value;
+}
+
+export function secondSlotOnly(first: number, second: any): unknown {
+	return second + 1;
+}
 `
 
 // TestCoercionSubjectRootNamesWhatEveryOperandAgreedOn pins protocol 51's
@@ -2430,16 +2447,19 @@ func TestCoercionSubjectRootNamesWhatEveryOperandAgreedOn(t *testing.T) {
 		export  string
 		root    typefacts.SubjectRootDerivation
 		refusal typefacts.SubjectRootRefusalReason
+		slots   []int
 		why     string
 	}{
 		{
 			export: "bothParameters",
 			root:   typefacts.SubjectRootParameter,
+			slots:  []int{0, 1},
 			why:    "both operands are the caller's, so whichever valueOf runs is the caller's -- ADR 0042's argument, reaching a coercion",
 		},
 		{
 			export: "parameterAndLiteral",
 			root:   typefacts.SubjectRootParameter,
+			slots:  []int{0},
 			why:    "a numeric literal is provably primitive and is skipped, not refused; this is the shape that would otherwise hide the family",
 		},
 		{
@@ -2461,6 +2481,33 @@ func TestCoercionSubjectRootNamesWhatEveryOperandAgreedOn(t *testing.T) {
 			export:  "writtenParameterCoercion",
 			refusal: typefacts.SubjectRefusalWrittenParameter,
 			why:     "ADR 0091 roots a written parameter only when every assigned value is rooted at that slot; this one takes a module literal, so the parameter roots at nothing at all and the leg it fell off is the answer -- not the operands disagreeing, which was this case's first and wrong expectation",
+		},
+		// ADR 0092's companion fact. The slots are what a receipt names, so
+		// the cases that matter are the ones where the count of slots is not
+		// the count of operands.
+		{
+			export: "sameParameterTwice",
+			root:   typefacts.SubjectRootParameter,
+			slots:  []int{0},
+			why:    "one slot coerced against itself is one claim about one parameter; a receipt naming it twice would say something the form does not",
+		},
+		{
+			export: "templateCoercion",
+			root:   typefacts.SubjectRootParameter,
+			slots:  []int{0, 1},
+			why:    "a template applies ToPrimitive to each substitution, so the quantifier ranges over the spans",
+		},
+		{
+			export: "unaryCoercion",
+			root:   typefacts.SubjectRootParameter,
+			slots:  []int{0},
+			why:    "a coercing unary has one operand, and the slot list is not the parameter list",
+		},
+		{
+			export: "secondSlotOnly",
+			root:   typefacts.SubjectRootParameter,
+			slots:  []int{1},
+			why:    "the slots are the ones the operands rooted at, not the declaration's parameters: slot 0 is never coerced here",
 		},
 	} {
 		transcript := implementationTranscriptFor(t, analyzer, path, coercionSubjectSource, testCase.export)
@@ -2490,6 +2537,29 @@ func TestCoercionSubjectRootNamesWhatEveryOperandAgreedOn(t *testing.T) {
 					"%s: states root %q and refusal %q; exactly one is required",
 					testCase.export, form.CoercionSubjectRoot, form.CoercionSubjectRootRefusal,
 				)
+			}
+			if !slices.Equal(form.CoercionSubjectParameters, testCase.slots) {
+				t.Fatalf(
+					"%s: coercionSubjectParameters %v, want %v -- %s",
+					testCase.export, form.CoercionSubjectParameters, testCase.slots, testCase.why,
+				)
+			}
+			// A refusal names no slots, and a root that names no parameter of
+			// this declaration names none either: the list accompanies a
+			// caller-rooted derivation and nothing else (ADR 0092).
+			if form.CoercionSubjectRootRefusal != "" && len(form.CoercionSubjectParameters) != 0 {
+				t.Fatalf(
+					"%s: refusal %q states slots %v",
+					testCase.export, form.CoercionSubjectRootRefusal, form.CoercionSubjectParameters,
+				)
+			}
+			for index := 1; index < len(form.CoercionSubjectParameters); index++ {
+				if form.CoercionSubjectParameters[index-1] >= form.CoercionSubjectParameters[index] {
+					t.Fatalf(
+						"%s: slots %v are not strictly increasing",
+						testCase.export, form.CoercionSubjectParameters,
+					)
+				}
 			}
 		}
 		if stated == 0 {

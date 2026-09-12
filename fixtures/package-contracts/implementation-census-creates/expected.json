@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "bcd248eec331c4a40c0a84dbc3908478bb4b992781f290203af609a9392be1fe",
+            "closureSha256": "7bbfebab0fa5b1d981e160f881b96fa0c505aa5378e6a58f2a8388cde507b501",
             "path": "./index.js",
-            "sha256": "a1be8acf4493addf5eecd7460b39d1cd3e5b5e5d724dcb7840496060a999b2ab"
+            "sha256": "4e07f0cffaa42aa4c9f3723496b10b0d341514f2f54320552ee45ac0f3a88a44"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "989d74521772c53a274cb101ab7a1a22d3cb30453dcb27040c800deb49d2f044"
+            "sha256": "00427753008045d5c141722425220b2d4d76726f43a1b26883a2c295c85e47b0"
           },
           "exports": {
             "accessorTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -26,6 +26,10 @@
             "coerceHelperResult": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "coerceLibraryResult": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "coerceObjectHelperResult": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "coerceOneParameterTwice": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "coerceParameterAndModuleValue": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "coerceTwoModuleValues": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "coerceTwoParameters": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "coerceWrittenHelperResult": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "constBound": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1",
             "cycle": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
