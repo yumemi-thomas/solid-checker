@@ -1714,6 +1714,30 @@ function helper(this: unknown): unknown {
 export function localViaCall(value: unknown): unknown {
 	return helper.call(value);
 }
+
+export function writtenParameterOwnResult(a, b) {
+	if (typeof b === "string") {
+		b = parseIntoObject(b);
+	}
+	return { ...a, ...b };
+}
+
+function parseIntoObject(text) {
+	const object = {};
+	object.parsed = text;
+	return object;
+}
+
+export function writtenParameterForeignResult(a, b) {
+	if (typeof b === "string") {
+		b = passThrough(b);
+	}
+	return { ...a, ...b };
+}
+
+function passThrough(value) {
+	return value;
+}
 `
 
 func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises(t *testing.T) {
@@ -1885,6 +1909,27 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 		}
 	}
 
+	// ADR 0093's boundary, which the table above cannot say: a helper that
+	// hands back its own argument allocates nothing, so the second arm has no
+	// premise and the binding roots at nothing at all. The table asserts that
+	// some form states a derivation, and the whole point here is that none
+	// does.
+	for _, form := range implementationTranscriptFor(
+		t, analyzer, path, subjectSource, "writtenParameterForeignResult",
+	).UncensusedInvokingForms {
+		// Its first spread operand is `a`, an unwritten parameter, which roots
+		// as it always did; the claim here is only that `b` never reaches the
+		// new derivation.
+		if form.SubjectRoot == typefacts.SubjectRootParameterOrOwnResult ||
+			len(form.SubjectLocalLiteralResults) > 0 {
+			t.Fatalf(
+				"writtenParameterForeignResult: states derivation %q with %d own-result premises; "+
+					"a call that returns its own argument allocates nothing",
+				form.SubjectRoot, len(form.SubjectLocalLiteralResults),
+			)
+		}
+	}
+
 	// ADR 0043: a stated subject always names the derivation that rooted it,
 	// and a parameter's *default* is a different claim from the caller's own
 	// argument, so the two never read alike.
@@ -1908,6 +1953,11 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 		{"readBoundCallerResult", typefacts.SubjectRootParameterResult},
 		{"defaultedLiteralRead", typefacts.SubjectRootParameterDefaultLiteral},
 		{"defaultedLiteralElement", typefacts.SubjectRootParameterDefaultLiteral},
+		// ADR 0093: one arm is the caller's argument, the other a value this
+		// program allocated. The pair below is the boundary — a helper handing
+		// back its own argument allocates nothing, so no premise exists and the
+		// binding roots at nothing at all.
+		{"writtenParameterOwnResult", typefacts.SubjectRootParameterOrOwnResult},
 	} {
 		transcript := implementationTranscriptFor(t, analyzer, path, subjectSource, testCase.export)
 		var stated int
@@ -1927,7 +1977,17 @@ func TestUncensusedFormSubjectParameterIsStatedOnlyUnderTheParameterRootPremises
 			wantParameter := form.SubjectRoot == typefacts.SubjectRootParameter ||
 				form.SubjectRoot == typefacts.SubjectRootParameterDefault ||
 				form.SubjectRoot == typefacts.SubjectRootParameterResult ||
-				form.SubjectRoot == typefacts.SubjectRootParameterDefaultLiteral
+				form.SubjectRoot == typefacts.SubjectRootParameterDefaultLiteral ||
+				form.SubjectRoot == typefacts.SubjectRootParameterOrOwnResult
+			// ADR 0093's own companion: one premise per source this program
+			// allocated, stated for that derivation and for no other.
+			if (len(form.SubjectLocalLiteralResults) > 0) !=
+				(form.SubjectRoot == typefacts.SubjectRootParameterOrOwnResult) {
+				t.Fatalf(
+					"%s: derivation %q carries %d own-result premises",
+					testCase.export, form.SubjectRoot, len(form.SubjectLocalLiteralResults),
+				)
+			}
 			if (form.SubjectDeclaration != nil) != wantDeclaration ||
 				(form.SubjectParameter != nil) != wantParameter {
 				t.Fatalf("%s: derivation %q carries the wrong companion fact", testCase.export, form.SubjectRoot)

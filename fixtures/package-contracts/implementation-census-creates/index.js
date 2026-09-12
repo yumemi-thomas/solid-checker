@@ -610,6 +610,60 @@ export function ownGetterFromFactory() {
   return readBoxValue(makeBoxWithGetter());
 }
 
+// ADR 0093: the shape ADR 0091 left open, and the commonest one in compiled
+// output. `b` holds either the caller's argument or the object
+// `parseIntoObject` allocated, and an own-property read is excused on each by a
+// derivation already reviewed — `parameter` on the first, ADR 0044's
+// own-literal argument on the second, reached through a call. The arms are
+// exhaustive because they are the binding's enumerated sources. **Certifies.**
+function parseIntoObject(text) {
+  const object = {};
+  object.parsed = text;
+  return object;
+}
+
+export function writtenParameterOwnResult(a, b) {
+  if (typeof b === "string") {
+    b = parseIntoObject(b);
+  }
+  return { ...a, ...b };
+}
+
+// The same shape whose helper hands back **its own argument**. Nothing this
+// program allocated is involved, so the second arm has no premise and the
+// binding refuses — the caller's value reaching a second slot is a different
+// claim this ADR does not make. **Refuses.**
+function passThrough(value) {
+  return value;
+}
+
+export function writtenParameterPassthroughResult(a, b) {
+  if (typeof b === "string") {
+    b = passThrough(b);
+  }
+  return { ...a, ...b };
+}
+
+// The vacuity guard, and the case that would be unsound if admitted: the helper
+// allocates a literal **carrying an accessor**, so reading an own property of
+// its result runs this program's own getter. `localLiteralResult` requires a
+// data-only literal and states no premise here. **Refuses.**
+function accessorBoxFrom(text) {
+  const object = {
+    get parsed() {
+      return text;
+    }
+  };
+  return object;
+}
+
+export function writtenParameterAccessorResult(a, b) {
+  if (typeof b === "string") {
+    b = accessorBoxFrom(b);
+  }
+  return { ...a, ...b };
+}
+
 const registryObject = { value: 1 };
 const untypedRegistry = /** @type {any} */ (registryObject);
 

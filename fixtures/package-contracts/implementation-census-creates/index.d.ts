@@ -73,6 +73,11 @@ export declare function coerceTwoModuleValues(): unknown;
 // frame caller's can hide a create this package owns. Both must refuse.
 export declare function ownGetterThroughHelper(): unknown;
 export declare function ownGetterFromFactory(): unknown;
+// ADR 0093's two arms, and the two shapes that must not reach them. `unknown`
+// on both parameters so the spread records a form at all.
+export declare function writtenParameterOwnResult(a: unknown, b: unknown): unknown;
+export declare function writtenParameterPassthroughResult(a: unknown, b: unknown): unknown;
+export declare function writtenParameterAccessorResult(a: unknown, b: unknown): unknown;
 // An immediately-invoked function expression: this census refuses it.
 export declare function iife(value: number): number;
 // ADR 0043: the root set closed under the reads the census dispositions. The

@@ -12480,7 +12480,7 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 105] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 108] = [
         "accessorTableRead",
         "arrayRestRead",
         "awaitIterateParameter",
@@ -12580,10 +12580,13 @@ export const value = phantom;
         "writtenFromTwoSlots",
         "writtenFromUninitialized",
         "writtenJoin",
+        "writtenParameterAccessorResult",
         "writtenParameterCallResult",
         "writtenParameterDestructured",
         "writtenParameterLoop",
         "writtenParameterModuleValue",
+        "writtenParameterOwnResult",
+        "writtenParameterPassthroughResult",
         "writtenParameterTwoSlots",
         "writtenTableRead",
     ];
@@ -14153,10 +14156,13 @@ export const value = phantom;
             "writtenFromTwoSlots",
             "writtenFromUninitialized",
             "writtenJoin",
+            "writtenParameterAccessorResult",
             "writtenParameterCallResult",
             "writtenParameterDestructured",
             "writtenParameterLoop",
             "writtenParameterModuleValue",
+            "writtenParameterOwnResult",
+            "writtenParameterPassthroughResult",
             "writtenParameterTwoSlots",
             "writtenTableRead",
         ];
@@ -14355,7 +14361,7 @@ export const value = phantom;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
-    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 91] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 94] = [
         "accessorTableRead",
         "arrayRestRead",
         "awaitIterateParameter",
@@ -14446,6 +14452,9 @@ export const value = phantom;
         "writtenFromTwoSlots",
         "writtenFromUninitialized",
         "writtenJoin",
+        "writtenParameterAccessorResult",
+        "writtenParameterOwnResult",
+        "writtenParameterPassthroughResult",
         "writtenTableRead",
     ];
     /// What the census fixture's generated candidates come to under ADR 0036:
@@ -14487,7 +14496,7 @@ export const value = phantom;
     /// `omittedBoxScale` closes through an explicit `never` premise in the
     /// first leaf call, while the explicit `unknown` and `any` controls keep
     /// their leaf coercions and are refused.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 45] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 46] = [
         "chainCallbacks",
         "coerceBoundHelperResult",
         "coerceConditionalHelperResult",
@@ -14533,8 +14542,9 @@ export const value = phantom;
         "whileBreak",
         "writtenFromUninitialized",
         "writtenJoin",
+        "writtenParameterOwnResult",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 53] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 55] = [
         ("accessorTableRead", "census"),
         ("arrayRestRead", "census"),
         ("awaitIterateParameter", "census"),
@@ -14583,9 +14593,11 @@ export const value = phantom;
         ("writtenByDestructuring", "census"),
         ("writtenFromModuleValue", "census"),
         ("writtenFromTwoSlots", "census"),
+        ("writtenParameterAccessorResult", "census"),
         ("writtenParameterCallResult", "census"),
         ("writtenParameterDestructured", "census"),
         ("writtenParameterModuleValue", "census"),
+        ("writtenParameterPassthroughResult", "census"),
         ("writtenParameterTwoSlots", "census"),
         ("writtenTableRead", "census"),
     ];

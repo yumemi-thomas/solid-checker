@@ -950,6 +950,17 @@ pub struct UncensusedInvokingForm {
     pub coercion_subject_root: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub coercion_subject_root_refusal: String,
+    /// Protocol 53 (ADR 0093): the own-result arm's premises for a
+    /// `parameter-or-own-result` subject — one per assigned source that is a
+    /// call whose result this program's own code allocated.
+    ///
+    /// Each entry is the premise [`Self::local_literal_result`] states for a
+    /// single subject, and a consumer binds **every** one of them to a call row
+    /// of this very transcript before admitting the derivation. Empty for every
+    /// other derivation; a `parameter-or-own-result` with an empty list is a
+    /// producer whose two walks disagree and refuses.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subject_local_literal_results: Vec<LocalLiteralResultPremise>,
     /// Protocol 52 (ADR 0092): the parameter slots a caller-rooted
     /// [`Self::coercion_subject_root`] rooted at, strictly increasing and
     /// deduplicated.

@@ -19808,3 +19808,58 @@ this document already records — the two rows that always sit near the cap
 them) time out and the gate reports a *certification regression* for a
 wall-clock cause. Re-running `scripts/ecosystem-benchmark/run.mjs` directly with
 `--timeout 1200` is what separates the two.
+
+## ADR 0093: a written parameter holding its own result (2026-09-12)
+
+ADR 0091 roots a written parameter only when every value assigned to it is
+rooted at that same slot, and named the shape it could not reach:
+`b = localHelper(b)`, where the binding holds either the caller's argument or an
+object the helper allocated. ADR 0093 joins ADR 0044's local-literal-result
+premise onto that condition under a new derivation `parameter-or-own-result`
+(handshake protocol 52 → 53, `subjectLocalLiteralResults` on the wire), with the
+census binding every premise to a call row of the same transcript before
+admitting it.
+
+**Measured on the 418-probe corpus: zero closures.** 5,275 certified and 11,552
+withheld before and after; no row moved. Eleven `written-parameter` refusal
+sites disappear — every copy of `@corvu/utils::combineStyle`, the instance the
+ADR was written from — and each export they belonged to is still withheld one
+level deeper, inside the helper the premise excuses. The remaining blocker in
+`stringStyleToObject` is the read `match[1]`, where `match` is an uninitialized
+`let` written each iteration from `extractCSSregex.exec(style)`: a written local
+binding refuses at `local-binding-written` before anything asks what it holds.
+
+**What the yield estimate got wrong.** § 75 ranked this leg at 33 claims by
+counting the refusal the census reported *first*; it did not check what sat
+behind it. A leg's size is an upper bound on what closing it can buy, never the
+figure itself, and this is the arc's cleanest instance of the difference.
+
+**Remaining approximations.** A callee that propagates its caller's provenance
+(`passThrough(b)`) allocates nothing, states no premise, and refuses — a
+different claim, not made here. A helper whose literal carries an accessor
+refuses and must (`writtenParameterAccessorResult` pins it; admitting it would
+run a getter this program wrote). Any form kind but the accessor pair refuses,
+as under ADR 0090. The `reads` census cannot reach the derivation at all: it has
+no call walk to bind the premises against, which is structural rather than an
+omission. Twelve `creates` exports remain blocked only by `written-parameter` in
+shapes that are not the helper-result one (`@solid-primitives/utils`,
+`@solid-primitives/i18n`, `component-register`, `fractional-indexing`), and are
+unmeasured.
+
+**Open, with a priced upper bound.** Eight withheld `creates` exports are
+blocked by nothing but `local-binding-written`: three `combineStyle` copies,
+`@floating-ui/utils::getDocumentElement`,
+`@solid-primitives/i18n::resolveRichTemplate`, and `motion-dom`'s
+`calcGeneratorDuration`, `removeAxisDelta` and `removeAxisTransforms`. One more
+sits on `local-binding-uninitialized`. Reading the producer says that leg is
+probably not the one that decides either: the subject-root walk is consulted
+only because `accessorFormLocked` already refused, and on `match[1]` it refused
+because `Array<string>`'s **index signature** declares no property symbol —
+which stands however the binding was bound. The premise with the reach is
+narrower than both: a numeric element access into a value whose apparent type is
+an engine-owned indexed container, on the reviewed-table discipline
+`engineOwnedIterableContainers` already sets. That is unmeasured, and it is the
+count to establish before any of the three is written. Eight is an upper bound,
+and this entry is why. § 76 of
+`docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
+carries the numbers.

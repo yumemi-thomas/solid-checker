@@ -8409,6 +8409,8 @@ enum CensusDisposition {
     OwnLiteralAccessorWrite,
     LocalLiteralResultAccessor,
     LocalLiteralResultAccessorWrite,
+    ParameterOrOwnResultAccessor,
+    ParameterOrOwnResultAccessorWrite,
     OwnLiteralIterable,
     ParameterRootedCoercion,
     PrimitiveCoercion,
@@ -8439,6 +8441,8 @@ impl CensusDisposition {
             Self::OwnLiteralAccessorWrite => "own-literal-accessor-write",
             Self::LocalLiteralResultAccessor => "local-literal-result-accessor",
             Self::LocalLiteralResultAccessorWrite => "local-literal-result-accessor-write",
+            Self::ParameterOrOwnResultAccessor => "parameter-or-own-result-accessor",
+            Self::ParameterOrOwnResultAccessorWrite => "parameter-or-own-result-accessor-write",
             Self::OwnLiteralIterable => "own-literal-iterable",
             Self::ParameterRootedCoercion => "parameter-rooted-coercion",
             Self::PrimitiveCoercion => "primitive-coercion",
@@ -9590,6 +9594,15 @@ fn census_transcript_calls(
                 "subject root {:?}, but this form does not read its subject",
                 form.subject_root
             )
+        } else if form.subject_root.as_str() == "parameter-or-own-result" {
+            // ADR 0093 states one premise per allocated source; reaching here
+            // means one did not bind to a call row of this transcript, which is
+            // a different sentence from an unreviewed derivation.
+            format!(
+                "subject root {:?}, but {} own-result premise(s) did not bind to this transcript's calls",
+                form.subject_root,
+                form.subject_local_literal_results.len()
+            )
         } else {
             format!(
                 "subject root {:?} is not reviewed for this form",
@@ -9633,6 +9646,14 @@ fn census_transcript_calls(
             continue;
         }
         if form.local_literal_result.is_some() {
+            deferred.push(form);
+            continue;
+        }
+        // ADR 0093: the own-result arm rests on callee transcripts too, so the
+        // form waits for the same call walk ADR 0044's single premise waits
+        // for. `census_form_disposition` answers `None` for the derivation
+        // precisely so it arrives here rather than being decided early.
+        if !form.subject_local_literal_results.is_empty() {
             deferred.push(form);
             continue;
         }
@@ -9680,6 +9701,20 @@ fn census_transcript_calls(
             ));
             continue;
         }
+        if !form.subject_local_literal_results.is_empty() {
+            if !census_parameter_or_own_result_is_bound(run, implementation, form)? {
+                return Err(refuse_form(form));
+            }
+            run.sites.push(census_form_site(
+                form,
+                if form.subject_write {
+                    CensusDisposition::ParameterOrOwnResultAccessorWrite
+                } else {
+                    CensusDisposition::ParameterOrOwnResultAccessor
+                },
+            ));
+            continue;
+        }
         if !census_coercion_rests_on_primitive_calls(run, implementation, form)? {
             return Err(refuse_form(form));
         }
@@ -9711,8 +9746,26 @@ fn census_local_literal_result_is_bound(
                 | typefacts::UncensusedInvokingFormKind::SetAccessor
                 | typefacts::UncensusedInvokingFormKind::PropertyAccessUnknownAccessor
         )
-        || premise.returns.is_empty()
     {
+        return Ok(false);
+    }
+    census_local_literal_result_premise_is_bound(run, implementation, premise)
+}
+
+/// Bind one local-literal-result premise to a call row of this transcript.
+///
+/// The half both callers share: ADR 0044's single-subject form
+/// ([`census_local_literal_result_is_bound`]) and ADR 0093's own-result arm,
+/// which states one premise per assigned source and must bind every one of
+/// them. Nothing here is re-derived — the row, the callee's declaration, and
+/// the transcript that row already produced are matched, and the allocation and
+/// every return must lie inside the callee the premise names.
+fn census_local_literal_result_premise_is_bound(
+    run: &mut CensusRun<'_>,
+    implementation: &typefacts::ExportImplementationTranscript,
+    premise: &typefacts::LocalLiteralResultPremise,
+) -> Result<bool, String> {
+    if premise.returns.is_empty() {
         return Ok(false);
     }
     let mut calls = implementation
@@ -9759,6 +9812,66 @@ fn census_local_literal_result_is_bound(
         "census-local-literal-result:{}",
         serde_json::to_string(premise).expect("native literal result encoding")
     ));
+    Ok(true)
+}
+
+/// ADR 0093: a written parameter each of whose values is either the caller's
+/// argument at this slot or a value this program's own code allocated.
+///
+/// ADR 0091 roots a written parameter only when *every* source is the caller's,
+/// which leaves the commonest compiled shape refusing:
+///
+/// ```js
+/// function combineStyle(a, b) {
+///   if (typeof b === "string") { b = stringStyleToObject(b); }
+///   return { ...a, ...b };
+/// }
+/// ```
+///
+/// The binding holds one of two values, and an own-property read is excused on
+/// each by a derivation already reviewed — `parameter` on the caller's argument
+/// (ADR 0034/0041) and ADR 0044's own-literal argument on the allocated one,
+/// reached through a call rather than named directly. That is ADR 0090's
+/// structure, and the arms are exhaustive because they are the binding's
+/// enumerated sources: the producer refuses the whole binding rather than
+/// skipping a write it cannot read a single value out of.
+///
+/// Every premise must bind, and binding is the same work ADR 0044 does: the
+/// call is a row of *this* transcript, its callee is a declaration in the
+/// artifact's own runtime source, and the allocation and every return lie
+/// inside it. A premise that does not bind refuses the form, so a producer
+/// stating the derivation over a call this census cannot place decides nothing.
+fn census_parameter_or_own_result_is_bound(
+    run: &mut CensusRun<'_>,
+    implementation: &typefacts::ExportImplementationTranscript,
+    form: &typefacts::UncensusedInvokingForm,
+) -> Result<bool, String> {
+    if form.subject_root.as_str() != "parameter-or-own-result"
+        || form.subject_parameter.is_none()
+        || form.subject_declaration.is_some()
+        || form.local_literal_result.is_some()
+        || form.coercion_premise.is_some()
+        || form.subject_local_literal_results.is_empty()
+        || !census_form_shape_reads_the_subject(form)
+    {
+        return Ok(false);
+    }
+    // The accessor kinds only, exactly as ADR 0090 admits its own two-arm
+    // derivation: an iteration protocol or an `instanceof` over such a binding
+    // is a reach this build has argued about for property reads alone.
+    if !matches!(
+        form.kind,
+        typefacts::UncensusedInvokingFormKind::GetAccessor
+            | typefacts::UncensusedInvokingFormKind::SetAccessor
+            | typefacts::UncensusedInvokingFormKind::PropertyAccessUnknownAccessor
+    ) {
+        return Ok(false);
+    }
+    for premise in &form.subject_local_literal_results {
+        if !census_local_literal_result_premise_is_bound(run, implementation, premise)? {
+            return Ok(false);
+        }
+    }
     Ok(true)
 }
 

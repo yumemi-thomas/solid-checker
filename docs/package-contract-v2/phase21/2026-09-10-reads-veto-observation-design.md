@@ -5656,3 +5656,145 @@ costs the 4 claims § 73.2 priced. It stays, because loosening a premise on one
 shape's evidence is how the arc's earlier mistakes were made; the amendment
 wants the second shape pinned first, and it is named here so it is not
 rediscovered.
+
+## 76. ADR 0093 measured: zero closures, and the blocker it uncovered (2026-09-12)
+
+ADR 0093 admits a written parameter whose every assigned value is either rooted
+at its own slot (ADR 0091) or the result of a call carrying ADR 0044's
+local-literal-result premise. § 75 ranked `written-parameter` as the largest
+premise-shaped refusal leg left in the `creates` census — 33 distinct claims
+across 15 packages, 26 of them the shape `b = localHelper(b)`.
+
+Measured on the 418-probe corpus against HEAD (`report-t1200.json`), with
+`bin/solid-typefacts` and the release checker both rebuilt at protocol 53:
+
+| | HEAD | ADR 0093 |
+| --- | --- | --- |
+| certified closures | 5,275 | **5,275** |
+| withheld closures | 11,552 | **11,552** |
+| distinct `written-parameter` refusal sites | 26 | 15 |
+| withheld `creates` exports blocked only by `written-parameter` | 15 | 12 |
+| withheld `creates` exports blocked only by `local-binding-written` | 5 | 8 |
+
+**Zero closures.** The premise fires, and every export it unblocks is still
+withheld one level deeper.
+
+### 76.1 What actually happened to the canonical package
+
+`@corvu/utils` is the instance ADR 0093 was written from, published verbatim by
+eight packages in the corpus. Before, `combineStyle` refused at its spread:
+
+```
+property-access-unknown-accessor (SpreadAssignment) at
+  @corvu/utils/dist/chunk/SEUPK2SH.js:368..372 … written-parameter
+```
+
+After, that refusal is **gone** — on all eleven artifact cases, across
+`@corvu/utils` (0.3.2, 0.4.2), `@corvu-next/utils` (0.1.4), and the copies
+vendored under `solid-transition-size`, `solid-focus-trap`, `solid-dismissible`,
+`solid-prevent-scroll` and `@corvu/popover`. The premise bound, the join
+widened, and `{ ...a, ...b }` is now this program's excusable read.
+
+`combineStyle::creates` is still withheld, and now for exactly one refusal —
+159 bytes earlier, inside the helper the premise was supposed to excuse:
+
+```
+property-access-unknown-accessor (ElementAccessExpression) at
+  @corvu/utils/dist/chunk/SEUPK2SH.js:209..217 … local-binding-written
+```
+
+Those eight bytes are **`match[1]`**, not the write beside them:
+
+```js
+var extractCSSregex = /((?:--)?(?:\w+-?)+)\s*:\s*([^;]*)/g;
+function stringStyleToObject(style) {
+  const object = {};
+  let match;
+  while (match = extractCSSregex.exec(style)) {
+    object[match[1]] = match[2];   // ← blocker is `match[1]`, the read
+  }
+  return object;
+}
+```
+
+`object` is never the problem: it is `const`, never reassigned, and ADR 0044's
+premise tolerates data-property mutation of an allocated literal by design (see
+`local_literal_result.go` — "Mutation of data properties has the existing
+own-literal premise; replacing the binding does not"). The problem is `match`,
+a `let` with no initializer that is written once per loop iteration, and reading
+an element of it is a form whose accessors the census cannot account for.
+
+### 76.2 What the real blocker is, and why it is a different premise
+
+`match` holds one of exactly two values: `undefined` before the first write, and
+the result of `extractCSSregex.exec(style)` after each one. The subject-root
+walk never gets as far as either, because the binding is *written* — it refuses
+at `local-binding-written` first, exactly as ADR 0091 refused a written
+parameter before ADR 0093 gave it a join.
+
+So the next premise is ADR 0091's argument moved from parameters to local
+bindings, with the same two-arm structure ADR 0090, 0092 and 0093 all share:
+
+- **The uninitialized arm.** A `let` before its first write holds `undefined`.
+  An own-property read of `undefined` throws a `TypeError` and runs *no user
+  code*, which is the only thing the census is claiming. A throw is not an
+  operation.
+- **The written arm.** `extractCSSregex.exec(style)` is a call on a RegExp this
+  module allocated from a literal, reaching `RegExp.prototype.exec` — standard
+  library, and its result is `null` or an Array the specification creates, whose
+  indices are own data properties. That is what `default-library` exists to say.
+
+**And reading the producer says that is probably the wrong target too.** The
+subject-root walk is only consulted *because* `accessorFormLocked` already
+refused. `match[1]` has a numeric-literal key, so it is one of the two key kinds
+`exactElementAccessKey` admits; the compiler is asked for the member and answers
+nothing, because `RegExpExecArray` reaches its elements through `Array<string>`'s
+**index signature** and an index signature declares no property symbol. The file
+says so in its own words — "absence of a symbol is not evidence of a plain data
+property" — and that refusal stands however `match` was bound.
+
+So the premise with the reach here is a third one, and it is the narrowest of
+the three: **a numeric element access into a value whose apparent type is an
+engine-owned indexed container**, where the index signature is the default
+library's own. `Array`, `ReadonlyArray`, `String`, `IArguments`, the typed
+arrays, `RegExpExecArray` and `RegExpMatchArray` — the same reviewed-table
+discipline as `engineOwnedIterableContainers`, whose comment already explains
+why such a table is stated rather than inferred, and whose omissions (every DOM
+collection; every structural protocol interface) are the precision.
+
+Two blockers are therefore stacked on this one read, and neither `written-parameter`
+nor `local-binding-written` was ever the one that decides. **Nothing here is
+measured yet**: the count of numeric-key element accesses that would clear under
+an index-signature premise is the thing to establish first, and it is a different
+number from either leg above. This section is the second time in two days that a
+leg's headline count turned out to be the refusal the census *reported first*
+rather than the one that decides; the third ranking is not to be trusted either
+until it is counted.
+
+### 76.3 Why ADR 0093 is still worth having
+
+Three things, none of them a closure:
+
+- **The frontier is strictly narrower.** Eleven refusal sites are gone and none
+  appeared; no row moved in either direction; no closure was lost.
+- **The refusal now names a blocker the reader can act on.** Before, the census
+  said the subject was a written parameter — true, and not the reason. Now it
+  points inside `stringStyleToObject`, at the read that actually stops the
+  argument.
+- **The next leg is priced.** Eight withheld `creates` exports are blocked by
+  nothing but `local-binding-written`: the three `combineStyle` copies,
+  `@floating-ui/utils::getDocumentElement`,
+  `@solid-primitives/i18n::resolveRichTemplate`, and three `motion-dom` exports
+  (`calcGeneratorDuration`, `removeAxisDelta`, `removeAxisTransforms`). One more,
+  `local-binding-uninitialized`, is the same premise's first arm alone.
+
+  That count is an **upper bound**, and § 76.2 is the reason to treat it as one.
+
+### 76.4 The 12 that remain on `written-parameter`
+
+Not the helper-result shape, and not measured further:
+`@solid-primitives/utils` (`handleDiffArray`, `concat`, `filterInstance`,
+`filterOutInstance`, `split`), `@solid-primitives/utils@7.0.0-next.4`
+(`handleDiffArray`), `@solid-primitives/i18n` (`prefix`, `resolveTemplate`),
+`component-register` (`compose`, `provide`), and `fractional-indexing`
+(`generateKeyBetween`, `generateNKeysBetween`).

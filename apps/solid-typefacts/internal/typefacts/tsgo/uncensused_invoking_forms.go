@@ -327,6 +327,7 @@ func (p *project) uncensusedInvokingFormCensusLocked(
 				form.SubjectWrite = subject.write
 				form.SubjectRoot = subject.derivation
 				form.SubjectDeclaration = subject.declaration
+				form.SubjectLocalLiteralResults = subject.literalResults
 			}
 			if form.SubjectRoot == "" && (kind == typefacts.UncensusedGetAccessor ||
 				kind == typefacts.UncensusedSetAccessor || kind == typefacts.UncensusedPropertyAccessUnknownAccessor) {
@@ -353,6 +354,10 @@ func (p *project) uncensusedInvokingFormCensusLocked(
 type subjectRoot struct {
 	index      int
 	derivation typefacts.SubjectRootDerivation
+	// ADR 0093: for `parameter-or-own-result`, the premise of every source
+	// that is a call this program's own code allocates the result of. One per
+	// such source, in source order; empty for every other derivation.
+	literalResults []typefacts.LocalLiteralResultPremise
 }
 
 // parameterSubjectRoots is the premise set for one declaration: every name
@@ -504,20 +509,39 @@ func (p *project) parameterSubjectRootsLocked(implementation *ast.Node) *paramet
 		// would root a binding whose every write went unenumerated, which is
 		// the one way this join can be unsound; refuse instead.
 		admitted := enumerated && len(sources) > 0
+		// ADR 0093: a source that is neither the slot nor another rooted name
+		// may still be a value *this program allocated* — the shape ADR 0091
+		// left open, `b = stringStyleToObject(b)`. Reading an own property of
+		// such a value reaches a data property, which is ADR 0044's argument,
+		// so the binding holds one of two values and each is excused by a
+		// derivation already reviewed. That is ADR 0090's structure, and the
+		// derivation is named apart for the same reason: a consumer that
+		// reviewed only the purely caller-rooted reading must refuse this one.
+		var literalResults []typefacts.LocalLiteralResultPremise
 		for _, source := range sources {
 			root := p.subjectRootLocked(source, roots)
-			if root == nil || root.parameter == nil ||
-				root.derivation != typefacts.SubjectRootParameter ||
-				(*root.parameter != index && *root.parameter != selfRootIndex) {
+			if root != nil && root.parameter != nil &&
+				root.derivation == typefacts.SubjectRootParameter &&
+				(*root.parameter == index || *root.parameter == selfRootIndex) {
+				continue
+			}
+			premise := p.localLiteralResultLocked(source)
+			if premise == nil {
 				admitted = false
 				break
 			}
+			literalResults = append(literalResults, *premise)
 		}
 		delete(roots.pending, symbol)
 		if admitted {
+			derivation := typefacts.SubjectRootParameter
+			if len(literalResults) > 0 {
+				derivation = typefacts.SubjectRootParameterOrOwnResult
+			}
 			roots.bySymbol[symbol] = subjectRoot{
-				index:      index,
-				derivation: typefacts.SubjectRootParameter,
+				index:          index,
+				derivation:     derivation,
+				literalResults: literalResults,
 			}
 		}
 	}
@@ -939,7 +963,11 @@ func (p *project) subjectRootLocked(
 		return nil
 	}
 	index := root.index
-	return &resolvedSubject{parameter: &index, derivation: root.derivation}
+	return &resolvedSubject{
+		parameter:      &index,
+		derivation:     root.derivation,
+		literalResults: root.literalResults,
+	}
 }
 
 // subjectRootRefusalLocked classifies **why** a subject did not root. It is a
@@ -1302,10 +1330,11 @@ func (p *project) parameterValueSourcesLocked(
 // parameter index for the caller-provenance derivations, a declaration
 // location for the own-literal one.
 type resolvedSubject struct {
-	parameter   *int
-	derivation  typefacts.SubjectRootDerivation
-	declaration *typefacts.Location
-	write       bool
+	parameter      *int
+	derivation     typefacts.SubjectRootDerivation
+	declaration    *typefacts.Location
+	write          bool
+	literalResults []typefacts.LocalLiteralResultPremise
 }
 
 // subjectParameterLocked answers the parameter a subject is rooted at under

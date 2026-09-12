@@ -4,7 +4,14 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 52 (ADR 0092): a `coercion` form whose
+// TypeFactsHandshakeProtocol is 53 (ADR 0093): the `parameter-or-own-result`
+// subject derivation and its `subjectLocalLiteralResults` premises. A written
+// parameter whose every value is either the caller's argument at this slot or a
+// value this program's own code allocated and returned — ADR 0091's open shape,
+// `b = stringStyleToObject(b)`. Each arm is excused by a derivation already
+// reviewed, which is ADR 0090's structure, and the spelling is apart from
+// `parameter` because only one arm is the caller's.
+// Protocol 52 (ADR 0092): a `coercion` form whose
 // operands agreed on a caller-provenance derivation also carries
 // `coercionSubjectParameters`, the slots they rooted at — strictly increasing
 // and deduplicated. Protocol 51 stated the agreement as a diagnostic; this
@@ -308,8 +315,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 52
-	TypeFactsSchemaSHA256             = "sha256:c063f621b184072a48fdc3e3a772765a590c96719b7a78fc18ca8518ca3735f9"
+	TypeFactsHandshakeProtocol uint64 = 53
+	TypeFactsSchemaSHA256             = "sha256:0198fe11518ac62f9105afd61ecf1084436b3bf44f48d36c413bb5fbf88dbe54"
 )
 
 type ServiceHandshake struct {

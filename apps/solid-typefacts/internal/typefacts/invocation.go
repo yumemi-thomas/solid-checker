@@ -741,6 +741,19 @@ const (
 	// is indistinguishable from a local one by flags alone.
 	SubjectRefusalImportedBinding SubjectRootRefusalReason = "imported-binding"
 
+	// SubjectRootParameterOrOwnResult is a written parameter each of whose
+	// values is either the caller's argument at this very slot or a value this
+	// program's own code allocated and returned (ADR 0093).
+	//
+	// Named apart from SubjectRootParameter because only one arm is the
+	// caller's: the other is ADR 0044's own-literal argument reached through a
+	// call, and a consumer that reviewed only the purely caller-rooted reading
+	// would otherwise say the caller installed whatever ran. The arms are
+	// exhaustive by construction — they are the enumerated sources of the
+	// binding — and SubjectLocalLiteralResults carries the second arm's
+	// premise, one per such source.
+	SubjectRootParameterOrOwnResult SubjectRootDerivation = "parameter-or-own-result"
+
 	// SubjectRefusalMixedOperandRoots is a coercion whose operands each rooted,
 	// but not at the same derivation. A coercing operator reaches ToPrimitive
 	// on every operand, so one operand this program built makes the form this
@@ -923,6 +936,15 @@ type UncensusedInvokingForm struct {
 	// derivation and never beside a refusal; empty where the agreed derivation
 	// names no slot of this declaration.
 	CoercionSubjectParameters []int `cbor:"coercionSubjectParameters,omitempty" json:"coercionSubjectParameters,omitempty"`
+	// SubjectLocalLiteralResults are the own-result arm's premises for a
+	// `parameter-or-own-result` subject: one per assigned source that is a call
+	// whose result this program allocated (ADR 0093, handshake protocol 53).
+	//
+	// Each is the same premise LocalLiteralResult states for a single subject,
+	// and a consumer binds each one to a call row of this very transcript
+	// before reading any of them. Stated only beside that derivation, and never
+	// beside a refusal.
+	SubjectLocalLiteralResults []LocalLiteralResultPremise `cbor:"subjectLocalLiteralResults,omitempty" json:"subjectLocalLiteralResults,omitempty"`
 	// LocalLiteralResult names a call whose every normal completion returns
 	// the same unwritten local data-only literal binding. This is a source
 	// identity fact, not a structural return-type assertion. Its callee must

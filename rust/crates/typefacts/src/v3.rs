@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:c063f621b184072a48fdc3e3a772765a590c96719b7a78fc18ca8518ca3735f9";
+    "sha256:0198fe11518ac62f9105afd61ecf1084436b3bf44f48d36c413bb5fbf88dbe54";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -278,7 +278,12 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // derivations of `coercionSubjectRoot` a premise (ADR 0092): the slots the
 // operands rooted at, which is what a receipt names. A consumer that reviewed
 // only protocol 51 read the derivation as a diagnostic, so the number moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 52;
+// Protocol 53 adds the `parameter-or-own-result` derivation and
+// `subjectLocalLiteralResults` (ADR 0093): a written parameter each of whose
+// values is either the caller's argument at this slot or a value this program
+// allocated and returned. Only one arm is the caller's, so the spelling is
+// apart from `parameter`.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 53;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

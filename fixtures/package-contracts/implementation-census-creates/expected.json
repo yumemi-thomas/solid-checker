@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "78083c472200b2d34f28e793f520d2de3483afebaa90c4d408a4b3ce0303e0aa",
+            "closureSha256": "1ebfb4748ea0b274cd461b3bf0dd28dafa576b0f7b5e0545ca8643a0f7ea48d5",
             "path": "./index.js",
-            "sha256": "ba43d192f93f284f78bf2e4826a1eaf8621e78272c2c25d3debaa21d1725077f"
+            "sha256": "42ec176f4884b56a1e20766f08b94ac50c1bde95ab955009c8125edf1730a624"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "c2e7b2d60cfa372b1f81c8f5e90035ba8a448b03ba8703377c246f703fbf323f"
+            "sha256": "7892ff6b022745109e4d9d8cd3b0e0a42dc732d139117e916758b7c815bee0ea"
           },
           "exports": {
             "accessorTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -112,10 +112,13 @@
             "writtenFromTwoSlots": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "writtenFromUninitialized": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "writtenJoin": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "writtenParameterAccessorResult": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "writtenParameterCallResult": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "writtenParameterDestructured": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "writtenParameterLoop": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "writtenParameterModuleValue": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "writtenParameterOwnResult": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "writtenParameterPassthroughResult": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "writtenParameterTwoSlots": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "writtenTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635"
           },
