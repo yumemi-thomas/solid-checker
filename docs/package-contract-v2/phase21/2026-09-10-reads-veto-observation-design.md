@@ -5488,3 +5488,95 @@ timeout is what separates them.
 And one process note, mine: the first run's report was overwritten by the
 second before the two were diffed, so the comparison had to detour through the
 2026-09-06 pin. Copy a report aside before re-running one.
+
+## 74. § 71.4's first option, priced (2026-09-12)
+
+§ 71.4 named three answers to the authority's 28% coverage and costed none of
+them. This section prices the first — **widen the pin** — for the versions the
+corpus actually installs, which is the only variant that raises coverage now:
+auditing `2.0.0-rc.8`, the current `next`, would cover **zero** corpus rows,
+because every probe installs rc.3, rc.0, beta.19 or rc.2 under a manifest
+generated 2026-08-26.
+
+### 74.1 What it would buy
+
+Coverage counts a row as reachable when it installs an audited archive at the
+audited version, and the corpus installs `solid-js` and `@solidjs/web` together:
+
+| add | rows gained | coverage |
+| --- | --- | --- |
+| rc.0 | +111 | 120 → 231 |
+| beta.19 | +17 | → 248 |
+| rc.2 | +2 | → 250 |
+
+250 of 418 is every solid-v2 row; the remaining 168 are Solid 1.x, whose
+authority is empty and which § 70.3 prices separately.
+
+**`@solidjs/signals` is not on this path at all.** The one corpus row installing
+it at rc.0 installs `solid-js@2.0.0-rc.0` as well, so it is already covered by
+the two packages above — and that archive is where all 15
+`AuditedCitation::Implementation` rows live, the hand readings of runtime bytes
+that `RC3_CORE_PRIMITIVES_AUDIT` records. The expensive half of the table is the
+half that buys nothing here.
+
+### 74.2 What it would cost, measured rather than estimated
+
+Per added version, the rows to re-establish are:
+
+| package | exports | rows | documents |
+| --- | --- | --- | --- |
+| `solid-js` | 9 — `For`, `Loading`, `Match`, `Repeat`, `Show`, `affects`, `isPending`, `latest`, `refresh` | 15 | `solid-js.json` |
+| `@solidjs/web` | 2 — `hydrate`, `render` | 8 | `solidjs-web.json`, `solidjs-web--web-node-server.json` |
+
+**11 exports across 3 documents per version; 33 export-audits across 9 documents
+for all three.** Each one must close its domain empty in *every* audited
+condition, which is why `@solidjs/web` carries two artifact-case documents.
+
+**There is no byte-identity shortcut, and that was worth checking first.** If an
+export's implementing bytes were unchanged between rc.3 and the new version, its
+row would carry over with a digest rather than a reading. Measured on the
+published archives: `solid-js` rc.3 → rc.0 keeps 17 of 43 files identical, but
+the runtime files are `dist/solid.js`, `dist/server.js` and `dist/dev.js` and
+**all three changed**; the only identical runtime file is `dist/refresh.js`.
+`@solidjs/web` is the same story — `dist/web.js`, `dist/server.js` and every
+`frames/` and `serialization/` bundle changed, and the two identical runtime
+files are `server-functions/dist/rich-args.js` and `storage/dist/storage.js`.
+rc.2, one release before the audited pin, still changes 18 of 43 `solid-js`
+files and 57 of 103 `@solidjs/web` files. Every audited export's bytes differ at
+every version, so each row is a fresh reading.
+
+### 74.3 The structural blocker, which is not an audit question
+
+A row's `AuditedCitation::Summary` names a repo-relative document and a byte
+range inside it, and those documents are the dialect's **bundled** contracts —
+one set per dialect, pinned to one archive by their own `package` block, and
+compiled into the analyzer through `include_bytes!`. There is nowhere to put a
+second version's audited document today, and the row table is keyed
+`(package, export, domain)` with **no version**, so simply adding an archive to
+`archives` re-points every existing citation at bytes it was never read
+against.
+
+Two shapes of answer, and the choice belongs to whoever owns the dialect seam:
+
+- **Version-keyed audited documents outside the runtime bundle**, cited by the
+  rows and never loaded by the analyzer. Smallest blast radius; the bundle index
+  stays one-per-dialect.
+- **A version in the row key**, so `denies()` answers per archive rather than per
+  name. Honest about what a row is, and it touches every row, the citation
+  tests, and the tier.
+
+### 74.4 What this section recommends
+
+Not this option. 33 export-audits against wholly different bytes, plus a
+structural change, buys 130 rows of *reachability* — and reachability is not
+yield: § 69.1's missing source root still stands in front of the table, so the
+tier answers nothing on any of those rows until stage 1 is built too. The same
+work recurs at the next prerelease, which is § 64.5's treadmill with a bigger
+bill.
+
+§ 71.4's second option — derive the rows from the runtime's own certified
+contracts, so they move with the version — is the one that would retire the
+treadmill rather than paying it again, and it is the one nobody has costed. It
+raises ADR 0005 objection 5 squarely and that is a design argument, not a
+reading of bytes. The third option, which the code takes today, is now at least
+stated with a number attached (§ 72).
