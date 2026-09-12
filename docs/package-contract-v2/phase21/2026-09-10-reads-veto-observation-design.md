@@ -5798,3 +5798,128 @@ Not the helper-result shape, and not measured further:
 (`handleDiffArray`), `@solid-primitives/i18n` (`prefix`, `resolveTemplate`),
 `component-register` (`compose`, `provide`), and `fractional-indexing`
 (`generateKeyBetween`, `generateNKeysBetween`).
+
+## 77. The index-signature premise, sized before it is written (2026-09-12)
+
+§ 76.2 named a third premise and said its reach was unmeasured. This is the
+measurement, taken the cheap way — by reading all 33 sites out of the published
+artifacts rather than by bumping the protocol for a diagnostic, as § 68 had to
+for the coercion premise. Every tarball the corpus installed is already in
+`rust/target/registry-cache`, so the whole audit needed no network and no run.
+
+### 77.1 What the 33 element-access refusals actually are
+
+`property-access-unknown-accessor (ElementAccessExpression)` is the second
+largest refusal kind in the census, after the property-access form itself:
+
+| form (node kind) | distinct sites |
+| --- | --- |
+| property-access-unknown-accessor (PropertyAccessExpression) | 40 |
+| **property-access-unknown-accessor (ElementAccessExpression)** | **33** |
+| coercion (BinaryExpression) | 18 |
+| instanceof (BinaryExpression) | 8 |
+| jsx-element (JsxElement) | 8 |
+| coercion (TemplateExpression) | 7 |
+| iteration-protocol (ArrayBindingPattern / SpreadElement) | 6 + 6 |
+
+Read at their exact byte ranges, the 33 split by key kind — the only thing
+`exactElementAccessKey` cares about:
+
+**Exact numeric literal — 18 sites**
+
+| text | sites |
+| --- | --- |
+| `match[1]` | 13 |
+| `classes[0]` | 2 |
+| `list[0]`, `fns[0]`, `resolveElements(scopeOrUpdateDom)[0]` | 1 each |
+
+**Not a literal key — 14 sites**: `current[i]` (2), `token[parser.id]` (2),
+`g[Symbol.for(key)]`, `regexps[c]`, `localCache[hash]`, `a[i]`, `object[key]`,
+`n[k]`, `element[EC]`, `intDigits[intDigits.length / 2]`, `arr[i]`,
+`computedStyle[name]`.
+
+**Unresolved — 1 site**, in `@solid-primitives/input-mask`, whose withheld row
+carries no version, so its bytes could not be read against the right artifact.
+It is counted nowhere below.
+
+### 77.2 The subjects are engine-created, and `tsc` says so
+
+The 13 `match[1]` sites are one shape, and the type they depend on was checked
+rather than assumed. Against the real published source with `--checkJs --strict`:
+
+```
+error TS2322: Type 'RegExpExecArray' is not assignable to type 'null'.
+error TS2322: Type 'string' is not assignable to type 'null'.
+```
+
+So the evolving `let` narrows to `RegExpExecArray` through the `while`
+condition, and `match[1]` is a `string`, even though `style` is an implicit
+`any` in the same function. The other five numeric-key subjects are rest
+parameters (`classes`, `list`, `fns`) — arrays the *engine* allocates at call
+time — and one call result typed `Element[]`.
+
+What refuses today is not the subject's provenance but the member: a numeric
+index into `Array<T>` reaches the **index signature**, and an index signature
+declares no property symbol, so `accessorFormLocked` records the honest
+`property-access-unknown-accessor`. The subject-root walk that answers
+`written-parameter` or `local-binding-written` runs only afterwards, as the
+diagnostic for a form already recorded — which is why neither of those legs was
+ever the one that decides.
+
+### 77.3 The yield, in the currency that counts
+
+Of the 244 distinct withheld `creates` exports, **9** have *every* one of their
+refusals in the numeric-literal set, and none has some-but-not-all:
+
+| export | refusals |
+| --- | --- |
+| `@corvu/utils@0.3.2::combineStyle` | 6 |
+| `@corvu/utils@0.4.2::combineStyle` | 4 |
+| `@corvu-next/utils@0.1.4::combineStyle` | 2 |
+| `@solid-primitives/i18n@3.0.0-next.4::resolveRichTemplate` | 1 |
+| `@solid-primitives/utils@6.4.1::filterInstance` | 1 |
+| `@solid-primitives/utils@6.4.1::filterOutInstance` | 1 |
+| `@solid-primitives/utils@6.4.1::split` | 1 |
+| `component-register@0.8.8::compose` | 1 |
+| `motion-dom@12.43.0::parseAnimateLayoutArgs` | 1 |
+
+Those nine carry **112 withheld closure entries across 12 probes** —
+`@corvu/utils` 72, `motion-dom` 20, `@corvu-next/utils` 14,
+`@solid-primitives/utils` 3, `@solid-primitives/i18n` 2, `component-register` 1.
+
+For scale: ADR 0092's nine claims were worth 83 closures. This is the same
+shape of number and it is **an upper bound**, stated as one — § 76 is the entry
+that earned the right to say that out loud.
+
+### 77.4 The premise, and the two things that keep it narrow
+
+A numeric-literal element access records no form when the subject's apparent
+type is an **engine-owned indexed container**: a reviewed table, on exactly the
+discipline `engineOwnedIterableContainers` already sets — `Array`,
+`ReadonlyArray`, `String`, `IArguments`, the typed arrays, `RegExpExecArray`,
+`RegExpMatchArray`. The engine creates these objects and their indices are own
+data properties; nothing user-written can run on the read.
+
+Deliberately absent, and this is the table's precision rather than an oversight:
+
+- **Every user type with a numeric index signature.** A TypeScript index
+  signature cannot *declare* an accessor, but the runtime object it describes
+  can carry one. Only the engine-created half of the premise makes the read
+  safe, and a user interface has no such half.
+- **Every DOM indexed collection** — `NodeList`, `HTMLCollection`,
+  `DOMTokenList` and the rest. Their indices are engine code in fact; they were
+  not reviewed here, and "the browser probably owns it" is not a premise.
+
+Two limits carry over unchanged from the iterable table, and they are the same
+two every declaration-based premise in that file carries: a value whose static
+type is `Array<T>` while the runtime object is a subclass overriding the index,
+and a Proxy, which is outside every producer census. The `Element[]` call result
+in `motion-dom` is exactly the shape where that limit bites hardest — the type
+is the callee's claim, not the allocation's.
+
+A union answers only when **every** constituent is in the table; `null` and
+`undefined` constituents are not, so an unnarrowed `RegExpExecArray | null` does
+not clear. That is stricter than the argument requires — reading an index of
+`null` throws and runs nothing — and it stays strict, because "it throws" is a
+claim about the whole form, not about the member, and it belongs to whatever
+ADR wants to make it.
