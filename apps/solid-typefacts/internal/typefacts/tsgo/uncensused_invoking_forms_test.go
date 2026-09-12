@@ -2627,3 +2627,161 @@ func TestCoercionSubjectRootNamesWhatEveryOperandAgreedOn(t *testing.T) {
 		}
 	}
 }
+
+const engineIndexedSource = `interface UserIndexed {
+	readonly [n: number]: { value: number };
+}
+
+declare const userIndexed: UserIndexed;
+declare const arrayLike: ArrayLike<{ value: number }>;
+declare const maybeMatch: RegExpExecArray | null;
+declare const bytesOrNodes: Uint8Array | NodeListOf<Element>;
+declare const bytesOrInts: Uint8Array | Int8Array;
+declare const nodes: NodeListOf<Element>;
+
+const extractCSSregex = /((?:--)?(?:\w+-?)+)\s*:\s*([^;]*)/g;
+
+export function regexMatchElement(style: string): unknown {
+	let match;
+	let first: unknown;
+	while ((match = extractCSSregex.exec(style))) {
+		first = match[1];
+	}
+	return first;
+}
+
+export function restParameterElement(...classes: any[]): unknown {
+	return classes[0];
+}
+
+export function typedArrayElement(bytes: Uint8Array): unknown {
+	return bytes[0];
+}
+
+export function stringElement(text: string): unknown {
+	return text[0];
+}
+
+export function userIndexedElement(): unknown {
+	return userIndexed[0];
+}
+
+export function arrayLikeElement(): unknown {
+	return arrayLike[0];
+}
+
+export function nodeListElement(): unknown {
+	return nodes[0];
+}
+
+export function assertedMatchElement(): unknown {
+	return maybeMatch![1];
+}
+
+export function mixedContainerUnionElement(): unknown {
+	return bytesOrNodes[0];
+}
+
+export function engineContainerUnionElement(): unknown {
+	return bytesOrInts[0];
+}
+
+export function computedIndexElement(list: any[], index: number): unknown {
+	return list[index];
+}
+
+export function writtenIndexElement(list: any[]): void {
+	list[0] = 1;
+}
+
+export function anyIndexElement(list: any): unknown {
+	return list[0];
+}
+
+export function unknownMemberRead(source: any): unknown {
+	return source.value;
+}
+`
+
+// TestEngineOwnedIndexReadRecordsNoForm pins § 77's premise: a numeric-literal
+// index into a value the engine allocated invokes nothing, and everything
+// beside it still refuses.
+//
+// The refusing half is the point of the test, not its ballast. Every case below
+// reaches the same unresolved-symbol branch the admitted ones do — an index
+// signature declares no property symbol whoever wrote it — so the only thing
+// separating them is the reviewed table and the two position restrictions. A
+// premise that admitted `userIndexed[0]` or `arrayLike[0]` would be reading a
+// *structural* declaration as evidence about the object that runs, which is the
+// failure this package's own comments name three times over.
+func TestEngineOwnedIndexReadRecordsNoForm(t *testing.T) {
+	analyzer, dir := markerProject(t, map[string]string{"indexed.ts": engineIndexedSource})
+	path := filepath.Join(dir, "indexed.ts")
+
+	for _, testCase := range []struct {
+		export string
+		forms  int
+		why    string
+	}{
+		{
+			export: "regexMatchElement", forms: 0,
+			why: "§ 77's measured shape: `match` narrows to RegExpExecArray through the while condition, and its elements are the engine's own storage",
+		},
+		{
+			export: "restParameterElement", forms: 0,
+			why: "a rest parameter's array is allocated by the engine at call time",
+		},
+		{export: "typedArrayElement", forms: 0, why: "the typed arrays are in the reviewed table"},
+		{export: "stringElement", forms: 0, why: "a primitive string's index is the engine's"},
+		{
+			export: "userIndexedElement", forms: 1,
+			why: "a user interface's numeric index signature declares no accessor and proves nothing: the object satisfying it may carry a getter",
+		},
+		{
+			export: "arrayLikeElement", forms: 1,
+			why: "ArrayLike is the default library's own *structural* contract, so the index named by the declaration is not the index that runs — the Iterable/Array split, applied here",
+		},
+		{
+			export: "nodeListElement", forms: 1,
+			why: "a DOM collection's indices are engine code in fact and were not reviewed into the table; \"the browser probably owns it\" is not a premise",
+		},
+		{
+			export: "assertedMatchElement", forms: 0,
+			why: "a non-null assertion is a checker-level narrowing, so GetTypeAtLocation answers the bare RegExpExecArray — and admitting it is sound whether or not the assertion holds, because reading an index of null throws before any user code could run",
+		},
+		{
+			export: "mixedContainerUnionElement", forms: 1,
+			why: "the quantifier is per constituent: a union that is an engine array in one arm is a DOM collection in the other, and the read happens against whichever the value turns out to be",
+		},
+		{
+			export: "engineContainerUnionElement", forms: 0,
+			why: "and it admits a union only when every constituent is in the table",
+		},
+		{export: "computedIndexElement", forms: 1, why: "a non-literal key names no member, before any question about the container"},
+		{
+			export: "writtenIndexElement", forms: 1,
+			why: "write position is refused rather than modelled, because SubjectWrite is load-bearing for the writes and invalidates domains",
+		},
+		{export: "anyIndexElement", forms: 1, why: "`any` admits an object whose index is a getter"},
+		{
+			export: "unknownMemberRead", forms: 1,
+			why: "the vacuity guard: if this file recorded nothing at all the zeros above would assert nothing",
+		},
+	} {
+		transcript := implementationTranscriptFor(t, analyzer, path, engineIndexedSource, testCase.export)
+		got := 0
+		for _, form := range transcript.UncensusedInvokingForms {
+			switch form.Kind {
+			case typefacts.UncensusedGetAccessor, typefacts.UncensusedSetAccessor,
+				typefacts.UncensusedPropertyAccessUnknownAccessor:
+				got++
+			}
+		}
+		if got != testCase.forms {
+			t.Fatalf(
+				"%s: %d accessor forms, want %d — %s",
+				testCase.export, got, testCase.forms, testCase.why,
+			)
+		}
+	}
+}

@@ -12480,8 +12480,9 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 108] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 113] = [
         "accessorTableRead",
+        "arrayLikeIndexRead",
         "arrayRestRead",
         "awaitIterateParameter",
         "callInitialized",
@@ -12513,6 +12514,9 @@ export const value = phantom;
         "defaultedThenWritten",
         "destructureModuleValue",
         "destructureParameter",
+        "engineComputedIndexRead",
+        "engineIndexRead",
+        "engineModuleIndexRead",
         "helperCoercion",
         "helperSpreadCoercion",
         "helperUntypedArgument",
@@ -12571,6 +12575,7 @@ export const value = phantom;
         "untypedBoxScale",
         "untypedCoercion",
         "updateOnParameter",
+        "userIndexRead",
         "viaHelperChain",
         "whileBreak",
         "writtenAfterRead",
@@ -14062,6 +14067,7 @@ export const value = phantom;
     fn the_generated_census_fixture_carries_every_creates_candidate_into_planning() {
         let proposing = [
             "accessorTableRead",
+            "arrayLikeIndexRead",
             "arrayRestRead",
             "awaitIterateParameter",
             "callInitialized",
@@ -14093,6 +14099,9 @@ export const value = phantom;
             "defaultedThenWritten",
             "destructureModuleValue",
             "destructureParameter",
+            "engineComputedIndexRead",
+            "engineIndexRead",
+            "engineModuleIndexRead",
             "helperCoercion",
             "helperSpreadCoercion",
             "helperUntypedArgument",
@@ -14147,6 +14156,7 @@ export const value = phantom;
             "untypedBoxScale",
             "untypedCoercion",
             "updateOnParameter",
+            "userIndexRead",
             "viaHelperChain",
             "whileBreak",
             "writtenAfterRead",
@@ -14361,8 +14371,9 @@ export const value = phantom;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
-    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 94] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 99] = [
         "accessorTableRead",
+        "arrayLikeIndexRead",
         "arrayRestRead",
         "awaitIterateParameter",
         "callInitialized",
@@ -14389,6 +14400,9 @@ export const value = phantom;
         "defaultedFromParameter",
         "destructureModuleValue",
         "destructureParameter",
+        "engineComputedIndexRead",
+        "engineIndexRead",
+        "engineModuleIndexRead",
         "helperCoercion",
         "helperSpreadCoercion",
         "helperUntypedArgument",
@@ -14443,6 +14457,7 @@ export const value = phantom;
         "untypedBoxScale",
         "untypedCoercion",
         "updateOnParameter",
+        "userIndexRead",
         "viaHelperChain",
         "whileBreak",
         "writtenAfterRead",
@@ -14496,7 +14511,7 @@ export const value = phantom;
     /// `omittedBoxScale` closes through an explicit `never` premise in the
     /// first leaf call, while the explicit `unknown` and `any` controls keep
     /// their leaf coercions and are refused.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 46] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 48] = [
         "chainCallbacks",
         "coerceBoundHelperResult",
         "coerceConditionalHelperResult",
@@ -14508,6 +14523,8 @@ export const value = phantom;
         "declaredMemberCoercion",
         "defaultedFromParameter",
         "destructureParameter",
+        "engineIndexRead",
+        "engineModuleIndexRead",
         "helperCoercion",
         "instanceOfLibrary",
         "instanceOfOwnClass",
@@ -14544,8 +14561,9 @@ export const value = phantom;
         "writtenJoin",
         "writtenParameterOwnResult",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 55] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 58] = [
         ("accessorTableRead", "census"),
+        ("arrayLikeIndexRead", "census"),
         ("arrayRestRead", "census"),
         ("awaitIterateParameter", "census"),
         ("callInitialized", "census"),
@@ -14564,6 +14582,7 @@ export const value = phantom;
         ("defaultedPropertyBinding", "census"),
         ("defaultedThenWritten", "census"),
         ("destructureModuleValue", "census"),
+        ("engineComputedIndexRead", "census"),
         ("helperSpreadCoercion", "census"),
         ("helperUntypedArgument", "census"),
         ("instanceOfComputedClass", "census"),
@@ -14588,6 +14607,7 @@ export const value = phantom;
         ("taggedTemplate", "census"),
         ("unknownBoxScale", "census"),
         ("untypedBoxScale", "census"),
+        ("userIndexRead", "census"),
         ("writtenAfterRead", "census"),
         ("writtenBeforeRead", "census"),
         ("writtenByDestructuring", "census"),

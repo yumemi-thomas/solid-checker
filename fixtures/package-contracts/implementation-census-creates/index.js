@@ -1255,3 +1255,58 @@ export function writtenParameterDestructured(source, other) {
   ({ value: source } = other);
   return source.value;
 }
+
+// ADR 0094: a numeric-literal index into a container the **engine** allocated
+// reaches its own storage, so the read invokes nothing and no form is recorded
+// at all.
+//
+// Every case here is written so the new premise is the *only* thing that can
+// decide it. A plain unwritten parameter would root at its own slot under
+// ADR 0034 and close whatever this premise said, which is why none of these
+// reads one: `values` is a **rest** parameter, whose array the engine builds at
+// call time and which ADR 0034 explicitly excludes, and the module bindings
+// below are initialized from a call, so they refuse at `module-from-call`.
+
+/** @type {unknown[]} */
+const engineIndexList = JSON.parse("[]");
+
+/** @type {{ readonly [n: number]: unknown }} */
+const userIndexTable = JSON.parse("{}");
+
+/** @type {ArrayLike<unknown>} */
+const arrayLikeTable = JSON.parse("{}");
+
+// A rest parameter's array is the engine's, and ADR 0034 does not root it.
+// **Certifies.**
+export function engineIndexRead(...values) {
+  return values[0];
+}
+
+// A module binding no other premise reaches — initialized from a call, so
+// ADR 0044 refuses it — whose type is the engine's own array. **Certifies.**
+export function engineModuleIndexRead() {
+  return engineIndexList[0];
+}
+
+// The same binding read with a **computed** key. The premise is about a member
+// the compiler can name, and a non-literal key names none. This is the vacuity
+// control: without it the two above could pass while the producer simply
+// stopped recording element accesses. **Refuses.**
+export function engineComputedIndexRead(index) {
+  return engineIndexList[index];
+}
+
+// A **user** interface's numeric index signature. An index signature cannot
+// declare an accessor, but the object satisfying it may carry one, so the
+// declaration proves nothing about the bytes that run. **Refuses.**
+export function userIndexRead() {
+  return userIndexTable[0];
+}
+
+// The default library's own *structural* index contract. `ArrayLike` is a shape
+// an ordinary object satisfies, so the index named by the declaration is not
+// the index that runs — the reason the reviewed table holds `Array` and not
+// `ArrayLike`. **Refuses.**
+export function arrayLikeIndexRead() {
+  return arrayLikeTable[0];
+}

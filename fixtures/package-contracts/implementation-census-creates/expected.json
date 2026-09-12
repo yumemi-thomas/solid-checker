@@ -4,16 +4,17 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "1ebfb4748ea0b274cd461b3bf0dd28dafa576b0f7b5e0545ca8643a0f7ea48d5",
+            "closureSha256": "62a4f0b9733301a7cb5e84a484a720c8a7a3a515f41ee5f82f7cd926afc7bd33",
             "path": "./index.js",
-            "sha256": "42ec176f4884b56a1e20766f08b94ac50c1bde95ab955009c8125edf1730a624"
+            "sha256": "332f3e8426f1bb1c15c85448d1b0cafd909ffd8b94c8d59bb83d0ca00e870c1c"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "7892ff6b022745109e4d9d8cd3b0e0a42dc732d139117e916758b7c815bee0ea"
+            "sha256": "39602fa17828dc48bc734af961a7361d81a1ef251d7664670bafcf439324a0f2"
           },
           "exports": {
             "accessorTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "arrayLikeIndexRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "arrayRestRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "awaitIterateParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "callInitialized": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -45,6 +46,9 @@
             "defaultedThenWritten": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "destructureModuleValue": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "destructureParameter": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "engineComputedIndexRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "engineIndexRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "engineModuleIndexRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "helperCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "helperSpreadCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "helperUntypedArgument": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -103,6 +107,7 @@
             "untypedBoxScale": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "untypedCoercion": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "updateOnParameter": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
+            "userIndexRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "viaHelperChain": "summary-5f5b804e83be5aede7d0abaf2dc45cc361fe1b11fc38c0a3ccf72ca6ebf6f4dc",
             "whileBreak": "summary-bb9433bea33558edb08f10a3607b4d9cc70cb859497f8ac079e48868052a4c94",
             "writtenAfterRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",

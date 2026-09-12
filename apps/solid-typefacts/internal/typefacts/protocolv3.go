@@ -4,7 +4,16 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 53 (ADR 0093): the `parameter-or-own-result`
+// TypeFactsHandshakeProtocol is 54 (ADR 0094): a **numeric-literal element
+// access into an engine-owned indexed container records no form at all**. An
+// index signature declares no property symbol, so `arr[0]` and `match[1]`
+// resolved nothing and were recorded as unknown accessors; where the container
+// is one the engine itself allocated — the reviewed table in
+// engine_indexed_containers.go — the member reached is engine storage and the
+// read invokes nothing. Read position only, exact numeric literal only, and
+// every union constituent must be in the table. This *removes* rows a consumer
+// previously saw, which is why it moves the number.
+// Protocol 53 (ADR 0093): the `parameter-or-own-result`
 // subject derivation and its `subjectLocalLiteralResults` premises. A written
 // parameter whose every value is either the caller's argument at this slot or a
 // value this program's own code allocated and returned — ADR 0091's open shape,
@@ -315,8 +324,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 53
-	TypeFactsSchemaSHA256             = "sha256:0198fe11518ac62f9105afd61ecf1084436b3bf44f48d36c413bb5fbf88dbe54"
+	TypeFactsHandshakeProtocol uint64 = 54
+	TypeFactsSchemaSHA256             = "sha256:116184f3d28b4e665c06e07d7c6fc2801a559192a29a943a7f7ff9f9bc8818ea"
 )
 
 type ServiceHandshake struct {

@@ -1758,7 +1758,8 @@ func (p *project) accessorFormLocked(
 	node *ast.Node,
 ) (typefacts.UncensusedInvokingFormKind, bool) {
 	queried := node.Name()
-	if queried == nil {
+	elementAccess := queried == nil
+	if elementAccess {
 		// An element access has no name node, and querying the access itself
 		// resolves nothing at all — literal key or not. The compiler names the
 		// accessed member from the *argument expression*, and only when that
@@ -1772,9 +1773,50 @@ func (p *project) accessorFormLocked(
 	}
 	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(queried))
 	if symbol == nil {
+		if p.engineOwnedIndexReadLocked(node, queried, elementAccess) {
+			return "", false
+		}
 		return typefacts.UncensusedPropertyAccessUnknownAccessor, true
 	}
 	return p.accessorKindForSymbolLocked(symbol, ast.GetAssignmentTarget(node) != nil)
+}
+
+// engineOwnedIndexReadLocked answers whether an element access the compiler
+// could not resolve to a member symbol nevertheless provably invokes nothing:
+// a **numeric literal** key into a value whose every type constituent is an
+// engine-owned indexed container.
+//
+// The unresolved symbol is not the anomaly here, it is the expected answer. A
+// numeric index into `Array<T>` reaches the interface's *index signature*, and
+// an index signature declares no property symbol at all — so `arr[0]` and
+// `match[1]` arrive here having resolved nothing, exactly as a computed key
+// does, and were recorded identically before this premise existed. What
+// separates them is that the member reached is the engine's own storage rather
+// than an unknown one.
+//
+// Three restrictions, each of which the table in engine_indexed_containers.go
+// does not carry:
+//
+//   - **Element access only.** A property access that resolved no symbol is an
+//     unknown member of an unknown shape and stays recorded.
+//   - **A numeric literal only.** A string-literal key names a *declared*
+//     member, and one that resolved to nothing is exactly the unresolved case;
+//     admitting it here would read "the checker found no member" as "no member
+//     is reached", which is the failure awaitFormLocked's comment names.
+//   - **Read position only.** A write to an index runs no setter on an engine
+//     array either, but SubjectWrite is load-bearing for the `writes` and
+//     `invalidates` domains, and dropping the row would drop that mark. The
+//     position is refused rather than modelled; no measured case needs it.
+func (p *project) engineOwnedIndexReadLocked(
+	node *ast.Node, queried *ast.Node, elementAccess bool,
+) bool {
+	if !elementAccess || nodeKindName(queried) != "NumericLiteral" {
+		return false
+	}
+	if ast.GetAssignmentTarget(node) != nil {
+		return false
+	}
+	return p.provablyEngineOwnedIndexedLocked(node.Expression())
 }
 
 // exactElementAccessKey answers the node to query for the member an element

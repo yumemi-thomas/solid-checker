@@ -19863,3 +19863,49 @@ count to establish before any of the three is written. Eight is an upper bound,
 and this entry is why. § 76 of
 `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
 carries the numbers.
+
+## ADR 0094: a numeric index into a container the engine built (2026-09-12)
+
+An element access whose key is an exact numeric literal records **no uncensused
+invoking form** when every constituent of the subject's apparent type is an
+engine-owned indexed container — a reviewed default-library table holding
+`Array`, `ReadonlyArray`, `String`, `IArguments`, `RegExpExecArray`,
+`RegExpMatchArray`, `TemplateStringsArray` and the typed arrays. Handshake
+protocol 53 → 54, and the number moves because this *removes* rows: silence on
+this census is a positive claim.
+
+**Why the leg rankings kept pointing elsewhere.** A numeric index reaches an
+interface's index signature, and an index signature declares no property
+symbol, so `arr[0]` and `match[1]` resolved nothing and were recorded exactly as
+a computed key is. The subject-root walk that answered `written-parameter` or
+`local-binding-written` runs only afterwards, as the diagnostic for a form
+already recorded. Two ADRs were aimed at those legs before § 77 read the 33
+sites and found the member, not the subject, was the blocker.
+
+**Remaining approximations.** The two limits every declaration-based premise in
+`uncensused_invoking_forms.go` carries are unchanged and not closed: a value
+whose static type is `Array<T>` while the runtime object is a **subclass**
+overriding the index answers from the base declaration, and a **Proxy** is
+outside every producer census. Beyond those: a computed key refuses (the
+premise is about a member the compiler can name); a string-literal key refuses,
+because it names a declared member and one that resolved to nothing is
+precisely the unresolved case; **write position** refuses rather than being
+modelled, because `subjectWrite` is load-bearing for the `writes` and
+`invalidates` domains and dropping the row would drop that mark; and a union
+refuses unless every constituent is in the table, `null` and `undefined`
+included — stricter than the argument needs, since reading an index of either
+throws without running user code.
+
+**Deliberately absent from the table**, on `engineOwnedIterableContainers`'
+standing discipline: the **structural** contracts `ArrayLike` and `ConcatArray`,
+which the default library declares with the same `readonly [n: number]: T` but
+which an ordinary object satisfies while carrying a getter; and every DOM
+indexed collection (`NodeList`, `HTMLCollection`, `DOMTokenList`, `FileList`),
+whose indices are engine code in fact but were not reviewed.
+
+**A fixture lesson worth keeping.** The first draft of the fixture block read
+plain unwritten parameters, and all five cases — the controls included — closed
+on ADR 0034's parameter root whatever this premise said. Every subject in the
+committed block is one no other premise roots: a rest parameter, which ADR 0034
+excludes, or a module binding initialized from a call, which ADR 0044 refuses.
+A control that would pass without the change under test is not a control.

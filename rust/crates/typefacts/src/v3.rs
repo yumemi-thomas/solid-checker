@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:0198fe11518ac62f9105afd61ecf1084436b3bf44f48d36c413bb5fbf88dbe54";
+    "sha256:116184f3d28b4e665c06e07d7c6fc2801a559192a29a943a7f7ff9f9bc8818ea";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -283,7 +283,14 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // values is either the caller's argument at this slot or a value this program
 // allocated and returned. Only one arm is the caller's, so the spelling is
 // apart from `parameter`.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 53;
+// Protocol 54 stops recording a form for a numeric-literal element access into
+// an engine-owned indexed container (ADR 0094). An index signature declares no
+// property symbol, so such a read resolved nothing and arrived as an unknown
+// accessor; where the container is one the engine allocated, the member reached
+// is its own storage and nothing user-written runs. This *removes* rows, so a
+// consumer that reviewed only protocol 53 would read the silence as a weaker
+// claim than it is, and the number moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 54;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

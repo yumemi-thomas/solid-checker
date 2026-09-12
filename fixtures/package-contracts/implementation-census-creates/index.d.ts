@@ -165,3 +165,13 @@ export declare function writtenParameterTwoSlots(first: any, second: any, flag: 
 export declare function writtenParameterModuleValue(source: any, flag: any): unknown;
 export declare function writtenParameterCallResult(source: any): unknown;
 export declare function writtenParameterDestructured(source: any, other: any): unknown;
+// ADR 0094: a numeric-literal index into an engine-allocated container records
+// no form. Every subject here is one no other premise roots — a rest parameter,
+// or a module binding initialized from a call — so the new premise alone
+// decides them. The controls keep a computed key, a user index signature and
+// the library's structural `ArrayLike` refusing.
+export declare function engineIndexRead(...values: unknown[]): unknown;
+export declare function engineModuleIndexRead(): unknown;
+export declare function engineComputedIndexRead(index: number): unknown;
+export declare function userIndexRead(): unknown;
+export declare function arrayLikeIndexRead(): unknown;
