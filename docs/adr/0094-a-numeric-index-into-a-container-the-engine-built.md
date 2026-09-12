@@ -120,6 +120,23 @@ this fixture read plain unwritten parameters and all five cases closed on
 ADR 0034 whatever this premise said. A control that would pass without the
 change under test is not a control.
 
-The corpus figure is in the commit message. § 77.3 priced it at 9 exports and
-112 withheld closure entries **as an upper bound**, and § 76 is the entry that
-earned the right to say that out loud.
+**On the corpus: 5,275 → 5,389 certified closures, +114**, with withheld falling
+11,552 → 11,438 and 14 rows moving, every one of them upward. § 77.3 priced it
+at 9 exports and 112 closure entries as an upper bound: the total came in within
+2%, the export list 44% right.
+
+Four exports closed — the three `combineStyle` copies and
+`@solid-primitives/i18n::resolveRichTemplate` — and they carry all 114 because
+`combineStyle` is published verbatim by eight packages. Four more had their
+predicted refusal removed and stopped at a blocker behind it that no report
+could have shown beforehand (`split` at a computed `_list[i]` in the same
+function, `filterInstance` and `filterOutInstance` at the callee `ofClass`,
+`compose` at a call through a nested callable's parameter), and one is
+undetermined because its rows stopped covering `motion-dom` this run.
+
+Seventeen refusal sites went away and one arrived: `_list[i]`, the form the walk
+reaches once `list[0]` stops refusing. That is the census's normal inward motion
+— it refuses a domain on the *first* premise it cannot establish, so every
+refusal hides what is behind it — and not a regression. § 78 of
+`phase21/2026-09-10-reads-veto-observation-design.md` carries the tables, and
+§ 78.3 the benchmark-churn caveat that any per-export diff needs.

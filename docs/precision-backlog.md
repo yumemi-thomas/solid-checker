@@ -19903,6 +19903,25 @@ which an ordinary object satisfies while carrying a getter; and every DOM
 indexed collection (`NodeList`, `HTMLCollection`, `DOMTokenList`, `FileList`),
 whose indices are engine code in fact but were not reviewed.
 
+**Measured on the 418-probe corpus: 5,275 → 5,389 certified closures (+114)**,
+withheld 11,552 → 11,438, 14 rows moved and none fell. Four exports closed — the
+three vendored `combineStyle` copies and
+`@solid-primitives/i18n::resolveRichTemplate` — which carry all 114 between them.
+§ 77 predicted 9 exports and 112 closures: tight on the total, 44% right on the
+list, because a leg's export count and its closure count are different
+distributions. Four of the five that did not close had their predicted refusal
+removed and stopped at a blocker behind it, which is the census refusing on the
+*first* premise it cannot establish and is why any leg count is an upper bound.
+One new refusal site appeared (`_list[i]`, a computed key in `split`, reached
+only because `list[0]` cleared) against 17 that went away.
+
+**A benchmark caveat, not a precision one.** Two exports show as losing closure
+(`@solid-primitives/refs::getFirstChild`, `::mergeRefs`). Their row's own count
+*rose*, and that row covers a different dependency set on every run — including
+between two runs whose corpus totals were identical. A per-export diff across
+runs mixes real movement with proposal-lane churn; the closure totals, per-row
+deltas and refusal sites do not. § 78.3 has the table.
+
 **A fixture lesson worth keeping.** The first draft of the fixture block read
 plain unwritten parameters, and all five cases — the controls included — closed
 on ADR 0034's parameter root whatever this premise said. Every subject in the

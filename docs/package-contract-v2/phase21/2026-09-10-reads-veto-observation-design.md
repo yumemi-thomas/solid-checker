@@ -5923,3 +5923,95 @@ not clear. That is stricter than the argument requires — reading an index of
 `null` throws and runs nothing — and it stays strict, because "it throws" is a
 claim about the whole form, not about the member, and it belongs to whatever
 ADR wants to make it.
+
+## 78. ADR 0094 measured: +114 closures, and what the estimate got right (2026-09-12)
+
+Measured on the 418-probe corpus against HEAD (`report-t1200.json`), both
+binaries rebuilt at protocol 54, mains power:
+
+| | HEAD | ADR 0094 |
+| --- | --- | --- |
+| certified closures | 5,275 | **5,389** |
+| withheld closures | 11,552 | **11,438** |
+| withheld `creates` exports | 244 | 239 |
+| distinct refusal sites behind them | 98 | 82 |
+
+**+114 closures**, and 14 rows moved — every one of them upward. `corvu@0.7.2`
+alone gains 46, `@corvu/drawer` 12, `@corvu-next/popover` and `@corvu/popover`
+10 each, the three `motion-solidjs` rows 6–7 each.
+
+### 78.1 The estimate was right about the total and wrong about the exports
+
+§ 77.3 priced this at **9 exports and 112 withheld closure entries**, as an
+upper bound. The total came in at 114 — within 2% — and the export list was
+44% right. Those two facts are not in tension; they are right for different
+reasons that happened to cancel.
+
+**Four exports closed**, and they are the vendored ones:
+`@corvu/utils@0.3.2::combineStyle`, `@corvu/utils@0.4.2::combineStyle`,
+`@corvu-next/utils@0.1.4::combineStyle` and
+`@solid-primitives/i18n@3.0.0-next.4::resolveRichTemplate`. `combineStyle` is
+published verbatim by eight packages, so four exports carry 114 closures.
+
+**Four more had their predicted refusal removed and hit a blocker behind it** —
+one the withheld details could not have shown beforehand, because the census
+never walked that far:
+
+| export | the refusal now |
+| --- | --- |
+| `@solid-primitives/utils::split` | `_list[i]` at `object.js:1115..1123` — a **computed** key, 165 bytes past the `list[0]` that was refusing |
+| `@solid-primitives/utils::filterInstance` | `ofClass`, a resolved callee that is neither a default-library member, a dialect primitive under the negative authority, nor a declaration in the artifact's own runtime source |
+| `@solid-primitives/utils::filterOutInstance` | the same `ofClass` |
+| `component-register::compose` | a call through `a` — a parameter of a nested callable, which is caller-supplied code |
+
+**One is undetermined**: `motion-dom::parseAnimateLayoutArgs` carried 20 withheld
+entries at HEAD and carries neither a withheld entry nor a closure here, because
+the rows that covered it stopped covering `motion-dom` this run. See § 78.3.
+
+So § 76's lesson held for a third time, now in the other direction: a leg's size
+is an upper bound on exports, and the *refusal the census reports first* is
+still the only one the report can show. What is new is that the bound was loose
+on exports and tight on closures, because a leg's export count and its closure
+count are different distributions — four exports in a library eight packages
+vendor outweigh five exports in libraries nobody copies.
+
+### 78.2 Seventeen refusal sites gone, one new — and the new one is the point
+
+The single new site is `_list[i]` inside `split`. It is not a regression and it
+is not noise: it is the form the walk reaches **once the form before it stops
+refusing**. The same function's `list[0]` cleared, the census went on, and it
+found a computed key, which this premise deliberately does not admit.
+
+A refusal appearing where none was is the direction that would signal a problem,
+so it is worth stating plainly why this one does not: the census refuses a
+domain on the *first* premise it cannot establish, so every refusal it reports
+hides whatever lies behind it. Removing one blocker never uncovers a *new*
+defect; it uncovers the next honest sentence. § 76 measured that inward motion
+and bought nothing for it. This section measures it and buys 114 closures, and
+the only difference between the two is which premise sat at the front.
+
+### 78.3 Two exports "lost" closure, and it is the benchmark, not the change
+
+`@solid-primitives/refs@1.1.4::getFirstChild` and `::mergeRefs` are closed at
+HEAD and are not closed here. Both belong to one row, `motion-solidjs@0.6.0`,
+whose own count *rose* 840 → 846.
+
+That row covers a different set of dependency packages on every run:
+
+| run | packages it closed into |
+| --- | --- |
+| HEAD (`report-t1200`) | motion-utils 40, `@solid-primitives/utils` 22, `@solid-primitives/refs` 2 |
+| ADR 0093 (`report-0093`) | motion-utils 50, motion-dom 14 |
+| ADR 0094 (`report-0094`) | motion-dom 39, motion-utils 25 |
+
+The middle row is the proof, and it is why this is worth a subsection rather
+than a footnote: **ADR 0093 changed the corpus total by zero**, and that run's
+coverage of this probe still bears no resemblance to either neighbour. The
+proposal/reuse lane picks different artifact cases run to run, so a unique-export
+diff across two runs mixes real movement with churn, and `parseAnimateLayoutArgs`
+disappearing entirely has the same cause.
+
+**What is not churn** is the closure total, the per-row deltas and the refusal
+sites: no row fell, and 17 sites went away against 1 arriving. Any comparison of
+*which exports* a probe covered needs the caveat in this section; the counts do
+not.
