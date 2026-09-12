@@ -563,6 +563,53 @@ export function coerceTwoModuleValues() {
   return untypedRegistry + untypedRegistry;
 }
 
+// ADR 0034 admits a parameter root in a **local-recursion frame**, not only in
+// the export's own declaration, and ADR 0092 declined to follow it there for a
+// coercion: inside a frame the value at that slot came from a call site in this
+// artifact, which may have handed it an object this program built. These two
+// exports are that worry written down. `readBoxValue`'s read is dispositioned
+// as the frame caller's, so if the disposition were what gates the walk, the
+// getter's unresolved call would never be reached.
+//
+// It is reached, and one stage earlier than the census: the **generator's** own
+// walk sees into the getter's body and declines to propose a `creates` closure
+// at all, citing `unresolved-callee` — for `ownGetterFromFactory` it also cites
+// `refusing-callee-fixpoint`, having followed the factory. So neither export
+// reaches the census with a candidate, and neither appears among the closed or
+// the withheld: a closure nobody proposed is not one the census withheld.
+// **Both are declined at closure-proposal**, on the call inside the getter
+// rather than on the read that invokes it.
+//
+// That is the answer to the worry, and it is not the answer ADR 0092 guessed
+// at: the getter's body is walked because walks here are per *declaration*,
+// so how the read was dispositioned never gated it. Measured beside this:
+// refusing every parameter-rooted disposition in a frame costs 714 of the
+// corpus's 5,275 certified closures and moves no row, so the frame case is
+// load-bearing and, on this shape, not leaking.
+function readBoxValue(box) {
+  return box.value;
+}
+
+export function ownGetterThroughHelper() {
+  return readBoxValue({
+    get value() {
+      return externalGlobal(1);
+    }
+  });
+}
+
+function makeBoxWithGetter() {
+  return {
+    get value() {
+      return externalGlobal(2);
+    }
+  };
+}
+
+export function ownGetterFromFactory() {
+  return readBoxValue(makeBoxWithGetter());
+}
+
 const registryObject = { value: 1 };
 const untypedRegistry = /** @type {any} */ (registryObject);
 

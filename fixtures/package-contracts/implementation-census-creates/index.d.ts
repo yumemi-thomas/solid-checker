@@ -69,6 +69,10 @@ export declare function coerceTwoParameters(left: unknown, right: unknown): unkn
 export declare function coerceOneParameterTwice(left: unknown): unknown;
 export declare function coerceParameterAndModuleValue(left: unknown): unknown;
 export declare function coerceTwoModuleValues(): unknown;
+// ADR 0034's local-recursion frame, and whether a read dispositioned as the
+// frame caller's can hide a create this package owns. Both must refuse.
+export declare function ownGetterThroughHelper(): unknown;
+export declare function ownGetterFromFactory(): unknown;
 // An immediately-invoked function expression: this census refuses it.
 export declare function iife(value: number): number;
 // ADR 0043: the root set closed under the reads the census dispositions. The

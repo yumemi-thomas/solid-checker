@@ -12480,7 +12480,7 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 103] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 105] = [
         "accessorTableRead",
         "arrayRestRead",
         "awaitIterateParameter",
@@ -12537,6 +12537,8 @@ export const value = phantom;
         "omittedBoxScale",
         "overloaded",
         "ownArrayRead",
+        "ownGetterFromFactory",
+        "ownGetterThroughHelper",
         "ownRestSpread",
         "ownTableMemberRead",
         "ownTableRead",

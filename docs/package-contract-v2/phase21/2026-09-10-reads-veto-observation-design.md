@@ -5580,3 +5580,79 @@ treadmill rather than paying it again, and it is the one nobody has costed. It
 raises ADR 0005 objection 5 squarely and that is a design argument, not a
 reading of bytes. The third option, which the code takes today, is now at least
 stated with a number attached (§ 72).
+
+## 75. The local-recursion frame carries 714 closures, and the worry does not survive contact (2026-09-12)
+
+ADR 0092 declined to follow ADR 0034 into a local-recursion frame and recorded
+the reason as an open question: at depth 0 a parameter holds what the external
+caller passed, by construction, while inside a frame the value came from a call
+site in this artifact and may be an object this program built. If that argument
+holds it applies to ADR 0034's accessors too — and those are closing claims
+today. So the question was never about ADR 0092's four claims.
+
+### 75.1 How much rests on it
+
+A probe binary that refuses **every** parameter-rooted disposition at depth > 0,
+against HEAD on the same machine:
+
+| | HEAD | frame refused |
+| --- | --- | --- |
+| certified closures | 5,275 | **4,561** |
+| certified entrypoints | 654 | 654 |
+| verified / complete / partial / refused | 381 / 324 / 57 / 18 | 381 / 324 / 57 / 18 |
+
+**714 closures, 13.5% of the corpus's total, and not one row.** The frame case
+is a closure-level premise: refusing it does not stop rows certifying, it makes
+their documents prove less. One in seven proved claims in this corpus rests on
+it, which is the number that decides whether the question was worth asking.
+
+### 75.2 The counterexample, and why it refuses
+
+The worry written as code, in `implementation-census-creates`:
+
+~~~js
+function readBoxValue(box) { return box.value; }   // depth 1: admitted today
+
+export function ownGetterThroughHelper() {
+  return readBoxValue({ get value() { return externalGlobal(1); } });
+}
+~~~
+
+plus `ownGetterFromFactory`, which routes the same object through a local
+factory so the getter's body sits in a different declaration. If the read's
+disposition were what gated the walk, the getter's unresolved call would never
+be reached and both would certify `creates: []` falsely.
+
+**Both are declined at `closure-proposal`, citing `unresolved-callee`** — and
+the factory one also cites `refusing-callee-fixpoint`, having followed the
+factory to its getter. The refusal is one stage *earlier* than the census: the
+generator's own walk reads the getter's body, so neither export reaches
+certification with a candidate at all. Neither appears among the closed or the
+withheld, because a closure nobody proposed is not one the census withheld —
+which is why both had to come out of the candidate and planning lists rather
+than into the withheld one.
+
+The mechanism is that walks here are per **declaration**. A getter's body is
+walked as part of whichever declaration lexically contains it, however the read
+that invokes it was dispositioned. Provenance decides whether the *read* is this
+export's operation; it never decided what gets walked.
+
+### 75.3 What this establishes, and what it does not
+
+Established: on this shape — a package-built object carrying an accessor, handed
+to a module-local helper, inline or through a factory — the frame case does not
+hide an operation, and the 714 closures are not resting on a hole.
+
+Not established: that the frame case is sound in general. One shape is one
+shape. The argument that makes it work is the per-declaration walk, and that
+argument would fail for an operation in a declaration nothing walks — which is
+also exactly what the generator's decline covers here. A second shape worth
+someone's time is an accessor installed by a *dependency's* factory, where the
+getter's body is the dependency's code; that is correctly excluded as the
+dependency's operation, but nothing pins it.
+
+On the evidence, **ADR 0092's depth gate is stricter than it needs to be** and
+costs the 4 claims § 73.2 priced. It stays, because loosening a premise on one
+shape's evidence is how the arc's earlier mistakes were made; the amendment
+wants the second shape pinned first, and it is named here so it is not
+rediscovered.

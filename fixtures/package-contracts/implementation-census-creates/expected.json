@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "7bbfebab0fa5b1d981e160f881b96fa0c505aa5378e6a58f2a8388cde507b501",
+            "closureSha256": "78083c472200b2d34f28e793f520d2de3483afebaa90c4d408a4b3ce0303e0aa",
             "path": "./index.js",
-            "sha256": "4e07f0cffaa42aa4c9f3723496b10b0d341514f2f54320552ee45ac0f3a88a44"
+            "sha256": "ba43d192f93f284f78bf2e4826a1eaf8621e78272c2c25d3debaa21d1725077f"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "00427753008045d5c141722425220b2d4d76726f43a1b26883a2c295c85e47b0"
+            "sha256": "c2e7b2d60cfa372b1f81c8f5e90035ba8a448b03ba8703377c246f703fbf323f"
           },
           "exports": {
             "accessorTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
@@ -69,6 +69,8 @@
             "omittedBoxScale": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "overloaded": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
             "ownArrayRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "ownGetterFromFactory": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "ownGetterThroughHelper": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "ownRestSpread": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "ownTableMemberRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
             "ownTableRead": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
