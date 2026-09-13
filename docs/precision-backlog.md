@@ -1,5 +1,43 @@
 # Precision backlog
 
+## Three levers sized against the ADR 0100 pin, and killed (2026-09-13)
+
+Measured on the pin re-taken after ADR 0100 (9,529 withheld detail rows), by
+reason class and distinct site, before any of them was built.
+
+- **Per-argument provenance into local frames (the ADR 0092 depth gate).**
+  The residue that cites a local-recursion frame is 2 detail rows on 1 site — a
+  coercion at `reach unknown` whose operands root at `parameter` inside a
+  helper — plus `no control-flow census at depth 1` (25) and mixed-operand
+  coercions (60), neither of which a frame mapping touches. ADR 0100's own
+  rule 5 (a direct call read in a helper frame) fired on no corpus row: the
+  shared walk refuses those exports earlier. `argument_parameters` is already
+  on the wire, so the mapping would be a certifier change with no protocol
+  bump, and it would move two entries. Not written.
+- **"A call through a parameter of a nested callable"** — 381 rows on 40 sites,
+  the third largest non-recipe class. The four sites carrying most of it are
+  `createCallbackStack`'s `stack.forEach((cb) => cb(…))` (callbacks retained
+  by the returned object, run by a later method call), motion-utils' `pipe`
+  (`transformers.reduce((a, b) => (v) => b(a(v)))`, run when the returned
+  closure runs), corvu's `signal` accessor and `@solid-primitives/memo`'s
+  `source`. Every one is the export invoking caller code from a retained or
+  returned closure, which § callbacks lists as an item, so `callbacks: []` is
+  false there and `creates: []` unprovable. Correct verdicts; describing them
+  needs `from: OperationOutput`/resource items with a later `at`, which is a
+  model-level ADR, not a census relaxation.
+- **A shared-module recipe format** (one module serving several claim ids).
+  Of 767 unique recipe-less `reads` entries, 46 sit on an export that already
+  has a recipe module for a sibling artifact case (`access` 9, `chain` 9,
+  `afterPaint` 8, `clamp` 5, `arrayEquals` 3, the rest one each), and the
+  three largest of those are non-empty enumerations the census refuses anyway.
+  The rest of the pool is a long tail of one to nine exports per case with no
+  module to share. Not built.
+
+What the pin says about the frontier: the non-recipe withheld set is now
+almost entirely correct census verdicts on false empty proposals, and the
+recipe-less `reads` set is hand authoring at one to nine exports per case.
+Closure coverage from here is bought per export, not per premise.
+
 ## ADR 0100: a described `callbacks` enumeration the census confirms (2026-09-13)
 
 The 1,155 `callbacks` census refusals in the pin are correct verdicts on empty
