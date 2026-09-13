@@ -8911,6 +8911,34 @@ type CensusWalkPass = (
 struct CallerSuppliedInvocations {
     total: usize,
     by_member: std::collections::BTreeMap<&'static str, usize>,
+    /// Every `parameter-rooted` site in walk order, with the facts a described
+    /// enumeration is confirmed against (ADR 0100). The other members carry
+    /// no such record: an accessor, an iteration or a coercion is an
+    /// invocation no proposal describes yet, so any one of them refuses.
+    direct: Vec<DirectInvocationSite>,
+}
+
+/// One call the walk dispositioned `ParameterRooted` — the export invoking a
+/// callable its caller supplied — as the described `callbacks` census reads it
+/// (ADR 0100). A described item is `from` a bare parameter `at` the call event
+/// on the same stack, and every field here is one of the ways a real site can
+/// fail to be that item.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct DirectInvocationSite {
+    /// The parameter the callee is rooted at, and whether the callee is a
+    /// *member* of it (`options.onChange()`) rather than the parameter itself.
+    /// `None` when the disposition rests on an alias the call's own
+    /// `calleeParameter` does not state, which no described item names.
+    callee: Option<(usize, bool)>,
+    /// The frame the call was read in: 0 is the demanded export's own
+    /// transcript, deeper is a local declaration the walk followed, whose
+    /// parameter indices are its own and not the export's (ADR 0092).
+    depth: usize,
+    /// Whether the call sits inside a callable nested in that frame — a
+    /// closure the implementation may hand out, whose execution point is not
+    /// the call event.
+    captured: bool,
+    location: String,
 }
 
 impl CallerSuppliedInvocations {
@@ -9014,6 +9042,38 @@ impl CensusRun<'_> {
             self.caller_supplied_invocations.record(disposition);
         }
         self.sites.push(site);
+    }
+
+    /// [`Self::record`] for a *call*, which additionally keeps the facts a
+    /// described `callbacks` enumeration is confirmed against when the
+    /// disposition is the direct member of the parameter-rooted family. Read
+    /// from the call as the producer stated it, not from the rebound alias:
+    /// an item names the parameter the caller wrote, and a call whose own
+    /// `calleeParameter` is absent is recorded as such and refuses later.
+    fn record_call(
+        &mut self,
+        disposition: CensusDisposition,
+        site: String,
+        call: &typefacts::ImplementationCall,
+        depth: usize,
+    ) {
+        if disposition == CensusDisposition::ParameterRooted {
+            self.caller_supplied_invocations
+                .direct
+                .push(DirectInvocationSite {
+                    callee: call
+                        .callee_parameter
+                        .as_ref()
+                        .map(|source| (source.parameter_index, !source.path.is_empty())),
+                    depth,
+                    captured: call.captured,
+                    location: format!(
+                        "{}:{}..{}",
+                        call.location.path, call.location.start_byte, call.location.end_byte
+                    ),
+                });
+        }
+        self.record(disposition, site);
     }
 }
 
@@ -9405,9 +9465,16 @@ fn census_creates_domain(
 /// act of invocation, so the disposition `creates` excuses is the item this
 /// census counts, and an empty enumeration is proven by there being none.
 ///
-/// Decides the empty enumeration only. A nonempty proposal names invocations
-/// whose timing, tracking and owner this walk does not derive, and admitting it
-/// would certify the proposal's own word (objection 5 of ADR 0006).
+/// Decides the empty enumeration, and — since ADR 0100 — a *described* one
+/// whose every item the same walk can confirm: an invocation `from` a bare
+/// parameter `at` the call event on the same stack. Such an item is exactly a
+/// `parameter-rooted` site read in the export's own frame, outside any nested
+/// callable, in an implementation that completes plainly; the census refuses
+/// the moment a site or an item is anything else, so a proposal's word is
+/// never admitted where the walk did not derive it (objection 5 of ADR 0006).
+/// Tracking and owner are the generator's reading of the same fact — a
+/// same-stack call inherits both from its caller — and the census neither
+/// confirms nor contradicts them.
 ///
 /// ADR 0023 holds here by construction rather than by a rule of its own: the
 /// walk dispositions *calls*, and retaining a callable in a collection or on a
@@ -9426,30 +9493,232 @@ fn census_callbacks_domain(
     };
     // `Callbacks` carries `KnowledgeSet<CallbackInvocation>` of its own rather
     // than an operation claim, so it is read through its own accessor.
-    let proposed = export.callbacks();
-    if !proposed.items().is_empty() {
-        return Err(refuse(format!(
-            "a callbacks closure candidate must enumerate no invocation, but the proposal names {}",
-            proposed.items().len()
-        )));
-    }
+    let described = described_callbacks(export).map_err(|reason| {
+        refuse(format!(
+            "a callbacks closure candidate may describe only invocations the implementation \
+             census confirms, and this proposal {reason}"
+        ))
+    })?;
     let (outcome, mut sites, requested, caller_supplied) =
         census_call_walk(plan, &refuse, transcript, implementation, evidence)?;
     if matches!(outcome, CensusOutcome::Decided { .. }) {
-        if caller_supplied.total > 0 {
-            // Not a premise gap: the walk decided, and what it decided is that
-            // the claim is false. Refused rather than closed, and named so the
-            // refusal is readable as evidence rather than as an absence.
-            return Err(refuse(format!(
-                "the callbacks closure candidate enumerates no invocation, but the implementation \
-                 census dispositioned {caller_supplied}: \
-                 this export invokes callable(s) its caller supplied"
-            )));
+        match &described {
+            None => {
+                if caller_supplied.total > 0 {
+                    // Not a premise gap: the walk decided, and what it decided
+                    // is that the claim is false. Refused rather than closed,
+                    // and named so the refusal is readable as evidence rather
+                    // than as an absence.
+                    return Err(refuse(format!(
+                        "the callbacks closure candidate enumerates no invocation, but the \
+                         implementation census dispositioned {caller_supplied}: \
+                         this export invokes callable(s) its caller supplied"
+                    )));
+                }
+                sites.push(
+                    "typefacts-implementation-census:callbacks:caller-supplied-invocations:0"
+                        .into(),
+                );
+            }
+            Some(indices) => {
+                sites.push(
+                    confirm_described_callbacks(
+                        indices,
+                        &caller_supplied,
+                        implementation.completion_form,
+                    )
+                    .map_err(refuse)?,
+                );
+            }
         }
-        sites
-            .push("typefacts-implementation-census:callbacks:caller-supplied-invocations:0".into());
     }
     Ok((outcome, sites, requested))
+}
+
+/// The parameters a proposal's `callbacks` enumeration describes invocations
+/// of, when every item is one the census can confirm (ADR 0100): `from` a bare
+/// parameter — no member path — and its operation an unguarded, untracked
+/// `invoke` `at` the call event on the same stack. `None` is the empty
+/// enumeration. `Err`
+/// names the first item outside that shape, which keeps a `deferred`,
+/// `tracked`, member-rooted or resource-rooted description refused exactly as
+/// every non-empty description was before this premise.
+fn described_callbacks(
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+) -> Result<Option<std::collections::BTreeSet<usize>>, String> {
+    use solid_reactive_ir::contract_semantics::{Event, OperationKind, Schedule, ValueSource};
+    let items = export.callbacks().items();
+    if items.is_empty() {
+        return Ok(None);
+    }
+    let mut indices = std::collections::BTreeSet::new();
+    for item in items {
+        let operation_id = item.operation.0.as_str();
+        let index = match &item.from {
+            ValueSource::Parameter { index, path } if path.is_empty() => usize::from(*index),
+            ValueSource::Parameter { index, .. } => {
+                return Err(format!(
+                    "describes `{operation_id}` as invoking a member of parameter {index}, and the \
+                     census confirms an invocation of a bare parameter only"
+                ));
+            }
+            ValueSource::OperationOutput { .. } | ValueSource::Resource { .. } => {
+                return Err(format!(
+                    "describes `{operation_id}` as invoking a callable that did not arrive as a \
+                     parameter"
+                ));
+            }
+        };
+        let Some(operation) = export.operation(operation_id) else {
+            return Err(format!(
+                "names the operation `{operation_id}` it does not publish"
+            ));
+        };
+        if operation.kind != OperationKind::Invoke {
+            return Err(format!(
+                "names `{operation_id}`, whose kind is {:?} rather than invoke",
+                operation.kind
+            ));
+        }
+        if operation.at != Some(Event::Call) || operation.schedule != Some(Schedule::SameStack) {
+            return Err(format!(
+                "describes `{operation_id}` at {:?} with schedule {:?}, and the census confirms \
+                 an invocation at the call event on the same stack only",
+                operation.at, operation.schedule
+            ));
+        }
+        if operation.tracking != solid_reactive_ir::contract_semantics::Tracking::Untracked {
+            // A tracked same-stack row is a dependency's invocation (`createMemo`
+            // runs its computation before returning); the walk sees the
+            // dependency call, not a call of the parameter, so nothing here
+            // could confirm it yet.
+            return Err(format!(
+                "describes `{operation_id}` as {:?}, and the census confirms the generator's \
+                 untracked call-time invocation only",
+                operation.tracking
+            ));
+        }
+        if operation.guard.is_some() {
+            return Err(format!(
+                "guards `{operation_id}`, and the census confirms an unguarded invocation only"
+            ));
+        }
+        indices.insert(index);
+    }
+    Ok(Some(indices))
+}
+
+/// Confirms a described enumeration against what the walk dispositioned, or
+/// refuses by naming the first fact that separates them (ADR 0100). Both
+/// directions are checked: every site the walk read must be an item the
+/// proposal describes, and every described item must have a site — a
+/// description the walk did not see is a claim the census did not derive.
+///
+/// The frame conditions are the whole of `at: call, same-stack`: a call read
+/// at depth 0, outside any nested callable, in a body that completes plainly
+/// runs before the export returns to its caller, on the caller's stack. An
+/// `async` or generator body may resume on another stack after `await` or
+/// `yield`, a nested callable may run whenever whoever holds it decides, and a
+/// helper's parameter is the helper's, not the export's, until per-argument
+/// provenance carries the export's own parameter into that frame.
+fn confirm_described_callbacks(
+    indices: &std::collections::BTreeSet<usize>,
+    walk: &CallerSuppliedInvocations,
+    completion: Option<typefacts::ImplementationCompletionForm>,
+) -> Result<String, String> {
+    let described = || {
+        format!(
+            "the callbacks closure candidate describes call-time invocation(s) of parameter(s) {}",
+            indices
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+    if completion != Some(typefacts::ImplementationCompletionForm::Plain) {
+        return Err(format!(
+            "{}, but the implementation completes as {}: a call in an async or generator body may \
+             run after the export has returned, so it is not an invocation at the call event",
+            described(),
+            completion.map_or_else(
+                || "unstated".to_owned(),
+                |form| format!("{form:?}").to_lowercase()
+            )
+        ));
+    }
+    if let Some((member, count)) = walk
+        .by_member
+        .iter()
+        .find(|(member, _)| **member != CensusDisposition::ParameterRooted.wire_name())
+    {
+        return Err(format!(
+            "{}, but the implementation census dispositioned {walk}: the {member} member ({count}) \
+             is an invocation of caller-supplied code the enumeration does not describe",
+            described()
+        ));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for site in &walk.direct {
+        let Some((index, member)) = site.callee else {
+            return Err(format!(
+                "{}, but the call at {} is parameter-rooted through an alias whose parameter the \
+                 call itself does not state, and no described item names an alias",
+                described(),
+                site.location
+            ));
+        };
+        if member {
+            return Err(format!(
+                "{}, but the call at {} invokes a member of parameter {index}, which the \
+                 enumeration does not describe",
+                described(),
+                site.location
+            ));
+        }
+        if site.depth != 0 {
+            return Err(format!(
+                "{}, but the call at {} is read inside a local declaration at depth {}: its \
+                 parameter {index} is the helper's, not the export's (ADR 0092)",
+                described(),
+                site.location,
+                site.depth
+            ));
+        }
+        if site.captured {
+            return Err(format!(
+                "{}, but the call at {} sits inside a callable nested in the implementation, so \
+                 its execution point is not the call event",
+                described(),
+                site.location
+            ));
+        }
+        if !indices.contains(&index) {
+            return Err(format!(
+                "{}, but the call at {} invokes parameter {index}, which the enumeration does not \
+                 describe",
+                described(),
+                site.location
+            ));
+        }
+        seen.insert(index);
+    }
+    if let Some(missing) = indices.iter().find(|index| !seen.contains(index)) {
+        return Err(format!(
+            "{}, but the implementation census found no call of parameter {missing}: the \
+             enumeration describes an invocation the implementation does not perform",
+            described()
+        ));
+    }
+    Ok(format!(
+        "typefacts-implementation-census:callbacks:described-invocations:{}:parameters:{}",
+        walk.direct.len(),
+        indices
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    ))
 }
 
 fn census_reads_domain(
@@ -10054,7 +10323,7 @@ fn census_transcript_calls(
         let premises = census_call_premises(implementation, call);
         match census_call_disposition(run, call, depth, premises)? {
             Some((disposition, site)) => {
-                run.record(disposition, site);
+                run.record_call(disposition, site, call, depth);
                 if disposition == CensusDisposition::LocalRecursion
                     && census_local_recursion(run, call, depth, premises)?
                         == CensusStep::NeedsTranscripts
@@ -21249,6 +21518,287 @@ mod tests {
             run.caller_supplied_invocations.total, 0,
             "an accessor on the export's own literal is not a caller-supplied invocation: {:?}",
             run.sites
+        );
+    }
+
+    /// ADR 0100: a described `callbacks` enumeration is confirmed against the
+    /// walk's own `parameter-rooted` sites, in both directions, and refused by
+    /// name on every way a site or an item can fail to be "from a bare
+    /// parameter, at the call event".
+    #[test]
+    fn a_described_callbacks_enumeration_is_confirmed_by_its_call_time_sites() {
+        use typefacts::ImplementationCompletionForm as Completion;
+        let certified = consumer_snapshot();
+        let roots = vec![consumer_root(&certified)];
+        let source = "/project/node_modules/consumer/dist/index.js";
+        let call = |start: u64, overrides: serde_json::Value| -> typefacts::ImplementationCall {
+            let mut value = json!({
+                "location": {"path": source, "startByte": start, "endByte": start + 4},
+                "reach": "reachable",
+                "kind": "call",
+                "target": "symbol:cb",
+                "calleeParameter": {"parameterIndex": 0},
+            });
+            let object = value.as_object_mut().expect("an object");
+            for (key, replacement) in overrides.as_object().expect("an object") {
+                object.insert(key.clone(), replacement.clone());
+            }
+            serde_json::from_value(value).expect("a valid call")
+        };
+        let walk = |calls: Vec<typefacts::ImplementationCall>, forms: serde_json::Value| {
+            let mut run = census_run(&certified, &roots);
+            let transcript = census_transcript_with(calls, forms);
+            assert_eq!(
+                census_transcript(&mut run, &transcript, 0, &[]),
+                Ok(CensusStep::Decided),
+                "{:?}",
+                run.sites
+            );
+            run.caller_supplied_invocations
+        };
+        let plain = Some(Completion::Plain);
+        let described = std::collections::BTreeSet::from([0usize]);
+
+        // Confirmed: one bare-parameter call written in the export's own body.
+        let one = walk(vec![call(100, json!({}))], json!([]));
+        assert_eq!(one.total, 1);
+        assert_eq!(
+            one.direct,
+            vec![DirectInvocationSite {
+                callee: Some((0, false)),
+                depth: 0,
+                captured: false,
+                location: format!("{source}:100..104"),
+            }]
+        );
+        assert_eq!(
+            confirm_described_callbacks(&described, &one, plain),
+            Ok(
+                "typefacts-implementation-census:callbacks:described-invocations:1:parameters:0"
+                    .into()
+            )
+        );
+        // Two calls of the same parameter are the same one item, and a
+        // construction of it runs the caller's code exactly as a call does.
+        let twice = walk(
+            vec![
+                call(100, json!({})),
+                call(200, json!({"kind": "construct"})),
+            ],
+            json!([]),
+        );
+        assert_eq!(
+            confirm_described_callbacks(&described, &twice, plain),
+            Ok(
+                "typefacts-implementation-census:callbacks:described-invocations:2:parameters:0"
+                    .into()
+            )
+        );
+
+        let refused = |indices: &std::collections::BTreeSet<usize>,
+                       sites: &CallerSuppliedInvocations,
+                       completion: Option<Completion>,
+                       needle: &str| {
+            let reason = confirm_described_callbacks(indices, sites, completion)
+                .expect_err("the census must refuse");
+            assert!(reason.contains(needle), "expected {needle:?} in: {reason}");
+        };
+        // `at: call, same-stack` needs a body that completes plainly.
+        refused(
+            &described,
+            &one,
+            Some(Completion::Async),
+            "completes as async",
+        );
+        refused(
+            &described,
+            &one,
+            Some(Completion::Generator),
+            "completes as generator",
+        );
+        refused(&described, &one, None, "completes as unstated");
+        // A call inside a nested callable has no call-event execution point.
+        refused(
+            &described,
+            &walk(vec![call(100, json!({"captured": true}))], json!([])),
+            plain,
+            "sits inside a callable nested in the implementation",
+        );
+        // A member of the parameter is not the bare parameter the item names.
+        refused(
+            &described,
+            &walk(
+                vec![call(
+                    100,
+                    json!({"calleeParameter": {"parameterIndex": 0, "path": [{"kind": "property", "property": "onChange"}]}}),
+                )],
+                json!([]),
+            ),
+            plain,
+            "invokes a member of parameter 0",
+        );
+        // A parameter the enumeration does not name: the proposal understates.
+        refused(
+            &described,
+            &walk(
+                vec![call(100, json!({"calleeParameter": {"parameterIndex": 1}}))],
+                json!([]),
+            ),
+            plain,
+            "invokes parameter 1, which the enumeration does not describe",
+        );
+        // A parameter the walk never saw called: the proposal overstates.
+        refused(
+            &std::collections::BTreeSet::from([0usize, 1]),
+            &one,
+            plain,
+            "found no call of parameter 1",
+        );
+        // Another member of the family beside the call — here the getter a
+        // caller-supplied receiver may carry — is an invocation no item
+        // describes, and the refusal names the member.
+        refused(
+            &described,
+            &walk(
+                vec![call(100, json!({}))],
+                json!([{
+                    "kind": "property-access-unknown-accessor",
+                    "nodeKind": "PropertyAccessExpression",
+                    "location": {"path": source, "startByte": 260, "endByte": 270},
+                    "reach": "reachable",
+                    "subjectParameter": 0,
+                    "subjectRoot": "parameter",
+                }]),
+            ),
+            plain,
+            "the parameter-rooted-accessor member (1)",
+        );
+        // A site read inside a helper frame names the helper's parameter, not
+        // the export's (ADR 0092); and one dispositioned through an alias the
+        // call itself does not root at a parameter names nothing an item can.
+        let site = |callee, depth| CallerSuppliedInvocations {
+            total: 1,
+            by_member: [(CensusDisposition::ParameterRooted.wire_name(), 1)].into(),
+            direct: vec![DirectInvocationSite {
+                callee,
+                depth,
+                captured: false,
+                location: format!("{source}:100..104"),
+            }],
+        };
+        refused(&described, &site(Some((0, false)), 1), plain, "at depth 1");
+        refused(&described, &site(None, 0), plain, "through an alias");
+    }
+
+    /// ADR 0100: which proposals `described_callbacks` reads as a described
+    /// enumeration, and which it refuses before any walk runs.
+    #[test]
+    fn only_a_call_time_bare_parameter_invocation_is_a_described_callbacks_item() {
+        use solid_reactive_ir::contract_semantics::{
+            ArtifactIdentity, CallClaims, CallSemantics, CallbackInvocation, Cardinality, Digest,
+            Event, ExportIdentity, ExportSemantics, ExportTargetIdentity, GuardPartition,
+            KnowledgeSet, Operation, OperationId, OperationKind, OwnerRelation, Schedule,
+            StabilityKnowledge, Tracking, Trigger, ValueShape, ValueSource,
+        };
+        let invoke = |id: &str| Operation {
+            id: OperationId(id.into()),
+            kind: OperationKind::Invoke,
+            guard: None,
+            trigger: Some(Trigger::Event(Event::Call)),
+            at: Some(Event::Call),
+            schedule: Some(Schedule::SameStack),
+            tracking: Tracking::Untracked,
+            owner: OwnerRelation::default(),
+            cardinality: Cardinality::default(),
+            inputs: vec![],
+            output: None,
+            resources: Default::default(),
+            composed_from: None,
+        };
+        let export = |items: Vec<CallbackInvocation>, operations: Vec<Operation>| {
+            let target = ExportTargetIdentity {
+                module: ArtifactIdentity {
+                    path: "index.js".into(),
+                    digest: Digest::parse(format!("sha256:{}", "0".repeat(64))).unwrap(),
+                },
+                export_name: "subject".into(),
+            };
+            ExportSemantics {
+                identity: ExportIdentity {
+                    entrypoint: ".".into(),
+                    public_name: "subject".into(),
+                    runtime: target.clone(),
+                    declarations: target,
+                },
+                shape: ValueShape::Callable,
+                stability: StabilityKnowledge::Unknown,
+                call: CallSemantics::new(
+                    CallClaims {
+                        callbacks: KnowledgeSet::complete(items),
+                        ..CallClaims::default()
+                    },
+                    operations,
+                    vec![],
+                    vec![],
+                    GuardPartition::default(),
+                ),
+            }
+        };
+        let item = |index: u16, path: Vec<String>, operation: &str| CallbackInvocation {
+            from: ValueSource::Parameter { index, path },
+            operation: OperationId(operation.into()),
+        };
+
+        assert_eq!(described_callbacks(&export(vec![], vec![])), Ok(None));
+        assert_eq!(
+            described_callbacks(&export(
+                vec![item(0, vec![], "a"), item(2, vec![], "b")],
+                vec![invoke("a"), invoke("b")],
+            )),
+            Ok(Some(std::collections::BTreeSet::from([0usize, 2])))
+        );
+
+        let refuses = |export: &ExportSemantics, needle: &str| {
+            let reason = described_callbacks(export).expect_err("refuses before the walk");
+            assert!(reason.contains(needle), "expected {needle:?} in: {reason}");
+        };
+        refuses(
+            &export(
+                vec![item(0, vec!["onChange".into()], "a")],
+                vec![invoke("a")],
+            ),
+            "a member of parameter 0",
+        );
+        let mut deferred = invoke("a");
+        deferred.schedule = Some(Schedule::Queued);
+        refuses(
+            &export(vec![item(0, vec![], "a")], vec![deferred]),
+            "schedule Some(Queued)",
+        );
+        let mut later = invoke("a");
+        later.at = Some(Event::Flush);
+        refuses(
+            &export(vec![item(0, vec![], "a")], vec![later]),
+            "at Some(Flush)",
+        );
+        let mut guarded = invoke("a");
+        guarded.guard = Some(solid_reactive_ir::contract_semantics::Guard(vec![]));
+        refuses(
+            &export(vec![item(0, vec![], "a")], vec![guarded]),
+            "guards `a`",
+        );
+        refuses(
+            &export(
+                vec![CallbackInvocation {
+                    from: ValueSource::OperationOutput {
+                        operation: OperationId("made".into()),
+                        path: vec![],
+                    },
+                    operation: OperationId("a".into()),
+                }],
+                vec![invoke("a"), invoke("made")],
+            ),
+            "did not arrive as a parameter",
         );
     }
 

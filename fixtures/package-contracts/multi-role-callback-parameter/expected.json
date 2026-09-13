@@ -16,7 +16,7 @@
             "contradictOnZeroOnly": "summary-791cb4c57004018a3fb0b4d95eff7e5e6d9ddfa314766fc6a3ad977a3fa3d055",
             "inlineAndReturned": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
             "inlineAndTracked": "summary-791cb4c57004018a3fb0b4d95eff7e5e6d9ddfa314766fc6a3ad977a3fa3d055",
-            "oneInlineSite": "summary-dff339376caaf3d23d0f9ef219335d4639ecdd3d3b6fd330406747059bfdbd31",
+            "oneInlineSite": "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d",
             "oneTrackedSite": "summary-0c7202079d42f5d2c136d1e88fcdb2286172d68472ec12c0e1b53cc899d0f154",
             "twoParameters": "summary-93f66b0a680eca3b237974a82ac0efa8c219d37a07af6f0fb21555296191198d",
             "twoTrackedSites": "summary-0c7202079d42f5d2c136d1e88fcdb2286172d68472ec12c0e1b53cc899d0f154"
@@ -177,22 +177,7 @@
       },
       "shape": "callable"
     },
-    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
-      "call": {
-        "closed": [
-          "reads",
-          "creates"
-        ],
-        "creates": [],
-        "proposedClosures": [
-          "reads",
-          "creates"
-        ],
-        "reads": []
-      },
-      "shape": "callable"
-    },
-    "summary-dff339376caaf3d23d0f9ef219335d4639ecdd3d3b6fd330406747059bfdbd31": {
+    "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d": {
       "call": {
         "callbacks": [
           {
@@ -204,6 +189,7 @@
           }
         ],
         "closed": [
+          "callbacks",
           "reads",
           "creates"
         ],
@@ -227,6 +213,22 @@
             }
           }
         ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "creates": [],
         "proposedClosures": [
           "reads",
           "creates"

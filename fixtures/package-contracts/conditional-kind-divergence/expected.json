@@ -13,7 +13,7 @@
             "sha256": "331ea4c8a084e455f21c5928b521703234ca536acb154d7bcc3a912c8fddb881"
           },
           "exports": {
-            "conditionalShape": "summary-3a8858d7c65936bb057bc7846cfefb18019d594f9f4c0cb8d7919985be9b9c30"
+            "conditionalShape": "summary-149a510a6c897f51d9c2e768c3ba1d17782573dd058339ba0fa86a4be1996ce0"
           },
           "resolution": {
             "runtimeBranch": "/exports/./development",
@@ -55,22 +55,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5": {
-      "call": {
-        "callbacks": [],
-        "closed": [
-          "callbacks",
-          "reads"
-        ],
-        "proposedClosures": [
-          "callbacks",
-          "reads"
-        ],
-        "reads": []
-      },
-      "shape": "plain"
-    },
-    "summary-3a8858d7c65936bb057bc7846cfefb18019d594f9f4c0cb8d7919985be9b9c30": {
+    "summary-149a510a6c897f51d9c2e768c3ba1d17782573dd058339ba0fa86a4be1996ce0": {
       "call": {
         "callbacks": [
           {
@@ -82,6 +67,7 @@
           }
         ],
         "closed": [
+          "callbacks",
           "reads",
           "creates",
           "returns"
@@ -107,6 +93,7 @@
           }
         ],
         "proposedClosures": [
+          "callbacks",
           "reads",
           "creates",
           "returns"
@@ -115,6 +102,21 @@
         "returns": []
       },
       "shape": "callable"
+    },
+    "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
+      },
+      "shape": "plain"
     }
   }
 }

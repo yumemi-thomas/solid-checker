@@ -13774,6 +13774,170 @@ export const value = phantom;
         );
     }
 
+    /// The reads fixture planned from **its own generated `expected.json`**,
+    /// the way `census_generated_fixture_plan` plans the creates fixture: the
+    /// exports' claims and proposals are the emitted document's byte for byte,
+    /// and only the package integrity is rebound to the published archive's.
+    fn reads_generated_fixture_plan() -> CertificationPlan {
+        let fixture = reads_census_fixture();
+        let read = |name: &str| std::fs::read(fixture.join(name)).expect("fixture file");
+        let manifest = read("package.json");
+        let (index, index_types) = (read("index.js"), read("index.d.ts"));
+        let (owned, owned_types) = (read("owned.js"), read("owned.d.ts"));
+        let generated = read("expected.json");
+        let decoded = crate::contract_document::decode(&generated)
+            .expect("the generator's own document decodes")
+            .normalize()
+            .expect("the generator's own document normalizes");
+        let name = "implementation-census-reads-package";
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", index.as_slice()),
+                ("package/index.d.ts", index_types.as_slice()),
+                ("package/owned.js", owned.as_slice()),
+                ("package/owned.d.ts", owned_types.as_slice()),
+            ],
+        );
+        let root = "/project/node_modules/implementation-census-reads-package";
+        let bindings = READS_FIXTURE_EXPORTS.map(|export| {
+            (
+                export,
+                ("index.js", index.as_slice()),
+                ("index.d.ts", index_types.as_slice()),
+                root,
+            )
+        });
+        let snapshot = ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2())
+            .expect("the fixture archive snapshots");
+        let mut package = decoded.package().clone();
+        package.integrity = snapshot.package_integrity().into();
+        let candidate = ContractProposal::new(package, decoded.artifact_cases().to_vec())
+            .normalize()
+            .expect("rebinding the integrity keeps the document normalizable");
+        try_plan_supplied_candidate_for_test_package(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            candidate,
+        )
+        .expect("the generated document plans against its own artifact")
+    }
+
+    /// ADR 0100: a **described** `callbacks` closure carried to a receipt.
+    /// `invokesCallerAccessor` calls its parameter directly in its own body,
+    /// so the generator proposes the domain closed *with that one item* —
+    /// `from` parameter 0, `at` the call event on the same stack — where every
+    /// non-empty enumeration used to stay partial. The census confirms the
+    /// item against the walk's one `parameter-rooted` site, the hand recipe
+    /// observes no invocation outside the call, and the receipt binds a
+    /// document whose `callbacks` is closed and non-empty.
+    #[test]
+    fn a_described_callbacks_closure_reaches_a_receipt_through_its_mandatory_veto() {
+        use solid_reactive_ir::contract_semantics::ValueSource;
+        let plan = reads_generated_fixture_plan();
+        let callbacks = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Callbacks));
+        let subject = plan
+            .candidates
+            .closure_candidates()
+            .iter()
+            .find(|candidate| {
+                candidate.path == callbacks && candidate.export == "invokesCallerAccessor"
+            })
+            .expect("the generated document proposes the described closure");
+        // The selected candidate is the document as emitted, closure and all;
+        // `candidates.proposal()` is the certifier's weakened universe, where
+        // the same item sits in a partial enumeration awaiting proof.
+        let case = plan
+            .selected_candidate
+            .artifact_cases()
+            .iter()
+            .find(|case| case.id == subject.artifact_case)
+            .expect("the candidate names its case");
+        let described = case.exports["invokesCallerAccessor"].callbacks();
+        assert!(described.is_closed(), "{described:?}");
+        assert!(
+            matches!(
+                described.items(),
+                [item] if matches!(&item.from, ValueSource::Parameter { index: 0, path } if path.is_empty())
+            ),
+            "one item, the bare parameter 0: {described:?}"
+        );
+        let weakened = plan
+            .candidates
+            .proposal()
+            .artifact_case(&subject.artifact_case)
+            .expect("the weakened universe keeps the case")
+            .exports["invokesCallerAccessor"]
+            .callbacks();
+        assert!(
+            !weakened.is_closed() && weakened.items().len() == 1,
+            "weakened to partial, the item kept: {weakened:?}"
+        );
+        // The four siblings still propose the empty enumeration, as before.
+        for export in READS_FIXTURE_EXPORTS {
+            if export != "invokesCallerAccessor" {
+                let claim = case.exports[export].callbacks();
+                assert!(
+                    claim.is_closed() && claim.items().is_empty(),
+                    "{export}: {claim:?}"
+                );
+            }
+        }
+
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("described-callbacks-receipt");
+        let claim_id = plan
+            .candidates
+            .proposal()
+            .claim_id(subject)
+            .expect("the candidate has a semantic claim id");
+        let Some(configuration) = tracer_configuration_from(
+            &reads_census_fixture(),
+            scratch.path(),
+            "described-callbacks-receipt",
+            &[(claim_id.as_str(), "invokes-caller-accessor.mjs")],
+        ) else {
+            return;
+        };
+        let finalized = tracer_certify(&plan, &pin, &configuration)
+            .expect("the census confirmed the described item and the recipe did not contradict it");
+        assert!(
+            !finalized.withheld_closures().iter().any(|record| {
+                record.domain == "callbacks" && record.export == "invokesCallerAccessor"
+            }),
+            "the described closure is bound, not withheld: {:?}",
+            finalized.withheld_closures()
+        );
+        let bound = crate::contract_document::decode(finalized.canonical_main())
+            .expect("a canonical main decodes")
+            .normalize()
+            .expect("a canonical main normalizes");
+        let bound_case = bound
+            .artifact_cases()
+            .iter()
+            .find(|case| case.entrypoint == ".")
+            .expect("the `.` case is bound");
+        let bound_callbacks = bound_case.exports["invokesCallerAccessor"].callbacks();
+        assert!(
+            bound_callbacks.is_closed() && bound_callbacks.items().len() == 1,
+            "the receipt binds a closed, non-empty enumeration: {bound_callbacks:?}"
+        );
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan),
+            "and the gate that closure scheduled actually ran"
+        );
+    }
+
     /// The safety property `scripts/probe-recipe-scaffold.mjs` rests on: a
     /// recipe that throws **withholds** its candidate; it never certifies it.
     ///

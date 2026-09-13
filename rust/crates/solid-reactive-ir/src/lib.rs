@@ -1052,6 +1052,16 @@ pub struct ContractExport {
     /// proposal input for `returns: []` and never a proof; `false` is
     /// "do not propose", including for a summary no walk reached.
     pub returns_walk_clean: bool,
+    /// The parameters this export's own body calls directly -- the callee is
+    /// the parameter itself, and the call is written in the body of the
+    /// function that declares it, outside any nested callable (ADR 0100). The
+    /// interprocedural pass writes an `inline` callback row for exactly that
+    /// shape and for a dialect primitive's inline position alike, and the wire
+    /// does not tell them apart; this set does, so the generator proposes a
+    /// described `callbacks` closure only for rows the implementation census
+    /// can confirm site for site. A proposal input, never evidence: empty is
+    /// "do not propose", and a summary no pass reached is empty.
+    pub direct_callback_parameters: BTreeSet<usize>,
 }
 
 impl ContractExport {

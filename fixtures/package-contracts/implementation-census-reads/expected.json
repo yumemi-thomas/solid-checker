@@ -13,7 +13,7 @@
             "sha256": "ce1f1ac53f860353e58434c04066a51b00152f00d5d28c0ddc0b283e1a349570"
           },
           "exports": {
-            "invokesCallerAccessor": "summary-dff339376caaf3d23d0f9ef219335d4639ecdd3d3b6fd330406747059bfdbd31",
+            "invokesCallerAccessor": "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d",
             "plainArithmetic": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
             "readsCallerElement": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
             "readsCallerMember": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
@@ -98,7 +98,7 @@
       },
       "shape": "callable"
     },
-    "summary-dff339376caaf3d23d0f9ef219335d4639ecdd3d3b6fd330406747059bfdbd31": {
+    "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d": {
       "call": {
         "callbacks": [
           {
@@ -110,6 +110,7 @@
           }
         ],
         "closed": [
+          "callbacks",
           "reads",
           "creates"
         ],
@@ -134,6 +135,7 @@
           }
         ],
         "proposedClosures": [
+          "callbacks",
           "reads",
           "creates"
         ],

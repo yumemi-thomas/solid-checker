@@ -388,3 +388,30 @@ whole of that 2,977, not a recipe gap.
 (`make ecosystem-benchmark`, 1200 s row timeout, 854 s wall): 6,722 → 6,790
 certified closure entries, uncapped `reads` closures 96 → 256, `no recipe in
 corpus` 10,714 → 10,166, row statuses unchanged, no row below the previous run.
+
+## 11. The `callbacks` refusals were the definition; the lever sat one step earlier (2026-09-13)
+
+§ 10 named the recipe-less `callbacks` candidates and ADR 0099 closed them.
+What remained was 1,155 refusals reading "enumerates no invocation, but the
+implementation census dispositioned N call(s) into the parameter-rooted
+family", and the refusal text now carries the member split: accessor 1,266
+sites, direct call 710, iteration and element 540, coercion 127, `hasInstance`
+62; 154 entries are direct calls and nothing else. Every one is a correct
+verdict — `semantic-model.md` § callbacks lists the getter, the iteration
+protocol and the coercion as invocations — so narrowing the family was never a
+lever, and describing those items needs timing the walk does not derive.
+
+The population the walk *does* derive an item for never reached the ledger:
+exports whose interprocedural summary already carried an `inline` row for a
+direct call of a parameter (`access`, `accessWith`, `pipe`, `safe`,
+`withAccess` on `@solid-primitives/utils`, `evaluate` on `@floating-ui/utils`,
+`withCopy`/`withArrayCopy`/`withObjectCopy` on `utils@7`'s `./immutable`),
+which the generator's filter dropped from proposal and left partial. ADR 0100
+proposes and confirms exactly that shape — `from` a bare parameter `at` the
+call event on the same stack, read in the export's own frame — and refuses by
+name on everything else. Corpus effect: +556 candidates, +18 certified closure entries (9,752 → 9,770),
+uncapped `callbacks` closures 339 → 365, 93 new candidates refused for a getter
+beside the direct call, no row below the pin; the full split is in
+`docs/precision-backlog.md` (ADR 0100 entry). Small, and honestly so: the
+next `callbacks` levers are dependency composition for the tracked same-stack
+row and ADR 0092's per-argument provenance for the helper frame.

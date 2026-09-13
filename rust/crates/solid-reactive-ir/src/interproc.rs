@@ -1278,6 +1278,14 @@ fn discover_interprocedural_graph(
                         callback_chain_reaches_owner_body(file, chain, &nodes[callback_owner])
                     })
                     .map(|chain| compose_callback_chain(&chain.wrappers));
+            // ADR 0100: whether the row below, if written, comes from the last
+            // rung alone -- a call of the parameter itself, written directly in
+            // the body of the function that declares it. That is the one row
+            // the implementation census confirms site for site, so it is
+            // recorded beside the row (`direct_callback_parameters`) rather
+            // than in it: the wire has one word, `inline`, for this and for a
+            // primitive's inline position alike.
+            let mut direct_own_call = false;
             let execution = match (runtime_execution, chain_execution) {
                 (Some(execution), _) => Some(execution),
                 (None, Some(composed)) => composed,
@@ -1305,9 +1313,17 @@ fn discover_interprocedural_graph(
                     // rung can classify the enclosing schedule, no row is
                     // written and the unknown-callback obligation opens the
                     // sentinel instead.
-                    .or((call.direct_callee && call_in_owner_body).then_some("inline")),
+                    .or_else(|| {
+                        direct_own_call = call.direct_callee && call_in_owner_body;
+                        direct_own_call.then_some("inline")
+                    }),
             };
             if let Some(execution) = execution {
+                if direct_own_call {
+                    contribution
+                        .direct_callback_parameters
+                        .push((nodes[callback_owner].span, parameter));
+                }
                 contribution.callbacks.push((
                     nodes[callback_owner].span,
                     ContractCallback {
@@ -4228,6 +4244,7 @@ struct InterproceduralGraphAssembly<'a> {
     contract_consumer_obligations: &'a mut Vec<StaticDefect>,
     edges: &'a mut [Vec<usize>],
     invoked_parameters: &'a mut [Vec<usize>],
+    direct_callback_parameters: &'a mut [Vec<usize>],
     escaped_parameters: &'a mut [Vec<usize>],
     invoked_parameter_members: &'a mut [Vec<ParameterMemberInvocation>],
     returned_bindings: &'a mut Vec<(SymbolId, SymbolId)>,
@@ -4265,6 +4282,13 @@ impl InterproceduralGraphAssembly<'_> {
         for (owner, parameter) in &contribution.invoked_parameters {
             if let Some(owner) = node_index(*owner) {
                 self.invoked_parameters[owner].push(*parameter);
+            }
+        }
+        for (owner, parameter) in &contribution.direct_callback_parameters {
+            if let Some(owner) = node_index(*owner)
+                && !self.direct_callback_parameters[owner].contains(parameter)
+            {
+                self.direct_callback_parameters[owner].push(*parameter);
             }
         }
         for (owner, parameter) in &contribution.escaped_parameters {
@@ -5217,6 +5241,7 @@ fn interprocedural_reads(
     let mut dispatch_obligations = Vec::new();
     let mut edges = vec![Vec::<usize>::new(); nodes.len()];
     let mut invoked_parameters = vec![Vec::<usize>::new(); nodes.len()];
+    let mut direct_callback_parameters = vec![Vec::<usize>::new(); nodes.len()];
     let mut escaped_parameters = vec![Vec::<usize>::new(); nodes.len()];
     let mut invoked_parameter_members = vec![Vec::<ParameterMemberInvocation>::new(); nodes.len()];
     let mut returned_binding_candidates = Vec::new();
@@ -5236,6 +5261,7 @@ fn interprocedural_reads(
             contract_consumer_obligations: &mut dispatch_obligations,
             edges: &mut edges,
             invoked_parameters: &mut invoked_parameters,
+            direct_callback_parameters: &mut direct_callback_parameters,
             escaped_parameters: &mut escaped_parameters,
             invoked_parameter_members: &mut invoked_parameter_members,
             returned_bindings: &mut returned_binding_candidates,
@@ -5684,6 +5710,7 @@ fn interprocedural_reads(
                 && equivalent_summary_reads(&summaries[*candidate], &summaries[first])
                 && equivalent_callbacks(&callback_summaries[*candidate], &callback_summaries[first])
                 && invoked_parameters[*candidate] == invoked_parameters[first]
+                && direct_callback_parameters[*candidate] == direct_callback_parameters[first]
                 && invoked_parameter_members[*candidate] == invoked_parameter_members[first]
                 && nodes[*candidate].r#async == nodes[first].r#async
         });
@@ -6133,6 +6160,7 @@ fn interprocedural_reads(
         returned: &returned,
         structured_returns: &structured_returns,
         callbacks: &callback_summaries,
+        direct_callback_parameters: &direct_callback_parameters,
         escaped_parameters: &escaped_parameters,
         invoked_parameter_members: &invoked_parameter_members,
         semantics: ContractSemantics { source_kinds },

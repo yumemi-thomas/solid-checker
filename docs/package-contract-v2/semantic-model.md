@@ -293,6 +293,23 @@ and `f?.(x)` is already a `CallExpression`. No consumer reads the field yet;
 carries the vocabulary and the limits, including why an *absent* field is not
 the same fact as a present empty one.
 
+**[Decision 2026-09-13]** a *described* enumeration is provable by the same
+census, for exactly the items the call walk derives: an unguarded, untracked
+`invoke` `from` a bare parameter (no member path) `at: call` on the same stack.
+Such an item is a `parameter-rooted` call read in the export's own frame,
+outside any nested callable, in a body that completes plainly, and the census
+confirms the enumeration in both directions — every such site is an item, every
+item has a site — refusing by name on a getter, iteration, coercion or
+`hasInstance` member beside it, on a call inside a nested callable or a local
+declaration's frame, on a member-rooted callee, on an `async` or generator
+body, and on an item with no site
+([ADR 0100](../adr/0100-described-callbacks-enumeration.md)). Tracking and
+owner are the generator's words for a same-stack call and are neither confirmed
+nor contradicted; the closure is a claim about the *set* of invocations. A
+`deferred` or `tracked` item, or one whose `inline` word came from a dialect
+primitive's position rather than from a call of the parameter itself, keeps
+the enumeration partial and is not proposed.
+
 ### reads
 
 `reads: [] closed` denies that one invocation of this export gives rise to any

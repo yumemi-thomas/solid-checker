@@ -1,8 +1,8 @@
 # Ecosystem Benchmark Report
 
-- Started: 2026-09-13T07:54:02.384Z
-- Finished: 2026-09-13T08:11:37.679Z
-- Duration: 1055295 ms
+- Started: 2026-09-13T09:26:46.002Z
+- Finished: 2026-09-13T09:45:01.015Z
+- Duration: 1095013 ms
 - Checker native binary: /Users/thomas/Documents/Github/solid-checker/rust/target/release/solid-checker-rust
 - Type Facts binary: /Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts
 - Registry cache for certification: /Users/thomas/Documents/Github/solid-checker/rust/target/registry-cache
@@ -979,7 +979,7 @@ Proposal-plan bytes are construction obligations, not proof evidence and not acc
 
 | Domain | Exports carrying an unknown |
 | --- | --- |
-| callbacks | 7934 |
+| callbacks | 7890 |
 | reads | 7927 |
 | writes | 8950 |
 | creates | 8282 |
@@ -989,7 +989,7 @@ Proposal-plan bytes are construction obligations, not proof evidence and not acc
 | cleanups | 8950 |
 | disposals | 8950 |
 | recursiveValue | 54 |
-| **total** | **77758** |
+| **total** | **77714** |
 
 Read the domain columns together, not separately: 36 of the 8950 unknown exports are unknown in every measured domain at once, so the same export can contribute to several columns.
 
@@ -1010,12 +1010,12 @@ Read the domain columns together, not separately: 36 of the 8950 unknown exports
 
 | Family | Contracts | Fully proven | With unknowns | With refusals | Exports proven | Unknown claims |
 | --- | --- | --- | --- | --- | --- | --- |
-| Official Solid | 19 | 0/19 (0%) | 19 | 7 | 0/1638 (0%) | 14576 |
-| Kobalte | 5 | 0/5 (0%) | 5 | 4 | 0/3558 (0%) | 31264 |
-| Solid Primitives | 282 | 0/282 (0%) | 282 | 8 | 0/1935 (0%) | 16203 |
-| Corvu | 22 | 0/22 (0%) | 22 | 0 | 0/292 (0%) | 2422 |
+| Official Solid | 19 | 0/19 (0%) | 19 | 7 | 0/1638 (0%) | 14575 |
+| Kobalte | 5 | 0/5 (0%) | 5 | 4 | 0/3558 (0%) | 31260 |
+| Solid Primitives | 282 | 0/282 (0%) | 282 | 8 | 0/1935 (0%) | 16179 |
+| Corvu | 22 | 0/22 (0%) | 22 | 0 | 0/292 (0%) | 2414 |
 | TanStack | 38 | 0/38 (0%) | 38 | 8 | 0/271 (0%) | 2324 |
-| Solid Devtools | 10 | 0/10 (0%) | 10 | 3 | 0/381 (0%) | 3094 |
+| Solid Devtools | 10 | 0/10 (0%) | 10 | 3 | 0/381 (0%) | 3087 |
 | Solid Recharts | 3 | 0/3 (0%) | 3 | 0 | 0/545 (0%) | 4905 |
 | Motion for Solid | 2 | 0/2 (0%) | 2 | 2 | 0/330 (0%) | 2970 |
 
@@ -1031,13 +1031,13 @@ Read the domain columns together, not separately: 36 of the 8950 unknown exports
 | @solidjs/signals@2.0.0-rc.3 | solid2 | 1647 | 183/183 | 0 | 0 | callbacks |
 | motion-solidjs@0.7.0-beta.4 | solid2 | 1485 | 165/165 | 0 | 0 | callbacks |
 | motion-solidjs@0.7.0-beta.4 | solid2 | 1485 | 165/165 | 0 | 0 | callbacks |
-| @solid-devtools/shared@0.20.0 | solid1 | 1348 | 174/174 | 0 | 0 | reads |
+| @solid-devtools/shared@0.20.0 | solid1 | 1342 | 174/174 | 0 | 0 | reads |
 | @kobalte/solidbase@0.6.13 | solid1 | 1248 | 144/144 | 0 | 0 | writes |
 | solid-recharts@2.0.0-beta.1 | solid2 | 981 | 109/109 | 0 | 0 | callbacks |
 | solid-recharts@2.0.0-beta.1 | solid2 | 981 | 109/109 | 0 | 0 | callbacks |
-| @solid-devtools/debugger@0.28.1 | solid1 | 935 | 116/116 | 14 | 0 | writes |
+| @solid-devtools/debugger@0.28.1 | solid1 | 934 | 116/116 | 14 | 0 | writes |
 | @solidjs/start@2.0.3 | solid1 | 746 | 83/83 | 0 | 0 | callbacks |
-| @solid-primitives/utils@7.0.0-next.4 | solid2 | 688 | 99/99 | 0 | 0 | writes |
+| @solidjs/router@1.0.0 | solid1 | 684 | 76/76 | 0 | 0 | callbacks |
 
 These figures describe the GENERATED DRAFT, not consumer findings. An unknown claim becomes a finding only when a consumer actually touches that surface, so a package with many unknowns on exports nobody imports costs a real project nothing. Nothing here has been reviewed or probed: every claim counted as proven is still inferred evidence awaiting review, and a closure note means the contract cannot be byte-attested at all.
 
@@ -1045,8 +1045,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Worker timings
 
-- Worker time: 12950176 ms
-- Phases: install 79922 ms, generation 552678 ms, harness 12317576 ms
+- Worker time: 12983184 ms
+- Phases: install 63615 ms, generation 519062 ms, harness 12400507 ms
 
 ### Dialect negative authority
 

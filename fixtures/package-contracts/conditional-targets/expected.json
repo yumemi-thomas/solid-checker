@@ -13,7 +13,7 @@
             "sha256": "252354a3dde324ce5d19f9923abe2b59ddb6e2a10b2006e04b0c1d81abe5954d"
           },
           "exports": {
-            "maybeRead": "summary-dff339376caaf3d23d0f9ef219335d4639ecdd3d3b6fd330406747059bfdbd31"
+            "maybeRead": "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d"
           },
           "resolution": {
             "runtimeBranch": "/exports/./development",
@@ -31,7 +31,7 @@
             "sha256": "252354a3dde324ce5d19f9923abe2b59ddb6e2a10b2006e04b0c1d81abe5954d"
           },
           "exports": {
-            "maybeRead": "summary-dff339376caaf3d23d0f9ef219335d4639ecdd3d3b6fd330406747059bfdbd31"
+            "maybeRead": "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -55,7 +55,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-dff339376caaf3d23d0f9ef219335d4639ecdd3d3b6fd330406747059bfdbd31": {
+    "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d": {
       "call": {
         "callbacks": [
           {
@@ -67,6 +67,7 @@
           }
         ],
         "closed": [
+          "callbacks",
           "reads",
           "creates"
         ],
@@ -91,6 +92,7 @@
           }
         ],
         "proposedClosures": [
+          "callbacks",
           "reads",
           "creates"
         ],

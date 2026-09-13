@@ -213,6 +213,12 @@ pub(crate) struct InterproceduralGraphContribution {
     /// behavior and make an ambiguous call look certified.
     pub(crate) dispatches: Vec<(Span, Vec<SymbolId>)>,
     pub(crate) invoked_parameters: Vec<(Span, usize)>,
+    /// `(owner, parameter index)` for a parameter the owner calls *itself*,
+    /// directly, in its own body -- `function f(cb) { cb() }` -- which is the
+    /// one `callbacks` row the implementation census can confirm site for
+    /// site (ADR 0100). Recorded beside the row rather than in it: the wire
+    /// spells this and a primitive's inline position with the same word.
+    pub(crate) direct_callback_parameters: Vec<(Span, usize)>,
     /// `(owner, parameter index)` for a parameter whose caller-supplied value
     /// this function neither invokes nor observes inertly — it stores it, hands
     /// it on, or returns it. See

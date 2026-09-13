@@ -123,7 +123,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // the export owns; and namespace-reexport-identity. Both are ordinary
       // registered generator fixtures, so this is the pin catching up rather
       // than a change of what the cut contains.
-      stableMainDocuments: 188,
+      // 189 adds the value-exports fixture's main document, ADR 0099's tracer
+      // (a value export that cannot be invoked closes its empty call domains),
+      // which landed as 8c386960 without moving this pin.
+      stableMainDocuments: 189,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

@@ -12,7 +12,11 @@
 //! and not an exact observation — the module's coverage limitation says so).
 //! ADR 0096 also observes a whole-parameter return: each normally completed
 //! call must return the original argument under `Object.is`. This observation
-//! says nothing about mutations to the argument's contents.
+//! says nothing about mutations to the argument's contents. ADR 0100 observes
+//! a *described* `callbacks` enumeration: each callable slot gets its own
+//! recording callable, and the marker fires for an invocation of a slot the
+//! enumeration does not describe, or of a described slot outside the sample
+//! call's own stack.
 //!
 //! The merged corpus — every hand module and manifest entry copied verbatim,
 //! plus the synthesized entries marked `provenance: "synthesized"` — is
@@ -26,7 +30,7 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest as _, Sha256};
 use solid_reactive_ir::contract_semantics::{
-    ClaimDomain, ExportSemantics, OperationKind, ValueShape,
+    ClaimDomain, Event, ExportSemantics, OperationKind, Schedule, ValueShape, ValueSource,
 };
 
 use super::ProbeHarnessConfiguration;
@@ -176,7 +180,12 @@ pub(crate) fn synthesize(
                     )
                 } else {
                     format!(
-                        "synthesized veto (ADR 0036) for {} `{}`: a finite sample of {} call(s) derived from the export's Type Facts call signature{}; a throwing sample call is recorded as a sample-threw event and observes nothing",
+                        "synthesized veto ({}) for {} `{}`: a finite sample of {} call(s) derived from the export's Type Facts call signature{}; a throwing sample call is recorded as a sample-threw event and observes nothing",
+                        if matches!(observation, Observation::DescribedCallbacks(_)) {
+                            "ADR 0100, described callbacks enumeration"
+                        } else {
+                            "ADR 0036"
+                        },
                         record.domain,
                         record.export,
                         observation.sample_tuples(signatures).len(),
@@ -317,6 +326,13 @@ fn slot_candidates(parameter: &typefacts::SelectedParameter) -> (Vec<Sample>, Ve
 }
 
 fn render(sample: Sample, literals: &[String]) -> String {
+    render_at(sample, literals, None)
+}
+
+/// [`render`], with a callable slot rendered as `callbackAt(<slot>)` when the
+/// module records per slot (ADR 0100) rather than through the one shared
+/// `callback` (ADR 0036).
+fn render_at(sample: Sample, literals: &[String], slot: Option<usize>) -> String {
     match sample {
         Sample::Undefined => "undefined".into(),
         Sample::Null => "null".into(),
@@ -326,7 +342,9 @@ fn render(sample: Sample, literals: &[String]) -> String {
         Sample::BigInt => "1n".into(),
         Sample::Object => "{}".into(),
         Sample::Array => "[]".into(),
-        Sample::Callable => "callback".into(),
+        Sample::Callable => {
+            slot.map_or_else(|| "callback".into(), |slot| format!("callbackAt({slot})"))
+        }
         Sample::Literal(index) => literals[index].clone(),
     }
 }
@@ -338,9 +356,18 @@ const MAX_SAMPLE_CALLS: usize = 6;
 /// overload — a contradiction one call shape provokes is a contradiction — and
 /// the cap applies per overload, so no overload is starved by another's width.
 fn sample_tuples(signatures: &[typefacts::SelectedSignature]) -> Vec<Vec<String>> {
+    sample_tuples_with(signatures, false)
+}
+
+/// [`sample_tuples`], rendering each callable slot as its own recording
+/// callable when `per_slot` is set (ADR 0100).
+fn sample_tuples_with(
+    signatures: &[typefacts::SelectedSignature],
+    per_slot: bool,
+) -> Vec<Vec<String>> {
     let mut tuples = Vec::new();
     for signature in signatures {
-        for tuple in signature_sample_tuples(signature) {
+        for tuple in signature_sample_tuples(signature, per_slot) {
             if !tuples.contains(&tuple) {
                 tuples.push(tuple);
             }
@@ -352,16 +379,19 @@ fn sample_tuples(signatures: &[typefacts::SelectedSignature]) -> Vec<Vec<String>
 /// One signature's argument tuples: tuple `i` takes each slot's `i`-th
 /// candidate, cycling, so every candidate of every slot is exercised at least
 /// once within the cap.
-fn signature_sample_tuples(signature: &typefacts::SelectedSignature) -> Vec<Vec<String>> {
+fn signature_sample_tuples(
+    signature: &typefacts::SelectedSignature,
+    per_slot: bool,
+) -> Vec<Vec<String>> {
     let slots = signature
         .parameters
         .iter()
         .filter(|parameter| !parameter.rest)
-        .map(slot_candidates)
+        .map(|parameter| (parameter.index, slot_candidates(parameter)))
         .collect::<Vec<_>>();
     let widest = slots
         .iter()
-        .map(|(candidates, _)| candidates.len())
+        .map(|(_, (candidates, _))| candidates.len())
         .max()
         .unwrap_or(1)
         .clamp(1, MAX_SAMPLE_CALLS);
@@ -369,8 +399,12 @@ fn signature_sample_tuples(signature: &typefacts::SelectedSignature) -> Vec<Vec<
         .map(|index| {
             slots
                 .iter()
-                .map(|(candidates, literals)| {
-                    render(candidates[index % candidates.len()], literals)
+                .map(|(slot, (candidates, literals))| {
+                    render_at(
+                        candidates[index % candidates.len()],
+                        literals,
+                        per_slot.then_some(*slot),
+                    )
                 })
                 .collect()
         })
@@ -391,6 +425,13 @@ enum Observation {
     /// invocation is a clean non-observation that certifies the very claim it
     /// should have contradicted.
     EmptyCallbacks,
+    /// ADR 0100: a described `callbacks` enumeration, every item `from` a bare
+    /// parameter `at` the call event on the same stack. The bits are the
+    /// described parameter indices — a set small enough to be `Copy`, and a
+    /// proposal naming an index the mask cannot hold is not synthesized. The
+    /// contradiction is an invocation of a callable at a slot outside the
+    /// set, or of one inside it after the sample call has returned.
+    DescribedCallbacks(u64),
     /// ADR 0099: the export's value cannot be invoked, per the producer, so
     /// every empty proposable call domain closes vacuously. The runtime half
     /// observes `typeof` of the exported value and emits when it is a
@@ -421,11 +462,30 @@ fn candidate_observation(domain: &str, export: &ExportSemantics) -> Option<Obser
         "creates" => Some(Observation::Creates),
         // `Callbacks` carries `KnowledgeSet<CallbackInvocation>` of its own and
         // is not an operation claim, so it is read through its own accessor.
-        "callbacks" => export
-            .callbacks()
-            .items()
-            .is_empty()
-            .then_some(Observation::EmptyCallbacks),
+        "callbacks" => {
+            if export.callbacks().items().is_empty() {
+                return Some(Observation::EmptyCallbacks);
+            }
+            let mut mask = 0u64;
+            for item in export.callbacks().items() {
+                let ValueSource::Parameter { index, path } = &item.from else {
+                    return None;
+                };
+                if !path.is_empty() || u32::from(*index) >= u64::BITS {
+                    return None;
+                }
+                let operation = export.operation(&item.operation.0)?;
+                if operation.kind != OperationKind::Invoke
+                    || operation.at != Some(Event::Call)
+                    || operation.schedule != Some(Schedule::SameStack)
+                    || operation.guard.is_some()
+                {
+                    return None;
+                }
+                mask |= 1 << index;
+            }
+            Some(Observation::DescribedCallbacks(mask))
+        }
         "returns" => {
             let claim = export.operation_claim(ClaimDomain::Returns)?;
             if claim.items().is_empty() {
@@ -470,6 +530,11 @@ impl Observation {
             Self::Creates => reviewed_observation("creates").unwrap(),
             Self::EmptyReturns => reviewed_observation("returns").unwrap(),
             Self::EmptyCallbacks => reviewed_observation("callbacks").unwrap(),
+            Self::DescribedCallbacks(_) => ReviewedObservation {
+                marker: "callback-invocation",
+                observation: "exact: a callable argument the sample supplied at a slot the enumeration does not describe was invoked at any time up to the end of the session's drain, or one at a described slot was invoked outside the sample call's own stack",
+                emit: "",
+            },
             Self::NotCallable => ReviewedObservation {
                 marker: "callable-value",
                 observation: "exact: typeof of the exported runtime value is \"function\"",
@@ -487,12 +552,16 @@ impl Observation {
         match self {
             Self::ParameterReturn(index) => identity_sample_tuples(signatures, index),
             Self::NotCallable => Vec::new(),
+            Self::DescribedCallbacks(_) => sample_tuples_with(signatures, true),
             _ => sample_tuples(signatures),
         }
     }
 
     fn sampling_limitations(self) -> &'static str {
         match self {
+            Self::DescribedCallbacks(_) => {
+                "at most six tuples per overload; no variadic tail or structural object construction; a described slot the signature does not type as callable is sampled with a non-callable value, so a call of it throws and observes nothing"
+            }
             Self::NotCallable => {
                 "no call is sampled: the observation is typeof of the exported value in the probe realm, so a value that is callable only through a construct signature the checker did not see, or only in another realm, is not observed"
             }
@@ -660,11 +729,16 @@ fn module_source(
     if observation == Observation::NotCallable {
         return not_callable_module_source(specifier, export);
     }
+    if let Observation::DescribedCallbacks(mask) = observation {
+        return described_callbacks_module_source(specifier, export, mask, signatures);
+    }
     let domain = match observation {
         Observation::Creates => "creates",
         Observation::EmptyReturns => "returns",
         Observation::EmptyCallbacks => "callbacks",
-        Observation::ParameterReturn(_) | Observation::NotCallable => unreachable!(),
+        Observation::ParameterReturn(_)
+        | Observation::NotCallable
+        | Observation::DescribedCallbacks(_) => unreachable!(),
     };
     // Only this observation emits from inside the callback. Giving every
     // synthesized module that emitter would spend the session's event budget on
@@ -728,6 +802,72 @@ fn module_source(
         } else {
             ""
         },
+    )
+}
+
+/// ADR 0100: the module for a described `callbacks` enumeration. Every callable
+/// slot is sampled with its own recording callable, so the module knows which
+/// slot ran; the marker fires when a slot outside the description runs at any
+/// time, or a described slot runs while no sample call is on the stack. A
+/// described slot running inside its sample call is the described item and
+/// observes nothing -- the census, not this module, is what proves it.
+fn described_callbacks_module_source(
+    specifier: &str,
+    export: &str,
+    mask: u64,
+    signatures: &[typefacts::SelectedSignature],
+) -> String {
+    let described = (0..u64::BITS)
+        .filter(|bit| mask & (1 << bit) != 0)
+        .map(|bit| bit.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let tuples = sample_tuples_with(signatures, true)
+        .into_iter()
+        .map(|arguments| format!("  [{}],", arguments.join(", ")))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "// Synthesized veto (ADR 0100) for the described `callbacks` closure of `{export}`.\n\
+         // Derived from the export's Type Facts call signature; deterministic in it.\n\
+         // It observes, it never proves: the implementation census is the proof.\n\
+         import * as subjectModule from {specifier_json};\n\
+         \n\
+         const subject = subjectModule[{export_json}];\n\
+         const described = new Set([{described}]);\n\
+         let emitter = null;\n\
+         let inCall = false;\n\
+         let emitted = false;\n\
+         const callbackAt = (slot) => () => {{\n\
+         \x20 if (!emitted && emitter && (!described.has(slot) || !inCall)) {{\n\
+         \x20   emitted = true;\n\
+         \x20   emitter.emit({{ marker: \"callback-invocation\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 }}\n\
+         }};\n\
+         const samples = [\n{tuples}\n];\n\
+         \n\
+         export async function runProbeSession(_session, harness) {{\n\
+         \x20 emitter = harness;\n\
+         \x20 harness.emit({{ marker: \"call\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 if (typeof subject !== \"function\") {{\n\
+         \x20   throw new Error(\"synthesized veto: the export is not callable in this realm\");\n\
+         \x20 }}\n\
+         \x20 let threw = 0;\n\
+         \x20 for (const args of samples) {{\n\
+         \x20   inCall = true;\n\
+         \x20   try {{\n\
+         \x20     subject(...args);\n\
+         \x20   }} catch {{\n\
+         \x20     threw += 1;\n\
+         \x20   }} finally {{\n\
+         \x20     inCall = false;\n\
+         \x20   }}\n\
+         \x20 }}\n\
+         \x20 if (threw > 0) harness.emit({{ marker: \"sample-threw\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 harness.emit({{ marker: \"call\", kind: \"call\", phase: \"exit\" }});\n\
+         }}\n",
+        specifier_json = serde_json::to_string(specifier).unwrap_or_default(),
+        export_json = serde_json::to_string(export).unwrap_or_default(),
     )
 }
 

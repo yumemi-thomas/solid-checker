@@ -253,6 +253,8 @@ fn self_bootstrapped_callbacks_are_unknown_while_consuming_callbacks_survive() {
                 arguments: Vec::new(),
                 owner: None,
             }]),
+            // The row above was written for `cb()` in the export's own body.
+            direct_callback_parameters: BTreeSet::from([0]),
             ..ContractExport::default()
         };
         let normalized = normalize_inferred_contract_with_candidates(
@@ -281,11 +283,91 @@ fn self_bootstrapped_callbacks_are_unknown_while_consuming_callbacks_survive() {
                     ))
             );
         } else {
+            // ADR 0100: an `inline` row — invoked from a bare parameter at the
+            // call event on the same stack — is an enumeration the census can
+            // confirm, so the consuming package proposes it closed and the
+            // certifier receives a `callbacks` candidate carrying the item.
             assert!(
-                matches!(&export.call.claims().callbacks, KnowledgeSet::Partial(callbacks) if callbacks.len() == 1)
+                matches!(&export.call.claims().callbacks, KnowledgeSet::Complete(callbacks) if callbacks.len() == 1),
+                "{:?}",
+                export.call.claims().callbacks
             );
             assert_eq!(export.call.operations.len(), 1);
+            assert!(
+                export
+                    .call
+                    .proposed_closures()
+                    .contains(&ClaimDomain::Callbacks)
+            );
+            assert!(
+                normalized
+                    .closure_candidates
+                    .iter()
+                    .any(|candidate| matches!(
+                        candidate.path,
+                        SemanticClaimPath::Domain(
+                            solid_reactive_ir::contract_semantics::ClaimPath::Call(
+                                ClaimDomain::Callbacks
+                            )
+                        )
+                    ))
+            );
         }
+    }
+}
+
+/// ADR 0100's boundary: a described invocation the census cannot confirm keeps
+/// the enumeration partial and yields no candidate, exactly as every non-empty
+/// enumeration did before the premise. Two shapes: a `deferred` row, whose
+/// execution point is not the call event; and an `inline` row the pass wrote
+/// for a primitive's inline position (`untrack(cb)`) rather than for a call of
+/// the parameter itself, which the wire spells identically and only the
+/// summary's direct set tells apart.
+#[test]
+fn a_deferred_callback_description_stays_partial_and_proposes_nothing() {
+    for (execution, direct) in [
+        ("deferred", BTreeSet::from([0])),
+        ("inline", BTreeSet::new()),
+    ] {
+        let summary = ContractExport {
+            kind: "function".into(),
+            callbacks: ContractClaim::Known(vec![solid_reactive_ir::ContractCallback {
+                parameter: 0,
+                execution: execution.into(),
+                schedule: None,
+                arguments: Vec::new(),
+                owner: None,
+            }]),
+            direct_callback_parameters: direct,
+            ..ContractExport::default()
+        };
+        let normalized = normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution_for_package("package", ["read".into()]),
+        )
+        .unwrap();
+        let export = &normalized.contract.artifact_cases()[0].exports["read"];
+        assert!(
+            matches!(&export.call.claims().callbacks, KnowledgeSet::Partial(callbacks) if callbacks.len() == 1),
+            "{execution}: {:?}",
+            export.call.claims().callbacks
+        );
+        // Not proposed, so the emitted document states no closure for the
+        // certifier to plan. (`closure_candidates` still lists the withdrawn
+        // path — that list is the plan sidecar's measurement of what the walk
+        // cleared, not what the document proposes.)
+        assert!(
+            !export
+                .call
+                .proposed_closures()
+                .contains(&ClaimDomain::Callbacks),
+            "{execution}"
+        );
+        assert_eq!(
+            export.claim_state(ClaimDomain::Callbacks),
+            KnowledgeState::PartialPositive,
+            "{execution}"
+        );
     }
 }
 
@@ -548,9 +630,9 @@ fn a_cleared_creates_walk_reaches_the_certifiers_candidate_universe_through_the_
     //
     // `Callbacks` joins them since 2026-09-12, on the same terms: this export
     // enumerates no invocation, so the callbacks census may decide it by the
-    // call walk dispositioning no caller-supplied invocation. An export that
-    // *described* one would stay partial — the generator proposes the empty
-    // enumeration only.
+    // call walk dispositioning no caller-supplied invocation. Since ADR 0100 an
+    // export that describes call-time invocations of bare parameters proposes
+    // too; one describing a `deferred` or `tracked` row still stays partial.
     assert_eq!(
         export.call.proposed_closures(),
         &std::collections::BTreeSet::from([

@@ -1,5 +1,50 @@
 # Precision backlog
 
+## ADR 0100: a described `callbacks` enumeration the census confirms (2026-09-13)
+
+The 1,155 `callbacks` census refusals in the pin are correct verdicts on empty
+proposals the walk falsifies (accessor 1,266 sites, direct 710, iteration and
+element 540, coercion 127, `hasInstance` 62), and the lever sat one step
+before them: the generator already described `function f(cb) { cb() }` with
+an `inline` row — `from` parameter 0, `at` the call event, same stack — and
+its proposal filter dropped every non-empty enumeration as "timing the walk
+does not derive". For that one shape the walk *does* derive it: a
+`parameter-rooted` call read in the export's own frame, outside any nested
+callable, in a body that completes plainly, runs before the export returns on
+the caller's stack. The interprocedural pass now records beside each `inline`
+row whether it came from a direct call of the parameter in the declaring body
+(`ContractExport::direct_callback_parameters`, a proposal input in the
+`creates_walk_clean` family — the wire spells `cb()` and `untrack(cb)` with
+one word), the generator proposes the domain closed with those items, the
+census confirms them site for site in both directions and refuses by name on
+everything else (another family member, a captured call, a helper frame, a
+member callee, an `async` body, a described parameter with no site), and a
+synthesized veto records per slot so it can see an undescribed slot run or a
+described slot run after the call returned. Twenty-four generator fixtures
+close `callbacks` with one item; `invokesCallerAccessor` is the tracer and
+reaches a receipt ([ADR 0100](adr/0100-described-callbacks-enumeration.md)).
+Not proposed, by decision: `deferred` and `tracked` rows, member-rooted
+callees, and the primitive-position `inline` rows (`untrackedWrapper`,
+`memoShape`), whose confirmation is dependency composition and the accessor
+census respectively. Corpus effect (release binary, 418 rows, default pool, `--timeout 1800`):
+closure candidates 24,912 → 25,468 (+556, every one a described enumeration
+that used to stay partial); certified closure entries 9,752 → 9,770 (solid2
++12, solid1 +6); uncapped `callbacks` closures 339 → 365 over the 396 uncapped
+rows; no row below the pin, no status move; wall 1,055 s → 1,095 s. Of the new
+candidates 93 are refused by the census's rule 2 — a getter on a parameter
+beside the direct call (`access` 62, `wrapSetter` 20, `getFirstChild` 10,
+`withArrayCopy` 1: "the parameter-rooted-accessor member is an invocation the
+enumeration does not describe") — and the rest fall to the shared walk's own
+refusals before any confirmation runs (unresolved callee, uncensused form,
+premise required: +255 entries in those reasons), exactly as the same exports'
+`creates` candidates do. The empty-enumeration refusals move 1,155 → 1,147.
+The gain is small because the population is small: on the hubs it is
+`access`/`pipe`/`safe`-shaped utilities, and the larger described shapes —
+`tracked` same-stack rows through `createMemo`, member-rooted callees, and the
+direct call that also hands the callback to a helper (`plain(items, cb)`) —
+wait on dependency composition, the accessor census, and ADR 0092's
+provenance respectively.
+
 ## Seventy-three `reads` recipes at the four largest recipe-less cases (2026-09-13)
 
 After ADR 0099 the pin's withheld set is 3,980 unique entries: 1,550 `reads`

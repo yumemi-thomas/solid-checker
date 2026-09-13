@@ -127,6 +127,7 @@ pub fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractEx
         creates_walk_clean: false,
         creates_walk_declines: Vec::new(),
         returns_walk_clean: false,
+        direct_callback_parameters: BTreeSet::new(),
     }
 }
 
@@ -1450,6 +1451,9 @@ pub(super) struct ContractAnalysis<'a> {
     pub(super) returned: &'a [SummaryReads],
     pub(super) structured_returns: &'a [Option<ContractReturn>],
     pub(super) callbacks: &'a [Vec<ContractCallback>],
+    /// Per node, the parameters the node calls itself, directly, in its own
+    /// body (ADR 0100) -- see `InterproceduralGraphContribution`.
+    pub(super) direct_callback_parameters: &'a [Vec<usize>],
     /// Per node, the parameters whose caller-supplied value the analysis never
     /// accounted for. Any one of them makes this export's `callbacks` domain
     /// its callback domain open — see
@@ -1467,6 +1471,7 @@ struct ContractExportNode<'a> {
     returned_summary: &'a SummaryReads,
     structured_return: Option<&'a ContractReturn>,
     callbacks: &'a [ContractCallback],
+    direct_callback_parameters: &'a [usize],
     escaped_parameters: &'a [usize],
     invoked_parameter_members: &'a [ParameterMemberInvocation],
 }
@@ -1479,6 +1484,7 @@ impl<'a> ContractExportNode<'a> {
             returned_summary: &analysis.returned[index],
             structured_return: analysis.structured_returns[index].as_ref(),
             callbacks: &analysis.callbacks[index],
+            direct_callback_parameters: &analysis.direct_callback_parameters[index],
             escaped_parameters: &analysis.escaped_parameters[index],
             invoked_parameter_members: &analysis.invoked_parameter_members[index],
         }
@@ -1495,6 +1501,7 @@ fn contract_export_function(
         returned_summary,
         structured_return,
         callbacks,
+        direct_callback_parameters,
         escaped_parameters,
         invoked_parameter_members,
     } = inputs;
@@ -1629,6 +1636,10 @@ fn contract_export_function(
         creates_walk_clean: false,
         creates_walk_declines: Vec::new(),
         returns_walk_clean: false,
+        // ADR 0100: a proposal input read beside the rows. Kept whether or not
+        // the callbacks domain above stayed known -- the generator's filter
+        // reads both, and an open domain proposes nothing either way.
+        direct_callback_parameters: direct_callback_parameters.iter().copied().collect(),
     }
 }
 

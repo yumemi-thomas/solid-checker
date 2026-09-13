@@ -108,15 +108,26 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                     *domain != ClaimDomain::Reads
                         || !resolved.closure.installs_runtime_accessor()
                 })
-                // The callbacks census decides the empty enumeration only: it
-                // proves `callbacks: []` by the call walk dispositioning no
-                // caller-supplied invocation. A described invocation carries
-                // timing, tracking and owner the walk does not derive, so
-                // proposing it would publish a closure the census must refuse —
-                // the enumeration stays partial, exactly as it did before the
-                // domain became proposable.
+                // The callbacks census decides the empty enumeration by the
+                // call walk dispositioning no caller-supplied invocation, and
+                // (ADR 0100) a described one whose every item the same walk
+                // confirms: `from` a bare parameter `at` the call event on the
+                // same stack — the `inline` row the interprocedural pass
+                // writes for a call written directly in the export's body. A
+                // `deferred` or `tracked` item, or one rooted at a member,
+                // carries a timing the walk does not derive, so proposing it
+                // would publish a closure the census must refuse — such an
+                // enumeration stays partial.
                 .filter(|domain| {
-                    *domain != ClaimDomain::Callbacks || export.callbacks().items().is_empty()
+                    *domain != ClaimDomain::Callbacks
+                        || callbacks_enumeration_is_confirmable(
+                            export,
+                            inferred
+                                .entrypoints
+                                .get(&artifact_case.entrypoint)
+                                .and_then(|entrypoint| entrypoint.exports.get(name))
+                                .map(|summary| &summary.direct_callback_parameters),
+                        )
                 })
                 .filter(|domain| {
                     *domain != ClaimDomain::Returns
@@ -300,6 +311,39 @@ impl GenerationScope {
     fn publishes_bootstrapped_reactive_domains(self) -> bool {
         matches!(self, Self::ConsumingPackage)
     }
+}
+
+/// ADR 0100: whether the implementation census can confirm every item of this
+/// export's `callbacks` enumeration — an unguarded, untracked `invoke` `from` a
+/// bare parameter `at` the call event on the same stack, **and** written by
+/// the interprocedural pass for a call of that parameter itself in the
+/// export's own body (`direct_callback_parameters`). The second condition is
+/// what the wire cannot say: `untrack(cb)` publishes the same `inline` row as
+/// `cb()`, and only the latter has a site the census walks to. The empty
+/// enumeration is confirmable vacuously (the walk finds no caller-supplied
+/// invocation). The certifier's `described_callbacks` applies the semantic
+/// half of the same test to the proposal it receives, so a document that
+/// passed here and one it plans agree; a summary with no direct set (`None`,
+/// a summary the loop cannot find) proposes nothing described.
+fn callbacks_enumeration_is_confirmable(
+    export: &ExportSemantics,
+    direct_callback_parameters: Option<&BTreeSet<usize>>,
+) -> bool {
+    export.callbacks().items().iter().all(|item| {
+        matches!(&item.from, ValueSource::Parameter { index, path }
+            if path.is_empty()
+                && direct_callback_parameters
+                    .is_some_and(|direct| direct.contains(&usize::from(*index))))
+            && export
+                .operation(&item.operation.0)
+                .is_some_and(|operation| {
+                    operation.kind == OperationKind::Invoke
+                        && operation.at == Some(Event::Call)
+                        && operation.schedule == Some(Schedule::SameStack)
+                        && operation.tracking == Tracking::Untracked
+                        && operation.guard.is_none()
+                })
+    })
 }
 
 fn normalize_export(

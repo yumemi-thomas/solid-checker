@@ -13,7 +13,7 @@
             "sha256": "9cac85e64e6a7649af44ab1afe3d06867c22dd22a3f671b34f852deb75b401d6"
           },
           "exports": {
-            "mapValue": "summary-17ea2f6e2dc978b7500df3b484fc251c6b51731e18404828a1474378ebbcb562"
+            "mapValue": "summary-935a22c335c6443a337b1c2fc6a8bb9c1ab459039d44df67e18a89a5befbc17a"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -37,7 +37,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-17ea2f6e2dc978b7500df3b484fc251c6b51731e18404828a1474378ebbcb562": {
+    "summary-935a22c335c6443a337b1c2fc6a8bb9c1ab459039d44df67e18a89a5befbc17a": {
       "call": {
         "callbacks": [
           {
@@ -49,6 +49,7 @@
           }
         ],
         "closed": [
+          "callbacks",
           "reads",
           "creates"
         ],
@@ -80,6 +81,7 @@
           }
         ],
         "proposedClosures": [
+          "callbacks",
           "reads",
           "creates"
         ],

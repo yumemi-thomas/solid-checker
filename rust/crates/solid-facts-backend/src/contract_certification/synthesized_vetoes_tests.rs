@@ -555,3 +555,151 @@ fn the_not_callable_module_emits_only_when_the_runtime_value_is_callable() {
         "a class is typeof function and the veto sees it: {class:?}"
     );
 }
+
+fn callable_fact() -> Value {
+    json!({
+        "callability": "callable",
+        "constructability": "nonConstructable",
+        "primitive": {"mayBeObject": true},
+    })
+}
+
+/// ADR 0100: the described-callbacks module is quiet for exactly the described
+/// invocation — a described slot run inside its sample call — and loud for an
+/// undescribed slot at any time or a described slot after the call returned.
+#[test]
+fn the_described_callbacks_module_emits_outside_the_description_only() {
+    let signatures = [signature(&[callable_fact(), callable_fact()])];
+    let invoked = |observed: &ObservationResult| {
+        observed
+            .markers
+            .iter()
+            .any(|marker| marker == "callback-invocation")
+    };
+    for implementation in [
+        "export function subject(a, b) { a(); return 1; }",
+        "export function subject(a, b) { a(); a(); }",
+        // Nothing invoked: the veto is one-sided, the census proves the item.
+        "export function subject(a, b) {}",
+    ] {
+        let quiet = execute(
+            implementation,
+            Observation::DescribedCallbacks(0b01),
+            &signatures,
+        );
+        assert_eq!(quiet.error, None, "{implementation}");
+        assert!(!invoked(&quiet), "{implementation}: {quiet:?}");
+    }
+    let both = execute(
+        "export function subject(a, b) { a(); b(); }",
+        Observation::DescribedCallbacks(0b11),
+        &signatures,
+    );
+    assert!(!invoked(&both), "{both:?}");
+    for implementation in [
+        // An undescribed slot.
+        "export function subject(a, b) { b(); }",
+        // The described slot, after the sample call has returned.
+        "export function subject(a, b) { queueMicrotask(a); }",
+        "export function subject(a, b) { Promise.resolve().then(a); }",
+    ] {
+        let loud = execute(
+            implementation,
+            Observation::DescribedCallbacks(0b01),
+            &signatures,
+        );
+        assert_eq!(loud.error, None, "{implementation}");
+        assert!(invoked(&loud), "{implementation}: {loud:?}");
+    }
+    // Every callable slot carries its own recording callable, so the module
+    // can tell the slots apart; the shared `callback` of ADR 0036 cannot.
+    let source = module_source(
+        "data:text/javascript,",
+        "subject",
+        Observation::DescribedCallbacks(0b01),
+        &signatures,
+    );
+    assert!(
+        source.contains("[callbackAt(0), callbackAt(1)]"),
+        "{source}"
+    );
+    assert!(
+        source.contains("const described = new Set([0]);"),
+        "{source}"
+    );
+}
+
+/// ADR 0100: only an enumeration of call-time bare-parameter invocations is
+/// observed; anything else keeps the candidate recipe-less.
+#[test]
+fn the_described_callbacks_observation_is_selected_from_the_exact_enumeration() {
+    use solid_reactive_ir::contract_semantics::{CallbackInvocation, ValueSource};
+    let invoke = |id: &str| Operation {
+        id: OperationId(id.into()),
+        kind: OperationKind::Invoke,
+        output: None,
+        ..return_operation()
+    };
+    let export = |items: Vec<CallbackInvocation>, operations: Vec<Operation>| {
+        let mut export = export_with_returns(KnowledgeSet::Unknown, operations);
+        export.call = CallSemantics::new(
+            CallClaims {
+                callbacks: KnowledgeSet::complete(items),
+                ..CallClaims::default()
+            },
+            export.call.operations.clone(),
+            vec![],
+            vec![],
+            GuardPartition::default(),
+        );
+        export
+    };
+    let item = |index: u16, operation: &str| CallbackInvocation {
+        from: ValueSource::Parameter {
+            index,
+            path: vec![],
+        },
+        operation: OperationId(operation.into()),
+    };
+    assert_eq!(
+        candidate_observation("callbacks", &export(vec![], vec![])),
+        Some(Observation::EmptyCallbacks)
+    );
+    assert_eq!(
+        candidate_observation(
+            "callbacks",
+            &export(
+                vec![item(0, "a"), item(3, "b")],
+                vec![invoke("a"), invoke("b")]
+            )
+        ),
+        Some(Observation::DescribedCallbacks(0b1001))
+    );
+    let mut queued = invoke("a");
+    queued.schedule = Some(Schedule::Queued);
+    assert_eq!(
+        candidate_observation("callbacks", &export(vec![item(0, "a")], vec![queued])),
+        None
+    );
+    assert_eq!(
+        candidate_observation(
+            "callbacks",
+            &export(
+                vec![CallbackInvocation {
+                    from: ValueSource::Parameter {
+                        index: 0,
+                        path: vec!["onChange".into()],
+                    },
+                    operation: OperationId("a".into()),
+                }],
+                vec![invoke("a")]
+            )
+        ),
+        None
+    );
+    assert_eq!(
+        candidate_observation("callbacks", &export(vec![item(64, "a")], vec![invoke("a")])),
+        None,
+        "an index the mask cannot hold is not synthesized"
+    );
+}

@@ -21,7 +21,7 @@ underneath.
 | `.` | `readsOwnLiteral` | own object literal (ADR 0044: data properties) | close |
 | `.` | `readsCallerMember` | caller's object, `.value` | close |
 | `.` | `readsCallerElement` | caller's object, `[key]` | close |
-| `.` | `invokesCallerAccessor` | caller's callable — the export's act is the invocation (census plan § 3.2) | close |
+| `.` | `invokesCallerAccessor` | caller's callable — the export's act is the invocation (census plan § 3.2), and since ADR 0100 that invocation is *described*: `callbacks` closes with one item | close |
 | `./owned` | `readsOwnProxy` | a proxy **this module built** | **refuse** |
 | `./owned` | `readsOwnProxyElement` | the same, element access | **refuse** |
 | `./owned` | `observedReads` | — | **refuse**, and that is the point |
@@ -87,8 +87,21 @@ the candidates; it does not yet prove the refusal.
   fired, so a fixture edit that removes the trap fails the recipe instead of
   silently passing the gate.
 
-`recipes.json` pins both to the claim ids in `expected-proposal.json`; the two
-files move together, and a regenerated plan means regenerated claim ids.
+- **`invokes-caller-accessor.mjs`** — the first recipe for a *described*
+  `callbacks` closure ([ADR 0100](../../../docs/adr/0100-described-callbacks-enumeration.md)).
+  `invokesCallerAccessor` calls its parameter directly in its own body, so the
+  generator's `inline` row is an item the census can confirm site for site —
+  `from` parameter 0, `at` the call event on the same stack — and the domain
+  is proposed *closed with that one item* rather than left partial. The recipe
+  hands the export a callable that knows whether the sample call is on the
+  stack and emits `callback-invocation` only for a run outside it; the
+  invocation itself is the census's to prove.
+  `a_described_callbacks_closure_reaches_a_receipt_through_its_mandatory_veto`
+  carries it to a receipt.
+
+`recipes.json` pins all three to the claim ids in `expected-proposal.json`;
+the two files move together, and a regenerated plan means regenerated claim
+ids.
 
 `recipes.json` here is documentary and was never loaded: the tracer tests
 assemble their own corpus from these modules and the *live* claim ids. It

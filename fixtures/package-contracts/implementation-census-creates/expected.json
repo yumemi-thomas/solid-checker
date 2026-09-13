@@ -74,9 +74,9 @@
             "memberParameterRooted": "summary-777cce4f1873adb072cbb4c24077dc8f455d9da483288bc44d8f3c6b912146d2",
             "moduleReceiverRead": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
             "nestedCallableParameterRead": "summary-807e5aa54f38ca3dde3ba6d81430ee34e7d173defd3b7193373a3194c561390c",
-            "noRecipe": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
+            "noRecipe": "summary-5af260abe18d7fafbbcb241326a40a893015997b2d69a80d3106a1220257eb59",
             "omittedBoxScale": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
-            "overloaded": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
+            "overloaded": "summary-5af260abe18d7fafbbcb241326a40a893015997b2d69a80d3106a1220257eb59",
             "ownArrayRead": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
             "ownGetterFromFactory": "summary-a162b302d7b2864351895844e279125d9b1e34888e08c9940fc52af266d2ee61",
             "ownGetterThroughHelper": "summary-a162b302d7b2864351895844e279125d9b1e34888e08c9940fc52af266d2ee61",
@@ -88,10 +88,10 @@
             "patternParameter": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
             "patternParameterDefault": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
             "patternRestParameter": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
-            "plain": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
+            "plain": "summary-5af260abe18d7fafbbcb241326a40a893015997b2d69a80d3106a1220257eb59",
             "protoTableRead": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
-            "readBoundCallerResult": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1",
-            "readCallerResult": "summary-d2be42eb3b0dba22847a4146164c82c8d32424d91f53f8f6592efacc9d3079a1",
+            "readBoundCallerResult": "summary-1ff1969ca67a96c3829cc85bfc5570cadaa31de909a035805cfb38abcd338112",
+            "readCallerResult": "summary-1ff1969ca67a96c3829cc85bfc5570cadaa31de909a035805cfb38abcd338112",
             "readLocalResult": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
             "reassignedHelper": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
             "reflectApply": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
@@ -154,33 +154,19 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d": {
-      "call": {
-        "callbacks": [],
-        "closed": [
-          "callbacks",
-          "creates"
-        ],
-        "creates": [],
-        "proposedClosures": [
-          "callbacks",
-          "creates"
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395": {
+    "summary-1ff1969ca67a96c3829cc85bfc5570cadaa31de909a035805cfb38abcd338112": {
       "call": {
         "callbacks": [
           {
             "from": {
-              "arg": 1,
+              "arg": 0,
               "path": []
             },
             "operation": "callback-0"
           }
         ],
         "closed": [
+          "callbacks",
           "creates"
         ],
         "creates": [],
@@ -204,6 +190,64 @@
           }
         ],
         "proposedClosures": [
+          "callbacks",
+          "creates"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
+          "creates"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-5af260abe18d7fafbbcb241326a40a893015997b2d69a80d3106a1220257eb59": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
           "creates"
         ]
       },
