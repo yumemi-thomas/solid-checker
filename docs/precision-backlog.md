@@ -1,5 +1,23 @@
 # Precision backlog
 
+## Dependency composition for `tracked` callback rows, sized and killed (2026-09-13)
+
+The premise: confirm a wrapper's `tracked` or `deferred` callback row by
+composing the dependency primitive's audited item with the argument slot the
+walk records, so `createDerived(fn) { return createMemo(fn) }` closes
+`callbacks` with its one item. Sized on a `--keep-temp` corpus run (381
+generated documents, 8,950 exports): 130 exports carry any `callbacks` item,
+44 of them already closed by ADR 0100, 86 partial. Of the partial ones 57 are
+`deferred` rows (`afterPaint`, `createMicrotask`, `pipe`, `leading`) and 21
+are `tracked` — 11 queued (`createAggregated`, `createIntervalCounter`), 10
+same-stack (`until`, corvu's `default`). The dialect tier answers `callbacks`
+with a negative closure only, so items would be a new positive authority
+threaded from the audited documents; that is an ADR across solid-dialect, the
+certifier and the veto for at most 21 exports. Not written. What this settles
+about the frontier: partial `callbacks` enumerations are rare in this corpus
+because the generator writes a row only for a call it can place, and the
+large withheld classes are empty proposals the census correctly refuses.
+
 ## Acquisition walks for `callbacks` as it does for `creates` (2026-09-13)
 
 `acquire_census_local_transcripts` demanded module-local declaration
