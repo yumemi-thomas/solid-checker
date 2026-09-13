@@ -2517,6 +2517,1612 @@
         "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/floating-ui.utils.mjs installs no accessor and there is no owned trap for this recipe to count",
         "NEVER EMITS: the recipe's own getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
       ]
+    },
+    {
+      "claimId": "claim:v1:sha256:31bc788e89d105633fde7ed0a5f9b638f8614eb0d72c010cf36b55a451c0e38b",
+      "module": "solid-primitives-utils-access-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: The recipe's own getter proves the observation apparatus is live on every run; the read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:353ae3365712ff671e19acea7f57e0914d95c81fc4da5c7a9e19e1c4b0dc121f",
+      "module": "solid-primitives-utils-access-with-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: the recipe's own getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:370683211ba9086799bc5a3c538bc784ff3bc1447b71ebe0fcf609020c89b704",
+      "module": "solid-primitives-utils-after-paint-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: the recipe's own getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:952d6df14e58d8d36d4b5971a211eef13755b11805530dd369d721e9a7aec665",
+      "module": "solid-primitives-utils-as-accessor-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: the recipe's own getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:47e30c84a81cb1c9df3cba88e1612eb64a138604764651932cba8ed5f9f52a2a",
+      "module": "solid-primitives-utils-as-array-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: the recipe's own getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:38034e35326eb3dc6aebc2e49b8fb073ca2f03e5b24becbc7baebb4ca103a82e",
+      "module": "solid-primitives-utils-chain-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: the recipe's own getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:888aac96b01e5a40650fa6caf08107086c1eaef813643acbcf21713efd64dc4b",
+      "module": "solid-primitives-utils-clamp-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:b5abb903ed7e69aca346ebf403d0297ddb0c237ff693e65a4e411b0dede34c63",
+      "module": "solid-primitives-utils-compare-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: this candidate's read is `a < b`, a coercion form with no reviewed subject root, so no recipe can serve it. The module is kept for the same reason as array-equals: it unmasks the census refusal that `no recipe in corpus` would otherwise hide"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:205d5d432f6d79878bd5ab9fa277f377286dcd43ca379e6e4fd57128ad3b7ea6",
+      "module": "solid-primitives-utils-create-callback-stack-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: the recipe's own getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:24d606e816a2344db1c1891361eb01eebf5ae911465779eee04e789eaf112b33",
+      "module": "solid-primitives-utils-create-id-generator-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples primitives beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:df453f6dfcf1c1acaa6e8de4bd85d2d61a8b51db7dcac80a96be638530badda1",
+      "module": "solid-primitives-utils-false-fn-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: the recipe's own getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:173b6e97422cdefa579f472e65015b4b3284e32c7bc9723a223c9f9deaa5d795",
+      "module": "solid-primitives-utils-is-non-nullable-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: the recipe's own getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:a8ff4305b92e8189da62691ec17a7f84be0a21b3699de2bf80700659e0e64b77",
+      "module": "solid-primitives-utils-is-object-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: the recipe's own getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:e7da9ccdbcebf151eee8caaf5e535039fa2a004d376c1722d474835ca243100d",
+      "module": "solid-primitives-utils-json-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples primitives beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:3daa8e12d44b67b1fa52171d8009f2a2c764e365550395d435fae31d602da55c",
+      "module": "solid-primitives-utils-noop-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: the recipe's own getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:145fc04719b83bcf707aa7fc74df2812aaac6187fea9eedb46e78d8e309a516b",
+      "module": "solid-primitives-utils-number-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples primitives beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:8cb7d0c3fb282f2558642af2a96444a2c8d007b75646a761600bded266b6fad1",
+      "module": "solid-primitives-utils-of-class-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: the recipe's own getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:7769c874045366d7f9e75929ee2465ede45905c5a7a815012b26dcb437edd1b0",
+      "module": "solid-primitives-utils-pipe-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: the recipe's own getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:44860b86547399bbb765f2779f709000ced8a46e58a033c5ba48d7c7be91ed6c",
+      "module": "solid-primitives-utils-reverse-chain-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: the recipe's own getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:8f35ddd5034a8c88b26646738fef9621fe24f8a15a1a451ed5ef8c658aa9edb7",
+      "module": "solid-primitives-utils-safe-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: the recipe's own getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:8b2f56cc1ef09ed984ff9df909df35def3187b6b1a63cdea04c884d17b41800c",
+      "module": "solid-primitives-utils-true-fn-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: same as clamp -- no code path emits the expected event, so this module cannot contradict the closure and only ever yields a clean non-observation. See \u00a7 6: an unenumerated read is a read of a source the export owns, which is the half no recipe can instrument"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:52d9ae3ff5e23ac580df777d43c854714869218cb06022d896c570f4cdc60782",
+      "module": "solid-primitives-utils-with-access-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: the recipe's own getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:5b4312baa92c6a5f933bfb15cc5e005736c7720849fe47b24c7b6122827d3f95",
+      "module": "solid-primitives-utils-immutable-clamp-reads-b70ad6d1.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./immutable`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/immutable/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:8cf5a77ff1f58bec8af2d8d431d296ccffe663fddcb8156a91ad25aa1a8af1d6",
+      "module": "solid-primitives-utils-immutable-filter-out-reads-b70ad6d1.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./immutable`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/immutable/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:f0b5fe5caf7cf13cc78f8ba4146dda0d9d02c90a55d53eda99a1d2fc7a4f50ea",
+      "module": "solid-primitives-utils-immutable-get-reads-b70ad6d1.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./immutable`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/immutable/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:493c7ed593ad717751cab4d4992599fc1b6884cdea303f9dbf779b61f02927e6",
+      "module": "solid-primitives-utils-immutable-merge-reads-b70ad6d1.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./immutable`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/immutable/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:02b84450c9c477bc7d216443ac11fc49d64892d44265657ca411687001910a47",
+      "module": "solid-primitives-utils-immutable-push-reads-b70ad6d1.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./immutable`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/immutable/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:793ab751254609d95a36f238925610392ced069f03e213ddc2addf70a7f5701f",
+      "module": "solid-primitives-utils-immutable-remove-items-reads-b70ad6d1.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./immutable`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/immutable/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:d851259851af2bbcf86466256681517709a80b94d99a12b2aea8a0f49c5cde5f",
+      "module": "solid-primitives-utils-immutable-shallow-copy-reads-b70ad6d1.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./immutable`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/immutable/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:9e8289a74dbca2b94f7c1ef6880bd7d8ba59ad558ecbca48ff9189545657bb69",
+      "module": "solid-primitives-utils-immutable-shallow-object-copy-reads-b70ad6d1.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./immutable`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/immutable/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:5c1433debf10de212b6a233b9ddb3e65648800aebd74c2fc327dc1df141543ed",
+      "module": "solid-primitives-utils-immutable-splice-reads-b70ad6d1.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./immutable`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/immutable/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:14c3f0dd01522eebe1d66ee9fccd459190adccaf0549f71876d656711b14c5f3",
+      "module": "solid-primitives-utils-immutable-with-array-copy-reads-b70ad6d1.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./immutable`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/immutable/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:4f84843d65f752906e216170d7cd869f121f33dec3792c9a480f63fba0081511",
+      "module": "solid-primitives-utils-immutable-with-copy-reads-b70ad6d1.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./immutable`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/immutable/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:8c60366f9921ba79d7e385491a7473bc2538c3cef5fffd419c408317d4098b10",
+      "module": "solid-primitives-utils-immutable-with-object-copy-reads-b70ad6d1.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./immutable`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/immutable/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:0ee9a55307b471b373cba15ec8381da03ba4c34cd15c39dbca5c467ffd677c07",
+      "module": "solid-primitives-utils-colors-color-scale-reads-8a0d569b.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:44eb63e1b44e2c45af29f85d6b576b22cfacd179939b686982f5807d902c5382",
+      "module": "solid-primitives-utils-colors-contrast-ratio-reads-8a0d569b.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:797288c402cd426f254317a749074b7e8c3f4da2fcdfa364cc948c9d121290b0",
+      "module": "solid-primitives-utils-colors-darken-reads-8a0d569b.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:1f37a873e5e2d34791a8943d4b3f119f9d715f6293766fd1cd66f9ea02e0b7ab",
+      "module": "solid-primitives-utils-colors-desaturate-reads-8a0d569b.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:77defb0e5e8f958768642ba4c0dd0b8f409f2fa2da875a5034cb97b99c88effd",
+      "module": "solid-primitives-utils-colors-get-color-channels-reads-8a0d569b.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:0399e6209c48bec9aba0d1b114467b55418ca80b629d0742aad2b9df7f90546d",
+      "module": "solid-primitives-utils-colors-is-readable-reads-8a0d569b.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:d15cefb8759d09c0cfad44f0ed788d9e4da44b38663afde6b0a450db3433f73c",
+      "module": "solid-primitives-utils-colors-is-valid-color-reads-8a0d569b.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:ec195fa8cc0f3403cc062aaadf5150df84ffc08a51dd5d25d91255d3d86e7678",
+      "module": "solid-primitives-utils-colors-normalize-color-reads-8a0d569b.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:cd55e1a7329f9210c49b7ce0fca206dc002c88808b01728e5cc1ff0f1a78b5a2",
+      "module": "solid-primitives-utils-colors-normalize-hue-reads-8a0d569b.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:734b803242d3d330decb0bad92d5d0df7109e8589873009c1e7ea9bdf4636d60",
+      "module": "solid-primitives-utils-colors-parse-color-reads-8a0d569b.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:dc325015efe32d7ce5a12696c4fa93e258851af5a9b2d98127b71c598ccb9cda",
+      "module": "solid-primitives-utils-colors-try-parse-color-reads-8a0d569b.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:e19850f81ed2374a5751986ef57fc895b899a7f4ea1d5a9912ce76b43d066e66",
+      "module": "motion-utils-anticipate-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:cda02546e71853fe2507d317dcdc22d6226dc7b54360b8cf7b0d995df14040bf",
+      "module": "motion-utils-circ-in-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:ba9501361d86af8383aefbbb00ede8d8e7ca47aeca7779a41447647166bdd7ed",
+      "module": "motion-utils-clamp-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:6a3210515cab7bf30ef1dbb9bb070fc239df6f970cdb7cc32497aebe77a536be",
+      "module": "motion-utils-cubic-bezier-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:b2ae0abbee7317753782a1a0d057c9b51f936838a5d3057515453dda6e552900",
+      "module": "motion-utils-easing-definition-to-function-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:7813d5df0f131347d25ca2b928075dea97847f5b42fdd07183a0023c2a79ceeb",
+      "module": "motion-utils-get-easing-for-segment-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:cc1dd0d62b0dbc53160c1e06a953be82f17d175244fe2bf1313948b492aec6e3",
+      "module": "motion-utils-has-warned-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:6a82fec9fa40eac3205ddfd0ffff6b0882b30912f248408dd5d73a0b6761367e",
+      "module": "motion-utils-invariant-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:adbd2af87aecbff59da96b5e9f356407e52c131015169f8c1f1440b3002bda58",
+      "module": "motion-utils-is-bezier-definition-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:8d1d0395d6cfd8166b85a0cc310864848e787a974bec7ea864e0cd98354db6ee",
+      "module": "motion-utils-is-easing-array-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:e0e7ef6b730a6f3260bc1f439f0bdd55f836ade43e32c5935e9dbaf8602aa58c",
+      "module": "motion-utils-is-numerical-string-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:716a1a9686c00b63973e9a852d5d71c988932e5c2d21d3b2319e8f703a15e068",
+      "module": "motion-utils-is-object-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:102e71d63fa7c6cc4d2cec63b6fa0198eea692c5c3656c4c1696e8eb7c26116c",
+      "module": "motion-utils-is-zero-value-string-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:31fab936e63a30a422c31626c986faf03f3aa4b1e5104fe90e78ef310a61e806",
+      "module": "motion-utils-memo-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:764769f9982734765e7a30c54b8054b99628edd608ae87212b0b078673f1e24f",
+      "module": "motion-utils-milliseconds-to-seconds-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:cb385727fdd78b08a7422e8e1fba5eb96648737740dc360ec80711f765fa68d2",
+      "module": "motion-utils-mirror-easing-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:7dd5d967d27e10ac6945aa105f35ca09887d95150187e552bb9eee7aa5dcdeec",
+      "module": "motion-utils-move-item-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:4390036af7f9e17297e445c9a5eaaca3dd074f5450d692c1831a64cf1206d000",
+      "module": "motion-utils-noop-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:d7fd5e4733aad3ca8bc4ad24bd7792fbe7a9ad92d0ae2b91775356aee4d18737",
+      "module": "motion-utils-pipe-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:f506c8ba055e563875ec97c5f38f7b04d4ade109c12bdb9596f422164e28e057",
+      "module": "motion-utils-progress-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:6b7ac9066e8798b515beed43fab55f27f521ee466dac34dc71cca09e44d42b66",
+      "module": "motion-utils-reverse-easing-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:e14fbf67b17c8214d018708c13b16219d163c426e1b3457ec4a85809e27da66c",
+      "module": "motion-utils-seconds-to-milliseconds-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:8ed1317aed2c9221eb356aec8896818e0320d5043c2cf7d5ed8816be34f65411",
+      "module": "motion-utils-steps-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:9a4ada2df7b4a2a43bd9929ff140c39f2308eb56827a17cdd64f4b299a0b8211",
+      "module": "motion-utils-velocity-per-second-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:1082eebb158328b561f47b760c088517825235edaad57048d71851d75bcd90ea",
+      "module": "motion-utils-warn-once-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:f93941f68c7b565054c7729b8d2ef85a81bc7db86144fde3e1f1ef8547ae9f50",
+      "module": "motion-utils-warning-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:1c3d50e9d08171f2ea33d64697bad0c06312c8e706078115d43731fc6b01f6fc",
+      "module": "motion-utils-wrap-reads-9a3a41a5.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of motion-utils@12.39.0; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/es/index.mjs installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:ee741dd77fd20c7120bdab13c9b73257cf02967b4505caf29afa98bd487ef718",
+      "module": "solid-primitives-utils-array-equals-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: this candidate's proposal names an operation, so it is not the empty closure PROPOSABLE admits and no recipe can serve it. The module is kept because without it the candidate reports `no recipe in corpus` and the census refusal underneath stays masked"
+      ]
     }
   ]
 }

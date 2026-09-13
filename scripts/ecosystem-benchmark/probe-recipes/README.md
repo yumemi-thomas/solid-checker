@@ -188,6 +188,48 @@ they are the caller's under ADR 0034. `evaluate` and `createCoords` follow the
 `access`/`noop` pattern. Certifying the case against this corpus closes all
 twelve (17 → 29 closed domains, 41 → 29 withheld, no veto threw).
 
+The seventy-three modules of 2026-09-13's second batch follow the frontier the
+re-pinned report showed after ADR 0099: 1,550 `reads` entries withheld for want
+of a recipe, on 219 artifact cases, the four largest of which are served here.
+
+- `solid-primitives-utils-*-reads-1bea9ecd.mjs` (23): `@solid-primitives/utils@7.0.0-next.4`'s
+  *own* corpus rows certify `dist/index.js` under a fourth artifact case, so the
+  twenty-two decidable recipes of the `2bf41ff6` set are carried over verbatim
+  with that case's claim ids. `arrayEquals` is copied too although its
+  candidate is `census refused` there (the proposal names an operation): a
+  recipe is what turns `no recipe in corpus` into the refusal underneath, the
+  convention the first five recipes set.
+- `solid-primitives-utils-immutable-*-reads-b70ad6d1.mjs` (12) and
+  `solid-primitives-utils-colors-*-reads-8a0d569b.mjs` (11): the package's
+  `./immutable` and `./colors` entrypoints, each its own artifact case. The
+  second scaffold pass found twenty-three and seven candidates the census
+  refuses -- non-empty enumerations (`drop`, `map`, `lighten`, `mix`, …),
+  coercion forms (`add`, `divide`), element-access legs (`pick`, `omit`) -- and
+  these twenty-three it can decide. The colour manipulation functions take a
+  parsed `Color`, not a string; a first draft passed strings and the package
+  threw `toFormat is not a function`, which the gate reported as
+  `veto did not complete` -- the recipe's misuse, not the package's defect,
+  and the samples now parse first.
+- `motion-utils-*-reads-9a3a41a5.mjs` (27): the `motion-utils@12.39.0`
+  dependency node all three `motion-solidjs` rows certify through. Its `.` case
+  has thirty-eight `reads` candidates. Eight of them -- `easeIn`, `easeOut`,
+  `easeInOut`, `backIn`, `backOut`, `backInOut`, `circOut`, `circInOut` -- are
+  constants bound to a call result (`cubicBezier(…)`, `reverseEasing(…)`),
+  and a recipe for any one of them makes the certifier refuse the *whole row*
+  ("runtime implementation does not match the snapshot-replayed export
+  binding"): the demand plans in the audit are digests, so the eight were found
+  by bisecting the throwing scaffolds. They stay recipe-less by decision. Three
+  more are census refusals (`SubscriptionManager`, `addUniqueItem`,
+  `removeItem`). The twenty-seven left are arithmetic, predicates and
+  higher-order helpers over the caller's functions (ADR 0034); `warning`,
+  `invariant` and `warnOnce` are sampled on their passing branch only, so
+  nothing is logged and the module's `Set` of warned messages is untouched.
+
+Every module declares `NEVER EMITS:` for the reason the earlier batches do.
+Certifying each entrypoint standalone against this corpus closes all
+seventy-two decidable `reads` domains with no veto thrown; the corpus effect is
+in the precision backlog.
+
 
 
 The `seroval-create-reference-identity-development.mjs` recipe (2026-09-10)

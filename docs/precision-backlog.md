@@ -1,5 +1,37 @@
 # Precision backlog
 
+## Seventy-three `reads` recipes at the four largest recipe-less cases (2026-09-13)
+
+After ADR 0099 the pin's withheld set is 3,980 unique entries: 1,550 `reads`
+withheld for want of a recipe, 1,085 `callbacks` and 738 `creates` census
+refusals, 278 vetoes the interpreter cannot run for the case, 260 thrown. The
+`reads` block is closable only by hand recipes, by the design decision that the
+domain has no synthesized veto, and the two-pass scaffold makes that mechanical
+where the census can decide. Seventy-three modules land at the four largest
+cases (`scripts/ecosystem-benchmark/probe-recipes/README.md`): twenty-three
+carried onto `@solid-primitives/utils@7.0.0-next.4`'s own-row case, twelve for
+its `./immutable` and eleven for its `./colors` entrypoints, twenty-seven for
+`motion-utils@12.39.0`, the node all three `motion-solidjs` rows certify
+through. Standalone, each entrypoint closes every decidable candidate with no
+veto thrown; the remaining candidates on those cases are the census's correct
+refusals plus eight `motion-utils` easing constants whose runtime binding is a
+call result and for which any recipe refuses the whole row.
+
+Two things this batch settled. `@kobalte/utils@0.9.2`, the most demanded
+package by consumer import sites (942), is TypeScript source under
+`node_modules` in this version, so every recipe there dies at ADR 0009 and the
+demand-hot hub is dead for recipe work. And the dependency-node cases are where
+recipes multiply: one `motion-utils` module serves three rows, one `utils@7`
+module its two. Corpus effect (release binary, 418 rows, default pool): certified
+closure entries 9,608 → 9,752; uncapped `reads` closures 166 → 256 over the 396
+uncapped rows; `no recipe in corpus` withheld entries 1,567 → 1,394; no row
+below the pin, no status move, no veto thrown by a new recipe; wall 1,055 s
+(pin re-taken at that run, budget 1,200 s). The `reads` frontier left is 1,394
+entries on 215 cases, the largest now `@tanstack/devtools-ui@0.7.1` (21) and
+the corvu popover node (20); below that it is a long tail of one to nine
+exports per case, where a shared-module recipe format would pay before more
+authoring does.
+
 ## Two producer-session and gate-batch savings in the ADR 0036 loop (2026-09-13)
 
 Measured with `SOLID_CHECKER_TIMINGS=1` on the two heaviest corpus rows run
