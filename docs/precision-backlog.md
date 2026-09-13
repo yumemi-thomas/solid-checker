@@ -1,5 +1,28 @@
 # Precision backlog
 
+## Twenty-six carried and predicate `reads` recipes on the corvu closures (2026-09-13)
+
+`@corvu/utils` is published under several closures and two versions the
+corpus still certifies through, and the small bodies do not move between
+them, so the tier after the mid-size nodes is mostly carrying: the four
+`./reactivity` recipes onto the 0.4.2 module under the accordion, drawer and
+popover rows' own closure and onto both 0.3.2 cases; the two `./dom` recipes
+onto both 0.3.2 cases and onto the `@corvu-next/utils@0.1.4` fork's two Solid
+2 cases; plus three new pure predicates (`dataIf`, `isButton`, `isFunction`)
+on the 0.4.2 root entrypoint's two cases. A second scaffold pass against
+0.3.2 and corvu-next installs confirmed the carried exports keep their census
+verdicts, and the root predicates were certified standalone before the run
+(`scripts/ecosystem-benchmark/probe-recipes/README.md`). Corpus effect
+(release binary, 418 rows): certified closure entries 10,072 → 10,182
+(solid1 +96, solid2 +14); uncapped `reads` closures 288 → 302 over the 396
+uncapped rows; `no recipe in corpus` `reads` detail rows 3,463 → 3,085; no
+row below the pin, no status move, no veto thrown; wall 1,095 s → 1,134 s.
+The `reads` frontier after this is 3,085 detail rows whose largest cases are
+the census-undecidable `@solid-primitives/utils` root exports, the
+window-bound DOM and icon entrypoints, and Solid-primitive wrappers
+(`@solid-primitives/memo`, `scheduled`, `timer`, `async`) whose `reads` a
+recipe cannot sample without a reactive runtime.
+
 ## Twenty-seven `reads` recipes at the mid-size dependency nodes (2026-09-13)
 
 After the two `callbacks` levers were sized and killed, the recipe-less

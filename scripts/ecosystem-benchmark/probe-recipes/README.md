@@ -259,6 +259,28 @@ The cases the ranking put above these were left by decision: the
 non-empty enumerations the earlier passes named; `@corvu-next/utils`'s DOM
 entrypoint and `@tanstack/devtools-ui`'s icons need a window.
 
+The tier after that (26 modules, same evening) is mostly carrying, because
+`@corvu/utils` is published under several closures and versions and the
+bodies do not move between them:
+
+- `corvu-utils-reactivity-*-reads-a0d201c0.mjs` (4): the 0.4.2 `./reactivity`
+  module under the accordion, drawer and popover rows' own closures.
+- `corvu-utils-reactivity-*-reads-{9e170a86,f240869a}.mjs` (8) and
+  `corvu-utils-dom-*-reads-{84d6a8cd,2c64155d}.mjs` (4): `@corvu/utils@0.3.2`,
+  the node three rows still certify through; its `access`, `chain`,
+  `mergeRefs`, `some`, `afterPaint` and `callEventHandler` are byte for byte
+  the 0.4.2 bodies, and the second scaffold pass against a 0.3.2 install
+  confirmed the same census verdicts.
+- `corvu-next-utils-dom-*-reads-{7496b629,95369190}.mjs` (4): the
+  `@corvu-next/utils@0.1.4` fork's `./dom` under two Solid 2 rows, the same
+  two bodies again, import specifier changed.
+- `corvu-utils-{data-if,is-button,is-function}-reads-{1b8ce990,77550142}.mjs`
+  (6): three pure predicates on the 0.4.2 `.` entrypoint, new recipes.
+
+A carried module is a new file with a new claim id and a header naming its
+own case; the corpus test's one-file-per-entry rule still holds, and the
+copies are cheap because the body is a handful of lines.
+
 
 
 The `seroval-create-reference-identity-development.mjs` recipe (2026-09-10)

@@ -4717,6 +4717,578 @@
         "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
         "NEVER EMITS: `read-operation`. Dispatches to `new ReadonlyStore` for a function and `new Store` otherwise; the construction reads no store."
       ]
+    },
+    {
+      "claimId": "claim:v1:sha256:70f5c6d1d05ebead42e6b519eb1657e9f763039255fee4a966fbf369515f666b",
+      "module": "corvu-utils-reactivity-access-reads-a0d201c0.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A plain value is returned as is; a callable is invoked, which is the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:bdcc6e6d2bdfdf7a4eddec9f9cd067a8d6b9bfaa5dfa3a779c6663b895d7b8b4",
+      "module": "corvu-utils-reactivity-chain-reads-a0d201c0.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. The returned function calls each supplied callback in order with the same arguments and skips falsy entries."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:9f1712e1ffebd8852cd287e56c07f4ab1ffd86bdad07cf6732409b500bd5465e",
+      "module": "corvu-utils-reactivity-merge-refs-reads-a0d201c0.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A `chain` over the supplied refs; each ref receives the element once."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:8a52aa40b6a486c97ae8f83fe36f2417bf97d2787f2c723fb151289e19b0725a",
+      "module": "corvu-utils-reactivity-some-reads-a0d201c0.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. Each supplied signal is invoked until one is truthy; those invocations are the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:28aa4c7889d03a8f569a4464a65f04af93a541640e4f00ec524c7bad63404a92",
+      "module": "corvu-utils-reactivity-access-reads-9e170a86.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A plain value is returned as is; a callable is invoked, which is the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:16bd245112a3fa7848fb255328f3b663ae2f5ad4533cb65c01b1dd1adbf6a55b",
+      "module": "corvu-utils-reactivity-chain-reads-9e170a86.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. The returned function calls each supplied callback in order with the same arguments and skips falsy entries."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:e33d87202ae675431a7d5b2c33ee6bbfb009c3e76985a890d74b512ece37337f",
+      "module": "corvu-utils-reactivity-merge-refs-reads-9e170a86.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A `chain` over the supplied refs; each ref receives the element once."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:ba881201f60a9ced2378e6f96d52539db26e90c41bc2a262dd3ca63039679296",
+      "module": "corvu-utils-reactivity-some-reads-9e170a86.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. Each supplied signal is invoked until one is truthy; those invocations are the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:68d12c67dfb10cbb0c0827d05dc3c9625a5f479cb9ab03e4f2bae84ec862f89d",
+      "module": "corvu-utils-reactivity-access-reads-f240869a.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A plain value is returned as is; a callable is invoked, which is the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:daf54aa77f475ff0b07ee4ae5f29a17112f12fdbae157ba712590693717b1c8d",
+      "module": "corvu-utils-reactivity-chain-reads-f240869a.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. The returned function calls each supplied callback in order with the same arguments and skips falsy entries."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:80a045b85be97953eb13522923baa809e971b1ebcf385078087e2b3880b444ee",
+      "module": "corvu-utils-reactivity-merge-refs-reads-f240869a.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A `chain` over the supplied refs; each ref receives the element once."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:ad33575a07b473d6419fcd545457fd48ac66e9dd25c3f059b8290f31e94a6984",
+      "module": "corvu-utils-reactivity-some-reads-f240869a.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. Each supplied signal is invoked until one is truthy; those invocations are the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:276a567f0560e59919b6ec0f948ee2f64f291fa8d0df793a02506bd0358d390b",
+      "module": "corvu-utils-dom-after-paint-reads-84d6a8cd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The frame scheduler is a recipe-installed shim: a `requestAnimationFrame` the harness realm does not provide, so the sample says nothing about browser paint timing",
+        "NEVER EMITS: `read-operation`. The export schedules its callback through two animation frames and reads nothing itself."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:d6df5104e4ee36cdbaf32b6fc5828b11a907e222c62cbd6abc180864b226acab",
+      "module": "corvu-utils-dom-call-event-handler-reads-84d6a8cd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A function handler is called; a bound-handler tuple is called with its data; the returned flag is the event's own `defaultPrevented`."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:0058ecffa82b5e04d2e597cd543a949e2a8ac4f16829b9864fe3d27ebffee18e",
+      "module": "corvu-utils-dom-after-paint-reads-2c64155d.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The frame scheduler is a recipe-installed shim: a `requestAnimationFrame` the harness realm does not provide, so the sample says nothing about browser paint timing",
+        "NEVER EMITS: `read-operation`. The export schedules its callback through two animation frames and reads nothing itself."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:c8366b416fd222e052e6f31962b354644d27b95d1a02b12c12e35207c52f5c49",
+      "module": "corvu-utils-dom-call-event-handler-reads-2c64155d.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A function handler is called; a bound-handler tuple is called with its data; the returned flag is the event's own `defaultPrevented`."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:e5ccc873217c2f1cdf9aad20500bda9c6a26289c5a2669917e9e6f1be102c8a1",
+      "module": "corvu-next-utils-dom-after-paint-reads-7496b629.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The frame scheduler is a recipe-installed shim: a `requestAnimationFrame` the harness realm does not provide, so the sample says nothing about browser paint timing",
+        "NEVER EMITS: `read-operation`. The export schedules its callback through two animation frames and reads nothing itself."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:fd58888b31620fa07987b94728c51c45e4d8296074a29086ef1b9e097fe3784d",
+      "module": "corvu-next-utils-dom-call-event-handler-reads-7496b629.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A function handler is called; a bound-handler tuple is called with its data; the returned flag is the event's own `defaultPrevented`."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:95c114ff7c0e83203357bfc32c3d87613ea75223308022f39150ac16b22f7dc3",
+      "module": "corvu-next-utils-dom-after-paint-reads-95369190.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The frame scheduler is a recipe-installed shim: a `requestAnimationFrame` the harness realm does not provide, so the sample says nothing about browser paint timing",
+        "NEVER EMITS: `read-operation`. The export schedules its callback through two animation frames and reads nothing itself."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:f17f45856768a541bf432b2f3aa215f96de6b940b6cf5bfdae366f2e8b1d4aaf",
+      "module": "corvu-next-utils-dom-call-event-handler-reads-95369190.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A function handler is called; a bound-handler tuple is called with its data; the returned flag is the event's own `defaultPrevented`."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:efab58d02e922e7511849ed37d4a24e80c9dfa716088fb7bd5307fe5fe137951",
+      "module": "corvu-utils-data-if-reads-1b8ce990.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a pure predicate; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A pure conditional over its argument: the empty string for a truthy condition, undefined otherwise."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:bba4be9576dfadbc58dfec3e001d3b166a97ebafe2b711fb9517cdb283410a05",
+      "module": "corvu-utils-is-button-reads-1b8ce990.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a pure predicate; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A pure comparison of a tag name and an input type against a module-level list of literals."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:46235d632ac4e4583f7e23a20c963662fa970af031e85823080ce2b7aab42ebb",
+      "module": "corvu-utils-is-function-reads-1b8ce990.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a pure predicate; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A `typeof` test plus the callable's own arity; nothing is invoked."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:f53269eb98c74cfa4c65ca646eb2fc000e50a84adb2782cd8e8fb5f4c3ccd79c",
+      "module": "corvu-utils-data-if-reads-77550142.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a pure predicate; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A pure conditional over its argument: the empty string for a truthy condition, undefined otherwise."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:4ce7975fc1490b2d27b7562ce8c3647d4e3accfe6a5820ec2e53a87a80b93fa7",
+      "module": "corvu-utils-is-button-reads-77550142.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a pure predicate; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A pure comparison of a tag name and an input type against a module-level list of literals."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:0269c4a146906726ac2c8135a2d581fe949fd82b47b12b02e7f1b4d3701c97d2",
+      "module": "corvu-utils-is-function-reads-77550142.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a pure predicate; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A `typeof` test plus the callable's own arity; nothing is invoked."
+      ]
     }
   ]
 }
