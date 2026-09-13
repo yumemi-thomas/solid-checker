@@ -73,7 +73,7 @@ test("the frozen Phase 20 cohort remains the exact authority for the Phase 21 le
   // passes against the rewritten ledger.
   assert.deepEqual(ledger.authority.currentReport, {
     path: "benchmarks/ecosystem/report.json",
-    sha256: "b3125f12e86a9975194470ca404de9cd717fa00276f97090591d901debaa2617"
+    sha256: "2e7f1cb9e30f130c72129ff920832b9bd0c19be61c401a3497fcc1023b398185"
   });
   assert.equal(ledger.rows.filter(row => row.phase21Disposition == null).length, 0);
   // One row moved, `@solid-primitives/geolocation@1.5.5|solid1|only`:
@@ -124,18 +124,23 @@ test("the frozen Phase 20 cohort remains the exact authority for the Phase 21 le
     // refusal set on 2026-09-03 (declaration-owner harness fix) and certifies
     // through an ordinary receipt, so the geolocation-style secondary gap books
     // it as pending-phase21-checker-work rather than verified.
-    "exact-refusal-semantic-model": 3,
-    "exact-refusal-type-facts-capability": 1,
-    "pending-phase21-checker-work": 9,
+    // 2026-09-13 repin (callbacks census, sixteen-row Solid 1.x creates audit,
+    // workspace-refusal withholding, eighty-five reads recipes, 1200 s row
+    // timeout): the three semantic-model refusals and the type-facts-capability
+    // refusal now certify in the live report, so the historical disposition
+    // function books them as pending-phase21-checker-work (9 -> 12), and one
+    // row gains a verified case (verified-through-ordinary-receipt-load).
+    "pending-phase21-checker-work": 12,
     "retained-unsupported-runtime-model": 7,
-    "retained-upstream-missing-bytes": 5
+    "retained-upstream-missing-bytes": 5,
+    "verified-through-ordinary-receipt-load": 1
   });
   assert.deepEqual(ledger.summary.remainingOwners, {
     "authenticated-dependency-layout": 5,
-    "checker-dependency-composition": 1,
     "checker-resolver": 3,
     "checker-semantic-model": 6,
     "checker-type-facts": 2,
+    "none": 1,
     "runtime-model": 7,
     "upstream-package": 6
   });

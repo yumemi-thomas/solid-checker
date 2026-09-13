@@ -314,7 +314,7 @@ ECOSYSTEM_PROBE_RECIPES := scripts/ecosystem-benchmark/probe-recipes
 ecosystem-benchmark: build-checker-release
 	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
-	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 600 --attempt-certification \
+	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 1200 --attempt-certification \
 	  --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" \
 	  --thresholds scripts/ecosystem-benchmark/phase16-thresholds.json
 
@@ -331,7 +331,7 @@ ecosystem-regression: build-checker-release
 	mkdir -p "$(CURDIR)/rust/target/ecosystem-regression"
 	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
-	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 600 --attempt-certification \
+	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 1200 --attempt-certification \
 	  --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" \
 	  --baseline benchmarks/ecosystem/report.json \
 	  --thresholds scripts/ecosystem-benchmark/certification-regression-thresholds.json \

@@ -1,51 +1,29 @@
 # Precision backlog
 
-## Eleven more `reads` closures on `@solid-primitives/utils@6.4.1`; one harness lever killed (2026-09-13)
+## Hygiene for the pin, two more recipe hubs, and the recipe-less `callbacks` candidates named (2026-09-13)
 
-The `.` case of the hub package had thirty-one `reads` candidates still withheld
-for want of a recipe. The two-pass scaffold procedure sorted them: twenty the
-census refuses (`domain-exhaustiveness` on aliases and constants, non-empty
-proposed enumerations, accessor and iteration legs) and eleven it decides —
-`clamp`, `compare`, `falseFn`, `isNonNullable`, `json`, `number`, `ofClass`,
-`pipe`, `reverseChain`, `safe`, `withAccess`. All eleven recipes are written
-and declared `NEVER EMITS:` (the pure-primitive ones keep objects out of their
-samples because `Math.max`, `<` and `Number` coerce through the caller's
-`valueOf`, a read that is the caller's under ADR 0034). Standalone
-certification of the case: 44 → 55 closed domains, 50 → 40 withheld, nothing
-lost. Each recipe closes the entry in every row depending on this node
-(forty-two in the 418-row corpus). Over the 418-row corpus (release binary, 1200 s row timeout) against the
-same tree with the nine-recipe corpus: `no recipe in corpus` 11,176 → 10,714
-(exactly 11 × 42), certified closure entries 6,636 → 6,678, uncapped `reads`
-closures 52 → 96, no row below baseline, Solid 2 unchanged to the entry. The three most-demanded remaining exports
-(`tryOnCleanup`, `entries`, `keys`) are aliases the census cannot make
-exhaustive; no recipe can move them. Also measured and left alone: the 139
-entries refused by `plain_condition_name` for `@tanstack/custom-condition`
-select `src/index.ts` cases, so accepting the name would only re-refuse them
-under ADR 0009 (§ 9 of
-[the demand measurement](package-contract-v2/phase21/2026-09-12-consumer-demand-measurement.md)).
-
-## Consumer demand measured; nine demand-scoped `reads` closures; probe-scoped coverage (2026-09-12)
-
-The withheld-closure ledger is 82.6% `noRecipe`, so the frontier is recipe
-authoring, and the question was which recipes are worth writing. Answered with
-no new instrument: ordinary analysis over 118 real consumer projects (five
-upstream repositories, dependencies installed) raises `SC9005` at every import
-of an uncontracted Solid package and names the module and export, so the
-findings *are* the demand — 233 distinct exports, 2,056 call sites,
-concentrated in `@kobalte/utils` (one consumer, 942 sites) and
-`@solid-primitives/utils` (the hub; `access` in 30 projects). Crossed with the
-pin, the hub's blocker is uniformly a missing `reads` recipe. Nine recipes for
-`@solid-primitives/utils@6.4.1`'s `.` case followed, scoped to the exports a
-consumer names among the twenty the census can decide; the other twenty of the
-case's forty candidates refuse for reasons no recipe serves —
-`callSignatureNotUnique` on engine-function aliases (10 claims), a non-empty
-proposed enumeration (6), accessor legs (4). Also found and settled:
-`@tanstack/charts` certifying 1 of 113 entrypoints is its probe's own `./solid`
-scoping, and `lib/certified-coverage.mjs` now measures such a row against what
-it requested; and `accepted dependency solid-js has no exact runtime binding`
-(74 refusal strings, 35 rows) is the decision `solid-reexport` pins, not a gap.
-Measurement, queue and method in
-[`phase21/2026-09-12-consumer-demand-measurement.md`](package-contract-v2/phase21/2026-09-12-consumer-demand-measurement.md).
+The Makefile's benchmark and regression targets now pass `--timeout 1200`: the
+three heaviest rows take 615–735 s since the callbacks census and the 1.x
+audit, and at 600 s a refresh silently demoted them to `infrastructure-failure`
+(−991 entries in one such run today). The wall-time budget test moves from
+150 s to 900 s with its rationale rewritten — the old number belonged to a
+three-domain corpus and had been failing on every pin since. Seventy-four more
+`reads` recipes landed: sixty-two for `@solid-primitives/utils@7.0.0-next.4`
+across its three corpus artifact cases and twelve for
+`@floating-ui/utils@0.2.12`; every one closes standalone with no veto thrown
+(§ 10 of [the demand measurement](package-contract-v2/phase21/2026-09-12-consumer-demand-measurement.md)).
+Found on the way: the 2,977 `callbacks` candidates withheld as `no recipe` are
+value exports with no call signature, which `synthesize` cannot sample and the
+census refuses as `callSignatureNotUnique`; they need a data-only value-export
+premise, not recipes. Case fragmentation is the next ceiling for recipe work
+(`@corvu/utils` spreads eighteen exports over eighteen cases); letting one
+module serve several claim ids is the format change that would lift it.
+Re-pinned `benchmarks/ecosystem/report.json` (2026-09-13T01:51Z, 854 s, release
+binary): 381 certified / 18 refused / 19 not attempted rows unchanged;
+certified closure entries 6,722 → 6,790; uncapped `reads` closures 96 → 256;
+`no recipe in corpus` 10,714 → 10,166; no row below the previous run. The
+phase 21 ledger was regenerated with `--write` and both ledger tests re-pinned
+to the new report with the movement attributed in their comments.
 
 ## The coercion census residue, sized: 24 sites, every one on a decided boundary (2026-09-13)
 
@@ -107,6 +85,30 @@ re-export declaration rather than the audited `@solidjs/signals` archive. The
 first is a policy question (the repository audits one specific prerelease);
 the second is the rc.3 declaration/runtime split, not a missing row.
 
+## Eleven more `reads` closures on `@solid-primitives/utils@6.4.1`; one harness lever killed (2026-09-13)
+
+The `.` case of the hub package had thirty-one `reads` candidates still withheld
+for want of a recipe. The two-pass scaffold procedure sorted them: twenty the
+census refuses (`domain-exhaustiveness` on aliases and constants, non-empty
+proposed enumerations, accessor and iteration legs) and eleven it decides —
+`clamp`, `compare`, `falseFn`, `isNonNullable`, `json`, `number`, `ofClass`,
+`pipe`, `reverseChain`, `safe`, `withAccess`. All eleven recipes are written
+and declared `NEVER EMITS:` (the pure-primitive ones keep objects out of their
+samples because `Math.max`, `<` and `Number` coerce through the caller's
+`valueOf`, a read that is the caller's under ADR 0034). Standalone
+certification of the case: 44 → 55 closed domains, 50 → 40 withheld, nothing
+lost. Each recipe closes the entry in every row depending on this node
+(forty-two in the 418-row corpus). Over the 418-row corpus (release binary, 1200 s row timeout) against the
+same tree with the nine-recipe corpus: `no recipe in corpus` 11,176 → 10,714
+(exactly 11 × 42), certified closure entries 6,636 → 6,678, uncapped `reads`
+closures 52 → 96, no row below baseline, Solid 2 unchanged to the entry. The three most-demanded remaining exports
+(`tryOnCleanup`, `entries`, `keys`) are aliases the census cannot make
+exhaustive; no recipe can move them. Also measured and left alone: the 139
+entries refused by `plain_condition_name` for `@tanstack/custom-condition`
+select `src/index.ts` cases, so accepting the name would only re-refuse them
+under ADR 0009 (§ 9 of
+[the demand measurement](package-contract-v2/phase21/2026-09-12-consumer-demand-measurement.md)).
+
 ## Solid 1.x `creates` audit: eleven rows for `solid-js@1.9.14` (2026-09-13)
 
 The open item "a 1.x `creates` audit does not exist" is closed for eleven
@@ -132,6 +134,29 @@ gates (`workspace_refusal_withholding`) instead of failing its case set. Still
 open: `reads`, `callbacks` and `returns` on every 1.x primitive; `createResource`,
 `lazy`, `createRoot`, `render`, `hydrate` and the `web`/`store` surfaces for
 `creates`.
+
+## Consumer demand measured; nine demand-scoped `reads` closures; probe-scoped coverage (2026-09-12)
+
+The withheld-closure ledger is 82.6% `noRecipe`, so the frontier is recipe
+authoring, and the question was which recipes are worth writing. Answered with
+no new instrument: ordinary analysis over 118 real consumer projects (five
+upstream repositories, dependencies installed) raises `SC9005` at every import
+of an uncontracted Solid package and names the module and export, so the
+findings *are* the demand — 233 distinct exports, 2,056 call sites,
+concentrated in `@kobalte/utils` (one consumer, 942 sites) and
+`@solid-primitives/utils` (the hub; `access` in 30 projects). Crossed with the
+pin, the hub's blocker is uniformly a missing `reads` recipe. Nine recipes for
+`@solid-primitives/utils@6.4.1`'s `.` case followed, scoped to the exports a
+consumer names among the twenty the census can decide; the other twenty of the
+case's forty candidates refuse for reasons no recipe serves —
+`callSignatureNotUnique` on engine-function aliases (10 claims), a non-empty
+proposed enumeration (6), accessor legs (4). Also found and settled:
+`@tanstack/charts` certifying 1 of 113 entrypoints is its probe's own `./solid`
+scoping, and `lib/certified-coverage.mjs` now measures such a row against what
+it requested; and `accepted dependency solid-js has no exact runtime binding`
+(74 refusal strings, 35 rows) is the decision `solid-reexport` pins, not a gap.
+Measurement, queue and method in
+[`phase21/2026-09-12-consumer-demand-measurement.md`](package-contract-v2/phase21/2026-09-12-consumer-demand-measurement.md).
 
 ## `reads` census: convention decided, rows pending an audit (2026-09-10)
 
