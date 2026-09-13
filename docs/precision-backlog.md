@@ -37,9 +37,51 @@ default-library alias, a default-library call result as a subject root, a
 captured parameter root, a dialect data object, a class construction), each its
 own ADR, fixture pair and protocol bump. The remaining Tier A rows named there
 (corvu `./create/keyedContext`, `@solid-primitives/refs`, `scheduled`,
-`./immutable`) are still unmeasured: their pass-2 scaffold has not been run, and
-per § 43.3 a candidate with no recipe hides its census verdict, so none of them
-should be written against until it has.
+`./immutable`) have since been measured — see the entry below.
+
+## Tier A pass-2 census: 206 rows gainable, 118 census refused (2026-09-14)
+
+The depth plan guessed at decidability for all but two Tier A rows; those
+guesses are now measured, and four of six were wrong in both directions.
+Full record in
+`docs/package-contract-v2/phase21/2026-09-14-tier-a-pass-2-census.md`.
+
+Of 324 recipe-less `reads` rows across twelve cases, **206 are gainable by
+authoring and 118 are census refused**. The two largest opportunities are the
+ones the plan had as doubtful: corvu `./create/keyedContext` (96 rows, guessed
+to wait on a withheld `solid-js` claim, measured fully decidable) and the corvu
+`./create/*` `default` exports (68 rows, same guess, same correction).
+`@solid-primitives/refs` yields 24 of 36 (the predicates are decidable; `Ref`
+and `resolveElements` refuse) and `@solid-primitives/scheduled` 18 of 36
+(`createScheduled`, `debounce`, `leading` decidable). Two rows yield nothing:
+`combineStyle` (66 rows) as the plan predicted, and `./immutable` (22 rows)
+against its prediction — all eleven of its still-withheld exports are census
+refused, so eleven recipes would have been written against candidates no recipe
+can serve. `@solid-primitives/refs@3.0.0-next.0` (24 rows) remains unmeasured:
+its only corpus root is `motion-solidjs@0.7.0-beta.4`, which hits the recorded
+`motion-utils@12.39.0` snapshot-replay blocker.
+
+Two method corrections the census forced, both of which silently produce
+plausible non-verdicts:
+
+- The plan's "case ids equal the corpus's, so a scratch project is enough"
+  holds only for root-row (`reused-proposal`) cases. Ten of the twelve Tier A
+  cases are `published-graph` — dependency nodes — and a standalone
+  certification yields a *different* artifact case (or, for `refs`, a clean
+  `certified` with no candidates at all). Certify the **root** with
+  `--dependency-graph-lane --recover-entrypoints` instead; that reproduced all
+  eight corvu case ids, plus `b97f9095` and `e1a524fa`, exactly.
+- On a graph-lane run the scaffold's `--specifier` must name the dependency
+  under study, not the root, or every gate fails with "the probe worker could
+  not resolve …" — which reads like a census verdict and is not one.
+
+The 118 blocked rows corroborate Tier B's aim rather than contradicting it:
+they are `iteration-protocol (SpreadElement)` with no reviewed root (B-4),
+coercion and unrooted element/property access (B-5), and two refusals that
+state B-6 almost in the ADR's own words ("the invocation of a member of
+parameter 1 … sits inside a callable nested in the implementation, so its
+execution point is not the call event"). The `./immutable` case that yields
+nothing to authoring is the one that most directly motivates B-5 and B-6.
 
 ## ADR 0101: a described `reads` enumeration the census confirms (2026-09-13)
 
