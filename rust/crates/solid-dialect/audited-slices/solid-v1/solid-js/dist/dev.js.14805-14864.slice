@@ -1,0 +1,3 @@
+function onMount(fn) {
+  createEffect(() => untrack(fn));
+}

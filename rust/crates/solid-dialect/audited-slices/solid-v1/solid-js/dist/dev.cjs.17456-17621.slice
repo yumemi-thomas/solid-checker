@@ -1,0 +1,8 @@
+function createContext(defaultValue, options) {
+  const id = Symbol("context");
+  return {
+    id,
+    Provider: createProvider(id, options),
+    defaultValue
+  };
+}

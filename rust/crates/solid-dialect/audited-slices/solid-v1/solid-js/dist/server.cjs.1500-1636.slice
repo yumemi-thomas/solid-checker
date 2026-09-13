@@ -1,0 +1,5 @@
+function createSignal(value, options) {
+  return [() => value, v => {
+    return value = typeof v === "function" ? v(value) : v;
+  }];
+}

@@ -3333,22 +3333,35 @@ mod tests {
         ));
     }
 
-    /// Solid 1.x denies nothing, and that is a decision with a recorded
-    /// reason, not an unfinished table.
+    /// Solid 1.x audits exactly one archive — `solid-js@1.9.14`, the tuple
+    /// every bundled solid-v1 document names — and denies `creates` for the
+    /// sixteen primitives its 2026-09-12/13 hand audit read, and nothing else.
     #[test]
-    fn solid_1x_carries_no_negative_authority() {
+    fn solid_1x_audits_solid_js_1_9_14_and_denies_only_its_sixteen_creates_rows() {
         let authority = Version::V1.dialect().negative_claim_authority();
-        assert!(authority.archives.is_empty());
-        assert!(authority.rows.is_empty());
-        assert!(authority.archives_named("solid-js").next().is_none());
-        assert!(!authority.denies("solid-js", "createEffect", CallClaimDomain::Creates));
+        assert_eq!(authority.archives.len(), 1);
+        assert_eq!(authority.rows.len(), 16);
+        let archive = authority
+            .archives_named("solid-js")
+            .next()
+            .expect("1.x audits solid-js");
+        assert_eq!(archive.version, "1.9.14");
+        assert!(authority.denies("solid-js", "createEffect", CallClaimDomain::Creates));
+        assert!(authority.denies("solid-js", "useContext", CallClaimDomain::Creates));
+        assert!(!authority.denies("solid-js", "createEffect", CallClaimDomain::Reads));
+        assert!(!authority.denies("solid-js", "createResource", CallClaimDomain::Creates));
+        assert!(primitive_performs_no_operation(
+            archive,
+            "createEffect",
+            CallClaimDomain::Creates
+        ));
         // And the shared function is scoped to the *exact* archive tuple: a
         // hypothetical `solid-js` archive at a version and integrity no
-        // dialect audited must not be answered from 2.0's real
-        // `solid-js@2.0.0-rc.3` rows just because the name matches.
+        // dialect audited must not be answered from either dialect's real
+        // rows just because the name matches.
         assert!(!primitive_performs_no_operation(
             &unaudited_archive("solid-js"),
-            "createRoot",
+            "createEffect",
             CallClaimDomain::Creates
         ));
     }
@@ -3358,7 +3371,14 @@ mod tests {
     /// audits those bytes, agreement becomes a real gate.
     #[test]
     fn one_dialect_answers_for_a_shared_archive_name_only_while_the_other_is_absent() {
-        let solid_js = only_audited_archive("solid-js");
+        // Both dialects now audit an archive *named* `solid-js`, at different
+        // bytes: 2.0's rc.3 and 1.x's 1.9.14. Pick 2.0's by version; the
+        // exact-tuple rule below is what keeps 1.x's audit of *other* bytes
+        // from vetoing or granting anything about these.
+        let solid_js = *audited_archives("solid-js")
+            .into_iter()
+            .find(|archive| archive.version == "2.0.0-rc.3")
+            .expect("2.0 audits solid-js@2.0.0-rc.3");
         // `Show`, not `createEffect`: 2.0 withdrew the `createEffect` row on
         // 2026-09-04 (its `node`-condition body reaches the SSR serializer, and
         // a flat row cannot carry the guard), so it now answers `false` for a
@@ -3373,16 +3393,32 @@ mod tests {
             "createEffect",
             CallClaimDomain::Creates
         ));
+        // 1.x audits `solid-js@1.9.14`, not these bytes, so it does not
+        // participate in the union for rc.3 — and rc.3's answer above is 2.0's
+        // alone. Symmetrically, 1.x's own archive answers from 1.x's rows only.
+        let solid_js_1x = *audited_archives("solid-js")
+            .into_iter()
+            .find(|archive| archive.version == "1.9.14")
+            .expect("1.x audits solid-js@1.9.14");
         assert!(
-            Version::V1
+            !Version::V1
                 .dialect()
                 .negative_claim_authority()
-                .archives_named("solid-js")
-                .next()
-                .is_none(),
-            "1.x audits no solid-js archive today, so the case above does not \
-             yet exercise cross-dialect agreement over the same bytes"
+                .archives
+                .contains(&solid_js)
         );
+        assert!(
+            !Version::V2
+                .dialect()
+                .negative_claim_authority()
+                .archives
+                .contains(&solid_js_1x)
+        );
+        assert!(primitive_performs_no_operation(
+            &solid_js_1x,
+            "createEffect",
+            CallClaimDomain::Creates
+        ));
 
         // The rule itself, pinned against a hand-built pair so it does not
         // depend on which archives the dialects happen to list today. Two
@@ -3469,7 +3505,8 @@ mod tests {
         assert_eq!(signals[0].manifest_sha256.len(), 64);
         assert!(audited_archives("").is_empty());
         assert!(audited_archives("@solidjs/router").is_empty());
-        assert_eq!(audited_archives("solid-js").len(), 1);
+        // Both dialects audit an archive named `solid-js`, at different bytes.
+        assert_eq!(audited_archives("solid-js").len(), 2);
     }
 
     /// The domain vocabulary is the eight kinded call claim domains, and

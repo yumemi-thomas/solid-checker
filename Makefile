@@ -68,6 +68,9 @@ PROBE_EXPECT_PINS = $(if $(PROBE_NODE),SOLID_CHECKER_EXPECT_PROBE_PINS=1,)
 # depends on `tsc-oracle-provision` (idempotent: it short-circuits on a tree
 # that already passes the version check).
 RC3_ARCHIVE_ENV = SOLID_CHECKER_RC3_ARCHIVE_ROOT="$(CURDIR)/rust/target/tsc-oracle/v2/node_modules"
+# The Solid 1.x counterpart: `solid_1x`'s citation test reads the audited
+# `solid-js@1.9.14` bundles from the `v1` oracle install the same way.
+RC3_ARCHIVE_ENV += SOLID_CHECKER_SOLID1_ARCHIVE_ROOT="$(CURDIR)/rust/target/tsc-oracle/v1/node_modules"
 
 .PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-probe-harness test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit phase19-audit phase20-ledger phase21-ledger compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
 

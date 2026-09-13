@@ -1,0 +1,12 @@
+function createMemo(fn, value) {
+  Owner = createOwner();
+  let v;
+  try {
+    v = fn(value);
+  } catch (err) {
+    handleError(err);
+  } finally {
+    Owner = Owner.owner;
+  }
+  return () => v;
+}

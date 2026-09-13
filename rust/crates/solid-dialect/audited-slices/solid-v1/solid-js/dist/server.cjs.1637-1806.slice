@@ -1,0 +1,10 @@
+function createComputed(fn, value) {
+  Owner = createOwner();
+  try {
+    fn(value);
+  } catch (err) {
+    handleError(err);
+  } finally {
+    Owner = Owner.owner;
+  }
+}

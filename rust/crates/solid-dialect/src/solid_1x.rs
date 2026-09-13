@@ -10,61 +10,1108 @@
 //! the bundled 1.x contract's 144 exports: a name earns a place here when the
 //! checker models a reactive obligation for it. `createUniqueId` is a real 1.x
 //! export with nothing to say about reactivity, and it is not here.
+//!
+//! The dialect's negative authority ([`NEGATIVE_AUTHORITY`]) audits exactly one
+//! archive, `solid-js@1.9.14`, and denies `creates` for sixteen primitives read
+//! by hand out of its six published bundles
+//! (`docs/package-contract-v2/audits/2026-09-12-solid-1x-1.9.14-core-primitives-creates.md`).
+//! It cites no bundled solid-v1 JSON document: those documents' `creates: []`
+//! closures were written by the 2026-08-28 migration over a domain the
+//! original audit never examined, and are not authority.
 
 use crate::{
-    Boundary, CallbackOwner, CleanupRule, Dialect, DialectNegativeAuthority, Execution, Primitive,
-    ReactiveRole, ResultSlot, TrackedCallbackTiming, Version, lookup, reverse,
+    AuditedArchive, AuditedCitation, Boundary, CallClaimDomain, CallbackOwner, CleanupRule,
+    Dialect, DialectNegativeAuthority, Execution, NegativeClaimRow, Primitive, ReactiveRole,
+    ResultSlot, TrackedCallbackTiming, Version, lookup, reverse,
 };
 
 /// Solid 1.x.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Solid1x;
 
-/// **No rows, and no audited archive.** This dialect denies nothing about
-/// `solid-js@1.9.14`, deliberately, and the reason is provenance rather than
-/// effort.
+/// The exact published archive the Solid 1.x negative rows were read against.
+///
+/// All four fields are the identity (ADR 0005 objection 1, ADR 0007). The
+/// tuple is the `package` block of every `pkg/contracts/bundled/solid-v1/*.json`
+/// document, re-established from the npm registry by
+/// `scripts/audit-solid-1x.mjs` (`benchmarks/package-contract-v2/phase0/solid-1x/`)
+/// and matching the tsc-oracle `v1` install byte for byte on every cited file.
+const AUDITED_ARCHIVES: &[AuditedArchive] = &[AuditedArchive {
+    name: "solid-js",
+    version: "1.9.14",
+    integrity: "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+    manifest_sha256: "52ee61ea826e59a5ec36f6ce91bafb7d38bf99ab04b3a6217993fb17af6037c0",
+}];
+
+/// The hand implementation census over the exact published 1.9.14 bytes of
+/// eleven core primitives (2026-09-12) plus five more (2026-09-13, §§ 13–17),
+/// and the source of every row below.
+const SOLID1_CORE_PRIMITIVES_AUDIT: &str =
+    "docs/package-contract-v2/audits/2026-09-12-solid-1x-1.9.14-core-primitives-creates.md";
+
+/// What the 1.x audit **denies**: sixteen `creates` rows for `solid-js@1.9.14`,
+/// every one read out of the archive's own runtime bytes by hand
+/// ([`SOLID1_CORE_PRIMITIVES_AUDIT`]) and cited with
+/// [`AuditedCitation::Implementation`] into all six `exports["."]` bundles.
+///
+/// # Why there is no `Summary` row here
 ///
 /// The nineteen `pkg/contracts/bundled/solid-v1/*.json` documents *do* close
-/// `creates: []` — for all 129 exports, across every artifact case — and it
-/// would be one mechanical extraction to turn that into rows. That closure is
-/// not an audit.
+/// `creates: []` for all 129 exports, and it would be one mechanical
+/// extraction to turn that into rows. That closure is not an audit. The
+/// hand-audited `solid-js@1.9.14` contract before commit `474c101f` ("migrate
+/// package contracts to normalized v2", 2026-08-28) was schema 1, which had
+/// **no claim domains at all**; the `creates: []` **closed** in today's
+/// documents was introduced *by the migration*, over a domain the audit never
+/// examined — the negative claim manufactured from missing knowledge that
+/// ADR 0005 names as inadmissible. `docs/precision-backlog.md` records the
+/// finding. So no row cites those documents, and the derivation test below
+/// asserts that the JSON-derivable set contributes **nothing** to this table.
 ///
-/// What the audit actually said is checked in as history. The hand-audited
-/// `solid-js@1.9.14` contract before commit `474c101f` ("migrate package
-/// contracts to normalized v2", 2026-08-28) was schema 1, and schema 1 had
-/// **no claim domains at all**: each summary carried `kind`, an optional
-/// `returns` shape, and `callbacks`, and nothing else. `dce2ffc5` ("Complete
-/// Solid 1.x contract audit", 2026-08-25) audited that surface. So the
-/// `creates: []` **closed** in today's documents was introduced *by the
-/// migration*, over a domain the audit never examined — which is the negative
-/// claim manufactured from missing knowledge that
-/// `docs/adr/0005-dialect-axioms-about-the-dialects-own-package.md` names as
-/// inadmissible ("Closing it because no requirement was derived manufactures a
-/// negative claim from missing knowledge. Only a hand audit can assert that
-/// closure").
+/// # `creates`, and only `creates`
 ///
-/// Two structural tells confirm it, either alone sufficient:
+/// The audit reads one domain. `reads`, `callbacks` and `returns` stay
+/// withheld for every 1.x primitive until each has its own audit; the
+/// admitted-domain assertion in the tests is `{Creates}`, and widening it is
+/// a decision.
 ///
-/// - Every solid-v1 summary closes a subset of `["callbacks", "reads",
-///   "creates", "returns"]` — 83 close all four, and six (`mergeProps`'s and
-///   `createResource`'s summaries) close only `["creates", "reads",
-///   "returns"]` — and *no* solid-v1 summary ever closes `writes`,
-///   `invalidates`, `throws`, `cleanups`, or `disposals`. That is precisely
-///   the four kinds the generator emitted and the five it hard-wired to
-///   `Unknown`
-///   (`phase21/2026-09-03-implementation-census-plan.md` § 1.1); "exactly"
-///   overstated the first half, but the argument itself survives on the
-///   second.
-/// - `createSignal`'s summary carries `shape: "callable"`, and
-///   `createSignal<T>()` returns `Signal<T>`, a two-element tuple. A hand
-///   audit of the returned shape does not make that mistake.
+/// # The reading the rows rest on
 ///
-/// Reviving this table therefore needs a 1.x `creates` audit, not a table
-/// edit. Until then the census refuses every 1.x callee by name, which is the
-/// honest answer; the finding is recorded in `docs/precision-backlog.md`.
+/// `Scheduler` and `ExternalSourceConfig` are `null` until a caller installs
+/// them through the separate exports `enableScheduling` and
+/// `enableExternalSource`; every reach from these bodies into the scheduler's
+/// lazily built `MessageChannel` or into an external-source factory is through
+/// module state the caller installed — an installed hook (audit § 0 H1), and
+/// in any case a module-level binding, which `semantic-model.md` § creates
+/// excludes by name. If that reading is ever reversed, the seven rows that
+/// reach the update cycle (`createSignal`, `createMemo`, `createComputed`,
+/// `createRenderEffect`, `createEffect`, `batch`, `onMount`) must be withheld
+/// together.
+const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
+    // R9 of SOLID1_CORE_PRIMITIVES_AUDIT § 0. Six bundles, one per
+    // export condition; the `.js`/`.cjs` twins are byte-identical, which the
+    // equal `slice_sha256` values state rather than imply.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "batch",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 9. `batch` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.js",
+                file_sha256: "b0525eede2c4209fb444831f3bb54f5fdb1a8d748aa7d597cd392880c761c11d",
+                start_byte: 13379,
+                end_byte: 13433,
+                slice_sha256: "094122e29711304fd0249a882f0b169fd7f02462bc67127f2a29c9f352429c6d",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 9. `batch` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "9ac2a6a5a0d43566c3dbda2fe440b914d37e6d7d5cdd5ebaa7f798c90d26fc29",
+                start_byte: 13394,
+                end_byte: 13448,
+                slice_sha256: "094122e29711304fd0249a882f0b169fd7f02462bc67127f2a29c9f352429c6d",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 9. `batch` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.js",
+                file_sha256: "4fadb6529e3a657f0d31f0237e976aeb6f859b0d5bccd58ea98bc9eb4413f010",
+                start_byte: 13977,
+                end_byte: 14031,
+                slice_sha256: "094122e29711304fd0249a882f0b169fd7f02462bc67127f2a29c9f352429c6d",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 9. `batch` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "3b62ac9d987c6d447b90b03891186ed374c4139d0f93a323a6bdc8b42c3d0e72",
+                start_byte: 13992,
+                end_byte: 14046,
+                slice_sha256: "094122e29711304fd0249a882f0b169fd7f02462bc67127f2a29c9f352429c6d",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 9. `batch` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.js",
+                file_sha256: "dfa0ec736228fb544ed655c4008f8ac987543118100bfc96eaec828db07331f0",
+                start_byte: 2266,
+                end_byte: 2303,
+                slice_sha256: "86503a4b75ce02b039de8b8d06606caeba95efbcd646849180ec2d3f6b616ecd",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 9. `batch` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "093e0bdc3b616e281b601f8ef82e3d14c6472d8b4540606d1f9dc4800c13063a",
+                start_byte: 2281,
+                end_byte: 2318,
+                slice_sha256: "86503a4b75ce02b039de8b8d06606caeba95efbcd646849180ec2d3f6b616ecd",
+            },
+        ],
+    },
+    // R6 of SOLID1_CORE_PRIMITIVES_AUDIT § 0. Six bundles, one per
+    // export condition; the `.js`/`.cjs` twins are byte-identical, which the
+    // equal `slice_sha256` values state rather than imply.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "createComputed",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 7. `createComputed` and `createRenderEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.js",
+                file_sha256: "b0525eede2c4209fb444831f3bb54f5fdb1a8d748aa7d597cd392880c761c11d",
+                start_byte: 5753,
+                end_byte: 5951,
+                slice_sha256: "6924747b55d9a6f0e184548d75ab167d23c07b96e46bfe9a985bd290a0ae8699",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 7. `createComputed` and `createRenderEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "9ac2a6a5a0d43566c3dbda2fe440b914d37e6d7d5cdd5ebaa7f798c90d26fc29",
+                start_byte: 5768,
+                end_byte: 5966,
+                slice_sha256: "6924747b55d9a6f0e184548d75ab167d23c07b96e46bfe9a985bd290a0ae8699",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 7. `createComputed` and `createRenderEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.js",
+                file_sha256: "4fadb6529e3a657f0d31f0237e976aeb6f859b0d5bccd58ea98bc9eb4413f010",
+                start_byte: 6291,
+                end_byte: 6499,
+                slice_sha256: "a5cec8d63977e87f10967d5d5997cb7bd0eda17bd54953c80e1cf699eefa821a",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 7. `createComputed` and `createRenderEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "3b62ac9d987c6d447b90b03891186ed374c4139d0f93a323a6bdc8b42c3d0e72",
+                start_byte: 6306,
+                end_byte: 6514,
+                slice_sha256: "a5cec8d63977e87f10967d5d5997cb7bd0eda17bd54953c80e1cf699eefa821a",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 7. `createComputed` and `createRenderEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.js",
+                file_sha256: "dfa0ec736228fb544ed655c4008f8ac987543118100bfc96eaec828db07331f0",
+                start_byte: 1622,
+                end_byte: 1791,
+                slice_sha256: "81fee305f25c3be61304ff283418e0f94866bb676e3b1fab6d328dd2d2a7848d",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 7. `createComputed` and `createRenderEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "093e0bdc3b616e281b601f8ef82e3d14c6472d8b4540606d1f9dc4800c13063a",
+                start_byte: 1637,
+                end_byte: 1806,
+                slice_sha256: "81fee305f25c3be61304ff283418e0f94866bb676e3b1fab6d328dd2d2a7848d",
+            },
+        ],
+    },
+    // R12 of SOLID1_CORE_PRIMITIVES_AUDIT § 0 (2026-09-13, § 13). Six bundles,
+    // one per export condition; the `.js`/`.cjs` twins are byte-identical.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "createContext",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 13. `createContext` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.js",
+                file_sha256: "b0525eede2c4209fb444831f3bb54f5fdb1a8d748aa7d597cd392880c761c11d",
+                start_byte: 16136,
+                end_byte: 16292,
+                slice_sha256: "1696acc67a62350f304f56cb4fa0ec7b7f4636a7b2b250fb2ea126152268983f",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 13. `createContext` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "9ac2a6a5a0d43566c3dbda2fe440b914d37e6d7d5cdd5ebaa7f798c90d26fc29",
+                start_byte: 16151,
+                end_byte: 16307,
+                slice_sha256: "1696acc67a62350f304f56cb4fa0ec7b7f4636a7b2b250fb2ea126152268983f",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 13. `createContext` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.js",
+                file_sha256: "4fadb6529e3a657f0d31f0237e976aeb6f859b0d5bccd58ea98bc9eb4413f010",
+                start_byte: 17441,
+                end_byte: 17606,
+                slice_sha256: "d5094c97565d8ced495c6841585a8c5392f30a031ba541eb3469df9a63b58392",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 13. `createContext` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "3b62ac9d987c6d447b90b03891186ed374c4139d0f93a323a6bdc8b42c3d0e72",
+                start_byte: 17456,
+                end_byte: 17621,
+                slice_sha256: "d5094c97565d8ced495c6841585a8c5392f30a031ba541eb3469df9a63b58392",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 13. `createContext` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.js",
+                file_sha256: "dfa0ec736228fb544ed655c4008f8ac987543118100bfc96eaec828db07331f0",
+                start_byte: 3399,
+                end_byte: 3546,
+                slice_sha256: "80db7be4958920897b5e16afd680516c288651ff5435db12e24889842ac6dfd5",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 13. `createContext` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "093e0bdc3b616e281b601f8ef82e3d14c6472d8b4540606d1f9dc4800c13063a",
+                start_byte: 3414,
+                end_byte: 3561,
+                slice_sha256: "80db7be4958920897b5e16afd680516c288651ff5435db12e24889842ac6dfd5",
+            },
+        ],
+    },
+    // R8 of SOLID1_CORE_PRIMITIVES_AUDIT § 0. Six bundles, one per
+    // export condition; the `.js`/`.cjs` twins are byte-identical, which the
+    // equal `slice_sha256` values state rather than imply.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "createEffect",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 8. `createEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.js",
+                file_sha256: "b0525eede2c4209fb444831f3bb54f5fdb1a8d748aa7d597cd392880c761c11d",
+                start_byte: 6156,
+                end_byte: 6471,
+                slice_sha256: "2ee7f40eb4c1072a21c2b8d3cc9834160f4fbdb0f6d33fe199fd1b4563b92759",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 8. `createEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "9ac2a6a5a0d43566c3dbda2fe440b914d37e6d7d5cdd5ebaa7f798c90d26fc29",
+                start_byte: 6171,
+                end_byte: 6486,
+                slice_sha256: "2ee7f40eb4c1072a21c2b8d3cc9834160f4fbdb0f6d33fe199fd1b4563b92759",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 8. `createEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.js",
+                file_sha256: "4fadb6529e3a657f0d31f0237e976aeb6f859b0d5bccd58ea98bc9eb4413f010",
+                start_byte: 6714,
+                end_byte: 7039,
+                slice_sha256: "32b128182dbff28a75297decd8e867e74c4a1c4d60f385f2c618ebb8b15d7a2c",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 8. `createEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "3b62ac9d987c6d447b90b03891186ed374c4139d0f93a323a6bdc8b42c3d0e72",
+                start_byte: 6729,
+                end_byte: 7054,
+                slice_sha256: "32b128182dbff28a75297decd8e867e74c4a1c4d60f385f2c618ebb8b15d7a2c",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 8. `createEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.js",
+                file_sha256: "dfa0ec736228fb544ed655c4008f8ac987543118100bfc96eaec828db07331f0",
+                start_byte: 1835,
+                end_byte: 1870,
+                slice_sha256: "fae26341d86979aaa089e11a41fef19468e041d54300a44b308c03d01e451aa9",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 8. `createEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "093e0bdc3b616e281b601f8ef82e3d14c6472d8b4540606d1f9dc4800c13063a",
+                start_byte: 1850,
+                end_byte: 1885,
+                slice_sha256: "fae26341d86979aaa089e11a41fef19468e041d54300a44b308c03d01e451aa9",
+            },
+        ],
+    },
+    // R5 of SOLID1_CORE_PRIMITIVES_AUDIT § 0. Six bundles, one per
+    // export condition; the `.js`/`.cjs` twins are byte-identical, which the
+    // equal `slice_sha256` values state rather than imply.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "createMemo",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 6. `createMemo` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.js",
+                file_sha256: "b0525eede2c4209fb444831f3bb54f5fdb1a8d748aa7d597cd392880c761c11d",
+                start_byte: 6834,
+                end_byte: 7261,
+                slice_sha256: "ac6dd73e0270fd20e9b46a2700bdd6bbd2ddba74e7df39b920960213ce7e551a",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 6. `createMemo` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "9ac2a6a5a0d43566c3dbda2fe440b914d37e6d7d5cdd5ebaa7f798c90d26fc29",
+                start_byte: 6849,
+                end_byte: 7276,
+                slice_sha256: "ac6dd73e0270fd20e9b46a2700bdd6bbd2ddba74e7df39b920960213ce7e551a",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 6. `createMemo` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.js",
+                file_sha256: "4fadb6529e3a657f0d31f0237e976aeb6f859b0d5bccd58ea98bc9eb4413f010",
+                start_byte: 7412,
+                end_byte: 7849,
+                slice_sha256: "ad27d2ef9fb668fa3bacfa07334042ea78727815bc6741dd50ef034273de2b32",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 6. `createMemo` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "3b62ac9d987c6d447b90b03891186ed374c4139d0f93a323a6bdc8b42c3d0e72",
+                start_byte: 7427,
+                end_byte: 7864,
+                slice_sha256: "ad27d2ef9fb668fa3bacfa07334042ea78727815bc6741dd50ef034273de2b32",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 6. `createMemo` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.js",
+                file_sha256: "dfa0ec736228fb544ed655c4008f8ac987543118100bfc96eaec828db07331f0",
+                start_byte: 1935,
+                end_byte: 2131,
+                slice_sha256: "c5ad2eb704d1ba3992a74d06e14569ca2a7e79350aab62f6a2c6316919516dcf",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 6. `createMemo` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "093e0bdc3b616e281b601f8ef82e3d14c6472d8b4540606d1f9dc4800c13063a",
+                start_byte: 1950,
+                end_byte: 2146,
+                slice_sha256: "c5ad2eb704d1ba3992a74d06e14569ca2a7e79350aab62f6a2c6316919516dcf",
+            },
+        ],
+    },
+    // R7 of SOLID1_CORE_PRIMITIVES_AUDIT § 0. Six bundles, one per
+    // export condition; the `.js`/`.cjs` twins are byte-identical, which the
+    // equal `slice_sha256` values state rather than imply.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "createRenderEffect",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 7. `createComputed` and `createRenderEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.js",
+                file_sha256: "b0525eede2c4209fb444831f3bb54f5fdb1a8d748aa7d597cd392880c761c11d",
+                start_byte: 5952,
+                end_byte: 6155,
+                slice_sha256: "f7c3e6ea4209f24fa6dfb714be9022b8af972961fbc57a8bc5df33f9c6d9ab97",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 7. `createComputed` and `createRenderEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "9ac2a6a5a0d43566c3dbda2fe440b914d37e6d7d5cdd5ebaa7f798c90d26fc29",
+                start_byte: 5967,
+                end_byte: 6170,
+                slice_sha256: "f7c3e6ea4209f24fa6dfb714be9022b8af972961fbc57a8bc5df33f9c6d9ab97",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 7. `createComputed` and `createRenderEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.js",
+                file_sha256: "4fadb6529e3a657f0d31f0237e976aeb6f859b0d5bccd58ea98bc9eb4413f010",
+                start_byte: 6500,
+                end_byte: 6713,
+                slice_sha256: "04311e342d1c0421afbb43054748f9d7ba7fead9439b34c8f348346477bb98aa",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 7. `createComputed` and `createRenderEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "3b62ac9d987c6d447b90b03891186ed374c4139d0f93a323a6bdc8b42c3d0e72",
+                start_byte: 6515,
+                end_byte: 6728,
+                slice_sha256: "04311e342d1c0421afbb43054748f9d7ba7fead9439b34c8f348346477bb98aa",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 7. `createComputed` and `createRenderEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.js",
+                file_sha256: "dfa0ec736228fb544ed655c4008f8ac987543118100bfc96eaec828db07331f0",
+                start_byte: 1792,
+                end_byte: 1834,
+                slice_sha256: "fbec132e9893ce500cee7699dc1177f7c82de0ea1a6e6af809a48c3ad1a8f887",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 7. `createComputed` and `createRenderEffect` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "093e0bdc3b616e281b601f8ef82e3d14c6472d8b4540606d1f9dc4800c13063a",
+                start_byte: 1807,
+                end_byte: 1849,
+                slice_sha256: "fbec132e9893ce500cee7699dc1177f7c82de0ea1a6e6af809a48c3ad1a8f887",
+            },
+        ],
+    },
+    // R4 of SOLID1_CORE_PRIMITIVES_AUDIT § 0. Six bundles, one per
+    // export condition; the `.js`/`.cjs` twins are byte-identical, which the
+    // equal `slice_sha256` values state rather than imply.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "createSignal",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 5. `createSignal` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.js",
+                file_sha256: "b0525eede2c4209fb444831f3bb54f5fdb1a8d748aa7d597cd392880c761c11d",
+                start_byte: 5233,
+                end_byte: 5752,
+                slice_sha256: "0ef6fad8b1835199b7f1f016e841090bef3171d325d42a0c2fab0f21a81b761b",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 5. `createSignal` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "9ac2a6a5a0d43566c3dbda2fe440b914d37e6d7d5cdd5ebaa7f798c90d26fc29",
+                start_byte: 5248,
+                end_byte: 5767,
+                slice_sha256: "0ef6fad8b1835199b7f1f016e841090bef3171d325d42a0c2fab0f21a81b761b",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 5. `createSignal` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.js",
+                file_sha256: "4fadb6529e3a657f0d31f0237e976aeb6f859b0d5bccd58ea98bc9eb4413f010",
+                start_byte: 5553,
+                end_byte: 6290,
+                slice_sha256: "e253c8edc9873981823ab5583e79d0ea1b99162d4072b0251a48bdda01bb592e",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 5. `createSignal` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "3b62ac9d987c6d447b90b03891186ed374c4139d0f93a323a6bdc8b42c3d0e72",
+                start_byte: 5568,
+                end_byte: 6305,
+                slice_sha256: "e253c8edc9873981823ab5583e79d0ea1b99162d4072b0251a48bdda01bb592e",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 5. `createSignal` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.js",
+                file_sha256: "dfa0ec736228fb544ed655c4008f8ac987543118100bfc96eaec828db07331f0",
+                start_byte: 1485,
+                end_byte: 1621,
+                slice_sha256: "e345c3338166b4be6ce6355e58814427cf497cd6503812ea2b8b108c50aa8ae5",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 5. `createSignal` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "093e0bdc3b616e281b601f8ef82e3d14c6472d8b4540606d1f9dc4800c13063a",
+                start_byte: 1500,
+                end_byte: 1636,
+                slice_sha256: "e345c3338166b4be6ce6355e58814427cf497cd6503812ea2b8b108c50aa8ae5",
+            },
+        ],
+    },
+    // R13 of SOLID1_CORE_PRIMITIVES_AUDIT § 0 (2026-09-13, § 14). Six bundles,
+    // one per export condition; the `.js`/`.cjs` twins are byte-identical.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "getOwner",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 14. `getOwner` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.js",
+                file_sha256: "b0525eede2c4209fb444831f3bb54f5fdb1a8d748aa7d597cd392880c761c11d",
+                start_byte: 14843,
+                end_byte: 14882,
+                slice_sha256: "283aec631382e4285673f2025f18ac178cb984770a65232d4536af4d7c1df846",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 14. `getOwner` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "9ac2a6a5a0d43566c3dbda2fe440b914d37e6d7d5cdd5ebaa7f798c90d26fc29",
+                start_byte: 14858,
+                end_byte: 14897,
+                slice_sha256: "283aec631382e4285673f2025f18ac178cb984770a65232d4536af4d7c1df846",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 14. `getOwner` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.js",
+                file_sha256: "4fadb6529e3a657f0d31f0237e976aeb6f859b0d5bccd58ea98bc9eb4413f010",
+                start_byte: 15526,
+                end_byte: 15565,
+                slice_sha256: "283aec631382e4285673f2025f18ac178cb984770a65232d4536af4d7c1df846",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 14. `getOwner` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "3b62ac9d987c6d447b90b03891186ed374c4139d0f93a323a6bdc8b42c3d0e72",
+                start_byte: 15541,
+                end_byte: 15580,
+                slice_sha256: "283aec631382e4285673f2025f18ac178cb984770a65232d4536af4d7c1df846",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 14. `getOwner` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.js",
+                file_sha256: "dfa0ec736228fb544ed655c4008f8ac987543118100bfc96eaec828db07331f0",
+                start_byte: 3707,
+                end_byte: 3746,
+                slice_sha256: "283aec631382e4285673f2025f18ac178cb984770a65232d4536af4d7c1df846",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 14. `getOwner` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "093e0bdc3b616e281b601f8ef82e3d14c6472d8b4540606d1f9dc4800c13063a",
+                start_byte: 3722,
+                end_byte: 3761,
+                slice_sha256: "283aec631382e4285673f2025f18ac178cb984770a65232d4536af4d7c1df846",
+            },
+        ],
+    },
+    // R14 of SOLID1_CORE_PRIMITIVES_AUDIT § 0 (2026-09-13, § 15). Six bundles,
+    // one per export condition; the `.js`/`.cjs` twins are byte-identical.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "mapArray",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 15. `mapArray` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.js",
+                file_sha256: "b0525eede2c4209fb444831f3bb54f5fdb1a8d748aa7d597cd392880c761c11d",
+                start_byte: 32751,
+                end_byte: 35782,
+                slice_sha256: "841e311992bdd52ba1ac8d4bebd5eb777e43c899316822f83a1def6692f93cc5",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 15. `mapArray` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "9ac2a6a5a0d43566c3dbda2fe440b914d37e6d7d5cdd5ebaa7f798c90d26fc29",
+                start_byte: 32766,
+                end_byte: 35797,
+                slice_sha256: "841e311992bdd52ba1ac8d4bebd5eb777e43c899316822f83a1def6692f93cc5",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 15. `mapArray` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.js",
+                file_sha256: "4fadb6529e3a657f0d31f0237e976aeb6f859b0d5bccd58ea98bc9eb4413f010",
+                start_byte: 34543,
+                end_byte: 37612,
+                slice_sha256: "1736b368d62b19086cefbc7dd4525a3eb3332205eff0a98a7094631b3d7b69b0",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 15. `mapArray` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "3b62ac9d987c6d447b90b03891186ed374c4139d0f93a323a6bdc8b42c3d0e72",
+                start_byte: 34558,
+                end_byte: 37627,
+                slice_sha256: "1736b368d62b19086cefbc7dd4525a3eb3332205eff0a98a7094631b3d7b69b0",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 15. `mapArray` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.js",
+                file_sha256: "dfa0ec736228fb544ed655c4008f8ac987543118100bfc96eaec828db07331f0",
+                start_byte: 5056,
+                end_byte: 5336,
+                slice_sha256: "6a3f9b16803cb02ed200a7feb4b9176922e3f8fc1c90ea34989c9283a757b79a",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 15. `mapArray` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "093e0bdc3b616e281b601f8ef82e3d14c6472d8b4540606d1f9dc4800c13063a",
+                start_byte: 5071,
+                end_byte: 5351,
+                slice_sha256: "6a3f9b16803cb02ed200a7feb4b9176922e3f8fc1c90ea34989c9283a757b79a",
+            },
+        ],
+    },
+    // R3 of SOLID1_CORE_PRIMITIVES_AUDIT § 0. Six bundles, one per
+    // export condition; the `.js`/`.cjs` twins are byte-identical, which the
+    // equal `slice_sha256` values state rather than imply.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "mergeProps",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 4. `mergeProps` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.js",
+                file_sha256: "b0525eede2c4209fb444831f3bb54f5fdb1a8d748aa7d597cd392880c761c11d",
+                start_byte: 38566,
+                end_byte: 40717,
+                slice_sha256: "70419fd8a5e57ae7733371e89e32abad4c8bede4287b8cb022a0ebd54209aeb7",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 4. `mergeProps` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "9ac2a6a5a0d43566c3dbda2fe440b914d37e6d7d5cdd5ebaa7f798c90d26fc29",
+                start_byte: 38581,
+                end_byte: 40732,
+                slice_sha256: "70419fd8a5e57ae7733371e89e32abad4c8bede4287b8cb022a0ebd54209aeb7",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 4. `mergeProps` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.js",
+                file_sha256: "4fadb6529e3a657f0d31f0237e976aeb6f859b0d5bccd58ea98bc9eb4413f010",
+                start_byte: 40429,
+                end_byte: 42580,
+                slice_sha256: "70419fd8a5e57ae7733371e89e32abad4c8bede4287b8cb022a0ebd54209aeb7",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 4. `mergeProps` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "3b62ac9d987c6d447b90b03891186ed374c4139d0f93a323a6bdc8b42c3d0e72",
+                start_byte: 40444,
+                end_byte: 42595,
+                slice_sha256: "70419fd8a5e57ae7733371e89e32abad4c8bede4287b8cb022a0ebd54209aeb7",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 4. `mergeProps` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.js",
+                file_sha256: "dfa0ec736228fb544ed655c4008f8ac987543118100bfc96eaec828db07331f0",
+                start_byte: 10453,
+                end_byte: 11294,
+                slice_sha256: "89c2c1e06f3648b7aa05dc840de9d467f199f56200a754d90e81aa8f5d6c1e3b",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 4. `mergeProps` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "093e0bdc3b616e281b601f8ef82e3d14c6472d8b4540606d1f9dc4800c13063a",
+                start_byte: 10468,
+                end_byte: 11309,
+                slice_sha256: "89c2c1e06f3648b7aa05dc840de9d467f199f56200a754d90e81aa8f5d6c1e3b",
+            },
+        ],
+    },
+    // R10 of SOLID1_CORE_PRIMITIVES_AUDIT § 0. Six bundles, one per
+    // export condition; the `.js`/`.cjs` twins are byte-identical, which the
+    // equal `slice_sha256` values state rather than imply.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "on",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 10. `on` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.js",
+                file_sha256: "b0525eede2c4209fb444831f3bb54f5fdb1a8d748aa7d597cd392880c761c11d",
+                start_byte: 13709,
+                end_byte: 14206,
+                slice_sha256: "1b3f2ae2dda48a0c1ffa099d75f2770c23eaeda83ca91113f56119dfe56bf11f",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 10. `on` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "9ac2a6a5a0d43566c3dbda2fe440b914d37e6d7d5cdd5ebaa7f798c90d26fc29",
+                start_byte: 13724,
+                end_byte: 14221,
+                slice_sha256: "1b3f2ae2dda48a0c1ffa099d75f2770c23eaeda83ca91113f56119dfe56bf11f",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 10. `on` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.js",
+                file_sha256: "4fadb6529e3a657f0d31f0237e976aeb6f859b0d5bccd58ea98bc9eb4413f010",
+                start_byte: 14307,
+                end_byte: 14804,
+                slice_sha256: "1b3f2ae2dda48a0c1ffa099d75f2770c23eaeda83ca91113f56119dfe56bf11f",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 10. `on` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "3b62ac9d987c6d447b90b03891186ed374c4139d0f93a323a6bdc8b42c3d0e72",
+                start_byte: 14322,
+                end_byte: 14819,
+                slice_sha256: "1b3f2ae2dda48a0c1ffa099d75f2770c23eaeda83ca91113f56119dfe56bf11f",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 10. `on` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.js",
+                file_sha256: "dfa0ec736228fb544ed655c4008f8ac987543118100bfc96eaec828db07331f0",
+                start_byte: 2327,
+                end_byte: 2659,
+                slice_sha256: "3254e3b718d93416e11a60a2ddf9be507e4b6b0edf2c0db24a6f2ae9d4ce0a93",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 10. `on` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "093e0bdc3b616e281b601f8ef82e3d14c6472d8b4540606d1f9dc4800c13063a",
+                start_byte: 2342,
+                end_byte: 2674,
+                slice_sha256: "3254e3b718d93416e11a60a2ddf9be507e4b6b0edf2c0db24a6f2ae9d4ce0a93",
+            },
+        ],
+    },
+    // R15 of SOLID1_CORE_PRIMITIVES_AUDIT § 0 (2026-09-13, § 16). Six bundles,
+    // one per export condition; the `.js`/`.cjs` twins are byte-identical.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "onCleanup",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 16. `onCleanup` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.js",
+                file_sha256: "b0525eede2c4209fb444831f3bb54f5fdb1a8d748aa7d597cd392880c761c11d",
+                start_byte: 14267,
+                end_byte: 14415,
+                slice_sha256: "0892207417709049d794f4fcd5517df320cc035e265e30a76fc4730c828ad6fa",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 16. `onCleanup` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "9ac2a6a5a0d43566c3dbda2fe440b914d37e6d7d5cdd5ebaa7f798c90d26fc29",
+                start_byte: 14282,
+                end_byte: 14430,
+                slice_sha256: "0892207417709049d794f4fcd5517df320cc035e265e30a76fc4730c828ad6fa",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 16. `onCleanup` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.js",
+                file_sha256: "4fadb6529e3a657f0d31f0237e976aeb6f859b0d5bccd58ea98bc9eb4413f010",
+                start_byte: 14865,
+                end_byte: 15098,
+                slice_sha256: "7915d5cda23e9d22c27d67cea4fd56f696d54a84fd44f29db389fdf5d068c490",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 16. `onCleanup` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "3b62ac9d987c6d447b90b03891186ed374c4139d0f93a323a6bdc8b42c3d0e72",
+                start_byte: 14880,
+                end_byte: 15113,
+                slice_sha256: "7915d5cda23e9d22c27d67cea4fd56f696d54a84fd44f29db389fdf5d068c490",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 16. `onCleanup` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.js",
+                file_sha256: "dfa0ec736228fb544ed655c4008f8ac987543118100bfc96eaec828db07331f0",
+                start_byte: 2684,
+                end_byte: 2819,
+                slice_sha256: "a9360fbfb9506dd42a0e97c4807f638c29e53d81c3f34afc421274018f6cc71e",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 16. `onCleanup` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "093e0bdc3b616e281b601f8ef82e3d14c6472d8b4540606d1f9dc4800c13063a",
+                start_byte: 2699,
+                end_byte: 2834,
+                slice_sha256: "a9360fbfb9506dd42a0e97c4807f638c29e53d81c3f34afc421274018f6cc71e",
+            },
+        ],
+    },
+    // R11 of SOLID1_CORE_PRIMITIVES_AUDIT § 0. Six bundles, one per
+    // export condition; the `.js`/`.cjs` twins are byte-identical, which the
+    // equal `slice_sha256` values state rather than imply.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "onMount",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 11. `onMount` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.js",
+                file_sha256: "b0525eede2c4209fb444831f3bb54f5fdb1a8d748aa7d597cd392880c761c11d",
+                start_byte: 14207,
+                end_byte: 14266,
+                slice_sha256: "d911737441911fbb4270c23d8e6212c8f74e9b48d43bb482371e4c8b86d92c03",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 11. `onMount` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "9ac2a6a5a0d43566c3dbda2fe440b914d37e6d7d5cdd5ebaa7f798c90d26fc29",
+                start_byte: 14222,
+                end_byte: 14281,
+                slice_sha256: "d911737441911fbb4270c23d8e6212c8f74e9b48d43bb482371e4c8b86d92c03",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 11. `onMount` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.js",
+                file_sha256: "4fadb6529e3a657f0d31f0237e976aeb6f859b0d5bccd58ea98bc9eb4413f010",
+                start_byte: 14805,
+                end_byte: 14864,
+                slice_sha256: "d911737441911fbb4270c23d8e6212c8f74e9b48d43bb482371e4c8b86d92c03",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 11. `onMount` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "3b62ac9d987c6d447b90b03891186ed374c4139d0f93a323a6bdc8b42c3d0e72",
+                start_byte: 14820,
+                end_byte: 14879,
+                slice_sha256: "d911737441911fbb4270c23d8e6212c8f74e9b48d43bb482371e4c8b86d92c03",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 11. `onMount` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.js",
+                file_sha256: "dfa0ec736228fb544ed655c4008f8ac987543118100bfc96eaec828db07331f0",
+                start_byte: 2660,
+                end_byte: 2683,
+                slice_sha256: "9986562f919977540d15b1c1b73c7ee88a98fa319ac07c4c734050acc8b5863b",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 11. `onMount` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "093e0bdc3b616e281b601f8ef82e3d14c6472d8b4540606d1f9dc4800c13063a",
+                start_byte: 2675,
+                end_byte: 2698,
+                slice_sha256: "9986562f919977540d15b1c1b73c7ee88a98fa319ac07c4c734050acc8b5863b",
+            },
+        ],
+    },
+    // R2 of SOLID1_CORE_PRIMITIVES_AUDIT § 0. Six bundles, one per
+    // export condition; the `.js`/`.cjs` twins are byte-identical, which the
+    // equal `slice_sha256` values state rather than imply.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "splitProps",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 3. `splitProps` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.js",
+                file_sha256: "b0525eede2c4209fb444831f3bb54f5fdb1a8d748aa7d597cd392880c761c11d",
+                start_byte: 40718,
+                end_byte: 42233,
+                slice_sha256: "0401d0b3a5b32d418ce3e1bb0dd037ad9c56e4da756afb09864f6f6cb071a3b0",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 3. `splitProps` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "9ac2a6a5a0d43566c3dbda2fe440b914d37e6d7d5cdd5ebaa7f798c90d26fc29",
+                start_byte: 40733,
+                end_byte: 42248,
+                slice_sha256: "0401d0b3a5b32d418ce3e1bb0dd037ad9c56e4da756afb09864f6f6cb071a3b0",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 3. `splitProps` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.js",
+                file_sha256: "4fadb6529e3a657f0d31f0237e976aeb6f859b0d5bccd58ea98bc9eb4413f010",
+                start_byte: 42581,
+                end_byte: 44096,
+                slice_sha256: "0401d0b3a5b32d418ce3e1bb0dd037ad9c56e4da756afb09864f6f6cb071a3b0",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 3. `splitProps` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "3b62ac9d987c6d447b90b03891186ed374c4139d0f93a323a6bdc8b42c3d0e72",
+                start_byte: 42596,
+                end_byte: 44111,
+                slice_sha256: "0401d0b3a5b32d418ce3e1bb0dd037ad9c56e4da756afb09864f6f6cb071a3b0",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 3. `splitProps` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.js",
+                file_sha256: "dfa0ec736228fb544ed655c4008f8ac987543118100bfc96eaec828db07331f0",
+                start_byte: 11295,
+                end_byte: 11750,
+                slice_sha256: "213b67a6a309d8c1c32596615f7accffcd6f7208845edb9b9879a28d2f6ec679",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 3. `splitProps` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "093e0bdc3b616e281b601f8ef82e3d14c6472d8b4540606d1f9dc4800c13063a",
+                start_byte: 11310,
+                end_byte: 11765,
+                slice_sha256: "213b67a6a309d8c1c32596615f7accffcd6f7208845edb9b9879a28d2f6ec679",
+            },
+        ],
+    },
+    // R16 of SOLID1_CORE_PRIMITIVES_AUDIT § 0 (2026-09-13, § 17). Six bundles,
+    // one per export condition; the `.js`/`.cjs` twins are byte-identical.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "untrack",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 17. `untrack` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.js",
+                file_sha256: "b0525eede2c4209fb444831f3bb54f5fdb1a8d748aa7d597cd392880c761c11d",
+                start_byte: 13434,
+                end_byte: 13708,
+                slice_sha256: "26664788da0606e73eb1b132889ba9bbc52309513e0b9d15ac5ed74dc2cd0a28",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 17. `untrack` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "9ac2a6a5a0d43566c3dbda2fe440b914d37e6d7d5cdd5ebaa7f798c90d26fc29",
+                start_byte: 13449,
+                end_byte: 13723,
+                slice_sha256: "26664788da0606e73eb1b132889ba9bbc52309513e0b9d15ac5ed74dc2cd0a28",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 17. `untrack` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.js",
+                file_sha256: "4fadb6529e3a657f0d31f0237e976aeb6f859b0d5bccd58ea98bc9eb4413f010",
+                start_byte: 14032,
+                end_byte: 14306,
+                slice_sha256: "26664788da0606e73eb1b132889ba9bbc52309513e0b9d15ac5ed74dc2cd0a28",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 17. `untrack` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "3b62ac9d987c6d447b90b03891186ed374c4139d0f93a323a6bdc8b42c3d0e72",
+                start_byte: 14047,
+                end_byte: 14321,
+                slice_sha256: "26664788da0606e73eb1b132889ba9bbc52309513e0b9d15ac5ed74dc2cd0a28",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 17. `untrack` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.js",
+                file_sha256: "dfa0ec736228fb544ed655c4008f8ac987543118100bfc96eaec828db07331f0",
+                start_byte: 2304,
+                end_byte: 2326,
+                slice_sha256: "5c6b46e92c061354239e5dd70806402ff0e676f4bd390dc0a6ac13b39c0b3139",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 17. `untrack` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "093e0bdc3b616e281b601f8ef82e3d14c6472d8b4540606d1f9dc4800c13063a",
+                start_byte: 2319,
+                end_byte: 2341,
+                slice_sha256: "5c6b46e92c061354239e5dd70806402ff0e676f4bd390dc0a6ac13b39c0b3139",
+            },
+        ],
+    },
+    // R1 of SOLID1_CORE_PRIMITIVES_AUDIT § 0. Six bundles, one per
+    // export condition; the `.js`/`.cjs` twins are byte-identical, which the
+    // equal `slice_sha256` values state rather than imply.
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "useContext",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 2. `useContext` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.js",
+                file_sha256: "b0525eede2c4209fb444831f3bb54f5fdb1a8d748aa7d597cd392880c761c11d",
+                start_byte: 16293,
+                end_byte: 16455,
+                slice_sha256: "693f083021eb3de3ae757fdd7d7ce3cf617d913a9a9036b0ca08f8705b734fd9",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 2. `useContext` — archive `solid-js@1.9.14`",
+                archive_path: "dist/solid.cjs",
+                file_sha256: "9ac2a6a5a0d43566c3dbda2fe440b914d37e6d7d5cdd5ebaa7f798c90d26fc29",
+                start_byte: 16308,
+                end_byte: 16470,
+                slice_sha256: "693f083021eb3de3ae757fdd7d7ce3cf617d913a9a9036b0ca08f8705b734fd9",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 2. `useContext` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.js",
+                file_sha256: "4fadb6529e3a657f0d31f0237e976aeb6f859b0d5bccd58ea98bc9eb4413f010",
+                start_byte: 17607,
+                end_byte: 17769,
+                slice_sha256: "693f083021eb3de3ae757fdd7d7ce3cf617d913a9a9036b0ca08f8705b734fd9",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 2. `useContext` — archive `solid-js@1.9.14`",
+                archive_path: "dist/dev.cjs",
+                file_sha256: "3b62ac9d987c6d447b90b03891186ed374c4139d0f93a323a6bdc8b42c3d0e72",
+                start_byte: 17622,
+                end_byte: 17784,
+                slice_sha256: "693f083021eb3de3ae757fdd7d7ce3cf617d913a9a9036b0ca08f8705b734fd9",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 2. `useContext` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.js",
+                file_sha256: "dfa0ec736228fb544ed655c4008f8ac987543118100bfc96eaec828db07331f0",
+                start_byte: 3547,
+                end_byte: 3706,
+                slice_sha256: "80775f0a6f4dc650857a3b80fd8033f64c12a6d7d4832521a82f327e39983cec",
+            },
+            AuditedCitation::Implementation {
+                audit: SOLID1_CORE_PRIMITIVES_AUDIT,
+                section: "## 2. `useContext` — archive `solid-js@1.9.14`",
+                archive_path: "dist/server.cjs",
+                file_sha256: "093e0bdc3b616e281b601f8ef82e3d14c6472d8b4540606d1f9dc4800c13063a",
+                start_byte: 3562,
+                end_byte: 3721,
+                slice_sha256: "80775f0a6f4dc650857a3b80fd8033f64c12a6d7d4832521a82f327e39983cec",
+            },
+        ],
+    },
+];
+
 static NEGATIVE_AUTHORITY: DialectNegativeAuthority = DialectNegativeAuthority {
-    archives: &[],
-    rows: &[],
+    archives: AUDITED_ARCHIVES,
+    rows: NEGATIVE_ROWS,
 };
 
 /// Source: `docs/solid-1x-api-surface.md`, sections `solid-js`,
@@ -171,8 +1218,10 @@ impl Dialect for Solid1x {
         "solid-v1/model-1"
     }
 
-    /// Empty — see [`NEGATIVE_AUTHORITY`] for why the solid-v1 documents'
-    /// `creates: []` closures are not an audit.
+    /// [`AUDITED_ARCHIVES`] and [`NEGATIVE_ROWS`] — sixteen `creates` denials
+    /// for `solid-js@1.9.14`, all read out of the archive's own runtime bytes
+    /// by hand ([`SOLID1_CORE_PRIMITIVES_AUDIT`]); see [`NEGATIVE_ROWS`] for
+    /// why the solid-v1 JSON documents contribute no row.
     fn negative_claim_authority(&self) -> &'static DialectNegativeAuthority {
         &NEGATIVE_AUTHORITY
     }
@@ -977,6 +2026,303 @@ const NAMESPACE_WEB: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn repository_root() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("..")
+            .canonicalize()
+            .unwrap()
+    }
+
+    fn sha256_hex(bytes: &[u8]) -> String {
+        use sha2::{Digest, Sha256};
+        format!("{:x}", Sha256::digest(bytes))
+    }
+
+    /// Where the checked-in copy of a cited byte range lives; derived from the
+    /// citation's own fields so a row and its slice cannot be named
+    /// inconsistently. Mirrors `solid_2`'s layout under `solid-v1/`.
+    fn audited_slice_path(archive_path: &str, start_byte: usize, end_byte: usize) -> String {
+        format!(
+            "rust/crates/solid-dialect/audited-slices/solid-v1/solid-js/{archive_path}.{start_byte}-{end_byte}.slice"
+        )
+    }
+
+    /// Every row cites bytes that say what the row says — for the
+    /// `Implementation` kind, the *subject* of the human reading: the audit
+    /// document and its section exist, the cited file is the pinned file at
+    /// the pinned digest, the range fits, the checked-in slice hashes to the
+    /// cited digest and begins with the export's own definition, and, when the
+    /// archive is on disk, the slice is still exactly those bytes of it.
+    /// Nothing here re-derives closure from a JavaScript body (ADR 0007).
+    #[test]
+    fn every_negative_row_citation_resolves_to_the_bytes_it_claims() {
+        let root = repository_root();
+        assert!(!NEGATIVE_ROWS.is_empty());
+        let manifest: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(
+                root.join("benchmarks/package-contract-v2/phase0/solid-1x/solid-js/files.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let archive_root = std::env::var("SOLID_CHECKER_SOLID1_ARCHIVE_ROOT")
+            .ok()
+            .filter(|value| !value.is_empty());
+        assert!(
+            archive_root.is_some()
+                || std::env::var("SOLID_CHECKER_EXPECT_PROBE_PINS").as_deref() != Ok("1"),
+            "SOLID_CHECKER_EXPECT_PROBE_PINS=1, but SOLID_CHECKER_SOLID1_ARCHIVE_ROOT is unset: \
+             the cited ranges would only be checked against the checked-in slices, never \
+             against the archive they claim to quote. scripts/verify.sh exports it from the \
+             tsc-oracle v1 install."
+        );
+        for row in NEGATIVE_ROWS {
+            assert_eq!(row.package, "solid-js");
+            assert_eq!(
+                row.citations.len(),
+                6,
+                "{}: one citation per bundle",
+                row.export
+            );
+            for citation in row.citations {
+                let &AuditedCitation::Implementation {
+                    audit,
+                    section,
+                    archive_path,
+                    file_sha256,
+                    start_byte,
+                    end_byte,
+                    slice_sha256,
+                } = citation
+                else {
+                    panic!("{}: every 1.x row is implementation-audited", row.export)
+                };
+                let audit_text = std::fs::read_to_string(root.join(audit)).unwrap();
+                assert!(
+                    audit_text.lines().any(|line| line == section),
+                    "{}: {audit} does not contain {section:?} verbatim",
+                    row.export
+                );
+                let entry = manifest
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|entry| entry["path"].as_str() == Some(archive_path))
+                    .unwrap_or_else(|| {
+                        panic!("{}: files.json does not pin {archive_path}", row.export)
+                    });
+                assert_eq!(
+                    entry["sha256"].as_str(),
+                    Some(file_sha256),
+                    "{}: {archive_path}",
+                    row.export
+                );
+                let file_bytes = entry["bytes"].as_u64().unwrap() as usize;
+                assert!(
+                    start_byte < end_byte && end_byte <= file_bytes,
+                    "{}: {archive_path}",
+                    row.export
+                );
+                let slice_path = audited_slice_path(archive_path, start_byte, end_byte);
+                let slice = std::fs::read(root.join(&slice_path)).unwrap_or_else(|error| {
+                    panic!("{}: no slice at {slice_path}: {error}", row.export)
+                });
+                assert_eq!(slice.len(), end_byte - start_byte, "{slice_path}");
+                assert_eq!(sha256_hex(&slice), slice_sha256, "{slice_path}");
+                let text = String::from_utf8(slice.clone()).unwrap();
+                assert!(
+                    text.starts_with(&format!("function {}(", row.export))
+                        || text.starts_with(&format!("const {} = ", row.export)),
+                    "{slice_path} does not begin with {}'s definition: {:?}",
+                    row.export,
+                    &text[..text.len().min(60)]
+                );
+                if let Some(archive_root) = &archive_root {
+                    let file = std::path::Path::new(archive_root)
+                        .join(row.package)
+                        .join(archive_path);
+                    let bytes = std::fs::read(&file).unwrap_or_else(|error| {
+                        panic!(
+                            "SOLID_CHECKER_SOLID1_ARCHIVE_ROOT is set, but {}: {error}",
+                            file.display()
+                        )
+                    });
+                    assert_eq!(
+                        sha256_hex(&bytes),
+                        file_sha256,
+                        "{} is not the pinned {archive_path}",
+                        file.display()
+                    );
+                    assert_eq!(
+                        bytes[start_byte..end_byte],
+                        slice[..],
+                        "{}: {slice_path}",
+                        row.export
+                    );
+                }
+            }
+        }
+    }
+
+    /// The archive tuple is the one every audited solid-v1 document names,
+    /// and the pinned manifest agrees with it.
+    #[test]
+    fn the_audited_archive_is_the_bundled_documents_package_block() {
+        let root = repository_root();
+        let [archive] = AUDITED_ARCHIVES else {
+            panic!("one archive")
+        };
+        let manifest_bytes = std::fs::read(
+            root.join("benchmarks/package-contract-v2/phase0/solid-1x/solid-js/package.json"),
+        )
+        .unwrap();
+        assert_eq!(sha256_hex(&manifest_bytes), archive.manifest_sha256);
+        let mut documents = 0;
+        for entry in std::fs::read_dir(root.join("pkg/contracts/bundled/solid-v1")).unwrap() {
+            let path = entry.unwrap().path();
+            if path.file_name().and_then(|name| name.to_str()) == Some("bundle-index.json") {
+                continue;
+            }
+            let document: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            if document["package"]["name"].as_str() != Some(archive.name) {
+                continue;
+            }
+            documents += 1;
+            assert_eq!(
+                document["package"]["version"].as_str(),
+                Some(archive.version),
+                "{}",
+                path.display()
+            );
+            assert_eq!(
+                document["package"]["integrity"].as_str(),
+                Some(archive.integrity),
+                "{}",
+                path.display()
+            );
+            assert_eq!(
+                document["package"]["manifest"]["sha256"].as_str(),
+                Some(archive.manifest_sha256),
+                "{}",
+                path.display()
+            );
+        }
+        assert!(documents >= 3, "the solid-js documents were not found");
+    }
+
+    /// Sorted by `(package, export, domain)`, no duplicates, canonical
+    /// spellings only, one domain admitted, and nothing derived from the
+    /// solid-v1 JSON documents' migrated closures.
+    #[test]
+    fn negative_rows_are_sorted_unique_canonical_and_implementation_only() {
+        use std::collections::BTreeSet;
+        let keys: Vec<_> = NEGATIVE_ROWS
+            .iter()
+            .map(|row| (row.package, row.export, row.domain))
+            .collect();
+        let mut sorted = keys.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(keys, sorted, "rows must be sorted and unique");
+        for row in NEGATIVE_ROWS {
+            assert_eq!(
+                Solid1x
+                    .primitive(row.export)
+                    .and_then(|primitive| Solid1x.name_of(primitive)),
+                Some(row.export),
+                "{} is not a canonical 1.x spelling",
+                row.export
+            );
+            assert!(
+                AUDITED_ARCHIVES
+                    .iter()
+                    .any(|archive| archive.name == row.package),
+                "{}: row names an archive the dialect did not audit",
+                row.package
+            );
+        }
+        let admitted: BTreeSet<CallClaimDomain> =
+            NEGATIVE_ROWS.iter().map(|row| row.domain).collect();
+        assert_eq!(
+            admitted,
+            BTreeSet::from([CallClaimDomain::Creates]),
+            "a new domain was added to the table without widening this comparison"
+        );
+        assert_eq!(
+            NEGATIVE_ROWS.len(),
+            16,
+            "R1-R16 of the 1.x audit, and nothing else"
+        );
+        assert!(
+            NEGATIVE_ROWS.iter().all(|row| row
+                .citations
+                .iter()
+                .all(|citation| matches!(citation, AuditedCitation::Implementation { .. }))),
+            "no 1.x row may cite a solid-v1 JSON summary: those closures are the migration's, not an audit's"
+        );
+    }
+
+    /// The tier answers for these rows exactly as the census will ask it.
+    #[test]
+    fn the_authority_denies_creates_for_the_sixteen_and_nothing_else() {
+        let [archive] = AUDITED_ARCHIVES else {
+            panic!("one archive")
+        };
+        for export in [
+            "batch",
+            "createComputed",
+            "createContext",
+            "createEffect",
+            "createMemo",
+            "createRenderEffect",
+            "createSignal",
+            "getOwner",
+            "mapArray",
+            "mergeProps",
+            "on",
+            "onCleanup",
+            "onMount",
+            "splitProps",
+            "untrack",
+            "useContext",
+        ] {
+            assert!(
+                crate::primitive_performs_no_operation(archive, export, CallClaimDomain::Creates),
+                "{export} creates"
+            );
+            assert!(
+                !crate::primitive_performs_no_operation(archive, export, CallClaimDomain::Reads),
+                "{export} reads must stay silent"
+            );
+        }
+        for export in [
+            "createResource",
+            "createRoot",
+            "lazy",
+            "createComponent",
+            "indexArray",
+            "children",
+        ] {
+            assert!(
+                !crate::primitive_performs_no_operation(archive, export, CallClaimDomain::Creates),
+                "{export} was not audited and must stay silent"
+            );
+        }
+        // A same-named archive at another identity is silence.
+        let other = AuditedArchive {
+            version: "1.9.13",
+            ..*archive
+        };
+        assert!(!crate::primitive_performs_no_operation(
+            &other,
+            "useContext",
+            CallClaimDomain::Creates
+        ));
+    }
 
     #[test]
     fn compatibility_names_signal_possible_components_without_proving_them() {

@@ -14,7 +14,7 @@
           },
           "exports": {
             "computedMember": "summary-554dcd4438cbaeb5dcdc06611db8eb9be479d61186bbe359f74d20afb703e7ec",
-            "dialectSilent": "summary-554dcd4438cbaeb5dcdc06611db8eb9be479d61186bbe359f74d20afb703e7ec",
+            "dialectSilent": "summary-531f27f0017c6b946639511260e54cfaa3d9358d2914244c0afbd3f102680f26",
             "expressionCallee": "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7",
             "memberPropertyUnresolved": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
             "memberReceiverUnresolved": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
@@ -22,7 +22,7 @@
             "parameterAliasRooted": "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7",
             "parameterRooted": "summary-69e7db72bd88be8d2b69aab298b2e7d32df88a0da2925f87351928c3ae0acd7e",
             "unresolvedCallee": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
-            "viaSilentHelper": "summary-554dcd4438cbaeb5dcdc06611db8eb9be479d61186bbe359f74d20afb703e7ec"
+            "viaSilentHelper": "summary-531f27f0017c6b946639511260e54cfaa3d9358d2914244c0afbd3f102680f26"
           },
           "resolution": {
             "runtimeBranch": "/exports/./import",
@@ -105,6 +105,27 @@
           }
         ],
         "proposedClosures": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-531f27f0017c6b946639511260e54cfaa3d9358d2914244c0afbd3f102680f26": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
           "reads",
           "creates",
           "returns"

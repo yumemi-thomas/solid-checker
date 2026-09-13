@@ -1,0 +1,19 @@
+function on(deps, fn, options) {
+  const isArray = Array.isArray(deps);
+  let prevInput;
+  let defer = options && options.defer;
+  return prevValue => {
+    let input;
+    if (isArray) {
+      input = Array(deps.length);
+      for (let i = 0; i < deps.length; i++) input[i] = deps[i]();
+    } else input = deps();
+    if (defer) {
+      defer = false;
+      return prevValue;
+    }
+    const result = untrack(() => fn(input, prevInput, prevValue));
+    prevInput = input;
+    return result;
+  };
+}

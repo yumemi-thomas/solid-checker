@@ -1,0 +1,11 @@
+function untrack(fn) {
+  if (!ExternalSourceConfig && Listener === null) return fn();
+  const listener = Listener;
+  Listener = null;
+  try {
+    if (ExternalSourceConfig) return ExternalSourceConfig.untrack(fn);
+    return fn();
+  } finally {
+    Listener = listener;
+  }
+}

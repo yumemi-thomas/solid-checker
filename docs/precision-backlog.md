@@ -1,5 +1,51 @@
 # Precision backlog
 
+## Solid 1.x `creates` audit extended: `createContext`, `getOwner`, `mapArray`, `onCleanup`, `untrack` (2026-09-13)
+
+Five more rows for `solid-js@1.9.14`, read out of all six bundles by the same
+method and cited byte-exactly (§§ 13–17 of
+[the 1.x audit](package-contract-v2/audits/2026-09-12-solid-1x-1.9.14-core-primitives-creates.md);
+sixteen rows, ninety-six slices). Chosen from the ecosystem ledger: they were
+the 1.x callees still refused as "not under the negative authority" (85
+entries). Measured over the 418-row corpus: +44 certified closure entries, all
+solid1, no row below baseline, `creates` 549 → 557 uncapped. Read but **not
+proposed**: `createComponent` (14 entries) — the reading finds no `create`, but
+the name is not in the dialect's canonical 1.x vocabulary and rows are keyed by
+canonical spelling, so admitting it is a dialect decision (§ 18). Still open on
+the same wall: the Solid 2 prereleases the corpus installs but no audit covers
+— `2.0.0-rc.0` (111 rows, 49 refused entries, mostly `useContext`) and
+`2.0.0-beta.19` (17 rows, 40 entries) — and 27 entries on rc.3 rows where the
+census resolves `useContext`/`createSignal`/`createMemo` to `solid-js`'s
+re-export declaration rather than the audited `@solidjs/signals` archive. The
+first is a policy question (the repository audits one specific prerelease);
+the second is the rc.3 declaration/runtime split, not a missing row.
+
+## Solid 1.x `creates` audit: eleven rows for `solid-js@1.9.14` (2026-09-13)
+
+The open item "a 1.x `creates` audit does not exist" is closed for eleven
+primitives — `batch`, `createComputed`, `createEffect`, `createMemo`,
+`createRenderEffect`, `createSignal`, `mergeProps`, `on`, `onMount`,
+`splitProps`, `useContext` — read by hand out of all six published bundles of
+`solid-js@1.9.14` and cited byte-exactly
+([audit](package-contract-v2/audits/2026-09-12-solid-1x-1.9.14-core-primitives-creates.md);
+rows in `solid_1x.rs`, slices under `audited-slices/solid-v1/`, manifest under
+`phase0/solid-1x/` from `scripts/audit-solid-1x.mjs`). The migrated
+`creates: []` closures of the bundled solid-v1 documents remain non-authority
+and no row cites them. A/B over the 418-row corpus against the same worktree
+with the authority emptied: +65 certified closure entries on solid1, solid2
+unchanged to the entry, no row below baseline; solid1 `dialect-silent` declines
+5,721 → 213. Small because the next walls stand behind it —
+`unaccepted-external-dependency` in the plain lane and the ranked census legs
+— while the graph lane shows the intended effect (`@kobalte/utils`
+`mergeDefaultProps` now closes `creates`). Two consequences recorded in the
+audit's § 12: the generator's spelling-keyed `some_audit_denies_primitive`
+moves 2.0 declines from `dialect-silent` to census refusals with zero closure
+change, and a graph node with two versions of one dependency now withholds its
+gates (`workspace_refusal_withholding`) instead of failing its case set. Still
+open: `reads`, `callbacks` and `returns` on every 1.x primitive; `createResource`,
+`lazy`, `createRoot`, `render`, `hydrate` and the `web`/`store` surfaces for
+`creates`.
+
 ## `reads` census: convention decided, rows pending an audit (2026-09-10)
 
 `semantic-model.md` § reads **[Decision 2026-09-10]** scopes the proxy

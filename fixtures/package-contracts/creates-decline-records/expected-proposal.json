@@ -2,7 +2,7 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:cba22031f64e3bd3c1ce6bd307b1f5df3d76df4d3b4ab72180507c435aaab404",
+  "semanticDigest": "sha256:e7c39f790c9f60482817732259167d9ea77d1d68d575d05e8462539aa53507d8",
   "closureCandidates": [
     {
       "claimId": "claim:v1:sha256:041e884a3f19ae91e0e92e618765c53d8924bebb7eaebc6aab8bd38bbfeaf1ff",
@@ -39,6 +39,25 @@
         "path": {
           "kind": "call",
           "domain": "reads"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:0cd6220c7e3443113f8c898e8dffbdd7e4469cb94b927a56d4ab4830e18caf87",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.js",
+        "runtimeDigest": "sha256:835e684c790bdf640b5e914f39dcab4ff6c54f1d9d89da867e18b5a11187eb96",
+        "declarationsPath": "./index.d.ts",
+        "declarationsDigest": "sha256:5d7871f52a626c94b82500b29804e37c9381cf396ad5a78b2c84321de1566c37",
+        "closureDigest": "sha256:23c1e66a1feb1c56c3fcf7feda712f05504d70d722af595d19a7fb1706b84cfe"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:0a5f07d9f33506969c6cd7a67418617ae99c574317f61716b28c33e7d321f812",
+        "export": "viaSilentHelper",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
         }
       }
     },
@@ -385,6 +404,25 @@
       }
     },
     {
+      "claimId": "claim:v1:sha256:c9fe3519064069a46bf27db1fa7567345892ee4927e1554ee06c1b2ad77c0e5d",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.js",
+        "runtimeDigest": "sha256:835e684c790bdf640b5e914f39dcab4ff6c54f1d9d89da867e18b5a11187eb96",
+        "declarationsPath": "./index.d.ts",
+        "declarationsDigest": "sha256:5d7871f52a626c94b82500b29804e37c9381cf396ad5a78b2c84321de1566c37",
+        "closureDigest": "sha256:23c1e66a1feb1c56c3fcf7feda712f05504d70d722af595d19a7fb1706b84cfe"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:0a5f07d9f33506969c6cd7a67418617ae99c574317f61716b28c33e7d321f812",
+        "export": "dialectSilent",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
+        }
+      }
+    },
+    {
       "claimId": "claim:v1:sha256:d78f79b523825adf8ddf9b7af3849ea7b720a0d65e7a6a48f4e1a2bc93c15b26",
       "artifact": {
         "entrypoint": ".",
@@ -555,25 +593,6 @@
           "kind": "operation-axis",
           "operation": "artifact-case:17b2e5d7d84766eb7e2193e92b0db3ce0e424e673da576c301e30033f5cc6403:proposes:operation:callback-0",
           "domain": "owner-child-capability"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:0cd6220c7e3443113f8c898e8dffbdd7e4469cb94b927a56d4ab4830e18caf87",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.js",
-        "runtimeDigest": "sha256:835e684c790bdf640b5e914f39dcab4ff6c54f1d9d89da867e18b5a11187eb96",
-        "declarationsPath": "./index.d.ts",
-        "declarationsDigest": "sha256:5d7871f52a626c94b82500b29804e37c9381cf396ad5a78b2c84321de1566c37",
-        "closureDigest": "sha256:23c1e66a1feb1c56c3fcf7feda712f05504d70d722af595d19a7fb1706b84cfe"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:0a5f07d9f33506969c6cd7a67418617ae99c574317f61716b28c33e7d321f812",
-        "export": "viaSilentHelper",
-        "path": {
-          "kind": "call",
-          "domain": "creates"
         }
       }
     },
@@ -1886,25 +1905,6 @@
         "path": {
           "kind": "call",
           "domain": "callbacks"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:c9fe3519064069a46bf27db1fa7567345892ee4927e1554ee06c1b2ad77c0e5d",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.js",
-        "runtimeDigest": "sha256:835e684c790bdf640b5e914f39dcab4ff6c54f1d9d89da867e18b5a11187eb96",
-        "declarationsPath": "./index.d.ts",
-        "declarationsDigest": "sha256:5d7871f52a626c94b82500b29804e37c9381cf396ad5a78b2c84321de1566c37",
-        "closureDigest": "sha256:23c1e66a1feb1c56c3fcf7feda712f05504d70d722af595d19a7fb1706b84cfe"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:0a5f07d9f33506969c6cd7a67418617ae99c574317f61716b28c33e7d321f812",
-        "export": "dialectSilent",
-        "path": {
-          "kind": "call",
-          "domain": "creates"
         }
       }
     },

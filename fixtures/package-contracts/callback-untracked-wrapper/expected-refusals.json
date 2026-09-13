@@ -31,20 +31,6 @@
       "declaration": "",
       "shape": "",
       "spelling": ""
-    },
-    {
-      "entrypoint": ".",
-      "conditions": [],
-      "stage": "closure-proposal",
-      "export": "trackedWrapper",
-      "domain": "creates",
-      "kind": "dialect-silent",
-      "package": "solid-js",
-      "callee": "createEffect",
-      "location": "<package-root>/index.ts:1283:1311",
-      "declaration": "",
-      "shape": "",
-      "spelling": ""
     }
   ]
 }

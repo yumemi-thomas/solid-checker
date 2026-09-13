@@ -1,0 +1,4 @@
+function createRenderEffect(fn, value, options) {
+  const c = createComputation(fn, value, false, STALE);
+  if (Scheduler && Transition && Transition.running) Updates.push(c);else updateComputation(c);
+}

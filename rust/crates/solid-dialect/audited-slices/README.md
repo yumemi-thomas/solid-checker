@@ -43,3 +43,22 @@ quotation, and the test that reads it exists to detect exactly such an edit.
 
 Adding a slice is a step of adding an `AuditedCitation::Implementation`, and
 both belong in the same commit as the audit section they cite.
+
+## `solid-v1/`
+
+    solid-v1/<phase0-archive-dir>/<package-relative path>.<start>-<end>.slice
+
+The same layout for the Solid 1.x dialect, rooted at
+`benchmarks/package-contract-v2/phase0/solid-1x/` instead of `rc3/`, and
+verified by `solid_1x::tests::every_negative_row_citation_resolves_to_the_bytes_it_claims`
+with `SOLID_CHECKER_SOLID1_ARCHIVE_ROOT` as the archive-reading arm (the
+tsc-oracle `v1` install, which `scripts/verify.sh` provisions and exports).
+
+These bytes are from `solid-js@1.9.14`
+(`sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==`),
+published by the SolidJS project under the MIT licence. Six runtime bundles are
+cited per export — `dist/{solid,dev,server}.{js,cjs}` — because the `exports`
+map runs a different one per condition, and the `.js`/`.cjs` twins are
+byte-identical for every cited definition, which the equal `slice_sha256`
+values state rather than imply. The audit is
+`docs/package-contract-v2/audits/2026-09-12-solid-1x-1.9.14-core-primitives-creates.md`.

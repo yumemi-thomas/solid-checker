@@ -1,0 +1,4 @@
+function createComputed(fn, value, options) {
+  const c = createComputation(fn, value, true, STALE);
+  if (Scheduler && Transition && Transition.running) Updates.push(c);else updateComputation(c);
+}

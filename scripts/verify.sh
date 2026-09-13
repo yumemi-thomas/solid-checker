@@ -211,6 +211,10 @@ bun scripts/tsc-oracle.mjs provision --dialect all
 # is version-verified by `provision`, which refuses a substituted prerelease.
 SOLID_CHECKER_RC3_ARCHIVE_ROOT="$PWD/rust/target/tsc-oracle/v2/node_modules"
 export SOLID_CHECKER_RC3_ARCHIVE_ROOT
+# The Solid 1.x dialect's rows cite `solid-js@1.9.14`, which the `v1` oracle
+# install carries at the audited digests; same arm, same loud skip.
+SOLID_CHECKER_SOLID1_ARCHIVE_ROOT="$PWD/rust/target/tsc-oracle/v1/node_modules"
+export SOLID_CHECKER_SOLID1_ARCHIVE_ROOT
 
 step go-rust-tests
 TYPEFACTS_TEST_BIN="$PWD/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \

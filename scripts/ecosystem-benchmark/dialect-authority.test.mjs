@@ -6,10 +6,10 @@ import { join } from "node:path";
 
 import { buildDialectAuthorityCoverage, loadAuditedArchives } from "./lib/dialect-authority.mjs";
 
-// The checked-in pins, in the shape the module expects. Two dialects, one of
-// which audited nothing: that asymmetry is the corpus's real one (solid-v1's
-// authority is empty, `rust/crates/solid-dialect/src/solid_1x.rs`) and it is
-// what makes "audited nothing" distinguishable from "no such dialect".
+// Hand-built pins in the shape the module expects. Two dialects, one of which
+// audited nothing: the asymmetry the corpus had until 2026-09-12 (solid-v1's
+// authority was empty) and the one that makes "audited nothing" distinguishable
+// from "no such dialect". The checked-in file is tested separately below.
 const PINS = {
   schemaVersion: 1,
   dialects: [
@@ -50,8 +50,11 @@ test("the checked-in pins load and name the archives the Rust tables audit", () 
     solid2.archives.map(archive => `${archive.name}@${archive.version}`).sort(),
     ["@solidjs/signals@2.0.0-rc.3", "@solidjs/web@2.0.0-rc.3", "solid-js@2.0.0-rc.3"]
   );
-  assert.equal(solid1.archives.length, 0);
-  assert.equal(solid1.negativeRowCount, 0);
+  assert.deepEqual(
+    solid1.archives.map(archive => `${archive.name}@${archive.version}`),
+    ["solid-js@1.9.14"]
+  );
+  assert.equal(solid1.negativeRowCount, 16);
 });
 
 test("a pin file that parses but pins nothing is refused, not read as full coverage", () => {

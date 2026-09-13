@@ -2,7 +2,7 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:07fa393504711c44e154ced5d0abc2120f2fc18e6cad701dfebc338aa04c096d",
+  "semanticDigest": "sha256:c9de3aea135cc6d54bba3ccfc9029612af82146372e624386961740bf7bd15f9",
   "closureCandidates": [
     {
       "claimId": "claim:v1:sha256:2b38d8f0588652012f91f5215f77f044e45dd585efa637be0470245c96739b4b",
@@ -305,6 +305,25 @@
         "path": {
           "kind": "call",
           "domain": "callbacks"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:b1fc487d165a1fdffbe721e1fd5dba694d73d30c8fa0de7d3f17f9eb9bcf96b5",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:4dbca095aafc90df07e21b8944ef612a93064288376aba1899cc984f804dc80c",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:4dbca095aafc90df07e21b8944ef612a93064288376aba1899cc984f804dc80c",
+        "closureDigest": "sha256:8f4e200aaa36d8c8f43a0fe87959e8879eab2d5565be1bcb98e66761d6c349c3"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:298e5c2a852d752bf9f208d29d61b440618516978182028a7245b1361f113eb1",
+        "export": "trackedWrapper",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
         }
       }
     },
@@ -1156,25 +1175,6 @@
           "kind": "operation-axis",
           "operation": "artifact-case:298e5c2a852d752bf9f208d29d61b440618516978182028a7245b1361f113eb1:rootWrapper:operation:callback-0",
           "domain": "owner-child-capability"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:b1fc487d165a1fdffbe721e1fd5dba694d73d30c8fa0de7d3f17f9eb9bcf96b5",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.ts",
-        "runtimeDigest": "sha256:4dbca095aafc90df07e21b8944ef612a93064288376aba1899cc984f804dc80c",
-        "declarationsPath": "./index.ts",
-        "declarationsDigest": "sha256:4dbca095aafc90df07e21b8944ef612a93064288376aba1899cc984f804dc80c",
-        "closureDigest": "sha256:8f4e200aaa36d8c8f43a0fe87959e8879eab2d5565be1bcb98e66761d6c349c3"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:298e5c2a852d752bf9f208d29d61b440618516978182028a7245b1361f113eb1",
-        "export": "trackedWrapper",
-        "path": {
-          "kind": "call",
-          "domain": "creates"
         }
       }
     },
