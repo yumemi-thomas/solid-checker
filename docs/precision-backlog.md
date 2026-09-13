@@ -1,5 +1,46 @@
 # Precision backlog
 
+## Twenty-four carried and DOM-predicate `reads` recipes (2026-09-14)
+
+The first two rows of the 2026-09-13 depth plan's Tier A, both already known
+decidable from a scaffold pass, so the work was authoring and the open question
+was only whether the claim ids still addressed live claims. Sixteen carried
+`@corvu/utils@0.4.2` `./reactivity` modules onto four `@corvu-next/utils`
+artifact cases — the fork re-exports a `dist/chunk/ZV6G25TT.js` that is
+byte-identical to 0.4.2's in both 0.1.4 and 0.1.5, diffed against both installs
+before the carry, since identical bodies are the entire warrant — and eight new
+ones on `@floating-ui/utils@0.2.12` `./dom`, the eight of twenty exports whose
+census decides. All eight reach every value they inspect off an argument, so
+the read is the caller's under ADR 0034, and each sample supplies a caller-owned
+node-like object. `isWebKit` turned out to need no host shim the plan had
+budgeted for (`typeof CSS !== 'undefined'` short-circuits and memoizes
+`false`); the real limitation, declared on all eight, is that the harness realm
+has no `window`, so the `isNode`/`isElement`/`isHTMLElement` predicates answer
+false and the samples exercise only the non-DOM branch.
+
+Corpus effect (release binary, 418 rows, `--timeout 1800`): certified closure
+entries 10,290 -> 10,352 (+62); `reads`-closed entries 6,040 -> 6,192 (+152);
+`no recipe in corpus` `reads` detail rows 2,242 -> 2,090; visible `reads` census
+refusals unchanged at 225; no row below the pin, no status move; wall 1,153 s ->
+1,198 s. **All 152 targeted rows closed** — the first `reads` batch here where
+every targeted row did, in contrast to the five `solid-primitives-utils`
+recipes of 2026-09-11, which closed none.
+
+What remains open is unchanged in kind and is not authoring: of the 2,090
+recipe-less rows, the mass is still `@solid-primitives/utils` exports refused on
+unrooted forms and default-library aliases (`keys`, `entries`, `defaultEquals`),
+`motion-utils` consts bound to a call result, the `@tanstack/store` classes,
+window-rooted DOM helpers, and Solid-primitive wrappers waiting on withheld
+`solid-js` claims. Those need the census premises named as Tier B and Tier C of
+`docs/package-contract-v2/phase21/2026-09-13-reads-depth-plan.md` (a
+default-library alias, a default-library call result as a subject root, a
+captured parameter root, a dialect data object, a class construction), each its
+own ADR, fixture pair and protocol bump. The remaining Tier A rows named there
+(corvu `./create/keyedContext`, `@solid-primitives/refs`, `scheduled`,
+`./immutable`) are still unmeasured: their pass-2 scaffold has not been run, and
+per § 43.3 a candidate with no recipe hides its census verdict, so none of them
+should be written against until it has.
+
 ## ADR 0101: a described `reads` enumeration the census confirms (2026-09-13)
 
 The recipe-less `reads` frontier (3,085 detail rows after the recipe batches)

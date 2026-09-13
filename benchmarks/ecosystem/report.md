@@ -1,8 +1,8 @@
 # Ecosystem Benchmark Report
 
-- Started: 2026-09-13T14:21:06.442Z
-- Finished: 2026-09-13T14:40:19.789Z
-- Duration: 1153347 ms
+- Started: 2026-09-13T21:12:43.147Z
+- Finished: 2026-09-13T21:32:41.399Z
+- Duration: 1198252 ms
 - Checker native binary: /Users/thomas/Documents/Github/solid-checker/rust/target/release/solid-checker-rust
 - Type Facts binary: /Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts
 - Registry cache for certification: /Users/thomas/Documents/Github/solid-checker/rust/target/registry-cache
@@ -1045,8 +1045,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Worker timings
 
-- Worker time: 13625039 ms
-- Phases: install 60595 ms, generation 513167 ms, harness 13051277 ms
+- Worker time: 14047498 ms
+- Phases: install 48561 ms, generation 523341 ms, harness 13475596 ms
 
 ### Dialect negative authority
 
@@ -1173,4 +1173,7 @@ None.
 
 ### Baseline comparison
 
-No baseline supplied.
+- Regressions: 0
+- Fixes: 0
+- Certification regressions: 0
+- Certification fixes: 0

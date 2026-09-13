@@ -378,6 +378,51 @@ proposals name two operations one of which is not such a row. `compare`'s
 coercion refusal stands. The empty enumeration is unchanged and still needs a
 hand recipe, for the reason in "Why hand-authored" above.
 
+## Twenty-four carried and DOM-predicate `reads` recipes (2026-09-14)
+
+Two batches the 2026-09-13 depth plan had already sized, both of them among the
+few candidates a scaffold pass had called *decidable* rather than census
+refused, so the only question left was authoring.
+
+Sixteen are carried. `@corvu-next/utils` is a fork of `@corvu/utils`, and its
+`./reactivity` entrypoint re-exports `dist/chunk/ZV6G25TT.js`, which is
+**byte-identical** to `@corvu/utils@0.4.2`'s in both published versions the
+corpus certifies through (0.1.4 under the `@corvu-next/accordion` and
+`@corvu-next/popover` rows, 0.1.5 under its own). That was diffed against both
+installs before anything was written, because "the same bodies" is the whole
+warrant for carrying a recipe: the four `access`, `chain`, `mergeRefs` and
+`some` modules are the 0.4.2 ones with the import specifier changed, on four
+artifact cases (88 detail rows).
+
+Eight are new, on `@floating-ui/utils@0.2.12` `./dom` under
+`@corvu-next/popover@0.1.5`'s case (64 rows). They are the eight of that
+entrypoint's twenty exports a scaffold pass found decidable; the other twelve
+refuse on `window` and `instanceof` forms, which no recipe can serve. Each of
+the eight reaches every value it inspects off an argument, so what it reads is
+its caller's under ADR 0034, and each sample passes a caller-owned node-like
+object (`{ ownerDocument: { defaultView } }`, `{ parentNode, ownerDocument }`)
+rather than anything the module owns.
+
+Two things measured rather than assumed. `isWebKit` needs **no** host shim: the
+depth plan expected a `CSS.supports` or `navigator` stand-in, but the body
+short-circuits on `typeof CSS !== 'undefined'` and memoizes `false`, so the
+recipe installs nothing and declares no shim. What does need declaring, and is
+declared on all eight, is the realm: the harness has no `window`, so `isNode`,
+`isElement` and `isHTMLElement` answer false and these samples exercise only
+the non-DOM branch — `getNodeName` takes the mocked-node `#document` fallback,
+which is why `isLastTraversableNode` answers true and `isTableElement` false
+for any argument here. The samples say nothing about the branch a browser realm
+takes. Every one of the twenty-four was executed against the published package
+before the run, not against a stub.
+
+**Measured outcome: all 152 rows close**, which is the first `reads` batch in
+this corpus where every targeted row did. Corpus effect (release binary, 418
+rows, `--timeout 1800`): certified closure entries 10,290 -> 10,352 (+62);
+`reads`-closed entries 6,040 -> 6,192 (+152); `no recipe in corpus` `reads`
+detail rows 2,242 -> 2,090; visible `reads` census refusals unchanged at 225,
+so nothing moved from one withholding class to another; no row below the pin,
+no status move; wall 1,153 s -> 1,198 s.
+
 `scripts/ecosystem-probe-recipes.test.mjs` pins the manifest's shape, that every
 declared module exists and exports `runProbeSession`, and that no module names
 `session` or `harness` in a position that hands either to a package.

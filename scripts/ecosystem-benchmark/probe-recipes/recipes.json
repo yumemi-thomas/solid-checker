@@ -5289,6 +5289,534 @@
         "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
         "NEVER EMITS: `read-operation`. A `typeof` test plus the callable's own arity; nothing is invoked."
       ]
+    },
+    {
+      "claimId": "claim:v1:sha256:e19cb5aef82faca398135849f4f32c41e75088eef6d18f0c7d3ef20c1e8c1a11",
+      "module": "corvu-next-utils-reactivity-access-reads-08b3dc34.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A plain value is returned as is; a callable is invoked, which is the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:cbf3a3ca05b190933a4c16fff9d2293a99eddd689f3bff50665e71e505f9d175",
+      "module": "corvu-next-utils-reactivity-access-reads-b6145c3d.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A plain value is returned as is; a callable is invoked, which is the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:1bbc24b700cc7feae163eaa18ba9dd7fb227bbd78cdd9c8cb218d36ed3dab086",
+      "module": "corvu-next-utils-reactivity-access-reads-d1cba274.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A plain value is returned as is; a callable is invoked, which is the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:4827b004b63c16b85b5fa4098a021b5122f506119bf64c20538bc34b76347aca",
+      "module": "corvu-next-utils-reactivity-access-reads-ff5cac09.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A plain value is returned as is; a callable is invoked, which is the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:e82ee9aa40188c35f04f1beed10fd7e36754c0882e3842fa10508bec717c58b1",
+      "module": "corvu-next-utils-reactivity-chain-reads-08b3dc34.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. The returned function calls each supplied callback in order with the same arguments and skips falsy entries."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:494ef80da14873f2997b8fc2fb36f581cd9a1548ac692fc7479ba14f4cc3e4f3",
+      "module": "corvu-next-utils-reactivity-chain-reads-b6145c3d.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. The returned function calls each supplied callback in order with the same arguments and skips falsy entries."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:e2627a067feb9c1f980f660a24b2830fd9e658e5216447171c4b8c8a59c2f43a",
+      "module": "corvu-next-utils-reactivity-chain-reads-d1cba274.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. The returned function calls each supplied callback in order with the same arguments and skips falsy entries."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:936441273e9c6ca78fa78592a91a1004532f5ad2061a85fd6ca4d4c93f619a97",
+      "module": "corvu-next-utils-reactivity-chain-reads-ff5cac09.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. The returned function calls each supplied callback in order with the same arguments and skips falsy entries."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:f43bc73620f5010b15254dd442d50d58bee6d2c08eeab6f92cd0f9926e7f5a7c",
+      "module": "corvu-next-utils-reactivity-merge-refs-reads-08b3dc34.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A `chain` over the supplied refs; each ref receives the element once."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:5772548808dff0dbf624203c88d59ea1e09ba1fdd796a3a5fa40df40dc698ad3",
+      "module": "corvu-next-utils-reactivity-merge-refs-reads-b6145c3d.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A `chain` over the supplied refs; each ref receives the element once."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:f70e4f9213f58e24d48254d3aac0ea856a0a4a9b54613fada9a2d2a80b7e8fa4",
+      "module": "corvu-next-utils-reactivity-merge-refs-reads-d1cba274.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A `chain` over the supplied refs; each ref receives the element once."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:94c5d2a49659becca7ce05dae9bf821720910529cae54624161a9f62b39a32d1",
+      "module": "corvu-next-utils-reactivity-merge-refs-reads-ff5cac09.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A `chain` over the supplied refs; each ref receives the element once."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:2f7f685998ae20c265b7dc4591b004d7f4c42d057f94ddf0bfb7cf1ef6d9b4b1",
+      "module": "corvu-next-utils-reactivity-some-reads-08b3dc34.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. Each supplied signal is invoked until one is truthy; those invocations are the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:ba49d2cd42464a578328d69d21725176c413a4048aa6e1ec71bf35f9d80f3680",
+      "module": "corvu-next-utils-reactivity-some-reads-b6145c3d.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. Each supplied signal is invoked until one is truthy; those invocations are the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:a00247d4964d6fee54c284cce491cb466b3321fce3f83b9ad9a8cf65c3265bbf",
+      "module": "corvu-next-utils-reactivity-some-reads-d1cba274.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. Each supplied signal is invoked until one is truthy; those invocations are the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:5a1003a5fd7830d11bd21829beb6de6759a773f4a6ec2d17345a1ce76aaba365",
+      "module": "corvu-next-utils-reactivity-some-reads-ff5cac09.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. Each supplied signal is invoked until one is truthy; those invocations are the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:d180deb073acbffb23d221d5fb1c3a65c2ba1ca5bda3b809214ac641eafec789",
+      "module": "floating-ui-utils-dom-get-containing-block-reads-1d311acb.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm defines no `window`, so `isNode`, `isElement` and `isHTMLElement` all answer false and these samples exercise only the non-DOM branch of each export; the sample says nothing about the branch a browser realm takes",
+        "NEVER EMITS: `read-operation`. The export walks parent links off the node its caller supplied, which is the caller's own object (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:d75ab38c9dfb80b9fa98e305d719f56533b789e7078bc3198ea8371a6805085b",
+      "module": "floating-ui-utils-dom-get-frame-element-reads-1d311acb.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm defines no `window`, so `isNode`, `isElement` and `isHTMLElement` all answer false and these samples exercise only the non-DOM branch of each export; the sample says nothing about the branch a browser realm takes",
+        "NEVER EMITS: `read-operation`. The export reads `parent` and `frameElement` off the window its caller supplied, which is the caller's own object (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:13e625e7319070eacde56aef1d786aad5ecc6d22c3e1220772a701cd2673f9cc",
+      "module": "floating-ui-utils-dom-get-nearest-overflow-ancestor-reads-1d311acb.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm defines no `window`, so `isNode`, `isElement` and `isHTMLElement` all answer false and these samples exercise only the non-DOM branch of each export; the sample says nothing about the branch a browser realm takes",
+        "NEVER EMITS: `read-operation`. The export walks parent links and reads `ownerDocument.body` off the node its caller supplied, which is the caller's own object (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:19409ff3008b72acb3b9036a3812bebfa98bc05104f4dd0485cc6353b6c3ba1d",
+      "module": "floating-ui-utils-dom-get-node-scroll-reads-1d311acb.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm defines no `window`, so `isNode`, `isElement` and `isHTMLElement` all answer false and these samples exercise only the non-DOM branch of each export; the sample says nothing about the branch a browser realm takes",
+        "NEVER EMITS: `read-operation`. The export reads scroll offsets off the value its caller supplied, which is the caller's own object (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:ddfff87dd6688e72ab82b6739e0f0c7cf7a93d264ecae9f4afb2cbbb05119739",
+      "module": "floating-ui-utils-dom-get-window-reads-1d311acb.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm defines no `window`, so `isNode`, `isElement` and `isHTMLElement` all answer false and these samples exercise only the non-DOM branch of each export; the sample says nothing about the branch a browser realm takes",
+        "NEVER EMITS: `read-operation`. The export reads `ownerDocument.defaultView` off the node its caller supplied, which is the caller's own object (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:6a3b22eff8c4e4c95873ee47e21deca4a513b39f4fd99fa8391504e54fe231d5",
+      "module": "floating-ui-utils-dom-is-last-traversable-node-reads-1d311acb.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm defines no `window`, so `isNode`, `isElement` and `isHTMLElement` all answer false and these samples exercise only the non-DOM branch of each export; the sample says nothing about the branch a browser realm takes",
+        "NEVER EMITS: `read-operation`. The export reads `nodeName` off the node its caller supplied and matches it against a literal pattern (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:4bdb5f3fa3e03b8560ef95d32d15d90279ec6616c9929b3e6de78766e76be3f8",
+      "module": "floating-ui-utils-dom-is-table-element-reads-1d311acb.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm defines no `window`, so `isNode`, `isElement` and `isHTMLElement` all answer false and these samples exercise only the non-DOM branch of each export; the sample says nothing about the branch a browser realm takes",
+        "NEVER EMITS: `read-operation`. The export reads `nodeName` off the node its caller supplied and matches it against a literal pattern (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:1754d29a0fc76c48976095c435c6dd5765267c73abc7d332b792cb0b46832c3a",
+      "module": "floating-ui-utils-dom-is-web-kit-reads-1d311acb.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm defines no `window`, so `isNode`, `isElement` and `isHTMLElement` all answer false and these samples exercise only the non-DOM branch of each export; the sample says nothing about the branch a browser realm takes",
+        "NEVER EMITS: `read-operation`. The export reads the host `CSS` global once and memoizes the answer in a module-local binding; neither is a reactive source this package owns."
+      ]
     }
   ]
 }
