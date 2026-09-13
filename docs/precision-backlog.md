@@ -1,5 +1,31 @@
 # Precision backlog
 
+## Twenty-seven `reads` recipes at the mid-size dependency nodes (2026-09-13)
+
+After the two `callbacks` levers were sized and killed, the recipe-less
+`reads` set was 767 unique (case, export) pairs on 219 cases, and the largest
+cases were the `@solid-primitives/utils` `.` cases whose remaining exports
+earlier passes had already named as census-undecidable. The next tier down is
+dependency nodes several rows share: `@corvu/utils@0.4.2`'s `./dom` and
+`./reactivity` (two artifact cases each, five Solid 1 rows), `@tanstack/store@0.11.1`
+(one case, five rows), and `@solid-primitives/utils@7`'s `./colors` under
+`@kobalte/core`'s closure (one case, one row, the same module bytes as the
+`8a0d569b` case already covered). The two-pass scaffold refused nine
+candidates by name — accessor forms, non-empty enumerations, a class whose
+domain exhaustiveness the census cannot state — and twelve exports it could
+decide got recipes, plus the eleven colours recipes carried onto the kobalte
+case with that case's claim ids (`scripts/ecosystem-benchmark/probe-recipes/README.md`).
+Two drafts were wrong about the packages, not the packages about themselves:
+`createStore` takes an actions factory, and `afterPaint` needs a frame
+scheduler the harness realm lacks, so its recipe installs a same-turn shim and
+says so. Corpus effect (release binary, 418 rows): certified closure entries
+9,770 → 10,072 (solid1 +284, solid2 +18); uncapped `reads` closures 256 → 288
+over the 396 uncapped rows; `no recipe in corpus` `reads` detail rows
+3,949 → 3,463; no row below the pin, no status move, no veto thrown by a new
+recipe; wall 1,085 s → 1,095 s. Left by decision at this tier: the
+`@corvu-next/utils` DOM entrypoint and `@tanstack/devtools-ui`'s icons need a
+window the harness does not provide.
+
 ## Dependency composition for `tracked` callback rows, sized and killed (2026-09-13)
 
 The premise: confirm a wrapper's `tracked` or `deferred` callback row by

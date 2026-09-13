@@ -4123,6 +4123,600 @@
         "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
         "NEVER EMITS: this candidate's proposal names an operation, so it is not the empty closure PROPOSABLE admits and no recipe can serve it. The module is kept because without it the candidate reports `no recipe in corpus` and the census refusal underneath stays masked"
       ]
+    },
+    {
+      "claimId": "claim:v1:sha256:e1e748f5d6aefd1339a10ae3e6b868203e0f3785399400d2283394cc10dc2feb",
+      "module": "solid-primitives-utils-colors-color-scale-reads-cfb40777.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:2ef765f16d513ec186a25e8bf6dfed4bb0f144f3397487b1385debdaf6311282",
+      "module": "solid-primitives-utils-colors-contrast-ratio-reads-cfb40777.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:1a2441ca1a1d61fd5716739adb1e6765f9b5f14fe4e67a12c84222545fe9a305",
+      "module": "solid-primitives-utils-colors-darken-reads-cfb40777.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:14741ea0798aceccde57e2741c7ceb0942da4927263b178cbed9830488cbb75d",
+      "module": "solid-primitives-utils-colors-desaturate-reads-cfb40777.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:4b89c9740dc41437db9e0e78e0ed9c8cf60e9149effa59d5eb41e5cc92f3c301",
+      "module": "solid-primitives-utils-colors-get-color-channels-reads-cfb40777.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:54bcffaf5b93510a01963a4695cf2d5816630b94d9b83225db185b16c2a8466a",
+      "module": "solid-primitives-utils-colors-is-readable-reads-cfb40777.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:f91b41da271fd2085c18d61e310b90958955028a637cdd7bc1ab6dd83a39ae1c",
+      "module": "solid-primitives-utils-colors-is-valid-color-reads-cfb40777.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:4e1b8c29527fd78a1baaaaeed0dc6b8d15dafd21c657bf2891c127115c23c5c7",
+      "module": "solid-primitives-utils-colors-normalize-color-reads-cfb40777.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:1d643937c388982b50b89f1b21e733b4013925da5a9fab5cf6f384026a080d13",
+      "module": "solid-primitives-utils-colors-normalize-hue-reads-cfb40777.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:e2d54bdbecb0382db8493d35ff9431fbef8bb6245f6e5f2f56b2795ee462b871",
+      "module": "solid-primitives-utils-colors-parse-color-reads-cfb40777.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:416530abc6519c5a558d2c641dc27b379845b249258377abb9e5ebc25879527c",
+      "module": "solid-primitives-utils-colors-try-parse-color-reads-cfb40777.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4 (`./colors`); they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/colors/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "NEVER EMITS: there is no code path here that emits the expected event, and the module says so -- \"no emit is the point\". The artifact case carries no runtime-accessor-installation hazard, so the census settles the closure syntactically and this module samples the export's own arithmetic and copies beside it. As a veto it is vacuous: it can only ever yield a clean non-observation"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:1a220aaa5c8e602bfefe6dc2300e416257cb7c5383f4723c3715ba928a1b8543",
+      "module": "corvu-utils-dom-after-paint-reads-f34410e8.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The frame scheduler is a recipe-installed shim: a `requestAnimationFrame` the harness realm does not provide, so the sample says nothing about browser paint timing",
+        "NEVER EMITS: `read-operation`. The export schedules its callback through two animation frames and reads nothing itself."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:66215e0fa4edd70aa254d69060c9bedd922e866f99b6f8c65c3dff484a536420",
+      "module": "corvu-utils-dom-call-event-handler-reads-f34410e8.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A function handler is called; a bound-handler tuple is called with its data; the returned flag is the event's own `defaultPrevented`."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:d24dc703611ce91f6f4980c90431d5bcae7ab3509f60aba050e5b1866e697c47",
+      "module": "corvu-utils-dom-after-paint-reads-fd42a1d9.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The frame scheduler is a recipe-installed shim: a `requestAnimationFrame` the harness realm does not provide, so the sample says nothing about browser paint timing",
+        "NEVER EMITS: `read-operation`. The export schedules its callback through two animation frames and reads nothing itself."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:10feaac75f768cf07155cb8698ebd6c7b930a9fbb399571eba12de0fbb504fa0",
+      "module": "corvu-utils-dom-call-event-handler-reads-fd42a1d9.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A function handler is called; a bound-handler tuple is called with its data; the returned flag is the event's own `defaultPrevented`."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:a1f51d15c221beddf615f26f684e8c06b0fc8f0b9f244d174980e58d515bfdef",
+      "module": "corvu-utils-reactivity-access-reads-f5afb395.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A plain value is returned as is; a callable is invoked, which is the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:5665b4c38598499facee5c00ba5c852f6056421ae61045fb17710e7c17debfdf",
+      "module": "corvu-utils-reactivity-chain-reads-f5afb395.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. The returned function calls each supplied callback in order with the same arguments and skips falsy entries."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:de1850b66a16a6c6c1f1903ffe627c283fba177a617866529cad0097d4b00cd5",
+      "module": "corvu-utils-reactivity-merge-refs-reads-f5afb395.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A `chain` over the supplied refs; each ref receives the element once."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:d4acda970b02802123d5a130887a3d78bbc3988e39616884d6ba4d5cda50eb05",
+      "module": "corvu-utils-reactivity-some-reads-f5afb395.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. Each supplied signal is invoked until one is truthy; those invocations are the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:09104c8d3ce95fe84e4cc648bf483cf3a8a82458ffce51cf319e3465fc7f532a",
+      "module": "corvu-utils-reactivity-access-reads-fa65fd49.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A plain value is returned as is; a callable is invoked, which is the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:e956a8c09e283787b1b4f17fdf9b40753a75477892e65b307785127ab0844d2b",
+      "module": "corvu-utils-reactivity-chain-reads-fa65fd49.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. The returned function calls each supplied callback in order with the same arguments and skips falsy entries."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:97f8ae17a0ab57eada88d8cb4e4997bc27ff444be7798096c2d05c6feea7e688",
+      "module": "corvu-utils-reactivity-merge-refs-reads-fa65fd49.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. A `chain` over the supplied refs; each ref receives the element once."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:8fe3909a49fc51f0aa841fc4c2abf906beb862076b97a1b13937eea9ec16cfb8",
+      "module": "corvu-utils-reactivity-some-reads-fa65fd49.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. Each supplied signal is invoked until one is truthy; those invocations are the caller's code (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:dfd3b33a515d6c3beb2a5a6908ed46ea4350bc039e2bee31af92d839aefd762c",
+      "module": "tanstack-store-batch-reads-0bdfa1cb.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. The supplied function runs once, synchronously, inside the batch; the export reads no atom itself."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:fd9ea14c8b58eddb7faf70284bc0cde8f7d1e12bc62a14b9e7ffc5b266ec7587",
+      "module": "tanstack-store-create-atom-reads-0bdfa1cb.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. Constructs an atom around a value or a computation; the construction itself reads nothing, and a later `get` is the caller's."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:53251d695d6b845d7b1ad80b428e3d8aebe3d2e42345ad0d003e36170769cd74",
+      "module": "tanstack-store-create-async-atom-reads-0bdfa1cb.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The getter is never driven by this recipe: subscribing would run caller-supplied code and settle on a later turn, which is outside what a construction sample observes",
+        "NEVER EMITS: `read-operation`. Constructs an atom whose computation awaits the supplied promise-returning getter; constructing it reads nothing, and the getter is the caller's code."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:b3523cd461d9b55b475ed198f9efdbba99da2b9013271ef18247424edac96b60",
+      "module": "tanstack-store-create-store-reads-0bdfa1cb.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small pure export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "Exact for this artifact case only: the closure carries no runtime-accessor-installation hazard, so no reactive-shaped source this module owns is left for the recipe to watch",
+        "NEVER EMITS: `read-operation`. Dispatches to `new ReadonlyStore` for a function and `new Store` otherwise; the construction reads no store."
+      ]
     }
   ]
 }

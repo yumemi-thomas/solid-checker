@@ -230,6 +230,35 @@ Certifying each entrypoint standalone against this corpus closes all
 seventy-two decidable `reads` domains with no veto thrown; the corpus effect is
 in the precision backlog.
 
+The 2026-09-13 evening batch (27 modules) went to the mid-size dependency
+nodes the ranking left, after the corpus's own frontier was re-measured:
+
+- `corvu-utils-dom-*-reads-{f34410e8,fd42a1d9}.mjs` (4) and
+  `corvu-utils-reactivity-*-reads-{f5afb395,fa65fd49}.mjs` (8): the
+  `@corvu/utils@0.4.2` `./dom` and `./reactivity` entrypoints, each published
+  under two artifact cases (the `solid` and `default` conditions), which five
+  Solid 1 rows certify through. The second scaffold pass refused `combineStyle`
+  (a spread-assignment accessor form) and `contains`/`sortByDocumentPosition`
+  (non-empty enumerations); `afterPaint`, `callEventHandler`, `access`,
+  `chain`, `mergeRefs` and `some` it can decide. `afterPaint` schedules through
+  `requestAnimationFrame`, which the harness realm lacks, so the recipe installs
+  a same-turn frame shim and says so in its limitation.
+- `tanstack-store-*-reads-0bdfa1cb.mjs` (4): `@tanstack/store@0.11.1`, the node
+  five `@tanstack/solid-*` rows share. `Store`, `ReadonlyStore`, `flush`,
+  `shallow` and `toObserver` are census refusals; `batch`, `createAtom`,
+  `createAsyncAtom` and `createStore` are decidable. `createStore`'s second
+  argument is an actions *factory*; the first draft passed an object and the
+  gate reported the package's `TypeError` as `veto did not complete`.
+- `solid-primitives-utils-colors-*-reads-cfb40777.mjs` (11): the `./colors`
+  recipes of the `8a0d569b` case carried, byte for byte apart from the header,
+  onto the same module under `@kobalte/core@2.0.0-alpha.0`'s closure, whose
+  claim ids the pin lists.
+
+The cases the ranking put above these were left by decision: the
+`@solid-primitives/utils` `.` cases hold the census-undecidable aliases and
+non-empty enumerations the earlier passes named; `@corvu-next/utils`'s DOM
+entrypoint and `@tanstack/devtools-ui`'s icons need a window.
+
 
 
 The `seroval-create-reference-identity-development.mjs` recipe (2026-09-10)
