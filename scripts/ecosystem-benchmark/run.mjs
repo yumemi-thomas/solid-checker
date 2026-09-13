@@ -141,10 +141,16 @@ export function recommendedCertificationConcurrency(
   const memorySlots = Number.isFinite(totalMemoryBytes) && totalMemoryBytes > 0
     ? Math.max(2, Math.floor(totalMemoryBytes / CERTIFICATION_MEMORY_SHARE_BYTES))
     : 2;
-  return Math.min(CERTIFICATION_SLOT_CEILING, parallelism + CERTIFICATION_OVERSUBSCRIPTION, memorySlots);
+  return Math.max(2, Math.min(CERTIFICATION_SLOT_CEILING, parallelism, memorySlots));
 }
 
-const CERTIFICATION_OVERSUBSCRIPTION = 6;
+// Cores-bounded since 2026-09-13. The six-slot oversubscription above was
+// measured when a certification child mostly waited (1,300 s of slot time for
+// 199 s of CPU); the probe-gate census and worker launches have since made it
+// CPU-bound, and the corpus wall is the heaviest row, which the other slots
+// slow down. Same binary, same 418 rows, identical outcomes: 20 slots 1,024 s,
+// 14 slots 981 s, 10 slots 970 s on the 14-core authority host. Ten and
+// fourteen are within run noise of each other, so the simpler bound stands.
 const CERTIFICATION_SLOT_CEILING = 20;
 
 export function certificationConcurrencyFromEnvironment(env = process.env) {

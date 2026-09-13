@@ -127,7 +127,11 @@ from it, it gets the veto that fits.
   a reused worker process (`repeat runs reused process, realm, or
   module-instance state`) and refuses the veto. Teaching it to recognise a
   replay would loosen an isolation guard, so the cost stands until the schedule
-  can carry one gate for several claim ids.
+  can carry one gate for several claim ids. What the same measurement did
+  find, and fixed, is recorded in `docs/precision-backlog.md` ("Two
+  producer-session and gate-batch savings in the ADR 0036 loop"): the loop
+  withdrew one incomplete gate per pass, and a plan this premise made
+  eligible for synthesis paid a second producer session to synthesize.
 - **A refusal this exposed.** `@solid-primitives/date-difference@1.0.2` had
   never run a probe gate; its first synthesized one hit an export-condition
   mismatch (the worker resolves `dist/index.cjs` where the witness read

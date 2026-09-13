@@ -543,12 +543,39 @@ impl CertificationPlan {
         revocation_epoch: u64,
         probes: Option<&ProbeHarnessConfiguration>,
     ) -> Result<FinalizedPolicy2Contract, Policy2FinalizationError> {
+        self.certify_value_only_seeded(
+            canonical_proposal,
+            pin,
+            issuer,
+            revocation_epoch,
+            probes,
+            None,
+        )
+    }
+
+    /// [`Self::certify_value_only`] with the synthesis pass already taken.
+    ///
+    /// `seed` is the synthesized corpus for this plan as the shared case-set
+    /// batch derived it from its own acquisition — the same hand-gated plan,
+    /// the same stated facts, the same recipe-less candidates — so the loop
+    /// starts at the pass that would have followed synthesis and spends no
+    /// producer session learning what the batch already knows. Every pass
+    /// after that is unchanged.
+    fn certify_value_only_seeded(
+        &self,
+        canonical_proposal: &[u8],
+        pin: &TypeFactsProducerPin,
+        issuer: &ConfiguredReceiptIssuer,
+        revocation_epoch: u64,
+        probes: Option<&ProbeHarnessConfiguration>,
+        seed: Option<synthesized_vetoes::SynthesizedCorpus>,
+    ) -> Result<FinalizedPolicy2Contract, Policy2FinalizationError> {
         // ADR 0036. Each pass either finalizes or withdraws at least one
         // candidate by name and re-plans, so the loop is bounded by the
         // candidate count; the one extra pass is the synthesis pass, taken at
-        // most once.
+        // most once — here, or by the batch that seeded this call.
         let mut already_withheld: Vec<WithheldClosure> = Vec::new();
-        let mut synthesized: Option<synthesized_vetoes::SynthesizedCorpus> = None;
+        let mut synthesized: Option<synthesized_vetoes::SynthesizedCorpus> = seed;
         // Set when a synthesized corpus could not run for this artifact case
         // and its served candidates were withheld by name: the plan then keeps
         // the hand corpus, and synthesis is not attempted a second time.
@@ -608,11 +635,11 @@ impl CertificationPlan {
             {
                 Ok(gates) => gates,
                 Err(error) => match incomplete_gate_withholding(plan, &error) {
-                    Some(record) => {
-                        already_withheld.push(record);
+                    records if !records.is_empty() => {
+                        already_withheld.extend(records);
                         continue;
                     }
-                    None => {
+                    _ => {
                         let records = workspace_refusal_withholding(plan, &error);
                         if !records.is_empty() {
                             already_withheld.extend(records);
@@ -761,38 +788,69 @@ pub(super) fn census_refusal_withholding(
 pub(super) fn incomplete_gate_withholding(
     plan: &CertificationPlan,
     error: &Policy2FinalizationError,
-) -> Option<WithheldClosure> {
-    let schedule = plan.probe_gate_schedule().ok()?;
-    let (gate, detail) = match error {
-        Policy2FinalizationError::Probe(ProbeGateError::IncompleteGate(gate_id)) => (
-            schedule.gates().iter().find(|gate| gate.id() == gate_id)?,
-            String::new(),
-        ),
-        Policy2FinalizationError::IncompleteGate { gate_id, detail } => (
-            schedule.gates().iter().find(|gate| gate.id() == gate_id)?,
-            format!(" ({detail})"),
-        ),
-        Policy2FinalizationError::ProbeHarness(ProbeHarnessError::SessionTimeout { claim_id }) => (
-            schedule
+) -> Vec<WithheldClosure> {
+    let Ok(schedule) = plan.probe_gate_schedule() else {
+        return Vec::new();
+    };
+    // Every incomplete gate the error names, the first with its account and
+    // any further ones of the same batch with theirs. One pass withholds them
+    // all: withdrawing them one at a time re-ran the whole batch once per
+    // gate for outcomes that were already in hand.
+    let mut incomplete: Vec<(&ProbeGate, String)> = Vec::new();
+    match error {
+        Policy2FinalizationError::Probe(ProbeGateError::IncompleteGate(gate_id)) => {
+            let Some(gate) = schedule.gates().iter().find(|gate| gate.id() == gate_id) else {
+                return Vec::new();
+            };
+            incomplete.push((gate, String::new()));
+        }
+        Policy2FinalizationError::IncompleteGate {
+            gate_id,
+            detail,
+            further,
+        } => {
+            for (gate_id, detail) in std::iter::once((gate_id, detail))
+                .chain(further.iter().map(|(gate_id, detail)| (gate_id, detail)))
+            {
+                let Some(gate) = schedule.gates().iter().find(|gate| gate.id() == gate_id) else {
+                    return Vec::new();
+                };
+                incomplete.push((gate, format!(" ({detail})")));
+            }
+        }
+        Policy2FinalizationError::ProbeHarness(ProbeHarnessError::SessionTimeout { claim_id }) => {
+            let Some(gate) = schedule
                 .gates()
                 .iter()
-                .find(|gate| gate.semantic_claim_id() == claim_id)?,
-            " (the worker did not report within the policy budget)".to_owned(),
-        ),
-        _ => return None,
-    };
-    let gate_id = gate.id();
-    let subject = gate.subject();
-    let SemanticClaimPath::Domain(ClaimPath::Call(domain)) = subject.path else {
-        return None;
-    };
-    Some(WithheldClosure {
-        artifact_case: subject.artifact_case.clone(),
-        export: subject.export.clone(),
-        domain: type_facts::call_claim_domain_name(domain).to_owned(),
-        semantic_claim_id: gate.semantic_claim_id().to_owned(),
-        reason: format!("{WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX}{gate_id}{detail}"),
-    })
+                .find(|gate| gate.semantic_claim_id() == claim_id)
+            else {
+                return Vec::new();
+            };
+            incomplete.push((
+                gate,
+                " (the worker did not report within the policy budget)".to_owned(),
+            ));
+        }
+        _ => return Vec::new(),
+    }
+    let mut records = Vec::with_capacity(incomplete.len());
+    for (gate, detail) in incomplete {
+        let gate_id = gate.id();
+        let subject = gate.subject();
+        // A gate on anything but a call domain is not a closure candidate's
+        // veto; nothing here may withhold it, so the whole error propagates.
+        let SemanticClaimPath::Domain(ClaimPath::Call(domain)) = subject.path else {
+            return Vec::new();
+        };
+        records.push(WithheldClosure {
+            artifact_case: subject.artifact_case.clone(),
+            export: subject.export.clone(),
+            domain: type_facts::call_claim_domain_name(domain).to_owned(),
+            semantic_claim_id: gate.semantic_claim_id().to_owned(),
+            reason: format!("{WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX}{gate_id}{detail}"),
+        });
+    }
+    records
 }
 
 /// The candidates whose mandatory vetoes could not *run at all* because the
@@ -969,7 +1027,15 @@ pub fn certify_value_only_case_set(
             // contracts whose every proposed closure had silently vanished:
             // `docs/precision-backlog.md` § "A certified contract can be
             // weaker than the proposal it came from".
-            if probes.is_some()
+            //
+            // The synthesis itself runs here, on the batch's evidence: the
+            // hand-gated plan and the facts it states are exactly what the
+            // per-plan loop's first pass would acquire again, one producer
+            // session per plan, only to derive this same corpus. The loop is
+            // then entered with the corpus in hand. A plan nothing can be
+            // synthesized for stays in the batch, as its loop would have
+            // certified it: the hand corpus, this evidence, its own gates.
+            if let Some(base) = probes
                 && gated.withheld().iter().any(|record| {
                     record.reason == WITHHELD_CLOSURE_NO_RECIPE
                         && (evidence.call_signatures(&record.export).is_some()
@@ -977,8 +1043,20 @@ pub fn certify_value_only_case_set(
                             // typeof veto from the same synthesis pass.
                             || evidence.not_callable_value(&record.export).is_some())
                 })
+                && let Some(corpus) =
+                    synthesized_vetoes::synthesize(plan, &evidence, base, gated.withheld())
+                        .map_err(|error| {
+                            Policy2FinalizationError::VetoSynthesis(error.to_string())
+                        })?
             {
-                return individually(original);
+                return original.certify_value_only_seeded(
+                    canonical_proposal,
+                    pin,
+                    issuer,
+                    revocation_epoch,
+                    probes,
+                    Some(corpus),
+                );
             }
             // Each alternative artifact case derives, runs, and authenticates
             // its own veto set; a batch never shares one plan's probe
@@ -986,7 +1064,7 @@ pub fn certify_value_only_case_set(
             let probe_gates = match finalization::authenticate_probe_gates(plan, probes, pin) {
                 Ok(gates) => gates,
                 Err(error)
-                    if incomplete_gate_withholding(plan, &error).is_some()
+                    if !incomplete_gate_withholding(plan, &error).is_empty()
                         || !workspace_refusal_withholding(plan, &error).is_empty() =>
                 {
                     return individually(original);
@@ -13263,6 +13341,102 @@ export const value = phantom;
         ));
     }
 
+    /// One pass withholds every incomplete gate the batch reported, each with
+    /// its own account; withdrawing them one per pass re-ran the node's whole
+    /// batch once per gate for outcomes already in hand. A gate the schedule
+    /// does not know fails closed: nothing is withheld and the error stands.
+    #[test]
+    fn every_incomplete_gate_of_a_batch_is_withheld_in_one_pass() {
+        let fixture = value_exports_fixture();
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let name = "value-exports-package";
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let root = "/project/node_modules/value-exports-package";
+        let bindings = VALUE_EXPORTS_FIXTURE_EXPORTS.map(|export| {
+            (
+                export,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        let plan = plan_for_test_package_closing(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[
+                ("OPTIONS", ClaimDomain::Callbacks),
+                ("OPTIONS", ClaimDomain::Reads),
+            ],
+            &|export| match export {
+                "Box" | "entries" | "helper" => ValueShape::Callable,
+                "parsed" => ValueShape::Unknown,
+                _ => ValueShape::Plain,
+            },
+        );
+        let schedule = plan.probe_gate_schedule().unwrap();
+        let gates = schedule.gates();
+        assert_eq!(gates.len(), 2);
+
+        let error = super::Policy2FinalizationError::IncompleteGate {
+            gate_id: gates[0].id().to_owned(),
+            detail: "the worker threw first".to_owned(),
+            further: vec![(
+                gates[1].id().to_owned(),
+                "the worker threw second".to_owned(),
+            )],
+        };
+        let records = super::incomplete_gate_withholding(&plan, &error);
+        assert_eq!(records.len(), 2, "{records:?}");
+        for (record, (gate, detail)) in records.iter().zip([
+            (&gates[0], "the worker threw first"),
+            (&gates[1], "the worker threw second"),
+        ]) {
+            assert_eq!(record.semantic_claim_id, gate.semantic_claim_id());
+            assert_eq!(record.export, "OPTIONS");
+            assert_eq!(
+                record.reason,
+                format!(
+                    "{}{} ({detail})",
+                    super::WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX,
+                    gate.id()
+                )
+            );
+        }
+        let (callbacks, reads) = (&records[0].domain, &records[1].domain);
+        assert_ne!(callbacks, reads);
+
+        let unknown = super::Policy2FinalizationError::IncompleteGate {
+            gate_id: gates[0].id().to_owned(),
+            detail: String::new(),
+            further: vec![("sha256:not-a-gate".to_owned(), String::new())],
+        };
+        assert!(
+            super::incomplete_gate_withholding(&plan, &unknown).is_empty(),
+            "a further gate the schedule does not know withholds nothing"
+        );
+        let single = super::Policy2FinalizationError::Probe(super::ProbeGateError::IncompleteGate(
+            gates[1].id().to_owned(),
+        ));
+        let records = super::incomplete_gate_withholding(&plan, &single);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].semantic_claim_id, gates[1].semantic_claim_id());
+    }
+
     /// The boundary of ADR 0099, pinned from both sides: a callable alias
     /// whose signature is overloaded and a class, which is invoked by `new`,
     /// state no not-callable fact, so with no recipe their candidates are
@@ -14851,7 +15025,7 @@ export const value = phantom;
         else {
             panic!("two versions refuse the workspace");
         };
-        assert!(super::incomplete_gate_withholding(&plan, &error).is_none());
+        assert!(super::incomplete_gate_withholding(&plan, &error).is_empty());
         let withheld = super::workspace_refusal_withholding(&plan, &error);
         assert_eq!(withheld.len(), schedule.gates().len());
         assert!(!withheld.is_empty());
@@ -17216,11 +17390,14 @@ export const value = phantom;
                         matches!(
                             result.as_ref().err().unwrap(),
                             super::PublishedGraphCertificationError::FinalizationAtNode {
-                                source: super::Policy2FinalizationError::Probe(
-                                    super::ProbeGateError::Contradiction { .. }
-                                ),
+                                source,
                                 ..
-                            }
+                            } if matches!(
+                                **source,
+                                super::Policy2FinalizationError::Probe(
+                                    super::ProbeGateError::Contradiction { .. }
+                                )
+                            )
                         ),
                         "the child observation must reach the veto: {:?}",
                         result.as_ref().err().unwrap()

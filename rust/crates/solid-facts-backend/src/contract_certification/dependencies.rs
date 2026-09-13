@@ -782,7 +782,7 @@ impl PublishedContractGraphPlan {
                 PublishedGraphCertificationError::FinalizationAtNode {
                     node: digest.to_owned(),
                     package: package.clone(),
-                    source,
+                    source: Box::new(source),
                 }
             })?;
             finalized.push(FinalizedGraphNode {
@@ -1027,7 +1027,9 @@ fn certify_graphs_with_recipe_gating(
                             "{}@{}",
                             node.identity.package_name, node.identity.package_version
                         ),
-                        source: super::Policy2FinalizationError::VetoSynthesis(error.to_string()),
+                        source: Box::new(super::Policy2FinalizationError::VetoSynthesis(
+                            error.to_string(),
+                        )),
                     }
                 })?;
                 if let Some(corpus) = corpus {
@@ -1132,8 +1134,13 @@ fn certify_graphs_with_recipe_gating(
                     gates_by_node.insert(digest.to_owned(), (gating_key, gates));
                 }
                 Err(source) => {
-                    if let Some(record) = super::incomplete_gate_withholding(&node.plan, &source) {
-                        withdrawals.push((digest.to_owned(), record));
+                    let incomplete = super::incomplete_gate_withholding(&node.plan, &source);
+                    if !incomplete.is_empty() {
+                        withdrawals.extend(
+                            incomplete
+                                .into_iter()
+                                .map(|record| (digest.to_owned(), record)),
+                        );
                         continue;
                     }
                     // A private workspace this node cannot have at all -- two
@@ -1229,7 +1236,7 @@ fn certify_graphs_with_recipe_gating(
                     return Err(PublishedGraphCertificationError::FinalizationAtNode {
                         node: digest.to_owned(),
                         package,
-                        source,
+                        source: Box::new(source),
                     });
                 }
             }
@@ -1601,8 +1608,10 @@ pub enum PublishedGraphCertificationError {
     FinalizationAtNode {
         node: String,
         package: String,
+        /// Boxed: with the finalization error inline this variant sits at the
+        /// size Clippy's `result_large_err` refuses.
         #[source]
-        source: super::Policy2FinalizationError,
+        source: Box<super::Policy2FinalizationError>,
     },
     #[error("recipe-gated planning failed for graph node {node} ({package}): {source}")]
     RecipeGatingAtNode {

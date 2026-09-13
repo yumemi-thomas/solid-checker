@@ -265,6 +265,17 @@ pub(crate) struct ProbeGateOutcome {
     kind: ProbeGateOutcomeKind,
 }
 
+impl ProbeGateOutcome {
+    pub(crate) fn gate_id(&self) -> &str {
+        &self.gate_id
+    }
+
+    /// The gate ended in an error, a timeout, or a refused run.
+    pub(crate) fn is_incomplete(&self) -> bool {
+        self.kind == ProbeGateOutcomeKind::ErrorOrTimeout
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct InspectedProbeGateBatch {
     gate_ids: Vec<String>,

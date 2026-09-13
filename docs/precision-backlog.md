@@ -1,5 +1,62 @@
 # Precision backlog
 
+## Two producer-session and gate-batch savings in the ADR 0036 loop (2026-09-13)
+
+Measured with `SOLID_CHECKER_TIMINGS=1` on the two heaviest corpus rows run
+alone with the release binary: `solid-js@1.9.14` takes 345 s alone against
+1,170 s inside the 418-row run, `@kobalte/utils@0.9.2` 405 s against 1,195 s,
+so the corpus wall (1,205 s, 14.2 rows in flight on average over 14 cores) is
+throughput-bound and only less work per row shortens it. Two pieces of that
+work were repeats of work already in hand, and both are removed with the
+verdicts unchanged:
+
+- **Every incomplete gate of a batch is withheld in one pass.** The ADR 0036
+  loop withdrew *one* incomplete gate per pass, then re-acquired the node's
+  Type Facts and re-launched every session of its batch to learn the next
+  gate id — an id the same evaluation had already reported. On the kobalte
+  row 100 of 106 gate passes withdrew exactly one gate each (612 gate runs,
+  4,416 sessions, 285 s of its 405 s). `Policy2FinalizationError::IncompleteGate`
+  now carries every further incomplete gate of the batch with its own
+  account, `incomplete_gate_withholding` returns them all, and both lanes
+  extend the withheld set at once. A contradiction among the remaining gates
+  is still left to the next pass; a further gate the schedule does not know
+  fails closed and withholds nothing. Unit test:
+  `every_incomplete_gate_of_a_batch_is_withheld_in_one_pass`.
+- **The case-set batch synthesizes before it hands a plan to the loop.** A
+  plan with a recipe-less candidate a synthesized veto could serve left the
+  shared batch for the per-plan loop, whose first pass re-acquired the plan's
+  Type Facts only to synthesize from the same facts the batch had. The batch
+  now calls `synthesize` on its own evidence and enters the loop seeded
+  (`certify_value_only_seeded`), so the synthesis pass costs no producer
+  session; a plan nothing can be synthesized for stays in the batch. The
+  solid-js row alone made 544 producer launches (materialize, launch,
+  acquire, remove: 162 s of its 345 s), two per plan that synthesized.
+
+What was measured and left alone: the watched-input census is 2,729 s of CPU
+on the kobalte row (9,780 censuses; the 117 MB pinned Node executable alone
+672 s, hashed at hardware SHA-256 rate). It is the write-isolation invariant
+of `probe_harness.rs` — one session must not tamper with what the next reads
+— and hashing fewer bytes or fewer times is a design decision for an ADR,
+not a performance patch. Corpus effect of the two savings, same release
+binary otherwise, 418 rows: wall 1,205 s → 1,024 s; summed row time
+17,096 s → 15,682 s; summed `witnessAcquisition` 14,863 s → 13,292 s; the
+kobalte row 1,205 s → 868 s. Certification is byte-for-byte the same set:
+9,608 entries, no row moves, no row below the pin. Two withheld entries on
+the kobalte row changed *reason* and nothing else — their veto now runs, and
+throws the ADR 0009 type-stripping refusal, in the pass where the old
+one-per-pass loop had census-refused them first ("no implementation
+transcript … under 0 premise(s)"); the new reason is the more exact of the
+two. The critical path is now `solid-js@1.9.14` at 1,024 s, three times its
+standalone 345 s, which is contention, not work — so the certification pool's
+width was re-measured: 20 slots (the six-over-cores default) 1,024 s, 14 slots
+981 s, 10 slots 970 s, identical outcomes each time. The default is now
+cores-bounded (`recommendedCertificationConcurrency`), and the pin is the
+981 s run: `benchmarks/ecosystem/report.json` 2026-09-13, 9,608 certified
+closure entries, wall-time budget 1,200 s. Row durations at 14 slots sum to
+11,883 s against 15,682 s at 20, so the narrower pool also spends less; the
+heaviest rows still run two to three times their standalone time, and giving
+the critical path its own core budget is the remaining scheduler lever.
+
 ## ADR 0099: a value export that cannot be invoked closes its empty call domains (2026-09-13)
 
 The 2,977 recipe-less `callbacks` candidates and the constants' `reads`

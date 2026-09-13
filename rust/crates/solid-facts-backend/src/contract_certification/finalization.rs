@@ -97,22 +97,41 @@ pub(super) fn authenticate_probe_gates_with_dependencies(
     let (evaluation, identity) =
         probe_harness::run_probe_gates(plan, &schedule, configuration, pin, dependencies)?;
     let outcomes = schedule.outcomes_from_evaluation(&evaluation)?;
-    let inspected = match schedule.inspect_outcomes(outcomes) {
+    let inspected = match schedule.inspect_outcomes(outcomes.iter().cloned()) {
         Ok(inspected) => inspected,
         // The gate says only that it did not complete; the evaluation knows
         // why. Carry that with the gate so the withheld record can say it
         // (ADR 0036) instead of naming a gate digest and nothing else.
+        //
+        // Every other incomplete gate of this batch travels with it. Each one
+        // would otherwise cost the caller a whole pass — re-acquiring the
+        // node's Type Facts and re-launching every session of the batch — to
+        // learn one more gate id it already has here; the outcomes are the
+        // same ones, from the same evaluation. A contradiction among the
+        // remaining gates is left to the next pass, exactly as before.
         Err(super::ProbeGateError::IncompleteGate(gate_id)) => {
-            let detail = schedule
-                .gates()
+            let detail_for = |gate_id: &str| {
+                schedule
+                    .gates()
+                    .iter()
+                    .find(|gate| gate.id() == gate_id)
+                    .and_then(|gate| evaluation.incompletion(gate.semantic_claim_id()))
+                    .map_or_else(
+                        || "the evaluation recorded no completion for the gate".to_owned(),
+                        str::to_owned,
+                    )
+            };
+            let detail = detail_for(&gate_id);
+            let further = outcomes
                 .iter()
-                .find(|gate| gate.id() == gate_id)
-                .and_then(|gate| evaluation.incompletion(gate.semantic_claim_id()))
-                .map_or_else(
-                    || "the evaluation recorded no completion for the gate".to_owned(),
-                    str::to_owned,
-                );
-            return Err(Policy2FinalizationError::IncompleteGate { gate_id, detail });
+                .filter(|outcome| outcome.is_incomplete() && outcome.gate_id() != gate_id)
+                .map(|outcome| (outcome.gate_id().to_owned(), detail_for(outcome.gate_id())))
+                .collect();
+            return Err(Policy2FinalizationError::IncompleteGate {
+                gate_id,
+                detail,
+                further,
+            });
         }
         Err(error) => return Err(error.into()),
     };
@@ -524,8 +543,14 @@ pub enum Policy2FinalizationError {
     /// A mandatory veto that ended in an error, a timeout, or a refused run,
     /// with the evaluation's account of why. `Probe(IncompleteGate)` is the
     /// same fact without it, from a path that never saw the evaluation.
+    /// `further` names every other gate of the same batch that did not
+    /// complete, each with its own account, so one pass can withhold them all.
     #[error("mandatory probe gate {gate_id} did not complete: {detail}")]
-    IncompleteGate { gate_id: String, detail: String },
+    IncompleteGate {
+        gate_id: String,
+        detail: String,
+        further: Vec<(String, String)>,
+    },
     #[error(transparent)]
     ProbeHarness(#[from] ProbeHarnessError),
     /// Boxed: the gating error carries a whole planning error, and unboxed it
