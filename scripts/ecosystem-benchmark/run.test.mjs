@@ -9,6 +9,7 @@ import {
   hasUsableDenominator,
   isCompleteCoverage,
   isMeasuredCoverage,
+  isRequestScoped,
   readCertifiedCoverage
 } from "./lib/certified-coverage.mjs";
 import { formatCoverage } from "./lib/report.mjs";
@@ -1956,6 +1957,82 @@ test("an unreadable manifest leaves no denominator, which is unmeasured and neve
     );
     // The corpus-wide classification of the same row -- neither half of the
     // split -- is pinned in report.test.mjs, where the summary lives.
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test("a probe-scoped row is measured against the subpaths it requested, not the manifest", () => {
+  const temporary = mkdtempSync(join(tmpdir(), "solid-checker-coverage-scoped-"));
+  try {
+    // `@tanstack/charts` ships 113 framework subpaths and its probe asks for
+    // `./solid` alone. Against the manifest that row read `1 of 113 (no root)`
+    // for ever -- a shortfall of 112 entrypoints nobody asked the receipt to
+    // cover -- and the corpus-wide rate counted it partial.
+    const catalog = join(temporary, "scoped");
+    writeCatalog(catalog, {
+      contracts: [{ package: "@tanstack/charts", entrypoints: ["./solid"] }]
+    });
+    const scoped = readCertifiedCoverage({
+      catalogPath: catalog,
+      packageName: "@tanstack/charts",
+      packageVersion: "1.0.0",
+      declaredEntrypoints: 113,
+      requestedEntrypoints: ["./solid"]
+    });
+    assert.deepEqual(scoped, {
+      declaredEntrypoints: 113,
+      declaredWildcard: false,
+      certifiedEntrypoints: 1,
+      rootCertified: false,
+      requestedEntrypoints: 1,
+      requestedCertified: 1,
+      rootRequested: false
+    });
+    assert.equal(isRequestScoped(scoped), true);
+    assert.equal(hasUsableDenominator(scoped), true);
+    assert.equal(isMeasuredCoverage(scoped), true);
+    // Complete: everything requested is covered, and the root was not asked for.
+    assert.equal(isCompleteCoverage(scoped), true);
+    assert.equal(
+      formatCoverage({ attempted: true, status: "certified", coverage: scoped }),
+      "complete 1 of 1 requested (113 declared, no root)"
+    );
+
+    // Asking for the root as well makes the same receipt partial: the root is
+    // required exactly when it was requested.
+    const withRoot = readCertifiedCoverage({
+      catalogPath: catalog,
+      packageName: "@tanstack/charts",
+      packageVersion: "1.0.0",
+      declaredEntrypoints: 113,
+      requestedEntrypoints: [".", "./solid"]
+    });
+    assert.equal(withRoot.requestedEntrypoints, 2);
+    assert.equal(withRoot.requestedCertified, 1);
+    assert.equal(withRoot.rootRequested, true);
+    assert.equal(isCompleteCoverage(withRoot), false);
+    assert.equal(
+      formatCoverage({ attempted: true, status: "certified", coverage: withRoot }),
+      "partial 1 of 2 requested (113 declared, no root)"
+    );
+
+    // An empty or absent list is the unscoped shape, byte for byte.
+    const unscoped = readCertifiedCoverage({
+      catalogPath: catalog,
+      packageName: "@tanstack/charts",
+      packageVersion: "1.0.0",
+      declaredEntrypoints: 113,
+      requestedEntrypoints: []
+    });
+    assert.deepEqual(unscoped, {
+      declaredEntrypoints: 113,
+      declaredWildcard: false,
+      certifiedEntrypoints: 1,
+      rootCertified: false
+    });
+    assert.equal(isRequestScoped(unscoped), false);
+    assert.equal(isCompleteCoverage(unscoped), false);
   } finally {
     rmSync(temporary, { recursive: true, force: true });
   }

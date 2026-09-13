@@ -781,7 +781,10 @@ export function readCertificationAttempt(
     packageVersion = "",
     declaredEntrypoints = null,
     declaredWildcard = false,
-    laneRequested = null
+    laneRequested = null,
+    // The probe's explicit `entrypoints` list, when it has one; see
+    // `readCertifiedCoverage`, which measures such a row against it.
+    requestedEntrypoints = null
   } = {}
 ) {
   let audit = null;
@@ -798,7 +801,8 @@ export function readCertificationAttempt(
     packageName,
     packageVersion,
     declaredEntrypoints,
-    declaredWildcard
+    declaredWildcard,
+    requestedEntrypoints
   });
   if (result.status === 0) {
     return {
@@ -1122,7 +1126,8 @@ async function runProbe(
           packageVersion: row.version,
           declaredEntrypoints,
           declaredWildcard,
-          laneRequested: lane
+          laneRequested: lane,
+          requestedEntrypoints: probe.entrypoints ?? null
         }
       );
     }
@@ -1319,7 +1324,8 @@ async function certifyCompleteProbe(
         packageVersion: item.task.row.version,
         declaredEntrypoints: item.result.declaredEntrypoints ?? null,
         declaredWildcard: item.result.declaredWildcard === true,
-        laneRequested
+        laneRequested,
+        requestedEntrypoints: item.task.probe.entrypoints ?? null
       }
     );
     item.result.durationMs += durationMs;

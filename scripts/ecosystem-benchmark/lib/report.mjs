@@ -19,6 +19,7 @@
 import { FAMILIES } from "./families.mjs";
 import {
   hasUsableDenominator,
+  isRequestScoped,
   isCompleteCoverage,
   isMeasuredCoverage
 } from "./certified-coverage.mjs";
@@ -218,6 +219,16 @@ export function formatCoverage(attempt) {
     return `unmeasured ${coverage.certifiedEntrypoints} of ? (${root})`;
   }
   const complete = isCompleteCoverage(coverage) ? "complete" : "partial";
+  // A probe-scoped row is measured against the subpaths it asked for; the
+  // manifest's count is reported beside it as what the package ships, never
+  // as the denominator (`isRequestScoped`).
+  if (isRequestScoped(coverage)) {
+    const declared = typeof coverage.declaredEntrypoints === "number"
+      ? `${coverage.declaredEntrypoints} declared`
+      : "? declared";
+    return `${complete} ${coverage.requestedCertified} of ${coverage.requestedEntrypoints} requested ` +
+      `(${declared}, ${root})`;
+  }
   // No `k of n` when `n` is a wildcard pattern count -- see
   // `hasUsableDenominator`. The certified count is still exact.
   if (!hasUsableDenominator(coverage)) {

@@ -113,6 +113,83 @@ the transcript. None of these modules does; nothing detects it if one starts.
 
 ## What each recipe is for, and what it measured (2026-09-04 … 2026-09-10)
 
+The nine `solid-primitives-utils-*-reads-9887e137.mjs` recipes (2026-09-12)
+address `@solid-primitives/utils@6.4.1`'s published `.` runtime case — the
+version thirty consumer projects import, per
+`docs/package-contract-v2/phase21/2026-09-12-consumer-demand-measurement.md`.
+The case has forty `reads` candidates; the second scaffold pass found twenty
+the census cannot decide (`callSignatureNotUnique` aliases such as
+`entries = Object.entries`, proposals with a non-empty enumeration, and the
+usual accessor legs), and of the twenty it can, these nine are the ones a
+consumer actually names: `access`, `accessWith`, `asAccessor`, `asArray`,
+`chain`, `createCallbackStack`, `isObject`, `noop`, `trueFn`. Each follows the
+`access` recipe's discipline — samples that assert the answers, an owned getter
+proving the apparatus live, no emit because every reachable read is the
+caller's under ADR 0034 — and each declares `NEVER EMITS:`. Certifying the case
+against this corpus closes all nine `reads` domains (27 → 28 certified entries,
+59 → 50 withheld, no veto threw).
+
+The eleven further `solid-primitives-utils-*-reads-9887e137.mjs` recipes
+(2026-09-13) finish the same case. The second scaffold pass over the thirty-one
+`reads` candidates the nine had left withheld found exactly twenty the census
+refuses -- `domain-exhaustiveness` on the aliases and constants (`entries`,
+`keys`, `tryOnCleanup`, `isDev`, `EQUALS_FALSE_OPTIONS`, …), proposals with a
+non-empty enumeration (`arrayEquals`, `filterNonNullable`, `handleDiffArray`,
+`lines`, `ndjson`, `accessArray`), and accessor or iteration legs
+(`createHydratableSignal`, `createMicrotask`, `defer`) -- and eleven it can
+decide: `clamp`, `compare`, `falseFn`, `isNonNullable`, `json`, `number`,
+`ofClass`, `pipe`, `reverseChain`, `safe`, `withAccess`. Five of those are
+consumer-demanded; the other six are written anyway because a recipe on this
+dependency node closes the entry in every row that depends on it (forty-two
+in the 418-row corpus), and each header says which it is. The pure-primitive
+ones (`clamp`, `compare`, `json`, `number`) keep objects out of their samples
+on purpose: `Math.max`, `<`, and `Number` coerce a caller's object through its
+own `valueOf`, and that read is the caller's under ADR 0034, not a
+contradiction. Certifying the case against this corpus closes all eleven
+(44 → 55 closed domains, 50 → 40 withheld, nothing lost, no veto threw); the
+twenty refused candidates are the census's to move, and no recipe can.
+
+Over the 418-row corpus (release binary, 1200 s row timeout) against the
+same tree with the nine-recipe corpus: `no recipe in corpus` 11,176 → 10,714
+(exactly 11 × 42), certified closure entries 6,636 → 6,678, uncapped `reads`
+closures 52 → 96, no row below baseline, Solid 2 unchanged to the entry.
+
+The sixty-two `solid-primitives-utils-*-reads-{2bf41ff6,f81b5488,6cd714eb}.mjs`
+modules (2026-09-13) finish `@solid-primitives/utils@7.0.0-next.4`'s `.` case in
+the same way. The ecosystem corpus certifies that one `dist/index.js` under
+three artifact cases — `2bf41ff6…` on solid-js@2.0.0-rc.0 rows, `f81b5488…` and
+`6cd714eb…` on rc.3 rows — and a claim id is case-bound, so each case gets its
+own copy of each module: the private workspace writes one file per recipe
+entry, and the corpus test requires declared modules and files to agree
+one-to-one. The second scaffold pass over the forty-five `reads` candidates
+found twenty-three the census refuses (the same aliases, constants,
+non-empty enumerations and accessor legs as 6.4.1, plus `contains`,
+`globalRegistry` and `wrapSetter`) and twenty-two it can decide: the twenty
+exports 6.4.1 already had recipes for, whose bodies are the same code compiled
+differently, plus `afterPaint` (no `requestAnimationFrame` under the pinned
+interpreter, so its samples assert the caller's callback never runs) and
+`createIdGenerator` (host clock and random source; neither a reactive source
+nor anything the recipe owns). Four of the twenty-two already had `2bf41ff6`
+recipes, hence eighteen new modules there and twenty-two for each rc.3 case.
+
+The twelve `floating-ui-utils-*-reads-9bc68a12.mjs` recipes (2026-09-13) address
+`@floating-ui/utils@0.2.12`'s ESM `.` case, the one the corpus reaches from three
+rows and the one a standalone certification selects (the package has no Solid
+dependency, so the closure does not fragment). Of its twenty-four `reads`
+candidates the census refuses twelve -- the `Math` aliases and the placement
+constant arrays (`domain-exhaustiveness`), four proposals with an operation, and
+`getOppositeAxisPlacements`'s coercion -- and decides twelve: pure functions
+over the caller's placement strings (`getSideAxis`, `getAxisLength`,
+`getOppositeAxis`, `getAlignmentAxis`, `getExpandedPlacements`, `clamp`), and
+four that read the caller's object (`expandPaddingObject`, `getPaddingObject`,
+`rectToClientRect`, `getAlignmentSides`), where the recipe counts the reads on
+owned getters -- four, four, four and two per call -- and does not emit, because
+they are the caller's under ADR 0034. `evaluate` and `createCoords` follow the
+`access`/`noop` pattern. Certifying the case against this corpus closes all
+twelve (17 → 29 closed domains, 41 → 29 withheld, no veto threw).
+
+
+
 The `seroval-create-reference-identity-development.mjs` recipe (2026-09-10)
 addresses Seroval 1.5.6 `createReference`'s `returns` closure in the published
 development ESM case, the one candidate the retained real certification left

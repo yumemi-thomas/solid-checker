@@ -150,21 +150,52 @@ export function certifiedEntrypointsOf({ catalogPath, packageName, packageVersio
 /// two numbers is not a substitute -- a wildcard manifest whose expansion
 /// happens to certify exactly as many entrypoints as it declares would
 /// otherwise read as complete against a pattern count.
+///
+/// `requestedEntrypoints` is the probe's own scoping, when it has one: a
+/// manifest probe may name the exact subpaths to certify (`@tanstack/charts`
+/// asks for `./solid` alone, out of 113 framework-specific subpaths). Against
+/// the declared count such a row reads `1 of 113 (no root)` for ever, which is
+/// a shortfall nobody can act on -- the other 112 were never asked for. When
+/// the list is non-empty the coverage carries three more fields, and the
+/// completeness and denominator predicates below read *them*: how many
+/// subpaths were requested, how many of those the receipt covers, and whether
+/// the root was among the requested. The declared figures stay beside them so
+/// the report can still say what the package ships. A probe with no list
+/// produces exactly the shape it always did.
 export function readCertifiedCoverage({
   catalogPath,
   packageName,
   packageVersion,
   declaredEntrypoints,
-  declaredWildcard = false
+  declaredWildcard = false,
+  requestedEntrypoints = null
 }) {
   const entrypoints = certifiedEntrypointsOf({ catalogPath, packageName, packageVersion });
   if (entrypoints === null) return null;
-  return {
+  const coverage = {
     declaredEntrypoints: typeof declaredEntrypoints === "number" ? declaredEntrypoints : null,
     declaredWildcard: declaredWildcard === true,
     certifiedEntrypoints: entrypoints.length,
     rootCertified: entrypoints.includes(".")
   };
+  if (Array.isArray(requestedEntrypoints) && requestedEntrypoints.length > 0) {
+    const requested = [...new Set(requestedEntrypoints.filter(value => typeof value === "string"))];
+    coverage.requestedEntrypoints = requested.length;
+    coverage.requestedCertified = requested.filter(entrypoint => entrypoints.includes(entrypoint)).length;
+    coverage.rootRequested = requested.includes(".");
+  }
+  return coverage;
+}
+
+/// Whether the probe scoped this row to an explicit entrypoint list, in which
+/// case that list -- not the manifest -- is the denominator.
+export function isRequestScoped(coverage) {
+  return (
+    coverage !== null &&
+    typeof coverage === "object" &&
+    typeof coverage.requestedEntrypoints === "number" &&
+    typeof coverage.requestedCertified === "number"
+  );
 }
 
 /// Whether this row's coverage is a measurement at all.
@@ -175,6 +206,7 @@ export function readCertifiedCoverage({
 /// like an unreadable catalog. Calling it partial would assert a shortfall
 /// against a number nobody read.
 export function isMeasuredCoverage(coverage) {
+  if (isRequestScoped(coverage)) return true;
   return (
     coverage !== null &&
     typeof coverage === "object" &&
@@ -211,6 +243,16 @@ export function isMeasuredCoverage(coverage) {
 /// coincidence is not a measurement. The count comparison is kept as well, for
 /// a report recorded before the flag existed.
 export function isCompleteCoverage(coverage) {
+  if (isRequestScoped(coverage)) {
+    // Complete against what was asked for. The root is required only when
+    // the probe asked for it: a probe scoped to `./solid` did not ask the
+    // receipt to cover `.`, and an uncovered root it never requested is not
+    // a shortfall of this row.
+    return (
+      coverage.requestedCertified === coverage.requestedEntrypoints &&
+      (coverage.rootRequested !== true || coverage.rootCertified === true)
+    );
+  }
   if (
     !isMeasuredCoverage(coverage) ||
     coverage.rootCertified !== true ||
@@ -232,6 +274,7 @@ export function isCompleteCoverage(coverage) {
 /// `20 of 2` is not a ratio, and printing it as one would read as a bug in the
 /// measurement instead of a fact about the manifest.
 export function hasUsableDenominator(coverage) {
+  if (isRequestScoped(coverage)) return true;
   return (
     isMeasuredCoverage(coverage) &&
     coverage.declaredWildcard !== true &&

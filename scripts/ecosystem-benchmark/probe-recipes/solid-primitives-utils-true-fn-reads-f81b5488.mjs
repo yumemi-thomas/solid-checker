@@ -1,0 +1,37 @@
+// Hand-authored `reads: []` veto for `@solid-primitives/utils@7.0.0-next.4`, on the
+// published `.` runtime case `artifact-case:f81b5488e3996a8a5274855cc63234dc16f0708c5e95952296ff999003a4834a`
+// (the case the ecosystem corpus certifies under solid-js@2.0.0-rc.3; the same
+// dist/index.js bytes appear under two more `.` cases, each with its own copy of
+// this module, because the private workspace writes one file per recipe entry).
+//
+// Not demand-scoped: written because the second scaffold pass (2026-09-13) showed
+// the census can decide this candidate, and one recipe on this dependency node
+// closes the entry in every row that depends on it.
+//
+// `trueFn` is `() => true`. It owns no source. The samples pass an owned
+// getter object as an argument and assert it is neither read nor called.
+// What it cannot do: establish the closure. Finite samples only falsify, and
+// the authenticated implementation census remains the proof. It hands the
+// package no `session` and no `harness`.
+import { trueFn } from "@solid-primitives/utils";
+
+export async function runProbeSession(_session, harness) {
+  let observed = 0;
+  const ownedByTheRecipe = {
+    get current() {
+      observed += 1;
+      return "read";
+    }
+  };
+  for (const args of [[], [ownedByTheRecipe], [() => ownedByTheRecipe.current]]) {
+    harness.emit({ marker: "call", kind: "call", phase: "enter" });
+    const answered = trueFn(...args);
+    if (answered !== true) {
+      throw new Error(`trueFn() answered ${String(answered)}`);
+    }
+    harness.emit({ marker: "call", kind: "call", phase: "exit" });
+  }
+  if (observed !== 0) {
+    throw new Error(`trueFn read a caller-owned source ${observed} time(s)`);
+  }
+}
