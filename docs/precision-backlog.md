@@ -1,5 +1,26 @@
 # Precision backlog
 
+## Acquisition walks for `callbacks` as it does for `creates` (2026-09-13)
+
+`acquire_census_local_transcripts` demanded module-local declaration
+transcripts for `creates` closure demands only. The `callbacks` census shares
+the walk, and an export whose `creates` walk declined at proposal time still
+proposes `callbacks`, so every such candidate that reached a local helper
+refused at verification with "implementation-census premise required: no
+implementation transcript was acquired" — a premise gap stated as a verdict:
+192 rows on 47 sites in the pin, `@tanstack/solid-pacer`'s `batch` and
+`createStore` (62), `solid-js@1.9.14`'s `compileJSON`/`createStream`/
+`fromCrossJSON` (24) among them. The loop now runs the `callbacks` census in
+acquisition mode beside `creates`, and the creates fixture's partition test
+pins it through `ownGetterFromFactory` and `ownGetterThroughHelper`, which
+propose `callbacks` with no `creates` candidate and reach local helpers.
+Corpus effect (release binary, 418 rows): the 192 rows are gone and every one
+is now a census verdict — 181 refusals in the walk's own classes, 7 empty
+enumerations the walk falsifies, 2 described enumerations with a getter beside
+the call — and none closes; certified closure entries 9,770 → 9,770, no row
+below the pin, wall 1,095 s → 1,085 s. A correction of what the ledger says,
+not a coverage gain; pin refreshed so the reasons are the real ones.
+
 ## Three levers sized against the ADR 0100 pin, and killed (2026-09-13)
 
 Measured on the pin re-taken after ADR 0100 (9,529 withheld detail rows), by

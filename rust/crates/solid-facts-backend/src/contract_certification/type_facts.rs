@@ -679,8 +679,8 @@ impl TypeFactsCertificationSession {
 }
 
 /// Acquires, through the still-open session, every module-local declaration
-/// transcript the `creates` implementation census of this plan's demands
-/// needs, one batch per recursion depth.
+/// transcript the `creates` and `callbacks` implementation censuses of this
+/// plan's demands need, one batch per recursion depth.
 ///
 /// The census is run in its acquisition mode against the transcripts already
 /// in hand: a pass that reaches a local declaration nobody has transcribed yet
@@ -718,14 +718,24 @@ fn acquire_census_local_transcripts(
                 let ProofDemandSubject::DomainClosure { subject, .. } = &proof.subject else {
                     continue;
                 };
-                if proof.family != ProofFamily::DomainExhaustiveness
-                    || !matches!(
-                        &subject.path,
-                        SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates))
-                    )
-                {
-                    continue;
-                }
+                // The two censuses that walk into local declarations. `reads`
+                // reads the root transcript's forms only and asks for nothing;
+                // `callbacks` shares the `creates` walk, and an export whose
+                // `creates` walk declined at proposal time still proposes
+                // `callbacks` — so acquiring for `creates` alone left every
+                // such candidate to refuse at verification for want of a
+                // transcript nobody had asked for (192 rows on 47 sites in the
+                // 2026-09-13 pin, `@tanstack/solid-pacer`'s `batch` and
+                // `createStore` among them).
+                let domain = match &subject.path {
+                    SemanticClaimPath::Domain(ClaimPath::Call(domain))
+                        if proof.family == ProofFamily::DomainExhaustiveness
+                            && matches!(domain, ClaimDomain::Creates | ClaimDomain::Callbacks) =>
+                    {
+                        *domain
+                    }
+                    _ => continue,
+                };
                 let Some(export) = plan
                     .candidates
                     .proposal()
@@ -739,9 +749,19 @@ fn acquire_census_local_transcripts(
                     locals: &locals,
                     dependencies,
                 };
-                if let Ok((CensusOutcome::NeedsTranscripts, _, wanted)) =
+                let pass = if domain == ClaimDomain::Creates {
                     census_creates_domain(plan, proof, export, transcript, implementation, evidence)
-                {
+                } else {
+                    census_callbacks_domain(
+                        plan,
+                        proof,
+                        export,
+                        transcript,
+                        implementation,
+                        evidence,
+                    )
+                };
+                if let Ok((CensusOutcome::NeedsTranscripts, _, wanted)) = pass {
                     for (location, premises) in wanted {
                         let known = locals
                             .iter()

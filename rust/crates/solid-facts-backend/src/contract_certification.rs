@@ -15494,6 +15494,20 @@ export const value = phantom;
                 "{}: a synthesized veto serves every callable candidate",
                 record.export
             );
+            // Acquisition walks for `callbacks` as it does for `creates`
+            // (2026-09-13): `ownGetterFromFactory` and `ownGetterThroughHelper`
+            // propose `callbacks` with no `creates` candidate and reach local
+            // helpers, and used to refuse at verification for want of a
+            // transcript nobody had demanded.
+            assert!(
+                !record
+                    .reason
+                    .contains("no implementation transcript was acquired"),
+                "{}:{}: every local declaration a census walks to was acquired: {}",
+                record.domain,
+                record.export,
+                record.reason
+            );
             let kind = if record
                 .reason
                 .starts_with(super::WITHHELD_CLOSURE_CENSUS_REFUSED_PREFIX)
