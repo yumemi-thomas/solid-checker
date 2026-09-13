@@ -383,6 +383,17 @@ a store or mutable proxy path.
 (`pkg/contracts/bundled/solid-v2/solidjs-signals.json`). **[Decision
 2026-09-03]** the assignment forms.
 
+**[Decision 2026-09-13, ADR 0099] An export that cannot be invoked closes its
+empty call domains vacuously.** Each of the four proposable call domains below
+denies that *one invocation of this export* gives rise to an operation of its
+kind. When the producer proves the exported value has neither [[Call]] nor
+[[Construct]] -- no call signature, no construct signature, not a class, not
+`any`/`unknown`/`never`, not instantiable -- there is no invocation, and the
+empty closure of each domain is the existing claim over an empty set. The
+runtime half is a synthesized veto that emits when `typeof` of the exported
+value is `"function"` after all. A value export with a described operation is
+outside this rule.
+
 ### creates
 
 `creates: [] closed` denies that one invocation of this export gives rise to

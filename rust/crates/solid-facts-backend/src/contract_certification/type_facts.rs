@@ -413,6 +413,11 @@ pub struct VerifiedTypeFactsEvidence {
     /// declared overload set. Read only by veto synthesis; a signature here
     /// proves nothing and binds nothing.
     call_signatures: std::collections::BTreeMap<String, Vec<typefacts::SelectedSignature>>,
+    /// ADR 0099: the not-callable value fact of every scheduled export whose
+    /// implementation transcript stated one, by export name. Read only by veto
+    /// synthesis, for the same reason as `call_signatures`: a fact here proves
+    /// nothing and binds nothing; the census reads it from the transcript.
+    not_callable_exports: std::collections::BTreeMap<String, typefacts::NotCallableValue>,
 }
 
 impl VerifiedTypeFactsEvidence {
@@ -527,6 +532,12 @@ impl VerifiedTypeFactsEvidence {
     /// only as honest as the set it was drawn from.
     pub(super) fn call_signatures(&self, export: &str) -> Option<&[typefacts::SelectedSignature]> {
         self.call_signatures.get(export).map(Vec::as_slice)
+    }
+
+    /// ADR 0099: the not-callable value fact the export's implementation
+    /// transcript stated, if any.
+    pub(super) fn not_callable_value(&self, export: &str) -> Option<&typefacts::NotCallableValue> {
+        self.not_callable_exports.get(export)
     }
 
     pub fn witness_bindings(&self) -> &[WitnessBinding] {
@@ -2881,6 +2892,7 @@ pub(super) fn verify_live_answer(
         bindings,
         session_evidence_root: identity.evidence_root().to_owned(),
         call_signatures: std::collections::BTreeMap::new(),
+        not_callable_exports: std::collections::BTreeMap::new(),
     })
 }
 
@@ -3092,6 +3104,7 @@ fn verify_live_export_value_answer_with_project_census(
     let certification_sources_root = plan.certification_sources_root();
     let mut bindings = Vec::with_capacity(expected_ids.len());
     let mut call_signatures = std::collections::BTreeMap::new();
+    let mut not_callable_exports = std::collections::BTreeMap::new();
     let mut census_refusals = Vec::<CensusRefusal>::new();
     for (index, scheduled) in schedule.export_values.iter().enumerate() {
         let transcript = &answer.transcripts[index];
@@ -3102,6 +3115,14 @@ fn verify_live_export_value_answer_with_project_census(
             call_signatures
                 .entry(export.to_owned())
                 .or_insert(signatures);
+        }
+        if let Some(proof) = scheduled.proof_demands.first()
+            && let Some(fact) = stated_not_callable_value(transcript)
+        {
+            let (_, export) = proof_artifact_export(&proof.subject);
+            not_callable_exports
+                .entry(export.to_owned())
+                .or_insert_with(|| fact.clone());
         }
         if transcript.location != scheduled.demand.location {
             let (expected, actual) = diagnostic_location_pair(
@@ -3181,6 +3202,7 @@ fn verify_live_export_value_answer_with_project_census(
         bindings,
         session_evidence_root: identity.evidence_root().to_owned(),
         call_signatures,
+        not_callable_exports,
     })
 }
 
@@ -3663,7 +3685,16 @@ fn verify_export_value_family(
                     reason: "domain-exhaustiveness demand has no closure subject".into(),
                 });
             };
-            if matches!(
+            if let Some(vacuous) =
+                census_not_callable_export(plan, proof, &subject.path, transcript, &open)?
+            {
+                // ADR 0099: the export's value cannot be invoked, so every
+                // proposable call domain -- each denying an operation "one
+                // invocation of this export" gives rise to -- closes on the
+                // producer's stated fact alone. The identity and emptiness
+                // checks live in the helper; nothing is walked.
+                sites.extend(vacuous);
+            } else if matches!(
                 &subject.path,
                 SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates))
             ) {
@@ -3932,6 +3963,113 @@ fn require_export_implementation<'a>(
 /// has to clear exactly the transcript completeness and the authenticated
 /// runtime binding that the demanded export cleared, or the composition would
 /// rest on a census this side never validated.
+/// ADR 0099: the not-callable value fact an export's implementation transcript
+/// states, exactly as the producer states it -- beside a declaration, with
+/// `valueNotCallable` as the transcript's only open reason and `complete`
+/// unset. Any other shape is `None`: a fact arriving beside other open reasons
+/// or on a complete transcript is a producer disagreement, and the consumer
+/// reads it as "not stated".
+fn stated_not_callable_value(
+    transcript: &ExportValueTranscript,
+) -> Option<&typefacts::NotCallableValue> {
+    let implementation = transcript.implementation.as_ref()?;
+    let fact = implementation.not_callable_value.as_ref()?;
+    let only_reason = implementation.open_reasons.len() == 1
+        && implementation.open_reasons[0].as_ref() == "valueNotCallable";
+    (!implementation.complete && only_reason && implementation.declaration.is_some())
+        .then_some(fact)
+}
+
+/// ADR 0099: close a proposable call domain vacuously for an export whose value
+/// cannot be invoked.
+///
+/// Every proposable call domain (`creates`, `returns`, `reads`, `callbacks`)
+/// denies that *one invocation of this export* gives rise to an operation of
+/// its kind (`semantic-model.md`, the shared rule each domain restates). A
+/// value with neither [[Call]] nor [[Construct]] has no invocation, so the
+/// denial holds for every one of them without a body to census -- and there is
+/// no body: the transcript is open with `valueNotCallable` precisely because
+/// the producer found no call signature to walk behind.
+///
+/// `Ok(None)` when the demand is not such a case, so the census arms run as
+/// before. `Ok(Some(sites))` only when: the producer stated the fact in its
+/// exact shape; the proposal closes this domain with an **empty** enumeration
+/// (a value export with a described operation is a proposal this premise does
+/// not reach); and the stated declaration is the snapshot-replayed runtime
+/// binding of the demanded export, by the same suffix test the implementation
+/// accessor applies. The site names the fact and the type so a receipt says
+/// what the closure rested on. The runtime half is the synthesized veto that
+/// observes `typeof` of the exported value ([`super::synthesized_vetoes`]).
+fn census_not_callable_export(
+    plan: &CertificationPlan,
+    proof: &ScheduledProofDemand,
+    path: &SemanticClaimPath,
+    transcript: &ExportValueTranscript,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+) -> Result<Option<Vec<String>>, TypeFactsCertificationError> {
+    let SemanticClaimPath::Domain(ClaimPath::Call(domain)) = path else {
+        return Ok(None);
+    };
+    if !domain.is_proposable() {
+        return Ok(None);
+    }
+    let Some(fact) = stated_not_callable_value(transcript) else {
+        return Ok(None);
+    };
+    let implementation = transcript
+        .implementation
+        .as_ref()
+        .expect("stated_not_callable_value read the implementation transcript");
+    let (artifact_case, export_name) = proof_artifact_export(&proof.subject);
+    let export = plan
+        .candidates
+        .proposal()
+        .artifact_case(artifact_case)
+        .and_then(|case| case.exports.get(export_name))
+        .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason: "demanded implementation export is absent from the candidate".into(),
+        })?;
+    let empty = match domain {
+        ClaimDomain::Callbacks => export.callbacks().items().is_empty(),
+        other => export
+            .operation_claim(*other)
+            .is_some_and(|claim| claim.items().is_empty()),
+    };
+    if !empty {
+        return Err(open(
+            "a not-callable export closes only an empty enumeration, and this proposal names an operation",
+        ));
+    }
+    let (runtime_path, runtime_export, _, _) =
+        plan.verified_exports
+            .runtime_binding(export_name)
+            .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+                demand: proof.id.clone(),
+                reason: "demanded export has no exact identifier runtime binding".into(),
+            })?;
+    let declaration = implementation
+        .declaration
+        .as_ref()
+        .expect("stated_not_callable_value required a declaration");
+    let actual_path = declaration.location.path.replace('\\', "/");
+    let expected_suffix = format!("/{}", runtime_path.trim_start_matches("./"));
+    if implementation.query_name.as_ref() != runtime_export
+        || !actual_path.ends_with(&expected_suffix)
+    {
+        return Err(TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason: "not-callable value fact does not match the snapshot-replayed export binding"
+                .into(),
+        });
+    }
+    require_census_decides_closure(proof, path, ClosureCensus::Implementation)?;
+    Ok(Some(vec![format!(
+        "typefacts-value-export:not-callable:{}:{}",
+        fact.kind, fact.r#type
+    )]))
+}
+
 fn require_named_export_implementation<'a>(
     plan: &'a CertificationPlan,
     proof: &ScheduledProofDemand,

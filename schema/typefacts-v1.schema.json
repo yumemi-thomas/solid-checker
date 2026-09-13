@@ -802,6 +802,7 @@
         "parameterPremiseRefusal": { "type": "string" },
         "callArgumentPremises": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/callArgumentPremise" } },
         "primitiveCompletion": { "type": "boolean" },
+        "notCallableValue": { "$ref": "#/$defs/notCallableValue" },
         "complete": { "type": "boolean" },
         "openReasons": { "type": "array", "maxItems": 1000000, "items": { "type": "string" } }
       }
@@ -825,6 +826,16 @@
       "description": "What one `coercion` form's clearance would rest on (ADR 0045, handshake protocol 29): every operand the coercion applies ToPrimitive to is either provably a primitive by its own type — those are not listed, because a primitive has no `Symbol.toPrimitive`, `valueOf` or `toString` to reach — or the result of one of these calls into the program's own runtime source. Absent when some operand is neither, which is every shape no ADR has reviewed. Stating it is never a claim that the form clears: a consumer grants it only by matching each call to a row of the same transcript's `calls`, taking that row's own callee and premise, and requiring the callee's transcript to state `primitiveCompletion`. Four value-carrying shapes are followed to reach an operand: a conditional and the short-circuit operators (every arm must qualify), and a reference to a local binding the file declares once, writes nowhere and initializes.",
       "properties": {
         "calls": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/location" } }
+      }
+    },
+    "notCallableValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "type"],
+      "description": "The demanded export's runtime value cannot be invoked (ADR 0099, handshake protocol 56): every constituent of its type has no call signature, no construct signature, is not callable without signatures, and is not any, unknown, never, an error, or an instantiable type. Stated only on a transcript that is otherwise open with the single reason valueNotCallable and carries declaration. kind is primitive when every constituent is a primitive type and object otherwise; type is the checker's spelling of the whole type.",
+      "properties": {
+        "kind": { "type": "string", "enum": ["primitive", "object"] },
+        "type": { "type": "string" }
       }
     },
     "callArgumentPremise": {

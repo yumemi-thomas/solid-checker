@@ -82,8 +82,17 @@ pub(crate) fn synthesize(
                 .iter()
                 .find(|case| case.id.as_str() == record.artifact_case)?;
             let export = case.exports.get(&record.export)?;
+            let Some(signatures) = evidence.call_signatures(&record.export) else {
+                // ADR 0099: no call signature, but the producer stated the
+                // value cannot be invoked. The veto observes `typeof`; it
+                // needs no sample and serves every empty proposable domain.
+                evidence.not_callable_value(&record.export)?;
+                if !empty_enumeration(&record.domain, export) {
+                    return None;
+                }
+                return Some((record, &[][..], Observation::NotCallable));
+            };
             let observation = candidate_observation(&record.domain, export)?;
-            let signatures = evidence.call_signatures(&record.export)?;
             if let Observation::ParameterReturn(index) = observation
                 && !identity_signatures_supported(signatures, index)
             {
@@ -160,17 +169,24 @@ pub(crate) fn synthesize(
             "expectedEvent": { "marker": reviewed.marker, "class": "call" },
             "drain": [{ "kind": "microtasks", "maxTurns": 1 }],
             "coverageLimitations": [
-                format!(
-                    "synthesized veto (ADR 0036) for {} `{}`: a finite sample of {} call(s) derived from the export's Type Facts call signature{}; a throwing sample call is recorded as a sample-threw event and observes nothing",
-                    record.domain,
-                    record.export,
-                    observation.sample_tuples(signatures).len(),
-                    if signatures.len() > 1 {
-                        format!(" ({} overloads, every one sampled)", signatures.len())
-                    } else {
-                        String::new()
-                    }
-                ),
+                if observation == Observation::NotCallable {
+                    format!(
+                        "synthesized veto (ADR 0099) for {} `{}`: the export's value type states no call or construct signature, so no call is sampled; the module observes typeof of the runtime value",
+                        record.domain, record.export
+                    )
+                } else {
+                    format!(
+                        "synthesized veto (ADR 0036) for {} `{}`: a finite sample of {} call(s) derived from the export's Type Facts call signature{}; a throwing sample call is recorded as a sample-threw event and observes nothing",
+                        record.domain,
+                        record.export,
+                        observation.sample_tuples(signatures).len(),
+                        if signatures.len() > 1 {
+                            format!(" ({} overloads, every one sampled)", signatures.len())
+                        } else {
+                            String::new()
+                        }
+                    )
+                },
                 format!(
                     "{} contradiction observed as: {}",
                     record.domain, reviewed.observation
@@ -375,6 +391,29 @@ enum Observation {
     /// invocation is a clean non-observation that certifies the very claim it
     /// should have contradicted.
     EmptyCallbacks,
+    /// ADR 0099: the export's value cannot be invoked, per the producer, so
+    /// every empty proposable call domain closes vacuously. The runtime half
+    /// observes `typeof` of the exported value and emits when it is a
+    /// function: the one way the stated fact could be false at run time.
+    NotCallable,
+}
+
+/// Whether the proposal closes `domain` with an empty enumeration -- the only
+/// shape a not-callable export's vacuous closure reaches (ADR 0099).
+fn empty_enumeration(domain: &str, export: &ExportSemantics) -> bool {
+    match domain {
+        "callbacks" => export.callbacks().items().is_empty(),
+        "creates" => export
+            .operation_claim(ClaimDomain::Creates)
+            .is_some_and(|claim| claim.items().is_empty()),
+        "returns" => export
+            .operation_claim(ClaimDomain::Returns)
+            .is_some_and(|claim| claim.items().is_empty()),
+        "reads" => export
+            .operation_claim(ClaimDomain::Reads)
+            .is_some_and(|claim| claim.items().is_empty()),
+        _ => false,
+    }
 }
 
 fn candidate_observation(domain: &str, export: &ExportSemantics) -> Option<Observation> {
@@ -431,6 +470,11 @@ impl Observation {
             Self::Creates => reviewed_observation("creates").unwrap(),
             Self::EmptyReturns => reviewed_observation("returns").unwrap(),
             Self::EmptyCallbacks => reviewed_observation("callbacks").unwrap(),
+            Self::NotCallable => ReviewedObservation {
+                marker: "callable-value",
+                observation: "exact: typeof of the exported runtime value is \"function\"",
+                emit: "",
+            },
             Self::ParameterReturn(_) => ReviewedObservation {
                 marker: "return-outside-identity",
                 observation: "exact on a normal completion: Object.is(result, original argument at the claimed index) is false; object contents and throwing calls are not observed",
@@ -442,12 +486,16 @@ impl Observation {
     fn sample_tuples(self, signatures: &[typefacts::SelectedSignature]) -> Vec<Vec<String>> {
         match self {
             Self::ParameterReturn(index) => identity_sample_tuples(signatures, index),
+            Self::NotCallable => Vec::new(),
             _ => sample_tuples(signatures),
         }
     }
 
     fn sampling_limitations(self) -> &'static str {
         match self {
+            Self::NotCallable => {
+                "no call is sampled: the observation is typeof of the exported value in the probe realm, so a value that is callable only through a construct signature the checker did not see, or only in another realm, is not observed"
+            }
             Self::ParameterReturn(_) => {
                 "identity samples use distinct object/callable identities and vary the returned slot separately; at most twelve tuples per overload, no variadic tail or structural object construction; throwing-only runs are incomplete and cannot satisfy the veto"
             }
@@ -609,11 +657,14 @@ fn module_source(
     if let Observation::ParameterReturn(index) = observation {
         return identity_module_source(specifier, export, index, signatures);
     }
+    if observation == Observation::NotCallable {
+        return not_callable_module_source(specifier, export);
+    }
     let domain = match observation {
         Observation::Creates => "creates",
         Observation::EmptyReturns => "returns",
         Observation::EmptyCallbacks => "callbacks",
-        Observation::ParameterReturn(_) => unreachable!(),
+        Observation::ParameterReturn(_) | Observation::NotCallable => unreachable!(),
     };
     // Only this observation emits from inside the callback. Giving every
     // synthesized module that emitter would spend the session's event budget on
@@ -677,6 +728,33 @@ fn module_source(
         } else {
             ""
         },
+    )
+}
+
+/// ADR 0099: the module for a not-callable export. It samples nothing -- there
+/// is no call to make -- and emits `callable-value` when the runtime value is a
+/// function after all, which is the one observation that falsifies the
+/// producer's stated fact. A non-function value is a clean non-observation and
+/// the closure rests on the fact.
+fn not_callable_module_source(specifier: &str, export: &str) -> String {
+    format!(
+        "// Synthesized veto (ADR 0099) for the empty call domains of `{export}`.\n\
+         // The producer states the export's value cannot be invoked; this observes\n\
+         // the runtime value's typeof and emits if it is a function after all.\n\
+         // It observes, it never proves: the stated type fact is the proof.\n\
+         import * as subjectModule from {specifier_json};\n\
+         \n\
+         const subject = subjectModule[{export_json}];\n\
+         \n\
+         export async function runProbeSession(_session, harness) {{\n\
+         \x20 harness.emit({{ marker: \"call\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 if (typeof subject === \"function\") {{\n\
+         \x20   harness.emit({{ marker: \"callable-value\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 }}\n\
+         \x20 harness.emit({{ marker: \"call\", kind: \"call\", phase: \"exit\" }});\n\
+         }}\n",
+        specifier_json = serde_json::to_string(specifier).unwrap_or_default(),
+        export_json = serde_json::to_string(export).unwrap_or_default(),
     )
 }
 

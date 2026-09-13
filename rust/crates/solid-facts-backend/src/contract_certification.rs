@@ -549,6 +549,10 @@ impl CertificationPlan {
         // most once.
         let mut already_withheld: Vec<WithheldClosure> = Vec::new();
         let mut synthesized: Option<synthesized_vetoes::SynthesizedCorpus> = None;
+        // Set when a synthesized corpus could not run for this artifact case
+        // and its served candidates were withheld by name: the plan then keeps
+        // the hand corpus, and synthesis is not attempted a second time.
+        let mut synthesis_dropped = false;
         loop {
             let configuration = synthesized
                 .as_ref()
@@ -589,6 +593,7 @@ impl CertificationPlan {
                 }
             };
             if synthesized.is_none()
+                && !synthesis_dropped
                 && let Some(base) = probes
                 && let Some(corpus) =
                     synthesized_vetoes::synthesize(plan, &evidence, base, gated.withheld())
@@ -609,11 +614,31 @@ impl CertificationPlan {
                     }
                     None => {
                         let records = workspace_refusal_withholding(plan, &error);
-                        if records.is_empty() {
-                            return Err(error);
+                        if !records.is_empty() {
+                            already_withheld.extend(records);
+                            continue;
                         }
-                        already_withheld.extend(records);
-                        continue;
+                        // A synthesized veto the pinned interpreter cannot run
+                        // for this artifact case: the graph lane withholds the
+                        // served candidates and keeps the hand corpus, and so
+                        // does this lane. A hand recipe hitting the same
+                        // binding still refuses as it always did.
+                        if synthesized.is_some()
+                            && let Some(base) = probes
+                            && synthesized_veto_cannot_run(&error)
+                        {
+                            let served = self
+                                .recipe_gated_with(Some(base.recipe_corpus()), &already_withheld)?;
+                            let records =
+                                synthesized_cannot_run_withholding(plan, served.withheld(), &error);
+                            if !records.is_empty() {
+                                already_withheld.extend(records);
+                                synthesized = None;
+                                synthesis_dropped = true;
+                                continue;
+                            }
+                        }
+                        return Err(error);
                     }
                 },
             };
@@ -822,6 +847,59 @@ pub(super) fn workspace_refusal_withholding(
         .collect()
 }
 
+/// Whether a finalization error says the synthesized veto **cannot run** for
+/// this artifact case -- the same three harness refusals the graph lane
+/// withholds on: an export condition the pinned interpreter cannot be given, a
+/// condition under which it would load a different file than the witness read,
+/// or a dependency edge the private workspace cannot populate.
+pub(super) fn synthesized_veto_cannot_run(error: &Policy2FinalizationError) -> bool {
+    matches!(
+        error,
+        Policy2FinalizationError::ProbeHarness(
+            ProbeHarnessError::Configuration(_)
+                | ProbeHarnessError::ConditionMismatch(_)
+                | ProbeHarnessError::UnauthenticatedDependency(_)
+        )
+    )
+}
+
+/// The withheld records for the candidates a synthesized corpus served when
+/// that corpus cannot run (ADR 0036, the plain lane's twin of the graph lane's
+/// arm): every candidate the **hand** corpus left `no recipe in corpus` --
+/// `served` is that gating -- withheld with the gate id and the harness's own
+/// reason, so the row certifies with those domains open instead of refusing.
+pub(super) fn synthesized_cannot_run_withholding(
+    plan: &CertificationPlan,
+    served: &[WithheldClosure],
+    error: &Policy2FinalizationError,
+) -> Vec<WithheldClosure> {
+    if !synthesized_veto_cannot_run(error) {
+        return Vec::new();
+    }
+    let schedule = plan.probe_gate_schedule().ok();
+    served
+        .iter()
+        .filter(|record| record.reason == WITHHELD_CLOSURE_NO_RECIPE)
+        .map(|record| {
+            let gate_id = schedule
+                .as_ref()
+                .and_then(|schedule| {
+                    schedule
+                        .gates()
+                        .iter()
+                        .find(|gate| gate.semantic_claim_id() == record.semantic_claim_id)
+                })
+                .map_or_else(|| "unscheduled".to_owned(), |gate| gate.id().to_owned());
+            WithheldClosure {
+                reason: format!(
+                    "{WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX}{gate_id} (synthesized veto cannot run for this artifact case: {error})"
+                ),
+                ..record.clone()
+            }
+        })
+        .collect()
+}
+
 /// Finalizes a complete set of alternative artifact cases while sharing only
 /// immutable Type Facts setup. Evidence and receipts remain one-per-plan and
 /// each is checked against its own demand graph before this returns anything.
@@ -894,7 +972,10 @@ pub fn certify_value_only_case_set(
             if probes.is_some()
                 && gated.withheld().iter().any(|record| {
                     record.reason == WITHHELD_CLOSURE_NO_RECIPE
-                        && evidence.call_signatures(&record.export).is_some()
+                        && (evidence.call_signatures(&record.export).is_some()
+                            // ADR 0099: a not-callable value gets its
+                            // typeof veto from the same synthesis pass.
+                            || evidence.not_callable_value(&record.export).is_some())
                 })
             {
                 return individually(original);
@@ -12922,6 +13003,349 @@ export const value = phantom;
         "viaHelperChain",
         "whileBreak",
     ];
+
+    const VALUE_EXPORTS_FIXTURE_EXPORTS: [&str; 10] = [
+        "Box", "FLAG", "LIMIT", "NAME", "NULLABLE", "OPTIONS", "SIDES", "entries", "helper",
+        "parsed",
+    ];
+
+    fn value_exports_fixture() -> std::path::PathBuf {
+        repository_root().join("fixtures/package-contracts/value-exports")
+    }
+
+    /// The ADR 0099 tracer: `fixtures/package-contracts/value-exports`, with
+    /// one export's one call domain proposed closed and empty. Value exports
+    /// are described as `Plain`, exactly as the generator publishes them, so
+    /// the export-value checks and the producer's not-callable fact describe
+    /// the same thing.
+    fn value_exports_plan(closed_export: &str, domain: ClaimDomain) -> CertificationPlan {
+        let fixture = value_exports_fixture();
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let name = "value-exports-package";
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let root = "/project/node_modules/value-exports-package";
+        let bindings = VALUE_EXPORTS_FIXTURE_EXPORTS.map(|export| {
+            (
+                export,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        plan_for_test_package_closing(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[(closed_export, domain)],
+            &|export| match export {
+                "Box" | "entries" | "helper" => ValueShape::Callable,
+                "parsed" => ValueShape::Unknown,
+                _ => ValueShape::Plain,
+            },
+        )
+    }
+
+    fn value_exports_certify(
+        export: &str,
+        domain: ClaimDomain,
+    ) -> Option<(
+        CertificationPlan,
+        Result<super::FinalizedPolicy2Contract, super::Policy2FinalizationError>,
+    )> {
+        let pin = pinned_producer_for_test()?;
+        let label = format!("value-exports-{export}-{domain:?}");
+        let scratch = TracerScratch::new(&label);
+        let plan = value_exports_plan(export, domain);
+        assert_eq!(
+            plan.probe_gate_schedule().unwrap().gates().len(),
+            1,
+            "{export}: one candidate, one veto"
+        );
+        let configuration =
+            tracer_configuration_from(&value_exports_fixture(), scratch.path(), &label, &[])?;
+        let outcome = tracer_certify(&plan, &pin, &configuration);
+        Some((plan, outcome))
+    }
+
+    fn domain_demand_ids(
+        plan: &CertificationPlan,
+        export: &str,
+        domain: ClaimDomain,
+    ) -> Vec<String> {
+        use solid_reactive_ir::contract_semantics::{
+            SemanticClaimPath, certification::ProofDemandSubject,
+        };
+        plan.demand_graph()
+            .demands()
+            .iter()
+            .filter(|demand| {
+                demand.family()
+                    == solid_reactive_ir::contract_semantics::certification::ProofFamily::DomainExhaustiveness
+                    && matches!(
+                        demand.subject(),
+                        ProofDemandSubject::DomainClosure { subject, .. }
+                            if subject.export == export
+                                && subject.path
+                                    == SemanticClaimPath::Domain(ClaimPath::Call(domain))
+                    )
+            })
+            .map(|demand| demand.id().as_str().to_owned())
+            .collect()
+    }
+
+    fn call_domain_is_closed_in(canonical_main: &[u8], export: &str, domain: ClaimDomain) -> bool {
+        let normalized = crate::contract_document::decode(canonical_main)
+            .expect("a canonical main decodes")
+            .normalize()
+            .expect("a canonical main normalizes");
+        let case = &normalized.artifact_cases()[0];
+        match domain {
+            ClaimDomain::Callbacks => matches!(
+                case.exports[export].callbacks(),
+                solid_reactive_ir::contract_semantics::KnowledgeSet::Complete(items) if items.is_empty()
+            ),
+            other => case.exports[export]
+                .operation_claim(other)
+                .expect("an operation domain")
+                .is_closed(),
+        }
+    }
+
+    /// ADR 0099: an export whose value cannot be invoked closes its empty call
+    /// domains on the producer's stated fact, with the synthesized `typeof`
+    /// veto as the runtime half. Every proposable domain a value export is
+    /// proposed for -- `callbacks` and `reads` -- and both kinds of fact.
+    #[test]
+    fn a_value_export_that_cannot_be_invoked_closes_its_empty_call_domains_on_the_stated_fact() {
+        for (export, domain, kind) in [
+            ("FLAG", ClaimDomain::Callbacks, "primitive"),
+            ("LIMIT", ClaimDomain::Reads, "primitive"),
+            ("NULLABLE", ClaimDomain::Callbacks, "primitive"),
+            ("OPTIONS", ClaimDomain::Reads, "object"),
+            ("SIDES", ClaimDomain::Callbacks, "object"),
+        ] {
+            let Some((plan, outcome)) = value_exports_certify(export, domain) else {
+                return;
+            };
+            let finalized = outcome.unwrap_or_else(|error| {
+                panic!("{export} {domain:?}: a not-callable value must certify: {error}")
+            });
+            assert!(
+                finalized.withheld_closures().is_empty(),
+                "{export} {domain:?}: {:?}",
+                finalized.withheld_closures()
+            );
+            assert!(call_domain_is_closed_in(
+                finalized.canonical_main(),
+                export,
+                domain
+            ));
+            assert_ne!(
+                finalized.bindings().probe_gate_root,
+                super::finalization::empty_probe_gate_root(&plan),
+                "{export}: the synthesized typeof veto ran"
+            );
+            let pin = pinned_producer_for_test().expect("checked above");
+            let evidence = plan
+                .acquire_and_verify_export_value_type_facts(&pin)
+                .expect("the same evidence the transaction acquired");
+            let demands = domain_demand_ids(&plan, export, domain);
+            let [demand] = demands.as_slice() else {
+                panic!("{export}: one {domain:?} demand");
+            };
+            let sites = evidence
+                .witness_bindings()
+                .iter()
+                .find(|binding| binding.demand_id() == demand)
+                .expect("the demand has a witness")
+                .site_ids()
+                .to_vec();
+            let prefix = format!("typefacts-value-export:not-callable:{kind}:");
+            assert!(
+                sites.iter().any(|site| site.starts_with(&prefix)),
+                "{export} {domain:?}: {sites:?}"
+            );
+            assert!(
+                !sites.iter().any(|site| site.starts_with("census-")),
+                "{export}: nothing was walked: {sites:?}"
+            );
+        }
+    }
+
+    /// Both proposable domains of one value export in one plan: two gates,
+    /// two claim ids, one module text, two launches. (Running identical
+    /// launches once was tried and refused by the evaluator's isolation
+    /// invariant, which reads a duplicated run as a reused worker process;
+    /// the cost is recorded in the ADR.)
+    #[test]
+    fn both_call_domains_of_a_value_export_close() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("value-exports-both");
+        let fixture = value_exports_fixture();
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let name = "value-exports-package";
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let root = "/project/node_modules/value-exports-package";
+        let bindings = VALUE_EXPORTS_FIXTURE_EXPORTS.map(|export| {
+            (
+                export,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        let plan = plan_for_test_package_closing(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[
+                ("OPTIONS", ClaimDomain::Callbacks),
+                ("OPTIONS", ClaimDomain::Reads),
+            ],
+            &|export| match export {
+                "Box" | "entries" | "helper" => ValueShape::Callable,
+                "parsed" => ValueShape::Unknown,
+                _ => ValueShape::Plain,
+            },
+        );
+        assert_eq!(plan.probe_gate_schedule().unwrap().gates().len(), 2);
+        let Some(configuration) =
+            tracer_configuration_from(&fixture, scratch.path(), "value-exports-both", &[])
+        else {
+            return;
+        };
+        let finalized = tracer_certify(&plan, &pin, &configuration)
+            .expect("both domains of a not-callable value certify");
+        assert!(
+            finalized.withheld_closures().is_empty(),
+            "{:?}",
+            finalized.withheld_closures()
+        );
+        assert!(call_domain_is_closed_in(
+            finalized.canonical_main(),
+            "OPTIONS",
+            ClaimDomain::Callbacks
+        ));
+        assert!(call_domain_is_closed_in(
+            finalized.canonical_main(),
+            "OPTIONS",
+            ClaimDomain::Reads
+        ));
+    }
+
+    /// The boundary of ADR 0099, pinned from both sides: a callable alias
+    /// whose signature is overloaded and a class, which is invoked by `new`,
+    /// state no not-callable fact, so with no recipe their candidates are
+    /// withheld exactly as before -- and `helper`, an ordinary function, still
+    /// closes through the implementation census, not through this premise.
+    #[test]
+    fn an_export_with_a_construct_or_overloaded_signature_stays_outside_the_premise() {
+        for export in ["entries", "Box"] {
+            let Some((_plan, outcome)) = value_exports_certify(export, ClaimDomain::Reads) else {
+                return;
+            };
+            let finalized = outcome.unwrap_or_else(|error| {
+                panic!("{export}: withholding must still certify the row: {error}")
+            });
+            let withheld = finalized.withheld_closures();
+            assert_eq!(withheld.len(), 1, "{export}: {withheld:?}");
+            assert_eq!(withheld[0].export, export);
+            assert_eq!(
+                withheld[0].reason,
+                super::WITHHELD_CLOSURE_NO_RECIPE,
+                "{export}"
+            );
+            assert!(!call_domain_is_closed_in(
+                finalized.canonical_main(),
+                export,
+                ClaimDomain::Reads
+            ));
+        }
+        // `parsed` is typed `any`: the callability classifier refuses it, so no
+        // fact is stated and the premise never applies; its candidates stay
+        // withheld and no `not-callable` site is minted for it.
+        if let Some((_plan, outcome)) = value_exports_certify("parsed", ClaimDomain::Callbacks) {
+            let finalized = outcome.expect("parsed: withholding must still certify the row");
+            let withheld = finalized.withheld_closures();
+            assert_eq!(withheld.len(), 1, "parsed: {withheld:?}");
+            assert_eq!(withheld[0].export, "parsed");
+            assert!(!call_domain_is_closed_in(
+                finalized.canonical_main(),
+                "parsed",
+                ClaimDomain::Callbacks
+            ));
+            assert!(
+                !withheld[0].reason.contains("not-callable"),
+                "an `any`-typed export must not reach the premise: {}",
+                withheld[0].reason
+            );
+        }
+        // `helper` is callable: its `callbacks` closes through the implementation
+        // census and the ADR 0036 sampled veto, never through this premise.
+        // (`reads` has no synthesized veto by the reads-veto design, so a
+        // recipe-less `reads` candidate is withheld for a callable export.)
+        let Some((plan, outcome)) = value_exports_certify("helper", ClaimDomain::Callbacks) else {
+            return;
+        };
+        let finalized = outcome.expect("helper's callbacks census certifies as before");
+        assert!(
+            call_domain_is_closed_in(finalized.canonical_main(), "helper", ClaimDomain::Callbacks),
+            "helper: {:?}",
+            finalized.withheld_closures()
+        );
+        let pin = pinned_producer_for_test().expect("checked above");
+        let evidence = plan
+            .acquire_and_verify_export_value_type_facts(&pin)
+            .expect("evidence");
+        let demands = domain_demand_ids(&plan, "helper", ClaimDomain::Callbacks);
+        let sites = evidence
+            .witness_bindings()
+            .iter()
+            .find(|binding| binding.demand_id() == demands[0])
+            .expect("witness")
+            .site_ids()
+            .to_vec();
+        assert!(
+            !sites
+                .iter()
+                .any(|site| site.starts_with("typefacts-value-export:")),
+            "helper is callable and must not close on the value premise: {sites:?}"
+        );
+        assert!(
+            sites.iter().any(|site| site.starts_with("census-")),
+            "helper's closure rests on the census: {sites:?}"
+        );
+    }
 
     fn census_fixture_plan(closed_export: &str) -> CertificationPlan {
         let fixture = census_fixture();

@@ -4,7 +4,15 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 55 (ADR 0095): **a class is a callee**. A
+// TypeFactsHandshakeProtocol is 56 (ADR 0099): **a value export that cannot
+// be invoked** states so. An export whose runtime value type has no call and
+// no construct signature on any constituent, and is not any/unknown/never or
+// instantiable, answers an implementation demand with NotCallableValue beside
+// its declaration and the single open reason valueNotCallable, where protocol
+// 55 answered callSignatureNotUnique. The positive fact is new and the
+// number moves.
+//
+// Protocol 55 (ADR 0095): **a class is a callee**. A
 // local-declaration demand naming a class resolves to the constructor whose
 // body `new C(…)` runs, in both spellings — `class C {…}` and the bundler's
 // `const C = class {…}` — and censuses that body as it would a function's. The
@@ -335,8 +343,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 55
-	TypeFactsSchemaSHA256             = "sha256:a9dd85812162e7996b8dd531ee7b53a05b0aa65403a962c2298a6db34067dba9"
+	TypeFactsHandshakeProtocol uint64 = 56
+	TypeFactsSchemaSHA256             = "sha256:be5e16f32dd5ea6a560c1be5b9e1fab60f290855016e4b1535db8f40bb9b1f11"
 )
 
 type ServiceHandshake struct {

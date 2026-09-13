@@ -632,6 +632,17 @@ impl UndefinedParameterDefault {
     }
 }
 
+/// [`ExportImplementationTranscript::not_callable_value`] (ADR 0099).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NotCallableValue {
+    /// `primitive` when every constituent of the value type is a primitive
+    /// type, `object` otherwise.
+    pub kind: Arc<str>,
+    /// The checker's spelling of the whole value type, for the receipt.
+    pub r#type: Arc<str>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExportImplementationTranscript {
@@ -767,6 +778,16 @@ pub struct ExportImplementationTranscript {
     /// one and not the other, so it may be read only from the transcript that
     /// was demanded under the premise the reader recorded. Absent means
     /// "not stated", which is the refusing value on every protocol.
+    /// ADR 0099, handshake protocol 56: the export's value **cannot be
+    /// invoked**. The producer states it only on a transcript that is
+    /// otherwise open with the single reason `valueNotCallable` and that
+    /// carries [`Self::declaration`] for identity; the certifier closes the
+    /// proposable call domains on it vacuously, because each denies an
+    /// operation "one invocation of this export" gives rise to and a value
+    /// with neither [[Call]] nor [[Construct]] has no invocation. Absent means
+    /// "not stated", never "callable".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub not_callable_value: Option<NotCallableValue>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub primitive_completion: bool,
     /// The conjunction of seven independent gates, every one of which the

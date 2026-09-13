@@ -368,6 +368,13 @@ type UndefinedParameterDefault struct {
 	Assignment Location `cbor:"assignment" json:"assignment"`
 }
 
+// NotCallableValue is ExportImplementationTranscript.NotCallableValue (ADR
+// 0099, handshake protocol 56).
+type NotCallableValue struct {
+	Kind string `cbor:"kind" json:"kind"`
+	Type string `cbor:"type" json:"type"`
+}
+
 type ExportImplementationTranscript struct {
 	Location    Location             `cbor:"location" json:"location"`
 	QueryName   string               `cbor:"queryName,omitempty" json:"queryName,omitempty"`
@@ -478,9 +485,25 @@ type ExportImplementationTranscript struct {
 	// declaration.** The same helper censused under two argument premises may
 	// state it under one and not the other, which is why a consumer may read it
 	// only from the transcript it demanded under the premise it recorded.
-	PrimitiveCompletion bool     `cbor:"primitiveCompletion,omitempty" json:"primitiveCompletion,omitempty"`
-	Complete            bool     `cbor:"complete,omitempty" json:"complete,omitempty"`
-	OpenReasons         []string `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+	// NotCallableValue states that the demanded export's value **cannot be
+	// invoked** (ADR 0099, handshake protocol 56): the checker's type for the
+	// runtime binding, over the runtime program, is a union whose every
+	// constituent has no call signature, no construct signature, is not
+	// callable without signatures (`Function`), and is not any, unknown,
+	// never, an error, or an instantiable (deferred) type. Kind is "primitive"
+	// when every constituent is a primitive type and "object" otherwise; Type
+	// is the checker's spelling of the whole type, for the receipt.
+	//
+	// Stated only on a transcript that is otherwise open with the single
+	// reason "valueNotCallable" and that carries Declaration for identity. It
+	// is the fact the call domains close on vacuously: every one of them
+	// denies an operation "one invocation of this export" gives rise to, and
+	// a value with no [[Call]] and no [[Construct]] has no invocation.
+	// Absent means "not stated", never "callable".
+	NotCallableValue    *NotCallableValue `cbor:"notCallableValue,omitempty" json:"notCallableValue,omitempty"`
+	PrimitiveCompletion bool              `cbor:"primitiveCompletion,omitempty" json:"primitiveCompletion,omitempty"`
+	Complete            bool              `cbor:"complete,omitempty" json:"complete,omitempty"`
+	OpenReasons         []string          `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
 }
 
 // ParameterPremise is one parameter's type binding under which an

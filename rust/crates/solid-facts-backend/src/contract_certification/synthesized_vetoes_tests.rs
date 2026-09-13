@@ -518,3 +518,40 @@ fn claim_filter_selects_only_one_whole_parameter_return() {
         );
     }
 }
+
+/// ADR 0099: the not-callable module samples nothing and emits only when the
+/// runtime value is a function after all.
+#[test]
+fn the_not_callable_module_emits_only_when_the_runtime_value_is_callable() {
+    let quiet = execute(
+        "export const subject = { equals: false };",
+        Observation::NotCallable,
+        &[],
+    );
+    assert_eq!(quiet.error, None);
+    assert!(
+        !quiet
+            .markers
+            .iter()
+            .any(|marker| marker == "callable-value"),
+        "{quiet:?}"
+    );
+    let loud = execute(
+        "export const subject = () => 1;",
+        Observation::NotCallable,
+        &[],
+    );
+    assert_eq!(loud.error, None);
+    assert!(
+        loud.markers.iter().any(|marker| marker == "callable-value"),
+        "{loud:?}"
+    );
+    let class = execute("export class subject {}", Observation::NotCallable, &[]);
+    assert!(
+        class
+            .markers
+            .iter()
+            .any(|marker| marker == "callable-value"),
+        "a class is typeof function and the veto sees it: {class:?}"
+    );
+}

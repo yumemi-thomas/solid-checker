@@ -1,5 +1,33 @@
 # Precision backlog
 
+## ADR 0099: a value export that cannot be invoked closes its empty call domains (2026-09-13)
+
+The 2,977 recipe-less `callbacks` candidates and the constants' `reads`
+candidates were one missing fact: the export is a value, not a function, so
+`synthesize` had no signature to sample and the census had no body to walk
+(`callSignatureNotUnique`). The producer now states `notCallableValue` for an
+export whose runtime value type has no call and no construct signature, is not
+a class, not `any`/`unknown`/`never`, not instantiable (protocol 55 → 56); the
+certifier closes the empty proposable call domains on it with the site
+`typefacts-value-export:not-callable:<kind>:<type>`; and a synthesized veto
+imports the value and emits `callable-value` if `typeof` says function. The
+class case earned its guard the honest way: the fixture's `Box` was typed at
+its declaration name as the instance type, the fact was stated, and the
+runtime veto contradicted it. Tracer: `fixtures/package-contracts/value-exports`
+([ADR 0099](adr/0099-a-value-export-that-cannot-be-invoked.md)). Corpus
+effect (release binary, 418 rows, `--timeout 1800`): certified closure entries
+6,790 → 9,608 (solid2 +1,533, solid1 +1,285); uncapped `callbacks` closures
+123 → 339 and `reads` 40 → 166 over the 396 uncapped rows; withheld entries
+`no recipe in corpus` 10,166 → 4,760 while census refusals stay at 4,607; no
+row falls below the pin and no row changes status. Two neutral moves inside
+the withheld set: `synthesized veto cannot run` 216 → 290 and `veto threw`
+106 → 263, both entries that were `no recipe` before and now name the exact
+harness or runtime reason (`window` undefined, TypeScript source under
+`node_modules`, JSX premise). Cost: wall 854 s → 1,205 s, and the summed
+`witnessAcquisition` stage across rows 8,856 s → 14,863 s; the heaviest rows
+(`@kobalte/utils@0.9.2`, `solid-js@1.9.14`, `@solidjs/web@2.0.0-rc.3`) now
+run 1,078–1,205 s, so both Makefile targets pass `--timeout 1800`.
+
 ## Hygiene for the pin, two more recipe hubs, and the recipe-less `callbacks` candidates named (2026-09-13)
 
 The Makefile's benchmark and regression targets now pass `--timeout 1200`: the

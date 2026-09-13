@@ -3907,6 +3907,7 @@ mod tests {
             parameter_premise_refusal: "".into(),
             call_argument_premises: Vec::new(),
             primitive_completion: false,
+            not_callable_value: None,
             complete: false,
             open_reasons: Vec::new(),
         }

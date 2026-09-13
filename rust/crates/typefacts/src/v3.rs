@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:a9dd85812162e7996b8dd531ee7b53a05b0aa65403a962c2298a6db34067dba9";
+    "sha256:be5e16f32dd5ea6a560c1be5b9e1fab60f290855016e4b1535db8f40bb9b1f11";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -298,7 +298,14 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // constructor each refuse by name through openReasons. A protocol-54 consumer
 // received `declarationNotExact` for every one of these, so the positive answer
 // is new and the number moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 55;
+// Protocol 56 states that a value export cannot be invoked (ADR 0099): an
+// export whose runtime value type has no call and no construct signature on
+// any constituent, and is neither any/unknown/never nor instantiable, answers
+// an implementation demand with `notCallableValue` beside its declaration and
+// the single open reason `valueNotCallable`, where protocol 55 answered
+// `callSignatureNotUnique`. A protocol-55 consumer would read the new open
+// reason as a refusal, so the number moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 56;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

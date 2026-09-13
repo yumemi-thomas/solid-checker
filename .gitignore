@@ -101,6 +101,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/callback-slot-derived-store-server/node_modules/**
 !fixtures/package-contracts/implementation-census-creates/node_modules/
 !fixtures/package-contracts/implementation-census-creates/node_modules/**
+!fixtures/package-contracts/value-exports/node_modules/
+!fixtures/package-contracts/value-exports/node_modules/**
 !fixtures/package-contracts/creates-decline-records/node_modules/
 !fixtures/package-contracts/creates-decline-records/node_modules/**
 !fixtures/package-contracts/implementation-census-reads/node_modules/

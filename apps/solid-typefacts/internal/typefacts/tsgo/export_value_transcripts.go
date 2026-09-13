@@ -269,6 +269,27 @@ func (p *project) exportImplementationTranscriptLocked(
 	transcript.Target = p.idFor(target)
 	valueType := p.checker.GetTypeAtLocation(node)
 	signatures := p.checker.GetSignaturesOfType(valueType, checker.SignatureKindCall)
+	// ADR 0099: a value with no call and no construct signature has no
+	// invocation for a call domain to be about. Stated with the declaration
+	// for identity and one open reason, and only when the classifier proves
+	// it; any doubt falls through to callSignatureNotUnique as before.
+	// A class symbol is excluded by name before the type is asked: the type
+	// at a class declaration's own name is the *instance* type, which has no
+	// construct signature, while the exported value is the constructor, and
+	// `typeof Box === "function"`. The fixture's `Box` found this -- the
+	// synthesized typeof veto contradicted the stated fact -- and the
+	// construct-signature test in the classifier stays as the second guard.
+	if len(signatures) == 0 && target.ValueDeclaration != nil &&
+		target.Flags&ast.SymbolFlagsClass == 0 {
+		if fact := notCallableValueFact(p.checker, valueType); fact != nil {
+			if declaration := p.resolvedDeclaration(nil, target.ValueDeclaration, target); declaration != nil {
+				transcript.Declaration = declaration
+				transcript.NotCallableValue = fact
+				transcript.OpenReasons = append(transcript.OpenReasons, "valueNotCallable")
+				return transcript
+			}
+		}
+	}
 	if len(signatures) != 1 {
 		transcript.OpenReasons = append(transcript.OpenReasons, "callSignatureNotUnique")
 		return transcript

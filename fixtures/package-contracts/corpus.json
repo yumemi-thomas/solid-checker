@@ -98,6 +98,7 @@
     "unresolved-dispatch-attribution",
     "unresolved-dispatch-domains-control",
     "unresolved-dispatch-reachability",
+    "value-exports",
     "wildcard-asset-entrypoints"
   ]
 }
