@@ -4,16 +4,18 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "dd0205421cdc2204853bafb3fbde9128049ce28bd1a56a67e62025af36206fa3",
+            "closureSha256": "7c3489c813e6155f787fdb81cf94c6856cfb46ac8ceac2441649329fdc17f0b8",
             "path": "./index.js",
-            "sha256": "43e538e57f0a1e4c745c71a8ea19b7d1fd0a0ef9800756f75f05c8e6879d3422"
+            "sha256": "9e5345c7fcc7c65e2627d5326a5007a8edcbc3c8529d040e910629b1af103949"
           },
           "declarations": {
             "path": "./index.d.ts",
-            "sha256": "ce1f1ac53f860353e58434c04066a51b00152f00d5d28c0ddc0b283e1a349570"
+            "sha256": "19f6dfe65a8013568ea0d041bea18b76ec700f1e92dce463765fb9072302c494"
           },
           "exports": {
             "invokesCallerAccessor": "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d",
+            "invokesCallerMember": "summary-2d137f26c377787379e2382d0cd2f74a7880b2dd8520aca7192ad5f9cc068967",
+            "invokesCallerMemberLater": "summary-cd719acaeb7892d543fd8085c736eafff7bd10635b9a9cab7fec9f739afcc2bb",
             "plainArithmetic": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
             "readsCallerElement": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
             "readsCallerMember": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
@@ -65,6 +67,55 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
+    "summary-2d137f26c377787379e2382d0cd2f74a7880b2dd8520aca7192ad5f9cc068967": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "of",
+                  "values"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
     "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d": {
       "call": {
         "callbacks": [],
@@ -140,6 +191,24 @@
           "creates"
         ],
         "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-cd719acaeb7892d543fd8085c736eafff7bd10635b9a9cab7fec9f739afcc2bb": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
+          "creates",
+          "returns"
+        ],
+        "returns": []
       },
       "shape": "callable"
     }

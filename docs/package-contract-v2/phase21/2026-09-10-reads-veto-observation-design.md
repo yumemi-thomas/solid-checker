@@ -6242,3 +6242,33 @@ now derives its gated-domain set from `PROPOSABLE` instead of restating it.
 The full design, the ordering trap in the observation, and the deliberate
 over-refusal are in
 [`2026-09-12-callbacks-census-scoping.md`](2026-09-12-callbacks-census-scoping.md).
+
+## 82. The described enumeration closes (2026-09-13, ADR 0101)
+
+§ 11 admitted `reads` to the census for the **empty** enumeration only, and
+§ 4 kept its veto a hand recipe because the closure's contradiction — a read of
+a source the export owns — is invisible to a synthesized module. Both stand.
+What the frontier measurement after the recipe batches showed is that the
+largest closable class under "no recipe in corpus" was not recipe-less at all:
+running the census under a scaffold pass, the exports refused as "the proposal
+names 1" were the generator's `parameter-member` rows — `accessArray`'s
+`list.map(...)`, `sortByDocumentPosition`'s `a.compareDocumentPosition(b)`,
+`getSide`'s `placement.split(...)` — a member invocation on a caller parameter
+written in the export's own body, which the transcript states at a location
+and the consumer already reads to decide whether a call site's argument is
+read reactively.
+
+[ADR 0101](../../adr/0101-described-reads-enumeration.md) lifts the empty-only
+rule for exactly that shape, the way ADR 0100 did for `callbacks`: the
+generator proposes an enumeration whose every item is such a row (an owned
+read, a composed row, a deferred, tracked or guarded one stays partial), the
+census confirms it site for site against the transcript's `calleeParameter`
+paths and `directCall`/`aliasCall` uses in both directions; the empty
+enumeration stays a forms-walk decision (refuting it would have cost 144
+correct closures on rest and array parameters, measured). The veto for the
+described enumeration is synthesized — a recording tripwire at every object
+slot, quiet for a described slot's member inside the sample call — which does
+not reopen § 3's objection: the items are the caller's values, which a module
+can hand in, and the owned side is the census's as before. The empty
+enumeration keeps its hand recipes. Corpus effect is in
+`docs/precision-backlog.md` under the ADR's entry.

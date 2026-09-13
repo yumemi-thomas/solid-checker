@@ -629,6 +629,196 @@ fn the_described_callbacks_module_emits_outside_the_description_only() {
     );
 }
 
+/// ADR 0101: the described-reads module is quiet for exactly the described
+/// read -- a member of a described slot's argument invoked inside its sample
+/// call -- and loud for a member of an undescribed slot at any time, or a
+/// member of a described slot after the call returned. A plain property read,
+/// a bare call of the argument, and the engine's own protocol members record
+/// nothing.
+#[test]
+fn the_described_reads_module_emits_outside_the_description_only() {
+    let object = value_fact(json!({"mayBeObject": true}));
+    let signatures = [signature(&[object.clone(), object])];
+    let read = |observed: &ObservationResult| {
+        observed
+            .markers
+            .iter()
+            .any(|marker| marker == "read-operation")
+    };
+    for implementation in [
+        "export function subject(a, b) { return a.of.values(); }",
+        "export function subject(a, b) { a.of.values(); a.other(); }",
+        // Reads that are not member invocations.
+        "export function subject(a, b) { return a.of.values; }",
+        "export function subject(a, b) { return b.value; }",
+        // A bare call of the argument is the callbacks domain's.
+        "export function subject(a, b) { return b(); }",
+        // The engine's own protocol members.
+        "export function subject(a, b) { return `${b}` + String(b) + JSON.stringify({ b }); }",
+        // A walk along a member chain ends: the tripwire is bounded in depth.
+        "export function subject(a, b) { let node = b; while (node) node = node.parentNode; }",
+        // Nothing invoked: the veto is one-sided, the census proves the item.
+        "export function subject(a, b) {}",
+    ] {
+        let quiet = execute(
+            implementation,
+            Observation::DescribedReads(0b01),
+            &signatures,
+        );
+        assert_eq!(quiet.error, None, "{implementation}");
+        assert!(!read(&quiet), "{implementation}: {quiet:?}");
+    }
+    let both = execute(
+        "export function subject(a, b) { a.x(); b.y.z(); }",
+        Observation::DescribedReads(0b11),
+        &signatures,
+    );
+    assert!(!read(&both), "{both:?}");
+    for implementation in [
+        // A member of an undescribed slot.
+        "export function subject(a, b) { b.of.values(); }",
+        "export function subject(a, b) { const values = b.of.values; values(); }",
+        // The described slot's member, after the sample call has returned.
+        "export function subject(a, b) { queueMicrotask(() => a.of.values()); }",
+        "export function subject(a, b) { Promise.resolve().then(() => a.of.values()); }",
+    ] {
+        let loud = execute(
+            implementation,
+            Observation::DescribedReads(0b01),
+            &signatures,
+        );
+        assert_eq!(loud.error, None, "{implementation}");
+        assert!(read(&loud), "{implementation}: {loud:?}");
+    }
+    // Every object slot carries its own tripwire, described or not, so the
+    // module can tell the slots apart; a primitive slot stays a primitive.
+    let source = module_source(
+        "data:text/javascript,",
+        "subject",
+        Observation::DescribedReads(0b01),
+        &signatures,
+    );
+    assert!(
+        source.contains("[tripwireAt(0), tripwireAt(1)]"),
+        "{source}"
+    );
+    assert!(
+        source.contains("const described = new Set([0]);"),
+        "{source}"
+    );
+    let mixed = [signature(&[
+        value_fact(json!({"mayBeObject": true})),
+        value_fact(json!({"mayBeNumber": true})),
+    ])];
+    let source = module_source(
+        "data:text/javascript,",
+        "subject",
+        Observation::DescribedReads(0b01),
+        &mixed,
+    );
+    assert!(source.contains("[tripwireAt(0), 1]"), "{source}");
+    // A described slot is a tripwire whatever the signature says about it.
+    let source = module_source(
+        "data:text/javascript,",
+        "subject",
+        Observation::DescribedReads(0b10),
+        &mixed,
+    );
+    assert!(
+        source.contains("[tripwireAt(0), tripwireAt(1)]"),
+        "{source}"
+    );
+}
+
+/// ADR 0101: only an enumeration of call-time member reads of caller
+/// parameters is observed; the empty enumeration keeps its hand recipes, and
+/// an owned, composed, deferred or guarded item keeps the candidate
+/// recipe-less.
+#[test]
+fn the_described_reads_observation_is_selected_from_the_exact_enumeration() {
+    use solid_reactive_ir::contract_semantics::{ComposedFrom, ReactiveRole};
+    let read = |id: &str, input: ValueShape| Operation {
+        id: OperationId(id.into()),
+        kind: OperationKind::Read,
+        inputs: vec![input],
+        output: None,
+        ..return_operation()
+    };
+    let parameter = |index: u16, path: &[&str]| ValueShape::Parameter {
+        index,
+        path: path.iter().map(|segment| (*segment).to_owned()).collect(),
+    };
+    let export = |items: &[&str], operations: Vec<Operation>| {
+        let mut export = export_with_returns(KnowledgeSet::Unknown, operations);
+        export.call = CallSemantics::new(
+            CallClaims {
+                reads: KnowledgeSet::complete(
+                    items.iter().map(|id| OperationId((*id).into())).collect(),
+                ),
+                ..CallClaims::default()
+            },
+            export.call.operations.clone(),
+            vec![],
+            vec![],
+            GuardPartition::default(),
+        );
+        export
+    };
+    assert_eq!(
+        candidate_observation("reads", &export(&[], vec![])),
+        None,
+        "the empty enumeration is served by hand recipes, deliberately"
+    );
+    assert_eq!(
+        candidate_observation(
+            "reads",
+            &export(
+                &["a", "b"],
+                vec![
+                    read("a", parameter(0, &["of", "values"])),
+                    read("b", parameter(2, &[]))
+                ]
+            )
+        ),
+        Some(Observation::DescribedReads(0b101))
+    );
+    let owned = read(
+        "a",
+        ValueShape::Reactive {
+            role: ReactiveRole::Accessor,
+            resource: None,
+            capabilities: KnowledgeSet::Unknown,
+        },
+    );
+    assert_eq!(
+        candidate_observation("reads", &export(&["a"], vec![owned])),
+        None
+    );
+    let mut queued = read("a", parameter(0, &["of"]));
+    queued.schedule = Some(Schedule::Queued);
+    assert_eq!(
+        candidate_observation("reads", &export(&["a"], vec![queued])),
+        None
+    );
+    let mut composed = read("a", parameter(0, &["of"]));
+    composed.composed_from = Some(ComposedFrom {
+        export: "helper".into(),
+        operation: OperationId("helper-read".into()),
+    });
+    assert_eq!(
+        candidate_observation("reads", &export(&["a"], vec![composed])),
+        None
+    );
+    assert_eq!(
+        candidate_observation(
+            "reads",
+            &export(&["a"], vec![read("a", parameter(64, &[]))])
+        ),
+        None,
+        "an index the mask cannot hold is not synthesized"
+    );
+}
+
 /// ADR 0100: only an enumeration of call-time bare-parameter invocations is
 /// observed; anything else keeps the candidate recipe-less.
 #[test]

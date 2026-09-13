@@ -13677,8 +13677,10 @@ export const value = phantom;
     /// The `.` entrypoint's exports — the five whose reads the census can
     /// decide. `./owned`'s three are deliberately absent: that closure builds
     /// a `Proxy`, so its `reads` never becomes a candidate at all.
-    const READS_FIXTURE_EXPORTS: [&str; 5] = [
+    const READS_FIXTURE_EXPORTS: [&str; 7] = [
         "invokesCallerAccessor",
+        "invokesCallerMember",
+        "invokesCallerMemberLater",
         "plainArithmetic",
         "readsCallerElement",
         "readsCallerMember",
@@ -13930,6 +13932,113 @@ export const value = phantom;
         assert!(
             bound_callbacks.is_closed() && bound_callbacks.items().len() == 1,
             "the receipt binds a closed, non-empty enumeration: {bound_callbacks:?}"
+        );
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan),
+            "and the gate that closure scheduled actually ran"
+        );
+    }
+
+    /// ADR 0101: `invokesCallerMember` invokes a member of its parameter in its
+    /// own body, so the generator's `parameter-member` row is proposed as a
+    /// closed, one-item `reads` enumeration rather than being refused as "the
+    /// proposal names 1". The census confirms the item against the transcript's
+    /// one member-invocation site, the synthesized tripwire veto observes no
+    /// member invocation outside the description, and the receipt binds a
+    /// document whose `reads` is closed and non-empty. Its sibling
+    /// `invokesCallerMemberLater` proposes nothing: the generator leaves a
+    /// captured member invocation open.
+    #[test]
+    fn a_described_reads_closure_reaches_a_receipt_through_its_mandatory_veto() {
+        use solid_reactive_ir::contract_semantics::ValueShape;
+        let plan = reads_generated_fixture_plan();
+        let reads = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Reads));
+        let subject = plan
+            .candidates
+            .closure_candidates()
+            .iter()
+            .find(|candidate| candidate.path == reads && candidate.export == "invokesCallerMember")
+            .expect("the generated document proposes the described closure");
+        assert!(
+            !plan
+                .candidates
+                .closure_candidates()
+                .iter()
+                .any(|candidate| {
+                    candidate.path == reads && candidate.export == "invokesCallerMemberLater"
+                }),
+            "a captured member invocation proposes no reads closure"
+        );
+        let case = plan
+            .selected_candidate
+            .artifact_cases()
+            .iter()
+            .find(|case| case.id == subject.artifact_case)
+            .expect("the candidate names its case");
+        let export = &case.exports["invokesCallerMember"];
+        let described = export
+            .operation_claim(ClaimDomain::Reads)
+            .expect("reads is an operation domain");
+        assert!(described.is_closed(), "{described:?}");
+        let [item] = described.items() else {
+            panic!("one item: {described:?}");
+        };
+        let operation = export.operation(&item.0).expect("the item is published");
+        assert!(
+            matches!(
+                operation.inputs.first(),
+                Some(ValueShape::Parameter { index: 0, path }) if path == &["of".to_owned(), "values".to_owned()]
+            ),
+            "parameter 0 at of.values: {operation:?}"
+        );
+        let later = &case.exports["invokesCallerMemberLater"];
+        assert!(
+            !later
+                .operation_claim(ClaimDomain::Reads)
+                .is_some_and(|claim| claim.is_closed()),
+            "{:?}",
+            later.operation_claim(ClaimDomain::Reads)
+        );
+
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("described-reads-receipt");
+        // No hand recipe: the described enumeration is served by the
+        // synthesized tripwire veto (`Observation::DescribedReads`).
+        let Some(configuration) = tracer_configuration_from(
+            &reads_census_fixture(),
+            scratch.path(),
+            "described-reads-receipt",
+            &[],
+        ) else {
+            return;
+        };
+        let finalized = tracer_certify(&plan, &pin, &configuration)
+            .expect("the census confirmed the described item and the veto did not contradict it");
+        assert!(
+            !finalized.withheld_closures().iter().any(|record| {
+                record.domain == "reads" && record.export == "invokesCallerMember"
+            }),
+            "the described closure is bound, not withheld: {:?}",
+            finalized.withheld_closures()
+        );
+        let bound = crate::contract_document::decode(finalized.canonical_main())
+            .expect("a canonical main decodes")
+            .normalize()
+            .expect("a canonical main normalizes");
+        let bound_case = bound
+            .artifact_cases()
+            .iter()
+            .find(|case| case.entrypoint == ".")
+            .expect("the `.` case is bound");
+        let bound_reads = bound_case.exports["invokesCallerMember"]
+            .operation_claim(ClaimDomain::Reads)
+            .expect("reads is an operation domain");
+        assert!(
+            bound_reads.is_closed() && bound_reads.items().len() == 1,
+            "the receipt binds a closed, non-empty enumeration: {bound_reads:?}"
         );
         assert_ne!(
             finalized.bindings().probe_gate_root,

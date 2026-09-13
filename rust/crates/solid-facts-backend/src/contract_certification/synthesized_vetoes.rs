@@ -181,10 +181,14 @@ pub(crate) fn synthesize(
                 } else {
                     format!(
                         "synthesized veto ({}) for {} `{}`: a finite sample of {} call(s) derived from the export's Type Facts call signature{}; a throwing sample call is recorded as a sample-threw event and observes nothing",
-                        if matches!(observation, Observation::DescribedCallbacks(_)) {
-                            "ADR 0100, described callbacks enumeration"
-                        } else {
-                            "ADR 0036"
+                        match observation {
+                            Observation::DescribedCallbacks(_) => {
+                                "ADR 0100, described callbacks enumeration"
+                            }
+                            Observation::DescribedReads(_) => {
+                                "ADR 0101, described reads enumeration"
+                            }
+                            _ => "ADR 0036",
                         },
                         record.domain,
                         record.export,
@@ -432,6 +436,17 @@ enum Observation {
     /// contradiction is an invocation of a callable at a slot outside the
     /// set, or of one inside it after the sample call has returned.
     DescribedCallbacks(u64),
+    /// ADR 0101: a described `reads` enumeration, every item a `read` of a
+    /// caller parameter -- the generator's `parameter-member` row for
+    /// `props.of.values()` -- `at` the call event on the same stack. The bits
+    /// are the described parameter indices, as for `DescribedCallbacks`. The
+    /// contradiction is an invocation of a *member* of a caller-supplied value
+    /// at a slot outside the set, or of one at a described slot after the
+    /// sample call has returned. Which member is not observed: the census
+    /// confirms the paths, the module tells the slots apart. A bare call of
+    /// the slot itself is the `callbacks` domain's item and is not observed
+    /// here.
+    DescribedReads(u64),
     /// ADR 0099: the export's value cannot be invoked, per the producer, so
     /// every empty proposable call domain closes vacuously. The runtime half
     /// observes `typeof` of the exported value and emits when it is a
@@ -486,6 +501,39 @@ fn candidate_observation(domain: &str, export: &ExportSemantics) -> Option<Obser
             }
             Some(Observation::DescribedCallbacks(mask))
         }
+        // The empty `reads` enumeration deliberately registers no observation
+        // (`reviewed_observation`): its contradiction is a read of a source the
+        // export owns, which no synthesized module can see, so it is served by
+        // hand recipes. A described enumeration is different in kind -- its
+        // items are member invocations of the caller's own values, which the
+        // module can hand in and watch -- and is observed on the same footing
+        // as a described `callbacks` enumeration (ADR 0101).
+        "reads" => {
+            let claim = export.operation_claim(ClaimDomain::Reads)?;
+            if claim.items().is_empty() {
+                return None;
+            }
+            let mut mask = 0u64;
+            for id in claim.items() {
+                let operation = export.operation(&id.0)?;
+                let Some(ValueShape::Parameter { index, .. }) = operation.inputs.first() else {
+                    return None;
+                };
+                if u32::from(*index) >= u64::BITS {
+                    return None;
+                }
+                if operation.kind != OperationKind::Read
+                    || operation.at != Some(Event::Call)
+                    || operation.schedule != Some(Schedule::SameStack)
+                    || operation.guard.is_some()
+                    || operation.composed_from.is_some()
+                {
+                    return None;
+                }
+                mask |= 1 << index;
+            }
+            Some(Observation::DescribedReads(mask))
+        }
         "returns" => {
             let claim = export.operation_claim(ClaimDomain::Returns)?;
             if claim.items().is_empty() {
@@ -535,6 +583,11 @@ impl Observation {
                 observation: "exact: a callable argument the sample supplied at a slot the enumeration does not describe was invoked at any time up to the end of the session's drain, or one at a described slot was invoked outside the sample call's own stack",
                 emit: "",
             },
+            Self::DescribedReads(_) => ReviewedObservation {
+                marker: "read-operation",
+                observation: "exact for the described slots: a member of an object argument the sample supplied at a slot the enumeration does not describe was invoked at any time up to the end of the session's drain, or a member of one at a described slot was invoked outside the sample call's own stack; which member, and any read of a source the export owns, are not observed",
+                emit: "",
+            },
             Self::NotCallable => ReviewedObservation {
                 marker: "callable-value",
                 observation: "exact: typeof of the exported runtime value is \"function\"",
@@ -553,6 +606,7 @@ impl Observation {
             Self::ParameterReturn(index) => identity_sample_tuples(signatures, index),
             Self::NotCallable => Vec::new(),
             Self::DescribedCallbacks(_) => sample_tuples_with(signatures, true),
+            Self::DescribedReads(mask) => reads_sample_tuples(signatures, mask),
             _ => sample_tuples(signatures),
         }
     }
@@ -561,6 +615,9 @@ impl Observation {
         match self {
             Self::DescribedCallbacks(_) => {
                 "at most six tuples per overload; no variadic tail or structural object construction; a described slot the signature does not type as callable is sampled with a non-callable value, so a call of it throws and observes nothing"
+            }
+            Self::DescribedReads(_) => {
+                "at most six tuples per overload; no variadic tail; every described slot and every object-typed slot is sampled with a recording tripwire whose members are all callable to a depth of eight, so an export that expects a real value there throws and observes nothing, and a walk along a member chain ends; engine-protocol members (then, valueOf, toString, toJSON, constructor, symbols) are not recorded, and iterating or coercing a tripwire throws"
             }
             Self::NotCallable => {
                 "no call is sampled: the observation is typeof of the exported value in the probe realm, so a value that is callable only through a construct signature the checker did not see, or only in another realm, is not observed"
@@ -732,13 +789,17 @@ fn module_source(
     if let Observation::DescribedCallbacks(mask) = observation {
         return described_callbacks_module_source(specifier, export, mask, signatures);
     }
+    if let Observation::DescribedReads(mask) = observation {
+        return described_reads_module_source(specifier, export, mask, signatures);
+    }
     let domain = match observation {
         Observation::Creates => "creates",
         Observation::EmptyReturns => "returns",
         Observation::EmptyCallbacks => "callbacks",
         Observation::ParameterReturn(_)
         | Observation::NotCallable
-        | Observation::DescribedCallbacks(_) => unreachable!(),
+        | Observation::DescribedCallbacks(_)
+        | Observation::DescribedReads(_) => unreachable!(),
     };
     // Only this observation emits from inside the callback. Giving every
     // synthesized module that emitter would spend the session's event budget on
@@ -811,6 +872,141 @@ fn module_source(
 /// time, or a described slot runs while no sample call is on the stack. A
 /// described slot running inside its sample call is the described item and
 /// observes nothing -- the census, not this module, is what proves it.
+/// [`sample_tuples`] for a described `reads` enumeration (ADR 0101): every
+/// described slot, and every slot whose candidate is an object, array or
+/// callable, is rendered as `tripwireAt(<slot>)` -- a recording value whose
+/// members are all callable -- so the module can tell which slot's member ran.
+/// Primitive candidates stay primitives: a member invocation on a number is
+/// not what the enumeration is about.
+fn reads_sample_tuples(signatures: &[typefacts::SelectedSignature], mask: u64) -> Vec<Vec<String>> {
+    let mut tuples = Vec::new();
+    for signature in signatures {
+        let slots = signature
+            .parameters
+            .iter()
+            .filter(|parameter| !parameter.rest)
+            .map(|parameter| (parameter.index, slot_candidates(parameter)))
+            .collect::<Vec<_>>();
+        let widest = slots
+            .iter()
+            .map(|(_, (candidates, _))| candidates.len())
+            .max()
+            .unwrap_or(1)
+            .clamp(1, MAX_SAMPLE_CALLS);
+        for index in 0..widest {
+            let tuple = slots
+                .iter()
+                .map(|(slot, (candidates, literals))| {
+                    let sample = candidates[index % candidates.len()];
+                    let described = u32::try_from(*slot).is_ok_and(|bit| bit < u64::BITS)
+                        && mask & (1 << slot) != 0;
+                    if described
+                        || matches!(sample, Sample::Object | Sample::Array | Sample::Callable)
+                    {
+                        format!("tripwireAt({slot})")
+                    } else {
+                        render(sample, literals)
+                    }
+                })
+                .collect::<Vec<_>>();
+            if !tuples.contains(&tuple) {
+                tuples.push(tuple);
+            }
+        }
+    }
+    tuples
+}
+
+/// ADR 0101: the module for a described `reads` enumeration. Every recorded
+/// slot is a tripwire -- a callable proxy whose every string-keyed member is
+/// another callable proxy remembering the slot -- so invoking a member of the
+/// argument is what records, and a plain property read, a bare call of the
+/// argument itself (the `callbacks` domain's item), or an engine-protocol
+/// member the runtime reaches on its own while coercing or awaiting records
+/// nothing. Quiet for a described slot's member run inside the sample call;
+/// loud for an undescribed slot's member at any time, or a described slot's
+/// member after the call returned.
+fn described_reads_module_source(
+    specifier: &str,
+    export: &str,
+    mask: u64,
+    signatures: &[typefacts::SelectedSignature],
+) -> String {
+    let described = (0..u64::BITS)
+        .filter(|bit| mask & (1 << bit) != 0)
+        .map(|bit| bit.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let tuples = reads_sample_tuples(signatures, mask)
+        .into_iter()
+        .map(|arguments| format!("  [{}],", arguments.join(", ")))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "// Synthesized veto (ADR 0101) for the described `reads` closure of `{export}`.\n\
+         // Derived from the export's Type Facts call signature; deterministic in it.\n\
+         // It observes, it never proves: the implementation census is the proof.\n\
+         import * as subjectModule from {specifier_json};\n\
+         \n\
+         const subject = subjectModule[{export_json}];\n\
+         const described = new Set([{described}]);\n\
+         let emitter = null;\n\
+         let inCall = false;\n\
+         let emitted = false;\n\
+         const record = (slot) => {{\n\
+         \x20 if (!emitted && emitter && (!described.has(slot) || !inCall)) {{\n\
+         \x20   emitted = true;\n\
+         \x20   emitter.emit({{ marker: \"read-operation\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 }}\n\
+         }};\n\
+         // Members the engine reads on its own while coercing, awaiting or\n\
+         // serializing a value; a member the export itself invokes is never one.\n\
+         const protocolKeys = new Set([\"then\", \"valueOf\", \"toString\", \"toJSON\", \"constructor\"]);\n\
+         // A member chain ends after a bounded depth, so a walk such as\n\
+         // `while (node) node = node.parentNode` terminates instead of running\n\
+         // to the session's budget; the export's own invocations sit far above it.\n\
+         const MEMBER_DEPTH = 8;\n\
+         const memberAt = (slot, depth) => new Proxy(() => undefined, {{\n\
+         \x20 get(_target, key) {{\n\
+         \x20   if (typeof key === \"symbol\" || protocolKeys.has(key) || depth >= MEMBER_DEPTH) return undefined;\n\
+         \x20   return memberAt(slot, depth + 1);\n\
+         \x20 }},\n\
+         \x20 apply() {{ record(slot); return undefined; }}\n\
+         }});\n\
+         const tripwireAt = (slot) => new Proxy(() => undefined, {{\n\
+         \x20 get(_target, key) {{\n\
+         \x20   return typeof key === \"symbol\" || protocolKeys.has(key) ? undefined : memberAt(slot, 1);\n\
+         \x20 }},\n\
+         \x20 // A bare invocation of the argument is the callbacks domain's item.\n\
+         \x20 apply() {{ return undefined; }}\n\
+         }});\n\
+         const samples = [\n{tuples}\n];\n\
+         \n\
+         export async function runProbeSession(_session, harness) {{\n\
+         \x20 emitter = harness;\n\
+         \x20 harness.emit({{ marker: \"call\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 if (typeof subject !== \"function\") {{\n\
+         \x20   throw new Error(\"synthesized veto: the export is not callable in this realm\");\n\
+         \x20 }}\n\
+         \x20 let threw = 0;\n\
+         \x20 for (const args of samples) {{\n\
+         \x20   inCall = true;\n\
+         \x20   try {{\n\
+         \x20     subject(...args);\n\
+         \x20   }} catch {{\n\
+         \x20     threw += 1;\n\
+         \x20   }} finally {{\n\
+         \x20     inCall = false;\n\
+         \x20   }}\n\
+         \x20 }}\n\
+         \x20 if (threw > 0) harness.emit({{ marker: \"sample-threw\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 harness.emit({{ marker: \"call\", kind: \"call\", phase: \"exit\" }});\n\
+         }}\n",
+        specifier_json = serde_json::to_string(specifier).unwrap_or_default(),
+        export_json = serde_json::to_string(export).unwrap_or_default(),
+    )
+}
+
 fn described_callbacks_module_source(
     specifier: &str,
     export: &str,

@@ -22,6 +22,8 @@ underneath.
 | `.` | `readsCallerMember` | caller's object, `.value` | close |
 | `.` | `readsCallerElement` | caller's object, `[key]` | close |
 | `.` | `invokesCallerAccessor` | caller's callable — the export's act is the invocation (census plan § 3.2), and since ADR 0100 that invocation is *described*: `callbacks` closes with one item | close |
+| `.` | `invokesCallerMember` | caller's object, `.of.values()` — a *member invocation*, which the generator describes as a `parameter-member` read item, and since [ADR 0101](../../../docs/adr/0101-described-reads-enumeration.md) the census confirms that enumeration site for site | **close with one item** |
+| `.` | `invokesCallerMemberLater` | the same member invocation inside a `queueMicrotask` callback | stays **open**: the generator proposes no closure for a captured member invocation, so there is nothing to confirm |
 | `./owned` | `readsOwnProxy` | a proxy **this module built** | **refuse** |
 | `./owned` | `readsOwnProxyElement` | the same, element access | **refuse** |
 | `./owned` | `observedReads` | — | **refuse**, and that is the point |
@@ -98,6 +100,15 @@ the candidates; it does not yet prove the refusal.
   invocation itself is the census's to prove.
   `a_described_callbacks_closure_reaches_a_receipt_through_its_mandatory_veto`
   carries it to a receipt.
+
+`invokesCallerMember` has no hand recipe and needs none: a described `reads`
+enumeration is served by a synthesized veto (ADR 0101,
+`Observation::DescribedReads`), which hands the export a recording tripwire
+at every object slot and emits `read-operation` only for a member invocation
+outside the description.
+`a_described_reads_closure_reaches_a_receipt_through_its_mandatory_veto`
+carries it to a receipt with `reads` closed and non-empty. The empty
+enumeration keeps its hand recipes, for the reason below.
 
 `recipes.json` pins all three to the claim ids in `expected-proposal.json`;
 the two files move together, and a regenerated plan means regenerated claim

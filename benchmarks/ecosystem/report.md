@@ -1,8 +1,8 @@
 # Ecosystem Benchmark Report
 
-- Started: 2026-09-13T12:15:20.740Z
-- Finished: 2026-09-13T12:34:14.960Z
-- Duration: 1134220 ms
+- Started: 2026-09-13T14:21:06.442Z
+- Finished: 2026-09-13T14:40:19.789Z
+- Duration: 1153347 ms
 - Checker native binary: /Users/thomas/Documents/Github/solid-checker/rust/target/release/solid-checker-rust
 - Type Facts binary: /Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts
 - Registry cache for certification: /Users/thomas/Documents/Github/solid-checker/rust/target/registry-cache
@@ -980,7 +980,7 @@ Proposal-plan bytes are construction obligations, not proof evidence and not acc
 | Domain | Exports carrying an unknown |
 | --- | --- |
 | callbacks | 7890 |
-| reads | 7927 |
+| reads | 7931 |
 | writes | 8950 |
 | creates | 8282 |
 | invalidates | 8950 |
@@ -989,7 +989,7 @@ Proposal-plan bytes are construction obligations, not proof evidence and not acc
 | cleanups | 8950 |
 | disposals | 8950 |
 | recursiveValue | 54 |
-| **total** | **77714** |
+| **total** | **77718** |
 
 Read the domain columns together, not separately: 36 of the 8950 unknown exports are unknown in every measured domain at once, so the same export can contribute to several columns.
 
@@ -1012,7 +1012,7 @@ Read the domain columns together, not separately: 36 of the 8950 unknown exports
 | --- | --- | --- | --- | --- | --- | --- |
 | Official Solid | 19 | 0/19 (0%) | 19 | 7 | 0/1638 (0%) | 14575 |
 | Kobalte | 5 | 0/5 (0%) | 5 | 4 | 0/3558 (0%) | 31260 |
-| Solid Primitives | 282 | 0/282 (0%) | 282 | 8 | 0/1935 (0%) | 16179 |
+| Solid Primitives | 282 | 0/282 (0%) | 282 | 8 | 0/1935 (0%) | 16183 |
 | Corvu | 22 | 0/22 (0%) | 22 | 0 | 0/292 (0%) | 2414 |
 | TanStack | 38 | 0/38 (0%) | 38 | 8 | 0/271 (0%) | 2324 |
 | Solid Devtools | 10 | 0/10 (0%) | 10 | 3 | 0/381 (0%) | 3087 |
@@ -1045,8 +1045,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Worker timings
 
-- Worker time: 13970406 ms
-- Phases: install 70309 ms, generation 528495 ms, harness 13371602 ms
+- Worker time: 13625039 ms
+- Phases: install 60595 ms, generation 513167 ms, harness 13051277 ms
 
 ### Dialect negative authority
 

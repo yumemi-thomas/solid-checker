@@ -371,6 +371,97 @@ fn a_deferred_callback_description_stays_partial_and_proposes_nothing() {
     }
 }
 
+/// ADR 0101: a `reads` enumeration is proposed closed when every item is the
+/// generator's own `parameter-member` row; an owned reactive read, or a row
+/// composed from another export, is a description the census cannot confirm,
+/// so the domain stays partial and no closure is proposed.
+#[test]
+fn only_a_parameter_member_read_description_proposes_a_reads_closure() {
+    let summary = |read: ContractReactiveRead| ContractExport {
+        kind: "function".into(),
+        reactive_reads: ContractClaim::Known(vec![read]),
+        ..ContractExport::default()
+    };
+    let normalize = |summary: ContractExport| {
+        normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution_for_package("package", ["read".into()]),
+        )
+        .unwrap()
+    };
+    let member = normalize(summary(ContractReactiveRead {
+        kind: "parameter-member".into(),
+        label: String::new(),
+        parameter: Some(0),
+        path: Some(vec!["of".into(), "values".into()]),
+        composed_owner: None,
+        composed_from: None,
+    }));
+    let export = &member.contract.artifact_cases()[0].exports["read"];
+    assert!(
+        export
+            .call
+            .proposed_closures()
+            .contains(&ClaimDomain::Reads),
+        "{:?}",
+        export.call.proposed_closures()
+    );
+    assert!(
+        matches!(export.call.claims().reads, KnowledgeSet::Complete(ref items) if items.len() == 1),
+        "{:?}",
+        export.call.claims().reads
+    );
+
+    for (label, read) in [
+        (
+            "owned accessor",
+            ContractReactiveRead {
+                kind: "accessor".into(),
+                label: "count".into(),
+                parameter: None,
+                path: None,
+                composed_owner: None,
+                composed_from: None,
+            },
+        ),
+        (
+            "composed from a sibling export",
+            ContractReactiveRead {
+                kind: "parameter-member".into(),
+                label: String::new(),
+                parameter: Some(0),
+                path: Some(vec!["of".into()]),
+                composed_owner: None,
+                composed_from: Some(solid_reactive_ir::ComposedReactiveRead {
+                    export: "helper".into(),
+                    read: 0,
+                }),
+            },
+        ),
+    ] {
+        let normalized = normalize(summary(read));
+        let export = &normalized.contract.artifact_cases()[0].exports["read"];
+        assert!(
+            !export
+                .call
+                .proposed_closures()
+                .contains(&ClaimDomain::Reads),
+            "{label}: {:?}",
+            export.call.proposed_closures()
+        );
+        assert!(
+            matches!(export.call.claims().reads, KnowledgeSet::Partial(ref items) if items.len() == 1),
+            "{label}: {:?}",
+            export.call.claims().reads
+        );
+        assert_eq!(
+            export.claim_state(ClaimDomain::Reads),
+            KnowledgeState::PartialPositive,
+            "{label}"
+        );
+    }
+}
+
 /// An ordinary consuming package publishes what it derived. The *cleanup* role
 /// is the only owner-requirement role that has a home in schema version 1, so
 /// this pair is a read operation and a `kind: cleanup` operation -- never a

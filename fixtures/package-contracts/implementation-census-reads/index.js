@@ -47,6 +47,33 @@ export function invokesCallerAccessor(read) {
 }
 
 // --- `reads: []` must close for every export above. ---
+
+// --- A *described* `reads` enumeration (ADR 0101). ---
+
+// The export invokes a member of a caller-supplied object in its own body. The
+// generator describes that as a `parameter-member` read item -- parameter 0,
+// path `of.values` -- and proposes the domain closed *with* it; the census
+// confirms the item against this very call and finds no member invocation the
+// enumeration does not name.
+export function invokesCallerMember(props) {
+  return props.of.values();
+}
+
+// The same member invocation inside a callable the export hands out. The
+// generator leaves `reads` open here (the captured call has no call-event
+// execution point), so no closure is proposed and there is nothing to confirm.
+// The guard is for the *other* domains' synthesized vetoes, which sample this
+// export with `{}`: an exception thrown from a microtask would kill the
+// shared probe worker rather than withhold one candidate.
+export function invokesCallerMemberLater(props) {
+  queueMicrotask(() => {
+    try {
+      props.of.values();
+    } catch {
+      // The sample handed no `of`; nothing to observe.
+    }
+  });
+}
 //
 // Nothing in this module installs a property accessor at run time, so its
 // closure carries no `runtime-accessor-installation` hazard and the census is

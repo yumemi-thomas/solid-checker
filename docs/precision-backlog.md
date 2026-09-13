@@ -1,5 +1,49 @@
 # Precision backlog
 
+## ADR 0101: a described `reads` enumeration the census confirms (2026-09-13)
+
+The recipe-less `reads` frontier (3,085 detail rows after the recipe batches)
+was sized by shared dependency case rather than by root row — a case's rows
+multiply by the root artifact cases that compose it, so `@solid-primitives/utils@6.4.1`'s
+one root case carried 588 rows and `@floating-ui/utils@0.2.12`'s two carried
+304 — and the census was run under a scaffold pass on the largest cases.
+"No recipe in corpus" was masking census verdicts (§ 43.3 of the reads-veto
+design record): on the utils case all fourteen withheld exports refuse, on
+floating-ui's root case all nine, on its DOM case twelve of twenty, and the
+largest refusal class was "the proposal names 1" — the generator's
+`parameter-member` row, a member invocation on a caller parameter
+(`list.map(...)`, `a.compareDocumentPosition(b)`, `placement.split(...)`)
+that the transcript states at a location. ADR 0101 lifts the empty-only rule
+for exactly that shape, as ADR 0100 did for `callbacks`: the generator
+proposes an enumeration whose every item is such a row (an owned read, a
+composed row, a deferred, tracked or guarded one stays partial), the census
+confirms it site for site against the transcript's `calleeParameter` paths and
+`directCall`/`aliasCall` uses in both directions, and a synthesized tripwire
+veto (`Observation::DescribedReads`) serves it, so closure needs no hand
+recipe. Two things the first corpus run corrected before the pin: refuting
+the *empty* enumeration on an undescribed member invocation would have cost
+144 correct closures on rest and array parameters (`some(...signals)`,
+`pipe(...transformers)`, `moveItem`), so the empty enumeration stays a
+forms-walk decision; and an unbounded tripwire let `contains`'
+`while (target) target = target.parentNode` run to the budget on 102 rows, so
+the member chain is bounded at depth eight. Corpus effect (release binary,
+418 rows, `--timeout 1800`): certified closure entries 10,182 → 10,290
+(solid1 +48, solid2 +60); uncapped `reads` closures 198 → 228 over the 394
+uncapped rows; `reads`-closed entries 946 → 1,111; `no recipe in corpus`
+`reads` detail rows 3,085 → 2,242, of which 213 are now visible census
+refusals (`handleDiffArray` and `ndjson` name two operations, `shallow`
+coerces, the rest are unrooted accessor forms) and 10 are `@kobalte/utils@0.9.2`
+source cases the pinned interpreter refuses to strip (ADR 0009); closure
+candidates 25,468 → 25,464 (four owned-read enumerations withdrawn to
+partial); no row below the pin, no status move; wall 1,134 s → 1,153 s.
+What the frontier is after this: the 2,242 recipe-less rows are dominated by
+`@solid-primitives/utils` exports whose census refuses on unrooted forms or
+non-unique call signatures (`keys`, `entries`, `defaultEquals`), `motion-utils`
+consts and the `SubscriptionManager` class, window-rooted DOM helpers, and
+Solid-primitive wrappers — three census premises (a default-library alias's
+closure, a `lib.dom`-declared host property, a class construction) and one
+harness capability, none of them authoring.
+
 ## Twenty-six carried and predicate `reads` recipes on the corvu closures (2026-09-13)
 
 `@corvu/utils` is published under several closures and two versions the

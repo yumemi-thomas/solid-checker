@@ -365,6 +365,19 @@ starting at `utils`. Measured in
 `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
 § 43.
 
+**Superseded in part by [ADR 0101](../../../docs/adr/0101-described-reads-enumeration.md)
+(2026-09-13).** "The proposal names an operation" is no longer a refusal when
+the operation is the generator's `parameter-member` row — a member invocation
+on a caller parameter, `list.map(...)`, `a.compareDocumentPosition(b)` — and
+every item is one; the census confirms the enumeration site for site and a
+synthesized tripwire veto serves it. `arrayEquals`, `filterNonNullable`,
+`accessArray`, `lines`, `contains` and `sortByDocumentPosition` now close on
+every case here, hand recipe or not (where a hand recipe exists it still runs
+as the mandatory veto). `handleDiffArray` and `ndjson` keep refusing: their
+proposals name two operations one of which is not such a row. `compare`'s
+coercion refusal stands. The empty enumeration is unchanged and still needs a
+hand recipe, for the reason in "Why hand-authored" above.
+
 `scripts/ecosystem-probe-recipes.test.mjs` pins the manifest's shape, that every
 declared module exists and exports `runProbeSession`, and that no module names
 `session` or `harness` in a position that hands either to a package.

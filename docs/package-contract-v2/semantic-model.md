@@ -385,6 +385,28 @@ still counts, which is why `createEffect`'s row is withheld: under
 `hydrating ∧ ssrSource === "client"` its client build reads a signal
 `withHydrationGate` created.
 
+**[Decision 2026-09-13] A described enumeration of member invocations closes.**
+The generator's `parameter-member` row — `function direct(props) {
+props.of.values() }` publishes a `read` whose input is parameter 0 at path
+`of.values` — is the export's own act of invoking a member of a value its
+caller handed it, and the consumer reads it to decide whether a call site's
+argument is read reactively. An enumeration whose every item is such a row,
+unguarded, untracked, `at: call` on the same stack, in this export's own frame
+and not composed from another export's, is proposable, and the implementation
+census confirms it site for site against the member invocations the
+transcript states — a call's `calleeParameter` with a path, and the use
+census's `directCall`/`aliasCall` rows — in both directions, refusing by name
+on an `async` or generator body, a site inside a nested callable, a computed
+segment, a site no item describes, and an item with no site
+([ADR 0101](../adr/0101-described-reads-enumeration.md)). The empty
+enumeration is still decided by the forms walk alone: a member invocation the
+generator wrote no row for is the caller's side of the line, not a false
+claim. A read of a source the export owns, a composed row, or a deferred, tracked or
+guarded one keeps the enumeration partial and is not proposed. This does not
+move the authorship line above: a *property access* on a caller's value is
+still the caller's and is still no item; what the row and this decision are
+about is the export *invoking* the member.
+
 ### writes
 
 `writes: [] closed` denies that one invocation of this export gives rise to any

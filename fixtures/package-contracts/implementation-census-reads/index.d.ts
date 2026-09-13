@@ -11,3 +11,5 @@ export declare function readsCallerElement(
   key: string
 ): number;
 export declare function invokesCallerAccessor(read: () => number): number;
+export declare function invokesCallerMember(props: { of: { values(): number[] } }): number[];
+export declare function invokesCallerMemberLater(props: { of: { values(): number[] } }): void;

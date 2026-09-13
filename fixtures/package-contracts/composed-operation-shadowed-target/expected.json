@@ -13,9 +13,9 @@
             "sha256": "4a2d9b19718366f42c1c1333594cce9146ad6224fc1f19e6255edcff4a68bac9"
           },
           "exports": {
-            "composesTheImportedTarget": "summary-16275f1977dc9de869a7d368fd999df6a965546f3a9b3b2c884482661202855b",
-            "composesTheLocalTarget": "summary-0fbe5e828a0b3a0c8d2225fd186da2522cd658b6d6e09c2634a8c27de5eceb3c",
-            "readSignal": "summary-3dbd7b48ccdc2ba34232feab44d213a018d339ea0f4b24d4757ef000619a828e"
+            "composesTheImportedTarget": "summary-81ffa7996925ababd59d74321322a5f2cafca0162f257e96b6a9c76a445e5f4e",
+            "composesTheLocalTarget": "summary-8c41ddee509f6c05a7e92f5aa91ed0658c9232ce52751c89305f5f6a41dcbe60",
+            "readSignal": "summary-2fb4f64b64f0b8eb3d0d3e23e1435a6cd66538b2d9614501c5410405a3e81dd5"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -39,12 +39,11 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-0fbe5e828a0b3a0c8d2225fd186da2522cd658b6d6e09c2634a8c27de5eceb3c": {
+    "summary-2fb4f64b64f0b8eb3d0d3e23e1435a6cd66538b2d9614501c5410405a3e81dd5": {
       "call": {
         "callbacks": [],
         "closed": [
           "callbacks",
-          "reads",
           "creates"
         ],
         "creates": [],
@@ -53,10 +52,6 @@
             "at": {
               "event": "call",
               "schedule": "same-stack"
-            },
-            "composedFrom": {
-              "export": "readSignal",
-              "operation": "read-0"
             },
             "count": {
               "max": "many",
@@ -79,7 +74,6 @@
         ],
         "proposedClosures": [
           "callbacks",
-          "reads",
           "creates"
         ],
         "reads": [
@@ -88,12 +82,11 @@
       },
       "shape": "callable"
     },
-    "summary-16275f1977dc9de869a7d368fd999df6a965546f3a9b3b2c884482661202855b": {
+    "summary-81ffa7996925ababd59d74321322a5f2cafca0162f257e96b6a9c76a445e5f4e": {
       "call": {
         "callbacks": [],
         "closed": [
           "callbacks",
-          "reads",
           "creates"
         ],
         "creates": [],
@@ -128,7 +121,6 @@
         ],
         "proposedClosures": [
           "callbacks",
-          "reads",
           "creates"
         ],
         "reads": [
@@ -137,12 +129,11 @@
       },
       "shape": "callable"
     },
-    "summary-3dbd7b48ccdc2ba34232feab44d213a018d339ea0f4b24d4757ef000619a828e": {
+    "summary-8c41ddee509f6c05a7e92f5aa91ed0658c9232ce52751c89305f5f6a41dcbe60": {
       "call": {
         "callbacks": [],
         "closed": [
           "callbacks",
-          "reads",
           "creates"
         ],
         "creates": [],
@@ -151,6 +142,10 @@
             "at": {
               "event": "call",
               "schedule": "same-stack"
+            },
+            "composedFrom": {
+              "export": "readSignal",
+              "operation": "read-0"
             },
             "count": {
               "max": "many",
@@ -173,7 +168,6 @@
         ],
         "proposedClosures": [
           "callbacks",
-          "reads",
           "creates"
         ],
         "reads": [

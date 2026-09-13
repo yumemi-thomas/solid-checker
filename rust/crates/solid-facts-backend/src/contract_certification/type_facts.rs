@@ -9760,15 +9760,17 @@ fn census_reads_domain(
             typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
         )));
     }
-    let proposed = export
-        .operation_claim(ClaimDomain::Reads)
-        .ok_or_else(|| refuse("reads is not an operation domain of this export".into()))?;
-    if !proposed.items().is_empty() {
-        return Err(refuse(format!(
-            "a reads closure candidate must enumerate no operation, but the proposal names {}",
-            proposed.items().len()
-        )));
-    }
+    // ADR 0101: the empty enumeration, or one whose every item the census can
+    // confirm -- a member invocation on a caller-supplied parameter, written in
+    // the export's own body at the call event. Anything else refuses here by
+    // name, before any form is read.
+    let described = described_reads(export).map_err(|reason| {
+        refuse(format!(
+            "a reads closure candidate may describe only call-time member invocations of its \
+             caller's parameters, which the implementation census confirms, and this proposal \
+             {reason}"
+        ))
+    })?;
     let run = CensusRun {
         certified: &plan.snapshot,
         plan: Some(plan),
@@ -9813,7 +9815,285 @@ fn census_reads_domain(
         "typefacts-implementation-census:reads:forms:{}",
         sites.len()
     ));
+    // ADR 0101: the member invocations this transcript states, against a
+    // described enumeration in both directions; counted only under the empty
+    // one.
+    sites.push(confirm_described_reads(described.as_deref(), implementation).map_err(refuse)?);
     Ok(sites)
+}
+
+/// The parameter-rooted reads a proposal's `reads` enumeration describes, when
+/// every item is one the census can confirm (ADR 0101): a `read` operation
+/// whose input is a caller parameter -- the generator's `parameter-member`
+/// row, `props.of.values()` -- unguarded, untracked, `at` the call event on
+/// the same stack, and performed in this export's own frame rather than
+/// composed from another export's row. `None` is the empty enumeration.
+/// `Err` names the first item outside that shape: a read of a reactive source
+/// the export owns, a deferred or tracked row, a guarded one, or a composed
+/// one stays refused exactly as every non-empty enumeration was before this
+/// premise, because the census that follows can confirm none of them.
+fn described_reads(
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+) -> Result<Option<Vec<ValueSource>>, String> {
+    use solid_reactive_ir::contract_semantics::{Event, OperationKind, Schedule, ValueShape};
+    let items = export
+        .operation_claim(ClaimDomain::Reads)
+        .ok_or_else(|| "states reads as something other than an operation domain".to_owned())?
+        .items();
+    if items.is_empty() {
+        return Ok(None);
+    }
+    let mut described = Vec::new();
+    for item in items {
+        let operation_id = item.0.as_str();
+        let Some(operation) = export.operation(operation_id) else {
+            return Err(format!(
+                "names the operation `{operation_id}` it does not publish"
+            ));
+        };
+        if operation.kind != OperationKind::Read {
+            return Err(format!(
+                "names `{operation_id}`, whose kind is {:?} rather than read",
+                operation.kind
+            ));
+        }
+        let source = match operation.inputs.first() {
+            Some(ValueShape::Parameter { index, path }) => ValueSource::Parameter {
+                index: *index,
+                path: path.clone(),
+            },
+            _ => {
+                return Err(format!(
+                    "describes `{operation_id}` as a read of a reactive source the export owns \
+                     or derived, and the census confirms member invocations of a caller \
+                     parameter only"
+                ));
+            }
+        };
+        if operation.at != Some(Event::Call) || operation.schedule != Some(Schedule::SameStack) {
+            return Err(format!(
+                "describes `{operation_id}` at {:?} with schedule {:?}, and the census confirms \
+                 a read at the call event on the same stack only",
+                operation.at, operation.schedule
+            ));
+        }
+        if operation.tracking != solid_reactive_ir::contract_semantics::Tracking::Untracked {
+            return Err(format!(
+                "describes `{operation_id}` as {:?}, and the census confirms the generator's \
+                 untracked call-time member invocation only",
+                operation.tracking
+            ));
+        }
+        if operation.guard.is_some() {
+            return Err(format!(
+                "guards `{operation_id}`, and the census confirms an unguarded read only"
+            ));
+        }
+        if operation.composed_from.is_some() {
+            // The read happens in the other export's frame, through this
+            // export's call to it; this census reads this export's own
+            // transcript and recurses into nothing.
+            return Err(format!(
+                "describes `{operation_id}` as composed from another export's read, and the \
+                 census confirms a member invocation written in this export's own body only"
+            ));
+        }
+        described.push(source);
+    }
+    Ok(Some(described))
+}
+
+/// One place this implementation invokes a member of one of its own
+/// parameters: `props.of.values()`, or the call of a binding an immutable
+/// alias or a destructuring pattern took from such a member. Read off the
+/// transcript's own facts -- a call's `calleeParameter`, and the use census's
+/// `directCall`/`aliasCall` rows -- not off a walk: this census enters no
+/// callee, so every site here is in the export's own frame.
+struct MemberInvocationSite<'a> {
+    parameter: usize,
+    path: &'a [typefacts::PathSegment],
+    location: &'a typefacts::Location,
+    captured: bool,
+}
+
+fn member_invocation_sites(
+    implementation: &typefacts::ExportImplementationTranscript,
+) -> Vec<MemberInvocationSite<'_>> {
+    let mut sites = Vec::new();
+    for call in &implementation.calls {
+        if !is_call_expression(call) || call.reach == Reachability::Unreachable {
+            continue;
+        }
+        if let Some(callee) = &call.callee_parameter
+            && !callee.path.is_empty()
+        {
+            sites.push(MemberInvocationSite {
+                parameter: callee.parameter_index,
+                path: &callee.path,
+                location: &call.location,
+                captured: call.captured,
+            });
+        }
+    }
+    for use_site in &implementation.parameter_uses {
+        if use_site.reach == Reachability::Unreachable
+            || use_site.binding_path.is_empty()
+            || !matches!(
+                use_site.kind,
+                ParameterUseKind::DirectCall | ParameterUseKind::AliasCall
+            )
+        {
+            continue;
+        }
+        // The same call may stand in both censuses; one site per location.
+        if sites
+            .iter()
+            .any(|site: &MemberInvocationSite<'_>| *site.location == use_site.location)
+        {
+            continue;
+        }
+        sites.push(MemberInvocationSite {
+            parameter: use_site.parameter_index,
+            path: &use_site.binding_path,
+            location: &use_site.location,
+            captured: use_site.captured,
+        });
+    }
+    sites
+}
+
+fn location_text(location: &typefacts::Location) -> String {
+    format!(
+        "{}:{}..{}",
+        location.path, location.start_byte, location.end_byte
+    )
+}
+
+/// Confirms a described `reads` enumeration against the member invocations
+/// the transcript states, or refuses by naming the first fact that separates
+/// them (ADR 0101). Both directions are checked: every member invocation of a
+/// caller parameter must be an item the proposal describes -- the same
+/// parameter, the item's path a prefix of the invoked one -- and every item
+/// must have such a site. The empty enumeration is not refuted by a site: a
+/// member invocation on a caller-supplied value is the caller's side of
+/// § reads' authorship line, and the row is description the generator adds
+/// when it can resolve the member, not a claim its absence falsifies.
+///
+/// The frame conditions are the whole of `at: call, same-stack`, as for ADR
+/// 0100: a body that completes plainly, and a site outside any nested
+/// callable. A site inside one is not ignored for a described enumeration --
+/// the generator leaves the domain open when it sees one, so a proposal that
+/// reached here with such a site is one the generator and the census disagree
+/// about, and the census refuses.
+fn confirm_described_reads(
+    described: Option<&[ValueSource]>,
+    implementation: &typefacts::ExportImplementationTranscript,
+) -> Result<String, String> {
+    let sites = member_invocation_sites(implementation);
+    let Some(items) = described else {
+        // The empty enumeration is decided by the forms walk alone. A member
+        // invocation on a caller-supplied value is on the caller's side of
+        // § reads' authorship line, so its absence from the proposal is not a
+        // false claim; the generator's `parameter-member` row is additional
+        // description it publishes when it can resolve the member, and the
+        // corpus measured 144 closed rows whose transcript states such a site
+        // without a row (`some(...signals)`, `pipe(...transformers)`,
+        // `moveItem(arr, …)`: rest and array parameters). Those closures are
+        // correct under the domain's definition and stay; the site only
+        // counts them.
+        return Ok(format!(
+            "typefacts-implementation-census:reads:member-invocations:{}",
+            sites.iter().filter(|site| !site.captured).count()
+        ));
+    };
+    let described_text = || {
+        format!(
+            "the reads closure candidate describes call-time member invocation(s) of {}",
+            items
+                .iter()
+                .map(|item| match item {
+                    ValueSource::Parameter { index, path } if path.is_empty() => {
+                        format!("parameter {index}")
+                    }
+                    ValueSource::Parameter { index, path } => {
+                        format!("parameter {index} at .{}", path.join("."))
+                    }
+                    other => format!("{other:?}"),
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+    if implementation.completion_form != Some(typefacts::ImplementationCompletionForm::Plain) {
+        return Err(format!(
+            "{}, but the implementation completes as {}: a read in an async or generator body \
+             may happen after the export has returned, so it is not a read at the call event",
+            described_text(),
+            implementation.completion_form.map_or_else(
+                || "unstated".to_owned(),
+                |form| format!("{form:?}").to_lowercase()
+            )
+        ));
+    }
+    let mut seen = vec![false; items.len()];
+    for site in &sites {
+        if site.captured {
+            return Err(format!(
+                "{}, but the invocation of a member of parameter {} at {} sits inside a callable \
+                 nested in the implementation, so its execution point is not the call event",
+                described_text(),
+                site.parameter,
+                location_text(site.location)
+            ));
+        }
+        if site
+            .path
+            .iter()
+            .any(|segment| segment.kind != PathSegmentKind::Property)
+        {
+            return Err(format!(
+                "{}, but the invocation at {} reaches parameter {} through a computed or \
+                 positional segment, which no described path can name",
+                described_text(),
+                location_text(site.location),
+                site.parameter
+            ));
+        }
+        let mut matched = false;
+        for (position, item) in items.iter().enumerate() {
+            if parameter_binding_matches(site.parameter, site.path, item) {
+                seen[position] = true;
+                matched = true;
+            }
+        }
+        if !matched {
+            return Err(format!(
+                "{}, but the invocation at {} is of parameter {} at .{}, which the enumeration \
+                 does not describe",
+                described_text(),
+                location_text(site.location),
+                site.parameter,
+                site.path
+                    .iter()
+                    .map(|segment| segment.property.to_string())
+                    .collect::<Vec<_>>()
+                    .join(".")
+            ));
+        }
+    }
+    if let Some((position, _)) = seen.iter().enumerate().find(|(_, seen)| !**seen) {
+        return Err(format!(
+            "{}, but the implementation census found no member invocation matching item {}: the \
+             enumeration describes a read the implementation does not perform in its own body",
+            described_text(),
+            position
+        ));
+    }
+    Ok(format!(
+        "typefacts-implementation-census:reads:described-invocations:{}:items:{}",
+        sites.len(),
+        items.len()
+    ))
 }
 
 fn census_returns_domain(
@@ -21152,6 +21432,253 @@ mod tests {
             serde_json::from_value(value.take()).expect("a valid transcript");
         transcript.calls = calls;
         transcript
+    }
+
+    /// ADR 0101: a described `reads` enumeration is confirmed against the
+    /// transcript's own member-invocation sites -- a call's `calleeParameter`
+    /// with a path, and the use census's `directCall`/`aliasCall` rows -- in
+    /// both directions, and refused by name on every way a site or an item can
+    /// fail to be "a member of a caller parameter, invoked at the call event".
+    #[test]
+    fn a_described_reads_enumeration_is_confirmed_by_its_member_invocation_sites() {
+        use typefacts::ImplementationCompletionForm as Completion;
+        let source = "/project/node_modules/consumer/dist/index.js";
+        let call = |start: u64, callee: serde_json::Value, overrides: serde_json::Value| {
+            let mut value = json!({
+                "location": {"path": source, "startByte": start, "endByte": start + 4},
+                "reach": "reachable",
+                "kind": "call",
+                "target": "symbol:member",
+                "calleeParameter": callee,
+            });
+            let object = value.as_object_mut().expect("an object");
+            for (key, replacement) in overrides.as_object().expect("an object") {
+                object.insert(key.clone(), replacement.clone());
+            }
+            serde_json::from_value::<typefacts::ImplementationCall>(value).expect("a valid call")
+        };
+        let member = |segments: &[&str]| {
+            json!({
+                "parameterIndex": 0,
+                "path": segments.iter().map(|segment| json!({"kind": "property", "property": segment})).collect::<Vec<_>>(),
+            })
+        };
+        let transcript = |calls: Vec<typefacts::ImplementationCall>,
+                          uses: serde_json::Value,
+                          completion: Option<Completion>| {
+            let mut transcript = census_transcript_with(calls, json!([]));
+            transcript.completion_form = completion;
+            transcript.parameter_uses = serde_json::from_value(uses).expect("valid uses");
+            transcript
+        };
+        let item = |index: u16, path: &[&str]| ValueSource::Parameter {
+            index,
+            path: path.iter().map(|segment| (*segment).to_owned()).collect(),
+        };
+        let plain = Some(Completion::Plain);
+        let described = [item(0, &["of", "values"])];
+
+        // Confirmed: `props.of.values()` in the export's own body.
+        let one = transcript(
+            vec![call(100, member(&["of", "values"]), json!({}))],
+            json!([]),
+            plain,
+        );
+        assert_eq!(
+            confirm_described_reads(Some(&described), &one),
+            Ok("typefacts-implementation-census:reads:described-invocations:1:items:1".into())
+        );
+        // A longer path is a read through the described one, and two sites
+        // of the same item are the same one item.
+        let deeper = transcript(
+            vec![
+                call(100, member(&["of", "values"]), json!({})),
+                call(200, member(&["of", "values", "slice"]), json!({})),
+            ],
+            json!([]),
+            plain,
+        );
+        assert_eq!(
+            confirm_described_reads(Some(&described), &deeper),
+            Ok("typefacts-implementation-census:reads:described-invocations:2:items:1".into())
+        );
+        // The bare item -- "read through parameter 0", the generator's weakest
+        // row when contributing paths disagree -- is a prefix of every path.
+        assert_eq!(
+            confirm_described_reads(Some(&[item(0, &[])]), &deeper),
+            Ok("typefacts-implementation-census:reads:described-invocations:2:items:1".into())
+        );
+        // A use the call census never sees: the call of a binding an alias
+        // took from the member.
+        let alias = transcript(
+            vec![],
+            json!([{
+                "parameterIndex": 0,
+                "bindingPath": [{"kind": "property", "property": "of"}, {"kind": "property", "property": "values"}],
+                "location": {"path": source, "startByte": 300, "endByte": 306},
+                "reach": "reachable",
+                "kind": "aliasCall",
+                "alias": true,
+                "captured": false,
+            }]),
+            plain,
+        );
+        assert_eq!(
+            confirm_described_reads(Some(&described), &alias),
+            Ok("typefacts-implementation-census:reads:described-invocations:1:items:1".into())
+        );
+        // The empty enumeration, with nothing invoked, and with a captured
+        // invocation the generator itself leaves the domain open for.
+        assert_eq!(
+            confirm_described_reads(None, &transcript(vec![], json!([]), plain)),
+            Ok("typefacts-implementation-census:reads:member-invocations:0".into())
+        );
+        assert_eq!(
+            confirm_described_reads(
+                None,
+                &transcript(
+                    vec![call(
+                        100,
+                        member(&["of", "values"]),
+                        json!({"captured": true})
+                    )],
+                    json!([]),
+                    plain,
+                )
+            ),
+            Ok("typefacts-implementation-census:reads:member-invocations:0".into())
+        );
+        // An unreachable site witnesses nothing in either direction.
+        assert_eq!(
+            confirm_described_reads(
+                None,
+                &transcript(
+                    vec![call(
+                        100,
+                        member(&["of", "values"]),
+                        json!({"reach": "unreachable"})
+                    )],
+                    json!([]),
+                    plain,
+                )
+            ),
+            Ok("typefacts-implementation-census:reads:member-invocations:0".into())
+        );
+
+        let refused = |described: Option<&[ValueSource]>,
+                       transcript: &typefacts::ExportImplementationTranscript,
+                       needle: &str| {
+            let reason =
+                confirm_described_reads(described, transcript).expect_err("the census must refuse");
+            assert!(reason.contains(needle), "expected {needle:?} in: {reason}");
+        };
+        // The empty enumeration is decided by the forms walk alone; a member
+        // invocation is the caller's side of the authorship line and is only
+        // counted in the site.
+        assert_eq!(
+            confirm_described_reads(None, &one),
+            Ok("typefacts-implementation-census:reads:member-invocations:1".into())
+        );
+        // `at: call, same-stack` needs a body that completes plainly.
+        refused(
+            Some(&described),
+            &transcript(
+                vec![call(100, member(&["of", "values"]), json!({}))],
+                json!([]),
+                Some(Completion::Async),
+            ),
+            "completes as async",
+        );
+        refused(
+            Some(&described),
+            &transcript(
+                vec![call(100, member(&["of", "values"]), json!({}))],
+                json!([]),
+                None,
+            ),
+            "completes as unstated",
+        );
+        // A site inside a nested callable: the generator would have left the
+        // domain open, so the two disagree and the census refuses.
+        refused(
+            Some(&described),
+            &transcript(
+                vec![call(
+                    100,
+                    member(&["of", "values"]),
+                    json!({"captured": true}),
+                )],
+                json!([]),
+                plain,
+            ),
+            "sits inside a callable nested in the implementation",
+        );
+        // Another member of the same parameter: the proposal understates.
+        refused(
+            Some(&described),
+            &transcript(
+                vec![
+                    call(100, member(&["of", "values"]), json!({})),
+                    call(200, member(&["other", "values"]), json!({})),
+                ],
+                json!([]),
+                plain,
+            ),
+            "is of parameter 0 at .other.values, which the enumeration does not describe",
+        );
+        // Another parameter altogether.
+        refused(
+            Some(&described),
+            &transcript(
+                vec![
+                    call(100, member(&["of", "values"]), json!({})),
+                    call(
+                        200,
+                        json!({"parameterIndex": 1, "path": [{"kind": "property", "property": "get"}]}),
+                        json!({}),
+                    ),
+                ],
+                json!([]),
+                plain,
+            ),
+            "is of parameter 1 at .get, which the enumeration does not describe",
+        );
+        // A computed segment no described path can name.
+        refused(
+            Some(&[item(0, &[])]),
+            &transcript(
+                vec![call(
+                    100,
+                    json!({"parameterIndex": 0, "path": [{"kind": "tuple", "index": 0}]}),
+                    json!({}),
+                )],
+                json!([]),
+                plain,
+            ),
+            "through a computed or positional segment",
+        );
+        // An item with no site: the proposal overstates.
+        refused(
+            Some(&[item(0, &["of", "values"]), item(1, &["get"])]),
+            &one,
+            "found no member invocation matching item 1",
+        );
+        // A bare call of the parameter is the `callbacks` domain's item, and
+        // neither confirms nor counts for a `reads` enumeration.
+        let bare = transcript(
+            vec![call(100, json!({"parameterIndex": 0}), json!({}))],
+            json!([]),
+            plain,
+        );
+        assert_eq!(
+            confirm_described_reads(None, &bare),
+            Ok("typefacts-implementation-census:reads:member-invocations:0".into())
+        );
+        refused(
+            Some(&described),
+            &bare,
+            "found no member invocation matching item 0",
+        );
     }
 
     #[test]

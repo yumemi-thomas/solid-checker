@@ -129,6 +129,18 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                                 .map(|summary| &summary.direct_callback_parameters),
                         )
                 })
+                // ADR 0101: a described `reads` enumeration is proposable when
+                // every item is the generator's own `parameter-member` row -- a
+                // member invocation on a caller parameter at the call event, in
+                // this export's own body -- which the census confirms site for
+                // site against the transcript's member invocations. A read of a
+                // source the export owns, a composed row, or a deferred, tracked
+                // or guarded one is a claim the census cannot confirm, so
+                // proposing it would publish a closure the census must refuse;
+                // such an enumeration stays partial.
+                .filter(|domain| {
+                    *domain != ClaimDomain::Reads || reads_enumeration_is_confirmable(export)
+                })
                 .filter(|domain| {
                     *domain != ClaimDomain::Returns
                         || export
@@ -325,6 +337,29 @@ impl GenerationScope {
 /// half of the same test to the proposal it receives, so a document that
 /// passed here and one it plans agree; a summary with no direct set (`None`,
 /// a summary the loop cannot find) proposes nothing described.
+/// Whether every item of the export's `reads` enumeration is one the
+/// implementation census confirms (ADR 0101): a `read` whose input is a caller
+/// parameter, unguarded, untracked, `at` the call event on the same stack, and
+/// performed in this export's own frame. The empty enumeration is trivially
+/// so.
+fn reads_enumeration_is_confirmable(export: &ExportSemantics) -> bool {
+    export
+        .operation_claim(ClaimDomain::Reads)
+        .is_some_and(|claim| {
+            claim.items().iter().all(|id| {
+                export.operation(&id.0).is_some_and(|operation| {
+                    operation.kind == OperationKind::Read
+                        && matches!(operation.inputs.first(), Some(ValueShape::Parameter { .. }))
+                        && operation.at == Some(Event::Call)
+                        && operation.schedule == Some(Schedule::SameStack)
+                        && operation.tracking == Tracking::Untracked
+                        && operation.guard.is_none()
+                        && operation.composed_from.is_none()
+                })
+            })
+        })
+}
+
 fn callbacks_enumeration_is_confirmable(
     export: &ExportSemantics,
     direct_callback_parameters: Option<&BTreeSet<usize>>,
