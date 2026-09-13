@@ -13,7 +13,7 @@
             "sha256": "93759a22c08aa996c97e6e8db5caaacdfb03e834203e4aeefe726cce0d10c481"
           },
           "exports": {
-            "thing": "summary-d0ecc97e0894e16992490fbc1fe8cb56b99877b8864e856948f4adbb1fc29e3b"
+            "thing": "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -37,12 +37,15 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-d0ecc97e0894e16992490fbc1fe8cb56b99877b8864e856948f4adbb1fc29e3b": {
+    "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5": {
       "call": {
+        "callbacks": [],
         "closed": [
+          "callbacks",
           "reads"
         ],
         "proposedClosures": [
+          "callbacks",
           "reads"
         ],
         "reads": []

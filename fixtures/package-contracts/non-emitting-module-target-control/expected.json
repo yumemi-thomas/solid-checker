@@ -57,7 +57,7 @@
             "sha256": "efee844b7898f3031e4a34c9cc2e2ce02814e37187180159e2413458e33093a6"
           },
           "exports": {
-            "Direction": "summary-d0ecc97e0894e16992490fbc1fe8cb56b99877b8864e856948f4adbb1fc29e3b"
+            "Direction": "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1enum",
@@ -79,7 +79,7 @@
             "sha256": "3818059da34b6ca9f5de317f661eeaa025b9fe904f3c9616da8b423f70547d6c"
           },
           "exports": {
-            "start": "summary-791cb4c57004018a3fb0b4d95eff7e5e6d9ddfa314766fc6a3ad977a3fa3d055"
+            "start": "summary-531f27f0017c6b946639511260e54cfaa3d9358d2914244c0afbd3f102680f26"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1runtime-barrel",
@@ -103,6 +103,21 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
+    "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
+      },
+      "shape": "plain"
+    },
     "summary-3a8858d7c65936bb057bc7846cfefb18019d594f9f4c0cb8d7919985be9b9c30": {
       "call": {
         "callbacks": [
@@ -149,19 +164,18 @@
       },
       "shape": "callable"
     },
-    "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b": {
-      "call": {},
-      "shape": "unknown"
-    },
-    "summary-791cb4c57004018a3fb0b4d95eff7e5e6d9ddfa314766fc6a3ad977a3fa3d055": {
+    "summary-531f27f0017c6b946639511260e54cfaa3d9358d2914244c0afbd3f102680f26": {
       "call": {
+        "callbacks": [],
         "closed": [
+          "callbacks",
           "reads",
           "creates",
           "returns"
         ],
         "creates": [],
         "proposedClosures": [
+          "callbacks",
           "reads",
           "creates",
           "returns"
@@ -171,17 +185,9 @@
       },
       "shape": "callable"
     },
-    "summary-d0ecc97e0894e16992490fbc1fe8cb56b99877b8864e856948f4adbb1fc29e3b": {
-      "call": {
-        "closed": [
-          "reads"
-        ],
-        "proposedClosures": [
-          "reads"
-        ],
-        "reads": []
-      },
-      "shape": "plain"
+    "summary-5ba387bcbb7c77d5164617c84e3b4e6802c1c5dbde3f3e7fed0bc1db4aa66a4b": {
+      "call": {},
+      "shape": "unknown"
     }
   }
 }

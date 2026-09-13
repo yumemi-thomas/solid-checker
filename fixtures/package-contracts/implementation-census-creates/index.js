@@ -1310,3 +1310,72 @@ export function userIndexRead() {
 export function arrayLikeIndexRead() {
   return arrayLikeTable[0];
 }
+
+// ADR 0095: `new C(…)` runs C's constructor exactly as a call runs a function
+// body. The census resolves a class callee in both spellings — `class C {}` and
+// the bundler's `const C = class {}` — and refuses every part of a construction
+// it cannot see.
+
+class PlainBox {
+  constructor(value) {
+    this.stored = value;
+  }
+}
+
+const CompiledBox = class {
+  constructor(value) {
+    this.stored = value;
+  }
+};
+
+class DerivedBox extends PlainBox {
+  constructor(value) {
+    super(value);
+  }
+}
+
+class InitializedBox {
+  cache = makeCache();
+  constructor() {}
+}
+
+class ImplicitBox {
+  constructor() {}
+}
+
+function makeCache() {
+  return untypedRegistry;
+}
+
+// A class this module declares, with no heritage clause and no initialized
+// field. **Certifies.**
+export function constructOwnClass(value) {
+  return new PlainBox(value);
+}
+
+// The same construction as every bundler emits it. **Certifies.**
+export function constructCompiledClass(value) {
+  return new CompiledBox(value);
+}
+
+// `extends` runs another constructor, and which one is a separate claim — the
+// engine's for a built-in base, this module's for a local one. **Refuses.**
+export function constructDerivedClass(value) {
+  return new DerivedBox(value);
+}
+
+// A field initializer runs at construction and is a node the demand does not
+// name, so censusing only the constructor would be silent about it.
+// **Refuses.**
+export function constructInitializedClass() {
+  return new InitializedBox();
+}
+
+// The vacuity control: a class whose constructor body is empty still has to be
+// *reached* for the two certifying cases above to mean anything. If the census
+// stopped resolving class callees entirely, this would certify for the wrong
+// reason — so it certifies here, and the two refusals above are what separate
+// "resolved and censused" from "never looked". **Certifies.**
+export function constructImplicitClass() {
+  return new ImplicitBox();
+}

@@ -376,7 +376,9 @@ describe("the checked-in fixture recipe corpora", () => {
     ]);
     assert.equal(
       manifest.recipes.length - silent.length,
-      14,
+      // Fourteen, plus `web-with-meta.mjs` (the `@solidjs/web` `returns`
+      // recipe that landed with the with-meta work).
+      15,
       "the recipes that can still contradict something"
     );
   });

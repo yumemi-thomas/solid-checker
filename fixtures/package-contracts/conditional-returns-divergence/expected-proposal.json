@@ -2,7 +2,7 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:a47c3553794998ed3e81391dac00668d5a7257385cd8645c8dad82d2d2e20aad",
+  "semanticDigest": "sha256:7655d764116e542aa8737984e80a2bcac5028b280f708a619826cdf1be52c9d8",
   "closureCandidates": [
     {
       "claimId": "claim:v1:sha256:056070bbfec863c007d6d435ce16707630bf2daa1bb1aa14241f5076f4c91364",
@@ -857,25 +857,6 @@
       }
     },
     {
-      "claimId": "claim:v1:sha256:bef495c2ee94ce94f0893d61513aa9dfa1be84a212ac01cf08e0a5baa1243945",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./node.js",
-        "runtimeDigest": "sha256:fcefb04a3038e2295d73b31ec50c3274fc25608fd5c31a05ca5e9c14f24dc444",
-        "declarationsPath": "./node.js",
-        "declarationsDigest": "sha256:fcefb04a3038e2295d73b31ec50c3274fc25608fd5c31a05ca5e9c14f24dc444",
-        "closureDigest": "sha256:c1e358e47e5e016e555d536b3d54613d31932a296084d03190b7030ca92a9caa"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:ec597aad27a8e06a714b2bad83117c5bbf1807ed25b0b1edba4a3ff20a84a08a",
-        "export": "Show",
-        "path": {
-          "kind": "call",
-          "domain": "callbacks"
-        }
-      }
-    },
-    {
       "claimId": "claim:v1:sha256:c080d24bd67273a38897bd0b42079beca25c2d7440b72f9c5e3e830794d110d4",
       "artifact": {
         "entrypoint": ".",
@@ -1062,25 +1043,6 @@
         "export": "Show",
         "path": {
           "kind": "guard-partition"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:e4a3905c04ee75730fe5688b139d9a05f0edf5812aaf79559a09e7465a31b156",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./node.js",
-        "runtimeDigest": "sha256:fcefb04a3038e2295d73b31ec50c3274fc25608fd5c31a05ca5e9c14f24dc444",
-        "declarationsPath": "./node.js",
-        "declarationsDigest": "sha256:fcefb04a3038e2295d73b31ec50c3274fc25608fd5c31a05ca5e9c14f24dc444",
-        "closureDigest": "sha256:c1e358e47e5e016e555d536b3d54613d31932a296084d03190b7030ca92a9caa"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:ec597aad27a8e06a714b2bad83117c5bbf1807ed25b0b1edba4a3ff20a84a08a",
-        "export": "Steady",
-        "path": {
-          "kind": "call",
-          "domain": "callbacks"
         }
       }
     },

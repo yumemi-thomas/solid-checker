@@ -16,11 +16,11 @@
             "derive": "summary-95209a37686d558e67e17cf855738ffb7201c7069bd7b6a8b806b1d3373ca13f",
             "makeDerivedOptimistic": "summary-95209a37686d558e67e17cf855738ffb7201c7069bd7b6a8b806b1d3373ca13f",
             "makeDerivedSignal": "summary-95209a37686d558e67e17cf855738ffb7201c7069bd7b6a8b806b1d3373ca13f",
-            "makeNamedStore": "summary-65c5999d1b92c4f484740ff9c8a1b381495ea34fe8b56b0d96f05ad2280dc428",
-            "makeOptimistic": "summary-981d8b51da305c18943723acc5cbdf5965ee0d81fedc78d35f773b74e153dd7a",
-            "makeOptimisticStore": "summary-65c5999d1b92c4f484740ff9c8a1b381495ea34fe8b56b0d96f05ad2280dc428",
-            "makeSignal": "summary-981d8b51da305c18943723acc5cbdf5965ee0d81fedc78d35f773b74e153dd7a",
-            "makeStore": "summary-65c5999d1b92c4f484740ff9c8a1b381495ea34fe8b56b0d96f05ad2280dc428",
+            "makeNamedStore": "summary-317184f7f1c0440a6325527d02af7bb585dfd2c34d4deb23c3616de41e85b6f4",
+            "makeOptimistic": "summary-526a54c4a1da4ec69531474fbf10d7b9bbd910dc7619c95c50a759d6146f5a92",
+            "makeOptimisticStore": "summary-317184f7f1c0440a6325527d02af7bb585dfd2c34d4deb23c3616de41e85b6f4",
+            "makeSignal": "summary-526a54c4a1da4ec69531474fbf10d7b9bbd910dc7619c95c50a759d6146f5a92",
+            "makeStore": "summary-317184f7f1c0440a6325527d02af7bb585dfd2c34d4deb23c3616de41e85b6f4",
             "projectOptimisticStore": "summary-f783919e54c73be75ea17b850e4e826e0475e812f43c050756871188e09b9923",
             "projectStore": "summary-f783919e54c73be75ea17b850e4e826e0475e812f43c050756871188e09b9923"
           },
@@ -46,9 +46,11 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-65c5999d1b92c4f484740ff9c8a1b381495ea34fe8b56b0d96f05ad2280dc428": {
+    "summary-317184f7f1c0440a6325527d02af7bb585dfd2c34d4deb23c3616de41e85b6f4": {
       "call": {
+        "callbacks": [],
         "closed": [
+          "callbacks",
           "reads",
           "creates"
         ],
@@ -76,6 +78,51 @@
           }
         ],
         "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-526a54c4a1da4ec69531474fbf10d7b9bbd910dc7619c95c50a759d6146f5a92": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
           "reads",
           "creates"
         ],
@@ -120,47 +167,6 @@
               "event": "call"
             }
           },
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "reactive",
-              "role": "accessor"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "reads",
-          "creates"
-        ],
-        "reads": [],
-        "returns": [
-          "return"
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-981d8b51da305c18943723acc5cbdf5965ee0d81fedc78d35f773b74e153dd7a": {
-      "call": {
-        "closed": [
-          "reads",
-          "creates"
-        ],
-        "creates": [],
-        "operations": [
           {
             "at": {
               "event": "call",

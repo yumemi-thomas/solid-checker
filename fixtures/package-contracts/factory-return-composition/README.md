@@ -12,3 +12,8 @@ returned parameter, callable argument, reassigned alias and another importer
 of identical dependency artifact bytes. These are
 certification tests, not checker diagnostics or relaxed published typings.
 No dialect stub, generated contract or finding snapshot is installed here.
+
+Dependency-first acquisition also certifies the parent with an empty hand
+corpus, including a three-node graph. A wrong-return child census, deliberately
+contradicted observation, and incomplete child veto all refuse the parent;
+having acquired conditional evidence never replaces receipt discharge.

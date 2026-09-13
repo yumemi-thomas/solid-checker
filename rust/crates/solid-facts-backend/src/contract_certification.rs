@@ -1259,11 +1259,22 @@ pub(crate) fn withheld_weakening(
 ) -> Result<NormalizedContract, RecipeGatingError> {
     let mut artifact_cases = candidate.artifact_cases().to_vec();
     for closure in withheld {
-        let domain = match closure.domain.as_str() {
-            "creates" => ClaimDomain::Creates,
-            "returns" => ClaimDomain::Returns,
-            "reads" => ClaimDomain::Reads,
-            _ => {
+        // Derived from `ClaimDomain::PROPOSABLE` rather than restated. The
+        // doc comment above says the gated domains "are exactly
+        // `ClaimDomain::PROPOSABLE`", and a second hand-written list saying so
+        // is the dual-derivation hazard this repository names elsewhere: the
+        // next domain admitted to `PROPOSABLE` becomes proposable while this
+        // arm still refuses every withheld record naming it, so the whole
+        // certification fails with `UnknownDomain` rather than gating.
+        // Confirmed by admitting `Callbacks` locally on 2026-09-12: planning
+        // refused every candidate until this arm was derived. The refusal was
+        // loud, which is why this is a latent trap and not a live defect.
+        let domain = match ClaimDomain::PROPOSABLE
+            .into_iter()
+            .find(|domain| domain.wire_name() == closure.domain.as_str())
+        {
+            Some(domain) => domain,
+            None => {
                 return Err(RecipeGatingError::UnknownDomain {
                     artifact_case: closure.artifact_case.clone(),
                     export: closure.export.clone(),
@@ -12108,6 +12119,198 @@ export const value = phantom;
     }
 
     #[test]
+    fn authenticated_self_dependency_veto_certifies_generated_and_hand_recipes() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let fixture = repository_root().join("fixtures/package-contracts/self-package-rebinding");
+        let manifest = std::fs::read(fixture.join("package.json")).unwrap();
+        let runtime = std::fs::read(fixture.join("index.js")).unwrap();
+        let declarations = std::fs::read(fixture.join("index.d.ts")).unwrap();
+        // Keep the fixture's authenticated self-package edge, but give this
+        // artifact its own implementation so its creates census reaches the
+        // probe workspace instead of refusing an out-of-artifact reexport.
+        let forward = b"import { noop as underlying } from 'self-package-rebinding';\nexport function noop() {}\n".to_vec();
+        let forward_types = b"export declare function noop(): void;\n".to_vec();
+        let name = "self-package-rebinding";
+        let root = "/project/node_modules/self-package-rebinding";
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", &manifest),
+                ("package/index.js", &runtime),
+                ("package/index.d.ts", &declarations),
+                ("package/forward.js", &forward),
+                ("package/forward.d.ts", &forward_types),
+            ],
+        );
+        let base = try_plan_closing_for_test_package_from_importer(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &[(
+                "noop",
+                ("index.js", &runtime),
+                ("index.d.ts", &declarations),
+                root,
+            )],
+            &[],
+            &format!("{root}/forward.js"),
+            &[],
+            &|_| ValueShape::Callable,
+        )
+        .unwrap();
+        let mut request = base.import_request.clone();
+        request.specifier = format!("{name}/forward");
+        request.importer = "/project/src/app.ts".into();
+        let mut resolved = base.resolved_import.clone();
+        resolved.specifier = request.specifier.clone();
+        resolved.importer = request.importer.clone();
+        resolved.requested_entrypoint = "./forward".into();
+        resolved.runtime = resolved_file(root, "forward.js", &forward);
+        resolved.declarations = resolved_file(root, "forward.d.ts", &forward_types);
+        let binding = resolved.exports.get_mut("noop").unwrap();
+        binding.runtime.module = resolved.runtime.clone();
+        binding.declarations.module = resolved.declarations.clone();
+        let parsed: SnapshotPackageManifest = serde_json::from_slice(&manifest).unwrap();
+        for (axis, trace) in [
+            (ResolutionAxis::Runtime, &mut resolved.runtime_trace),
+            (
+                ResolutionAxis::Declarations,
+                &mut resolved.declaration_trace,
+            ),
+        ] {
+            *trace = resolve_snapshot_export(
+                &base.snapshot,
+                &parsed,
+                "./forward",
+                &BTreeSet::from(["import"]),
+                axis,
+            )
+            .unwrap()
+            .trace;
+        }
+        let mut resolution = base.verified_resolution.clone();
+        resolution.runtime_path = "forward.js".into();
+        resolution.declarations_path = "forward.d.ts".into();
+        resolved.closure = super::module_closure::replay_snapshot_closure(
+            &base.snapshot,
+            &resolution,
+            &[AcceptedDependencyEdge {
+                specifier: name.into(),
+                package_name: name.into(),
+                artifact_case: base.selected_artifact_case_id().into(),
+                accepted_contract_digest: base
+                    .demand_graph()
+                    .candidate_semantic_digest()
+                    .as_str()
+                    .into(),
+            }],
+        )
+        .unwrap();
+        assert_eq!(resolved.closure.dependencies.len(), 1);
+        assert_eq!(resolved.closure.dependencies[0].specifier, name);
+        let (package, mut case) = crate::artifact_resolution::proposal_identity(&resolved).unwrap();
+        let mut export = base.selected_candidate.artifact_cases()[0].exports["noop"].clone();
+        export.identity.entrypoint = case.entrypoint.clone();
+        export.identity.runtime.module = case.runtime.clone();
+        export.identity.declarations.module = case.declarations.clone();
+        export.call = CallSemantics::new(
+            CallClaims {
+                creates: KnowledgeSet::complete(vec![]),
+                ..CallClaims::default()
+            },
+            vec![],
+            vec![],
+            vec![],
+            GuardPartition::default(),
+        );
+        case.exports.insert("noop".into(), export);
+        let candidate = ContractProposal::new(package, vec![case])
+            .normalize()
+            .unwrap();
+        let integrity = base.snapshot.package_integrity();
+        let graph = plan_published_contract_graph(
+            PublishedGraphNodeRequest::new(
+                CertificationRequest::new(candidate, request, resolved),
+                archive.clone(),
+                graph_lock(name, "1.0.0", integrity),
+            ),
+            [PublishedGraphNodeRequest::new(
+                CertificationRequest::new(
+                    base.selected_candidate.clone(),
+                    base.import_request.clone(),
+                    base.resolved_import.clone(),
+                ),
+                archive,
+                graph_lock(name, "1.0.0", integrity),
+            )],
+        )
+        .unwrap();
+        let plan = graph.plan(graph.root_identity()).unwrap();
+        let schedule = plan.probe_gate_schedule().unwrap();
+        assert_eq!(schedule.gates().len(), 1);
+        let claim_id = schedule.gates()[0].semantic_claim_id();
+        let issuer =
+            ConfiguredReceiptIssuer::persistent_local("self-dependency-veto", [62; 32]).unwrap();
+        for hand_recipe in [false, true] {
+            let scratch = TracerScratch::new("self-dependency-veto");
+            let recipe_directory = scratch.path().join("probe-recipes");
+            std::fs::create_dir_all(&recipe_directory).unwrap();
+            std::fs::write(
+                recipe_directory.join("noop.mjs"),
+                "import { noop } from 'self-package-rebinding/forward';\nexport async function runProbeSession(_session, harness) {\n  harness.emit({ marker: 'call', kind: 'call', phase: 'enter' });\n  noop();\n  harness.emit({ marker: 'call', kind: 'call', phase: 'exit' });\n}\n",
+            )
+            .unwrap();
+            let entries = if hand_recipe {
+                vec![(claim_id, "noop.mjs")]
+            } else {
+                vec![]
+            };
+            let Some(probes) = tracer_configuration_from(
+                scratch.path(),
+                scratch.path(),
+                "self-dependency-veto",
+                &entries,
+            ) else {
+                return;
+            };
+            if hand_recipe {
+                let error =
+                    super::finalization::authenticate_probe_gates(plan, Some(&probes), &pin)
+                        .expect_err(
+                            "the self-package name alone cannot supply the missing sibling plan",
+                        );
+                assert!(
+                    error
+                        .to_string()
+                        .contains("has no exact planned runtime target"),
+                    "{error}"
+                );
+            }
+            let finalized = graph
+                .certify_value_only(&pin, &issuer, 1, Some(&probes))
+                .expect("the authenticated self-package copy serves either recipe source");
+            assert_eq!(finalized.nodes().len(), 2);
+            assert!(finalized.root().withheld_closures().is_empty());
+            assert!(creates_is_closed_in(
+                finalized.root().canonical_main(),
+                "noop"
+            ));
+            assert_ne!(
+                finalized.root().bindings().probe_gate_root,
+                super::finalization::empty_probe_gate_root(
+                    &plan.recipe_gated(None).unwrap().into_parts().0
+                )
+            );
+        }
+    }
+
+    #[test]
     fn captured_parameter_member_reads_stay_open_and_forged_direct_reads_refuse() {
         let Some(pin) = pinned_producer_for_test() else {
             return;
@@ -12347,6 +12550,41 @@ export const value = phantom;
                 );
             } else {
                 result.expect("the exact returned parameter does not need a concrete generic type");
+                let scratch = TracerScratch::new("synthesized-parameter-identity");
+                let Some(probes) = tracer_configuration_from(
+                    &fixture,
+                    scratch.path(),
+                    "synthesized-parameter-identity",
+                    &[],
+                ) else {
+                    return;
+                };
+                let finalized = tracer_certify(&plan, &pin, &probes)
+                    .expect("generic identity closures certify with an empty hand corpus");
+                let accepted = crate::contract_document::decode(finalized.canonical_main())
+                    .unwrap()
+                    .normalize()
+                    .unwrap();
+                for export in ["identity", "second"] {
+                    assert!(
+                        accepted.artifact_cases().iter().all(|case| {
+                            case.exports[export]
+                                .operation_claim(ClaimDomain::Returns)
+                                .is_some_and(|claim| claim.is_closed() && claim.items().len() == 1)
+                        }),
+                        "{export}: the receipt must carry the closed identity claim"
+                    );
+                    assert!(
+                        !finalized.withheld_closures().iter().any(|record| {
+                            record.export == export && record.domain == "returns"
+                        })
+                    );
+                }
+                assert_ne!(
+                    finalized.bindings().probe_gate_root,
+                    super::finalization::empty_probe_gate_root(&plan),
+                    "synthesis must run a real veto before closing the return domain"
+                );
             }
         }
     }
@@ -12480,7 +12718,7 @@ export const value = phantom;
         repository_root().join("fixtures/package-contracts/implementation-census-creates")
     }
 
-    const CENSUS_FIXTURE_EXPORTS: [&str; 113] = [
+    const CENSUS_FIXTURE_EXPORTS: [&str; 118] = [
         "accessorTableRead",
         "arrayLikeIndexRead",
         "arrayRestRead",
@@ -12501,6 +12739,11 @@ export const value = phantom;
         "coerceTwoParameters",
         "coerceWrittenHelperResult",
         "constBound",
+        "constructCompiledClass",
+        "constructDerivedClass",
+        "constructImplicitClass",
+        "constructInitializedClass",
+        "constructOwnClass",
         "cycle",
         "declaredMemberCoercion",
         "deep",
@@ -13403,9 +13646,16 @@ export const value = phantom;
         // withdraws the domain. The pair that shows the withdrawal working is
         // `implementation-census-reads`' two entrypoints.
         assert_eq!(candidates_for(ClaimDomain::Reads), RETURNS_FIXTURE_EXPORTS);
-        // 4 returns + 9 creates + 9 reads. Each proposed closure schedules its
-        // own mandatory contradiction veto.
-        assert_eq!(plan.probe_gate_schedule().unwrap().gates().len(), 22);
+        // 4 returns + 9 creates + 9 reads, plus the `callbacks` candidates the
+        // shared walk proposes for the exports that reach a 1.x primitive
+        // (eight of the nine since the 2026-09-12 audit). Each proposed
+        // closure schedules its own mandatory contradiction veto.
+        let callbacks_candidates = candidates_for(ClaimDomain::Callbacks).len();
+        assert_eq!(callbacks_candidates, 8);
+        assert_eq!(
+            plan.probe_gate_schedule().unwrap().gates().len(),
+            4 + 9 + 9 + callbacks_candidates
+        );
     }
 
     /// The sibling package `primitive-consumer/`, whose one export calls a real
@@ -14086,6 +14336,11 @@ export const value = phantom;
             "coerceTwoParameters",
             "coerceWrittenHelperResult",
             "constBound",
+            "constructCompiledClass",
+            "constructDerivedClass",
+            "constructImplicitClass",
+            "constructInitializedClass",
+            "constructOwnClass",
             "cycle",
             "declaredMemberCoercion",
             "deep",
@@ -14201,10 +14456,25 @@ export const value = phantom;
             .collect::<Vec<_>>();
         assert_eq!(returns_candidates, CENSUS_FIXTURE_VALUELESS_EXPORTS);
         // One mandatory contradiction veto per candidate, and one
-        // `DomainExhaustiveness` demand: the census is now reachable.
+        // `DomainExhaustiveness` demand: the census is now reachable. The
+        // `callbacks` candidates share the `creates` walk, so an export whose
+        // walk reaches a 1.x primitive proposes both since the 2026-09-12 audit
+        // lifted `dialect-silent` on eleven spellings; count them rather than
+        // pinning a sum that would restate the audit's reach.
+        let callbacks = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Callbacks));
+        let callbacks_candidates = plan
+            .candidates
+            .closure_candidates()
+            .iter()
+            .filter(|candidate| candidate.path == callbacks)
+            .count();
+        assert!(
+            callbacks_candidates > 0,
+            "the walk proposes callbacks closures too"
+        );
         assert_eq!(
             plan.probe_gate_schedule().unwrap().gates().len(),
-            proposing.len() + returns_candidates.len()
+            proposing.len() + returns_candidates.len() + callbacks_candidates
         );
         for export in proposing {
             assert_eq!(creates_demand_ids(&plan, export).len(), 1, "{export}");
@@ -14215,11 +14485,13 @@ export const value = phantom;
         let gated = plan.recipe_gated(None).expect("gating without a corpus");
         assert_eq!(
             gated.withheld().len(),
-            proposing.len() + returns_candidates.len()
+            proposing.len() + returns_candidates.len() + callbacks_candidates
         );
         for record in gated.withheld() {
             assert!(
-                record.domain == "creates" || record.domain == "returns",
+                record.domain == "creates"
+                    || record.domain == "returns"
+                    || record.domain == "callbacks",
                 "{}",
                 record.domain
             );
@@ -14371,7 +14643,7 @@ export const value = phantom;
 
     /// The census fixture's generated `creates` candidates (its function
     /// exports except `unresolved` and `iife`, whose walks decline).
-    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 99] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CANDIDATES: [&str; 104] = [
         "accessorTableRead",
         "arrayLikeIndexRead",
         "arrayRestRead",
@@ -14392,6 +14664,11 @@ export const value = phantom;
         "coerceTwoParameters",
         "coerceWrittenHelperResult",
         "constBound",
+        "constructCompiledClass",
+        "constructDerivedClass",
+        "constructImplicitClass",
+        "constructInitializedClass",
+        "constructOwnClass",
         "cycle",
         "declaredMemberCoercion",
         "deep",
@@ -14511,7 +14788,7 @@ export const value = phantom;
     /// `omittedBoxScale` closes through an explicit `never` premise in the
     /// first leaf call, while the explicit `unknown` and `any` controls keep
     /// their leaf coercions and are refused.
-    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 48] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_CLOSED: [&str; 51] = [
         "chainCallbacks",
         "coerceBoundHelperResult",
         "coerceConditionalHelperResult",
@@ -14519,6 +14796,9 @@ export const value = phantom;
         "coerceOneParameterTwice",
         "coerceTwoParameters",
         "constBound",
+        "constructCompiledClass",
+        "constructImplicitClass",
+        "constructOwnClass",
         "cycle",
         "declaredMemberCoercion",
         "defaultedFromParameter",
@@ -14561,7 +14841,7 @@ export const value = phantom;
         "writtenJoin",
         "writtenParameterOwnResult",
     ];
-    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 58] = [
+    const CENSUS_FIXTURE_GENERATED_CREATES_WITHHELD: [(&str, &str); 60] = [
         ("accessorTableRead", "census"),
         ("arrayLikeIndexRead", "census"),
         ("arrayRestRead", "census"),
@@ -14575,6 +14855,8 @@ export const value = phantom;
         ("coerceParameterAndModuleValue", "census"),
         ("coerceTwoModuleValues", "census"),
         ("coerceWrittenHelperResult", "census"),
+        ("constructDerivedClass", "census"),
+        ("constructInitializedClass", "census"),
         ("deep", "census"),
         ("defaultedFromDefaulted", "census"),
         ("defaultedFromModuleValue", "census"),
@@ -16073,6 +16355,11 @@ export const value = phantom;
         let bytes = |file: &str| std::fs::read(fixture.join(file)).unwrap();
         for scenario in [
             "closed",
+            "synthesized",
+            "synthesized-chain",
+            "synthesized-census-refused",
+            "contradicted",
+            "incomplete",
             "open",
             "unrun-veto",
             "second",
@@ -16082,6 +16369,8 @@ export const value = phantom;
             "other-importer",
         ] {
             let leaf_runtime = match scenario {
+                "synthesized-chain" => b"import { value as seed } from 'seed-package'; export function value(input, other) { return input; }".to_vec(),
+                "synthesized-census-refused" => b"export function value(input, other) { return other; }".to_vec(),
                 "second" => b"export function value(input, other) { return other; }".to_vec(),
                 "other-export" => b"export function value(input, other) { return input; } export function other(input) { return input; }".to_vec(),
                 _ => bytes("leaf.js"),
@@ -16098,6 +16387,41 @@ export const value = phantom;
                 "other-export" => b"import { other as factory } from 'leaf-package'; const value = factory({}); export { value };".to_vec(),
                 _ => bytes("root.js"),
             };
+            let mut dependencies = Vec::new();
+            let mut leaf_edges = Vec::new();
+            if scenario == "synthesized-chain" {
+                let (seed, archive, integrity) = synthetic_graph_certification_request_shaped(
+                    "seed-package",
+                    "1.0.0",
+                    "/project/node_modules/root-package/node_modules/leaf-package/node_modules/seed-package",
+                    "/project/node_modules/root-package/node_modules/leaf-package/dist/index.js",
+                    b"export function value() {}",
+                    b"export declare function value(): void;",
+                    vec![],
+                    ValueShape::Callable,
+                    CallClaims::default(),
+                );
+                let seed_plan = plan_certification(
+                    seed.clone(),
+                    UntrustedArtifactEnvelope::Published(archive.clone()),
+                )
+                .unwrap();
+                leaf_edges.push(AcceptedDependencyEdge {
+                    specifier: "seed-package".into(),
+                    package_name: "seed-package".into(),
+                    artifact_case: seed_plan.selected_artifact_case_id().into(),
+                    accepted_contract_digest: seed_plan
+                        .demand_graph()
+                        .candidate_semantic_digest()
+                        .as_str()
+                        .into(),
+                });
+                dependencies.push(PublishedGraphNodeRequest::new(
+                    seed,
+                    archive,
+                    graph_lock("seed-package", "1.0.0", &integrity),
+                ));
+            }
             let (mut leaf, leaf_archive, leaf_integrity) =
                 synthetic_graph_certification_request_shaped(
                     "leaf-package",
@@ -16110,7 +16434,7 @@ export const value = phantom;
                     },
                     &leaf_runtime,
                     &leaf_types,
-                    vec![],
+                    leaf_edges,
                     ValueShape::Callable,
                     CallClaims::default(),
                 );
@@ -16211,44 +16535,78 @@ export const value = phantom;
                 ValueShape::Plain,
                 CallClaims::default(),
             );
+            let leaf_only_graph = (scenario == "synthesized").then(|| {
+                plan_published_contract_graph(
+                    PublishedGraphNodeRequest::new(
+                        leaf.clone(),
+                        leaf_archive.clone(),
+                        graph_lock("leaf-package", "2.0.0", &leaf_integrity),
+                    ),
+                    [],
+                )
+                .unwrap()
+            });
+            dependencies.push(PublishedGraphNodeRequest::new(
+                leaf,
+                leaf_archive,
+                graph_lock("leaf-package", "2.0.0", &leaf_integrity),
+            ));
             let graph = plan_published_contract_graph(
                 PublishedGraphNodeRequest::new(
                     root,
                     root_archive,
                     graph_lock("root-package", "1.0.0", &root_integrity),
                 ),
-                [PublishedGraphNodeRequest::new(
-                    leaf,
-                    leaf_archive,
-                    graph_lock("leaf-package", "2.0.0", &leaf_integrity),
-                )],
+                dependencies,
             )
             .unwrap();
             let scratch = TracerScratch::new("factory-return");
-            let Some(probes) = tracer_configuration_from(
-                &fixture,
-                scratch.path(),
-                "factory-return",
-                &[(
+            let recipes = if scenario.starts_with("synthesized") {
+                vec![]
+            } else {
+                vec![(
                     claim.as_str(),
-                    if scenario == "second" {
-                        "identity-second.mjs"
-                    } else {
-                        "identity.mjs"
+                    match scenario {
+                        "second" => "identity-second.mjs",
+                        "contradicted" => "contradicted.mjs",
+                        "incomplete" => "incomplete.mjs",
+                        _ => "identity.mjs",
                     },
-                )],
-            ) else {
+                )]
+            };
+            let Some(probes) =
+                tracer_configuration_from(&fixture, scratch.path(), "factory-return", &recipes)
+            else {
                 return;
             };
             let issuer =
                 ConfiguredReceiptIssuer::persistent_local("factory-return", [54; 32]).unwrap();
+            if let Some(leaf_only_graph) = leaf_only_graph {
+                let finalized = leaf_only_graph
+                    .certify_value_only(&pin, &issuer, 1, Some(&probes))
+                    .expect("a one-node graph synthesizes its identity veto before finalization");
+                let accepted = crate::contract_document::decode(finalized.root().canonical_main())
+                    .unwrap()
+                    .normalize()
+                    .unwrap();
+                assert!(
+                    accepted.artifact_cases()[0].exports["value"]
+                        .operation_claim(ClaimDomain::Returns)
+                        .is_some_and(|claim| claim.is_closed() && claim.items().len() == 1)
+                );
+                assert!(finalized.root().withheld_closures().is_empty());
+                assert_ne!(
+                    finalized.root().bindings().probe_gate_root,
+                    super::finalization::empty_probe_gate_root(&leaf_plan)
+                );
+            }
             let result = graph.certify_value_only(
                 &pin,
                 &issuer,
                 1,
                 (scenario != "unrun-veto").then_some(&probes),
             );
-            if scenario == "closed" {
+            if matches!(scenario, "closed" | "synthesized" | "synthesized-chain") {
                 let finalized = result
                     .unwrap_or_else(|error| panic!("factory identity must certify: {error:?}"));
                 assert!(finalized.root().withheld_closures().is_empty());
@@ -16261,11 +16619,39 @@ export const value = phantom;
                     accepted.artifact_cases()[0].exports["value"].shape,
                     ValueShape::Plain
                 );
+                let child = finalized
+                    .nodes()
+                    .iter()
+                    .find(|node| node.identity().package_name == "leaf-package")
+                    .unwrap()
+                    .finalized();
+                assert_ne!(
+                    child.bindings().probe_gate_root,
+                    super::finalization::empty_probe_gate_root(&leaf_plan)
+                );
+                if scenario == "synthesized-chain" {
+                    assert_eq!(finalized.nodes().len(), 3);
+                }
             } else {
                 assert!(
                     result.is_err(),
                     "unsupported factory result certified: {scenario}"
                 );
+                if scenario == "contradicted" {
+                    assert!(
+                        matches!(
+                            result.as_ref().err().unwrap(),
+                            super::PublishedGraphCertificationError::FinalizationAtNode {
+                                source: super::Policy2FinalizationError::Probe(
+                                    super::ProbeGateError::Contradiction { .. }
+                                ),
+                                ..
+                            }
+                        ),
+                        "the child observation must reach the veto: {:?}",
+                        result.as_ref().err().unwrap()
+                    );
+                }
                 if scenario == "second" {
                     assert!(
                         format!("{:?}", result.as_ref().err().unwrap())

@@ -13,7 +13,7 @@
             "sha256": "2b70b524370f2e43401a8d6941bd4f9f344c2fe781f8d54f267d8413dd2d0fe1"
           },
           "exports": {
-            "PREFIX": "summary-d0ecc97e0894e16992490fbc1fe8cb56b99877b8864e856948f4adbb1fc29e3b",
+            "PREFIX": "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5",
             "subscribe": "summary-af541cfd2e71ac60435cca0ac3f565ebfba5ee970831dd5b46df9a803f1c7fb5"
           },
           "resolution": {
@@ -38,6 +38,21 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
+    "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
+      },
+      "shape": "plain"
+    },
     "summary-af541cfd2e71ac60435cca0ac3f565ebfba5ee970831dd5b46df9a803f1c7fb5": {
       "call": {
         "closed": [
@@ -82,18 +97,6 @@
         ]
       },
       "shape": "callable"
-    },
-    "summary-d0ecc97e0894e16992490fbc1fe8cb56b99877b8864e856948f4adbb1fc29e3b": {
-      "call": {
-        "closed": [
-          "reads"
-        ],
-        "proposedClosures": [
-          "reads"
-        ],
-        "reads": []
-      },
-      "shape": "plain"
     }
   }
 }

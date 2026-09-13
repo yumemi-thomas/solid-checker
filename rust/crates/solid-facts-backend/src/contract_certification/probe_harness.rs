@@ -1360,7 +1360,7 @@ fn require_condition_neutral_unplanned_dependencies(
     for (name, dependency) in closure {
         // A graph dependency carries a plan, and the plan's own replay already
         // proved its case reproduces under this set.
-        if dependency.certified_entry.is_some() || dispositioned.contains(name.as_str()) {
+        if !dependency.certified_entries.is_empty() || dispositioned.contains(name.as_str()) {
             continue;
         }
         let snapshot = dependency.snapshot;
@@ -2891,17 +2891,20 @@ impl PrivateProbeWorkspace {
         let mut dependency_runtime_targets = BTreeMap::new();
         for (name, dependency) in dependencies {
             let target = modules_directory.join(&dependency.directory);
-            copy_snapshot_into(&target, dependency.snapshot)?;
-            if let Some(entry) = dependency.certified_entry {
-                let runtime = target.join(single_safe_relative_path(entry.runtime_path)?);
+            // The subject was already copied from this exact snapshot. A
+            // self-package edge resolves into that copy, not a second tree.
+            if target != package_directory {
+                copy_snapshot_into(&target, dependency.snapshot)?;
+            }
+            for (specifier, runtime_path) in &dependency.certified_entries {
+                let runtime = target.join(single_safe_relative_path(runtime_path)?);
                 if !runtime.is_file() {
                     return Err(ProbeHarnessError::Configuration(format!(
-                        "the certified entry of dependency {name:?} names {:?}, which its \
-                         authenticated copy does not carry",
-                        entry.runtime_path
+                        "the certified entry {specifier:?} of dependency {name:?} names \
+                         {runtime_path:?}, which its authenticated copy does not carry"
                     )));
                 }
-                dependency_runtime_targets.insert(entry.specifier.to_owned(), runtime);
+                dependency_runtime_targets.insert((*specifier).to_owned(), runtime);
             }
             dependency_roots.insert(name.clone(), target);
         }
@@ -3058,12 +3061,17 @@ impl PrivateProbeWorkspace {
         // placing a dependency inside the watched tree would fail here instead
         // of leaving it unwatched. Labels cannot collide: the closure is keyed
         // by package name, and two versions of one name were refused above.
-        watched.extend(dependency_roots.iter().map(|(name, root)| {
-            (
-                format!("private-dependency:{name}"),
-                WatchedInput::Contents(root.clone()),
-            )
-        }));
+        watched.extend(
+            dependency_roots
+                .iter()
+                .filter(|(_, root)| **root != package_directory)
+                .map(|(name, root)| {
+                    (
+                        format!("private-dependency:{name}"),
+                        WatchedInput::Contents(root.clone()),
+                    )
+                }),
+        );
         // Every location outside the private tree a bare specifier could reach.
         // `refuse_resolvable_bare_specifier_sources` proved each absent a
         // moment ago, so each is recorded absent and one appearing mid-run is a
@@ -3097,7 +3105,9 @@ impl PrivateProbeWorkspace {
         // `.jsx` in the first place.
         let mut jsx_free_modules = jsx_free_modules_of(&package_directory, &plan.snapshot);
         for (name, dependency) in dependencies {
-            if let Some(root) = dependency_roots.get(name) {
+            if let Some(root) = dependency_roots.get(name)
+                && *root != package_directory
+            {
                 jsx_free_modules.extend(jsx_free_modules_of(root, dependency.snapshot));
             }
         }
@@ -4297,12 +4307,13 @@ struct AuthenticatedDependency<'a> {
     /// is a different one.
     directory: PathBuf,
     snapshot: &'a super::ArtifactSnapshot,
-    /// Present only for a dependency this transaction *certified* — a
-    /// `graph_dependencies` entry, which is a full plan of its own. A
+    /// Exact runtime targets by specifier, from the subject's own plan and
+    /// every independently planned graph dependency. Package-name deduplication
+    /// must retain sibling entrypoints, and conflicting targets refuse. A
     /// declaration-only `certification_sources` snapshot has none, and
     /// deliberately: the census bound no runtime case for it, so there is no
     /// answer to compare a resolution against.
-    certified_entry: Option<CertifiedDependencyEntry<'a>>,
+    certified_entries: BTreeMap<&'a str, &'a str>,
 }
 
 /// What a composed dependency's own certification selected.
@@ -4345,36 +4356,39 @@ fn authenticated_dependency_closure<'a>(
     graph_dependencies: &[&'a CertificationPlan],
 ) -> Result<BTreeMap<String, AuthenticatedDependency<'a>>, ProbeHarnessError> {
     let mut closure = BTreeMap::<String, AuthenticatedDependency<'_>>::new();
-    // Each snapshot travels with the certified entry it has, if any. Only a
-    // graph dependency's *own* package carries one: its plan resolved its own
-    // import request to an exact runtime file. Its declaration-only sources,
-    // and the analyzed plan's, carry none.
-    let snapshots = plan
-        .certification_sources
-        .iter()
-        .map(|source| (&source.snapshot, None))
-        .chain(graph_dependencies.iter().flat_map(|dependency| {
-            std::iter::once((
-                &dependency.snapshot,
-                Some(CertifiedDependencyEntry {
-                    specifier: dependency.import_request.specifier.as_str(),
-                    runtime_path: dependency.verified_resolution.runtime_path(),
-                }),
-            ))
-            .chain(
-                dependency
-                    .certification_sources
-                    .iter()
-                    .map(|source| (&source.snapshot, None)),
-            )
-        }));
+    // Include the subject: its authenticated copy also answers self-package
+    // imports. Source-only snapshots carry no planned runtime target.
+    let snapshots = std::iter::once((
+        &plan.snapshot,
+        Some(CertifiedDependencyEntry {
+            specifier: plan.import_request.specifier.as_str(),
+            runtime_path: plan.verified_resolution.runtime_path(),
+        }),
+    ))
+    .chain(
+        plan.certification_sources
+            .iter()
+            .map(|source| (&source.snapshot, None)),
+    )
+    .chain(graph_dependencies.iter().flat_map(|dependency| {
+        std::iter::once((
+            &dependency.snapshot,
+            Some(CertifiedDependencyEntry {
+                specifier: dependency.import_request.specifier.as_str(),
+                runtime_path: dependency.verified_resolution.runtime_path(),
+            }),
+        ))
+        .chain(
+            dependency
+                .certification_sources
+                .iter()
+                .map(|source| (&source.snapshot, None)),
+        )
+    }));
     for (snapshot, certified_entry) in snapshots {
         let name = snapshot.package_name().to_owned();
         let directory = safe_package_directory(&name)?;
-        if name == plan.snapshot.package_name() {
-            if snapshot.root() == plan.snapshot.root() {
-                continue;
-            }
+        if name == plan.snapshot.package_name() && snapshot.root() != plan.snapshot.root() {
             return Err(ProbeHarnessError::AmbiguousDependencyVersion {
                 package_name: name.clone(),
                 versions: format!(
@@ -4385,7 +4399,7 @@ fn authenticated_dependency_closure<'a>(
             });
         }
         match closure.get(&name) {
-            Some(existing) if existing.snapshot.root() == snapshot.root() => continue,
+            Some(existing) if existing.snapshot.root() == snapshot.root() => {}
             Some(existing) => {
                 let mut versions = [
                     format!(
@@ -4403,14 +4417,25 @@ fn authenticated_dependency_closure<'a>(
             }
             None => {}
         }
-        closure.insert(
-            name,
-            AuthenticatedDependency {
+        let dependency = closure
+            .entry(name)
+            .or_insert_with(|| AuthenticatedDependency {
                 directory,
                 snapshot,
-                certified_entry,
-            },
-        );
+                certified_entries: BTreeMap::new(),
+            });
+        if let Some(entry) = certified_entry
+            && let Some(previous) = dependency
+                .certified_entries
+                .insert(entry.specifier, entry.runtime_path)
+            && previous != entry.runtime_path
+        {
+            return Err(ProbeHarnessError::ConditionMismatch(format!(
+                "the authenticated dependency specifier {:?} has conflicting planned runtime \
+                     targets {previous:?} and {:?} in one probe workspace",
+                entry.specifier, entry.runtime_path
+            )));
+        }
     }
     Ok(closure)
 }
@@ -4448,7 +4473,18 @@ fn require_authenticated_dependency_closure(
     closure: &BTreeMap<String, AuthenticatedDependency<'_>>,
 ) -> Result<(), ProbeHarnessError> {
     for edge in &plan.verified_closure.manifest().dependencies {
-        if closure.contains_key(&edge.package_name) {
+        if let Some(dependency) = closure.get(&edge.package_name) {
+            if edge.package_name == plan.snapshot.package_name()
+                && !dependency
+                    .certified_entries
+                    .contains_key(edge.specifier.as_str())
+            {
+                return Err(ProbeHarnessError::ConditionMismatch(format!(
+                    "self-package dependency {:?} has no exact planned runtime target in the \
+                     authenticated probe workspace",
+                    edge.specifier
+                )));
+            }
             continue;
         }
         return Err(ProbeHarnessError::UnauthenticatedDependency(Box::new(

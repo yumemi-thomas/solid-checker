@@ -16,16 +16,16 @@
             "arrayFrom": "summary-e8b2bd3ac108f20311bb8cfab1e4b61da87bc20c2d66b1a8fed865f852c5e761",
             "bigInt64ArrayFrom": "summary-e8b2bd3ac108f20311bb8cfab1e4b61da87bc20c2d66b1a8fed865f852c5e761",
             "bigUint64ArrayFrom": "summary-e8b2bd3ac108f20311bb8cfab1e4b61da87bc20c2d66b1a8fed865f852c5e761",
-            "constructArray": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "constructMap": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "constructSet": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "constructWeakMap": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "constructWeakSet": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "convertBigInt": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "convertBoolean": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "convertNumber": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "convertObject": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "convertSymbol": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "constructArray": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "constructMap": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "constructSet": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "constructWeakMap": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "constructWeakSet": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "convertBigInt": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "convertBoolean": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "convertNumber": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "convertObject": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "convertSymbol": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
             "float32ArrayFrom": "summary-e8b2bd3ac108f20311bb8cfab1e4b61da87bc20c2d66b1a8fed865f852c5e761",
             "float64ArrayFrom": "summary-e8b2bd3ac108f20311bb8cfab1e4b61da87bc20c2d66b1a8fed865f852c5e761",
             "getPosition": "summary-cf21752daa1d1ff8529313c3dc8d53e3af300195e6d4faa294066955c29d7c23",
@@ -40,8 +40,8 @@
             "retainArray": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
             "retainMap": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
             "retainSet": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "shadowedQueueMicrotask": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "shadowedString": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "shadowedQueueMicrotask": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "shadowedString": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
             "typedArrayFrom": "summary-e8b2bd3ac108f20311bb8cfab1e4b61da87bc20c2d66b1a8fed865f852c5e761",
             "uint16ArrayFrom": "summary-e8b2bd3ac108f20311bb8cfab1e4b61da87bc20c2d66b1a8fed865f852c5e761",
             "uint32ArrayFrom": "summary-e8b2bd3ac108f20311bb8cfab1e4b61da87bc20c2d66b1a8fed865f852c5e761",
@@ -106,6 +106,24 @@
           }
         ],
         "proposedClosures": [
+          "reads",
+          "creates"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
           "reads",
           "creates"
         ],

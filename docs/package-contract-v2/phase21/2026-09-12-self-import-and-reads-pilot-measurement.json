@@ -1,0 +1,445 @@
+{
+  "format": "solid-checker-diagnostic-measurement",
+  "authoritative": false,
+  "scope": "one package before/after and one development-only reads pilot; no corpus-wide measurement",
+  "selfPackageImports": {
+    "beforeExecutableSha256": "sha256:f3d03668daa585b5e0b7ecf09063edd3f7a5d471706f9885d352688385ed830a",
+    "afterExecutableSha256": "sha256:47f01b3f81b8613b432afdd2fdf713f545eb21e8f5ee0b7fd12dec4599e501c5",
+    "before": {
+      "auditPath": "/private/tmp/solid-self-import-9vvt27vi/returns-synthesis-offline-JEQHex/audit.json",
+      "auditSha256": "sha256:4bf87fc174d1356e2b27ec1c3130ec7c0b1f9ab499f8a883aa1d5e5f2955e1e5",
+      "status": "certified",
+      "stage": "catalog-publication",
+      "package": {
+        "name": "@tanstack/solid-store",
+        "version": "0.11.1"
+      },
+      "ordinaryAnalysis": {
+        "receiptAuthenticated": true,
+        "exactCaseSelected": true
+      },
+      "certifiedClosures": {
+        "cases": 5,
+        "count": 4,
+        "closedByDomain": {
+          "returns": 4
+        },
+        "closed": [
+          {
+            "artifactCase": "artifact-case:9918775469c9ec307de2499d83d1ea9a568138193f1cbb99471e5e45531727a4",
+            "closed": [
+              "returns"
+            ],
+            "export": "Match",
+            "node": {
+              "digest": "sha256:2c0a899caae7798e9ce1f15e0a89739638719d2701e79416a829e8b74ece515d",
+              "package": "solid-js",
+              "version": "1.9.14"
+            }
+          },
+          {
+            "artifactCase": "artifact-case:9918775469c9ec307de2499d83d1ea9a568138193f1cbb99471e5e45531727a4",
+            "closed": [
+              "returns"
+            ],
+            "export": "onCleanup",
+            "node": {
+              "digest": "sha256:2c0a899caae7798e9ce1f15e0a89739638719d2701e79416a829e8b74ece515d",
+              "package": "solid-js",
+              "version": "1.9.14"
+            }
+          },
+          {
+            "artifactCase": "artifact-case:9918775469c9ec307de2499d83d1ea9a568138193f1cbb99471e5e45531727a4",
+            "closed": [
+              "returns"
+            ],
+            "export": "Match",
+            "node": {
+              "digest": "sha256:78396b5a8683af96420746c4def78d89f31bc1f21142681d59146c7d4e020ce0",
+              "package": "solid-js",
+              "version": "1.9.14"
+            }
+          },
+          {
+            "artifactCase": "artifact-case:9918775469c9ec307de2499d83d1ea9a568138193f1cbb99471e5e45531727a4",
+            "closed": [
+              "returns"
+            ],
+            "export": "onCleanup",
+            "node": {
+              "digest": "sha256:78396b5a8683af96420746c4def78d89f31bc1f21142681d59146c7d4e020ce0",
+              "package": "solid-js",
+              "version": "1.9.14"
+            }
+          }
+        ]
+      },
+      "withheldByDomain": {
+        "returns": 1,
+        "reads": 9
+      },
+      "targetWithheld": [
+        {
+          "artifactCase": "artifact-case:cd70d4f002318ffe54a14339d52dc56b0e05b31c2c8f2a7ab6a5e9a5dcf1eb39",
+          "domain": "returns",
+          "export": "dynamicProperty",
+          "node": {
+            "digest": "sha256:7bb19aec52a2e2def370a79cf626cf5876a2ba3ce2b3ad05a37a6d20e1fefc73",
+            "package": "solid-js",
+            "version": "1.9.14"
+          },
+          "reason": "veto did not complete: gate sha256:00756d1650961453bc1ee1030d27d7ba6fda462229c5a1c81a9cfc61ceaddf8f (synthesized veto cannot run for this artifact case: probe workspace has no authenticated snapshot for dependency \"solid-js\" (package solid-js) of solid-js@1.9.14: this certification transaction authenticated no bytes for it, so the private workspace would carry a partial dependency closure)",
+          "semanticClaimId": "claim:v1:sha256:1589993ce8386943c23c3a1c4e4311927b14f397cd040422a6d92271ed54c4b0"
+        }
+      ]
+    },
+    "after": {
+      "auditPath": "/private/tmp/solid-self-import-9vvt27vi/returns-synthesis-offline-SWQbYQ/audit.json",
+      "auditSha256": "sha256:64085224a2df9b5b7fd73039b9de919d54183c0ea0c6c83d22e94bdebd6ba477",
+      "status": "certified",
+      "stage": "catalog-publication",
+      "package": {
+        "name": "@tanstack/solid-store",
+        "version": "0.11.1"
+      },
+      "ordinaryAnalysis": {
+        "receiptAuthenticated": true,
+        "exactCaseSelected": true
+      },
+      "certifiedClosures": {
+        "cases": 5,
+        "count": 5,
+        "closedByDomain": {
+          "returns": 5
+        },
+        "closed": [
+          {
+            "artifactCase": "artifact-case:9918775469c9ec307de2499d83d1ea9a568138193f1cbb99471e5e45531727a4",
+            "closed": [
+              "returns"
+            ],
+            "export": "Match",
+            "node": {
+              "digest": "sha256:2c0a899caae7798e9ce1f15e0a89739638719d2701e79416a829e8b74ece515d",
+              "package": "solid-js",
+              "version": "1.9.14"
+            }
+          },
+          {
+            "artifactCase": "artifact-case:9918775469c9ec307de2499d83d1ea9a568138193f1cbb99471e5e45531727a4",
+            "closed": [
+              "returns"
+            ],
+            "export": "onCleanup",
+            "node": {
+              "digest": "sha256:2c0a899caae7798e9ce1f15e0a89739638719d2701e79416a829e8b74ece515d",
+              "package": "solid-js",
+              "version": "1.9.14"
+            }
+          },
+          {
+            "artifactCase": "artifact-case:9918775469c9ec307de2499d83d1ea9a568138193f1cbb99471e5e45531727a4",
+            "closed": [
+              "returns"
+            ],
+            "export": "Match",
+            "node": {
+              "digest": "sha256:78396b5a8683af96420746c4def78d89f31bc1f21142681d59146c7d4e020ce0",
+              "package": "solid-js",
+              "version": "1.9.14"
+            }
+          },
+          {
+            "artifactCase": "artifact-case:9918775469c9ec307de2499d83d1ea9a568138193f1cbb99471e5e45531727a4",
+            "closed": [
+              "returns"
+            ],
+            "export": "onCleanup",
+            "node": {
+              "digest": "sha256:78396b5a8683af96420746c4def78d89f31bc1f21142681d59146c7d4e020ce0",
+              "package": "solid-js",
+              "version": "1.9.14"
+            }
+          },
+          {
+            "artifactCase": "artifact-case:cd70d4f002318ffe54a14339d52dc56b0e05b31c2c8f2a7ab6a5e9a5dcf1eb39",
+            "closed": [
+              "returns"
+            ],
+            "export": "dynamicProperty",
+            "node": {
+              "digest": "sha256:7bb19aec52a2e2def370a79cf626cf5876a2ba3ce2b3ad05a37a6d20e1fefc73",
+              "package": "solid-js",
+              "version": "1.9.14"
+            }
+          }
+        ]
+      },
+      "withheldByDomain": {
+        "reads": 9
+      },
+      "targetWithheld": []
+    }
+  },
+  "readsPilot": {
+    "conditions": [
+      "import",
+      "browser",
+      "development"
+    ],
+    "result": {
+      "auditPath": "/private/tmp/solid-reads-pilot-fvflxjti/returns-synthesis-offline-S7X19X/audit.json",
+      "auditSha256": "sha256:bb93c76123ab3660cb7489dc08e2dc8db480aa5abbb594511e4f23149a4135a8",
+      "status": "certified",
+      "stage": "catalog-publication",
+      "package": {
+        "name": "@solid-primitives/utils",
+        "version": "7.0.0-next.4"
+      },
+      "ordinaryAnalysis": {
+        "receiptAuthenticated": true,
+        "exactCaseSelected": true
+      },
+      "certifiedClosures": {
+        "cases": 1,
+        "count": 26,
+        "closedByDomain": {
+          "creates": 25,
+          "reads": 1,
+          "returns": 3
+        },
+        "closed": [
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "access"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "accessArray"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "accessWith"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates",
+              "returns"
+            ],
+            "export": "afterPaint"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "arrayEquals"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "asAccessor"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "asArray"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "chain"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "clamp"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "compare"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "contains"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "createIdGenerator"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "falseFn"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "filterNonNullable"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "returns"
+            ],
+            "export": "handleDiffArray"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "isNonNullable"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "isObject"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "json"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "reads",
+              "creates"
+            ],
+            "export": "noop"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "number"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "ofClass"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "pipe"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "safe"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "trueFn"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates",
+              "returns"
+            ],
+            "export": "withAccess"
+          },
+          {
+            "artifactCase": "artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2",
+            "closed": [
+              "creates"
+            ],
+            "export": "wrapSetter"
+          }
+        ]
+      },
+      "withheldByDomain": {
+        "reads": 44,
+        "creates": 6
+      },
+      "targetWithheld": []
+    },
+    "recipeSha256": "sha256:ac04c23ef87ecc16f86182ea7f6594c3112e6d61c72ba13c802420b553de3f73",
+    "recipeSource": "// Pilot only: exact utils noop, no caller callbacks or objects supplied.\nimport { noop } from \"@solid-primitives/utils\";\nimport { DEV, createRoot, createEffect, getObserver, flush } from \"@solidjs/signals\";\n\nexport function observe(subject, harness) {\n  if (typeof DEV?.getSources !== \"function\") throw new Error(\"audited development observer unavailable\");\n  let dispose;\n  let calls = 0;\n  createRoot(cleanup => {\n    dispose = cleanup;\n    createEffect(() => {\n      calls += 1;\n      harness.emit({ marker: \"call\", kind: \"call\", phase: \"enter\" });\n      subject();\n      const observer = getObserver();\n      if (!observer) throw new Error(\"missing tracking observer\");\n      if (DEV.getSources(observer).length > 0) {\n        harness.emit({ marker: \"read-operation\", kind: \"call\", phase: \"enter\" });\n      }\n      harness.emit({ marker: \"call\", kind: \"call\", phase: \"exit\" });\n    }, () => {});\n  });\n  try {\n    flush();\n    if (calls !== 1) throw new Error(\"expected one completed synchronous invocation\");\n  } finally {\n    dispose();\n    flush();\n  }\n}\n\nexport async function runProbeSession(_session, harness) {\n  observe(noop, harness);\n}\n",
+    "controlSource": "import { createSignal, untrack } from \"@solidjs/signals\";\nconst [privateSource] = createSignal(0);\nexport function trackedRead() { privateSource(); }\nexport function untrackedRead() { untrack(privateSource); }\n",
+    "controlAuthority": "three fresh Node processes, not private certification-worker runs",
+    "controls": [
+      {
+        "mode": "real-noop",
+        "contradictions": 0
+      },
+      {
+        "mode": "tracked-control",
+        "contradictions": 1
+      },
+      {
+        "mode": "untracked-control",
+        "contradictions": 0
+      }
+    ],
+    "runtimePackages": [
+      {
+        "name": "solid-js",
+        "version": "2.0.0-rc.3",
+        "manifestSha256": "sha256:e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b",
+        "developmentRuntimeSha256": "sha256:dfc362391cbc0b069cef8b8d0d72c99d34310231a76fd66ef615533424d3ac18"
+      },
+      {
+        "name": "@solidjs/web",
+        "version": "2.0.0-rc.3",
+        "manifestSha256": "sha256:ee9b514b90b06b679d2376c5b5a993c0391aa66ec744e453ec3e534babd30e8e",
+        "developmentRuntimeSha256": "sha256:d848d00341ac8195e191404ace7dd8b4c650f47befb0cfecac78ddcf01587851"
+      },
+      {
+        "name": "@solidjs/signals",
+        "version": "2.0.0-rc.3",
+        "manifestSha256": "sha256:22d27a9ebdc7b4fbfc65b9857bbea96ea60d3617697fd628b42b6e1253ffdb76",
+        "developmentRuntimeSha256": "sha256:cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79"
+      }
+    ]
+  }
+}

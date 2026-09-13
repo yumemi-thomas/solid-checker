@@ -17,7 +17,7 @@
             "computedRoot": "summary-c792da561a3e511d210f87ee39f8733cf215844d7926a5b8bc1bf525be5ae97e",
             "disagreeingPaths": "summary-c325818cc2036acd020cceb47adde29d4d17bce6701e871b268dbf3ebecd5191",
             "oneSegment": "summary-482d3b4e01fa58e8cd68c3b1eb7d895544bc7f1c9c95d4cd9f8a6a7e46c46188",
-            "readModuleLocal": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+            "readModuleLocal": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
             "threeSegments": "summary-e741f468739ed91f8bd455f0bff6eb3303225ddbf572316dbf2bc3b3fbef301b",
             "twoSegments": "summary-a1d1ac830dc137d22208787a2ab54de916d9b1b4690cd5286be32669381c7ad9"
           },
@@ -85,6 +85,24 @@
         "reads": [
           "read-0"
         ]
+      },
+      "shape": "callable"
+    },
+    "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "reads": []
       },
       "shape": "callable"
     },
@@ -259,21 +277,6 @@
         "reads": [
           "read-0"
         ]
-      },
-      "shape": "callable"
-    },
-    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
-      "call": {
-        "closed": [
-          "reads",
-          "creates"
-        ],
-        "creates": [],
-        "proposedClosures": [
-          "reads",
-          "creates"
-        ],
-        "reads": []
       },
       "shape": "callable"
     },

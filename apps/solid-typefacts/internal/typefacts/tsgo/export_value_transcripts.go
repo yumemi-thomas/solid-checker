@@ -438,7 +438,34 @@ func (p *project) localDeclarationImplementationTranscriptLocked(
 		transcript.OpenReasons = append(transcript.OpenReasons, "declarationOutsideSnapshot")
 		return transcript
 	}
+	var declared *ast.Node
 	matches := exactFunctionLikeDeclarationsAt(sourceFile, location)
+	if len(matches) == 0 {
+		// A class at the demanded location is a callee too: `new C(…)` runs a
+		// constructor body exactly as a call runs a function body, and a
+		// consumer that resolved the callee to a class has no other node to
+		// name. classConstructorAt either hands back that constructor or says
+		// which part of the construction this producer cannot see (protocol
+		// 55); every one of its reasons refuses here, and a consumer refuses on
+		// any nonempty openReasons whether or not it has seen the word.
+		if class := exactClassDeclarationAt(sourceFile, location); class != nil {
+			constructor, refusal := classConstructorAt(class)
+			if refusal != "" {
+				transcript.OpenReasons = append(transcript.OpenReasons, refusal)
+				return transcript
+			}
+			matches = []*ast.Node{constructor}
+			// The *declaration* this transcript is about stays the class: a
+			// consumer demanded `C`, and the identity it binds the answer to
+			// must be the thing it asked for. What the transcript *censuses* is
+			// the constructor, which is the code a construction runs. Reporting
+			// the constructor as the declaration would answer `"constructor"`
+			// to a query for `"C"`, which the session refuses outright — and
+			// correctly, since that check is what stops a producer describing
+			// some other node than the one demanded.
+			declared = class
+		}
+	}
 	if len(matches) == 0 {
 		transcript.OpenReasons = append(transcript.OpenReasons, "declarationNotExact")
 		return transcript
@@ -463,6 +490,15 @@ func (p *project) localDeclarationImplementationTranscriptLocked(
 			name = parent.Name()
 		}
 	}
+	if name == nil {
+		// A constructor has no name of its own, and the thing a consumer
+		// resolved to reach it was the class: `new C(…)` names `C`. So the
+		// class's own name identifies this transcript — its declaration for
+		// `class C {…}`, and the enclosing variable declaration's for the
+		// compiled `const C = class {…}`, which is the same indirection the
+		// arrow case above takes.
+		name = classNameForConstructor(implementation)
+	}
 	var target *ast.Symbol
 	if name != nil && ast.IsIdentifier(name) {
 		transcript.QueryName = name.Text()
@@ -481,7 +517,10 @@ func (p *project) localDeclarationImplementationTranscriptLocked(
 		return transcript
 	}
 	transcript.Target = p.idFor(target)
-	transcript.Declaration = p.resolvedDeclaration(nil, implementation, target)
+	if declared == nil {
+		declared = implementation
+	}
+	transcript.Declaration = p.resolvedDeclaration(nil, declared, target)
 	if transcript.Declaration == nil {
 		transcript.OpenReasons = append(transcript.OpenReasons, "declarationUnavailable")
 		return transcript
@@ -800,6 +839,7 @@ func (p *project) implementationCallCensusLocked(
 			}
 			call.Target, call.TargetName, call.TargetModule, call.Declaration =
 				p.implementationCallTargetLocked(node.Expression())
+			call.ImmutableCalleeAlias = p.immutableCalleeAliasLocked(node)
 			// ADR 0034: a `.call`/`.apply` on a default-library receiver states
 			// that receiver and the parameter its `this` argument is rooted at.
 			call.CallReceiver, call.ThisParameter =
@@ -1298,4 +1338,27 @@ func implementationCompletionForm(implementation *ast.Node) typefacts.Implementa
 	default:
 		return typefacts.CompletionPlain
 	}
+}
+
+// classNameForConstructor answers the identifier that names the class a
+// constructor belongs to, or nil when the constructor is not a class member or
+// the class is anonymous and unbound. An anonymous class expression that is not
+// assigned to a variable — `export default class {}`, or one passed straight to
+// a call — has no name to resolve a symbol through, and states none rather than
+// borrowing the enclosing declaration's.
+func classNameForConstructor(implementation *ast.Node) *ast.Node {
+	if implementation == nil || nodeKindName(implementation) != "Constructor" {
+		return nil
+	}
+	class := implementation.Parent
+	if class == nil || !(ast.IsClassDeclaration(class) || ast.IsClassExpression(class)) {
+		return nil
+	}
+	if name := class.Name(); name != nil {
+		return name
+	}
+	if parent := class.Parent; parent != nil && ast.IsVariableDeclaration(parent) {
+		return parent.Name()
+	}
+	return nil
 }

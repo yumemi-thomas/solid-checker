@@ -13,9 +13,9 @@
             "sha256": "4a2d9b19718366f42c1c1333594cce9146ad6224fc1f19e6255edcff4a68bac9"
           },
           "exports": {
-            "composesTheImportedTarget": "summary-32f61a051b133d54abcc7bb42f0343acd1b089e94b020fc680cce24ed82e24b2",
-            "composesTheLocalTarget": "summary-6705f37fb228ed34eb7ed979984b93126a1cb201c61cf7d014d763775e4a3945",
-            "readSignal": "summary-d19f5a1f55d9af75c02f24e19e666071c5655429456a962a33e1cc29e94484f9"
+            "composesTheImportedTarget": "summary-16275f1977dc9de869a7d368fd999df6a965546f3a9b3b2c884482661202855b",
+            "composesTheLocalTarget": "summary-0fbe5e828a0b3a0c8d2225fd186da2522cd658b6d6e09c2634a8c27de5eceb3c",
+            "readSignal": "summary-3dbd7b48ccdc2ba34232feab44d213a018d339ea0f4b24d4757ef000619a828e"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -39,55 +39,11 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-32f61a051b133d54abcc7bb42f0343acd1b089e94b020fc680cce24ed82e24b2": {
+    "summary-0fbe5e828a0b3a0c8d2225fd186da2522cd658b6d6e09c2634a8c27de5eceb3c": {
       "call": {
+        "callbacks": [],
         "closed": [
-          "reads",
-          "creates"
-        ],
-        "creates": [],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "composedFrom": {
-              "export": "otherReadSignal",
-              "operation": "read-0"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "read-0",
-            "inputs": [
-              {
-                "kind": "reactive",
-                "role": "accessor"
-              }
-            ],
-            "kind": "read",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "reads",
-          "creates"
-        ],
-        "reads": [
-          "read-0"
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-6705f37fb228ed34eb7ed979984b93126a1cb201c61cf7d014d763775e4a3945": {
-      "call": {
-        "closed": [
+          "callbacks",
           "reads",
           "creates"
         ],
@@ -122,6 +78,7 @@
           }
         ],
         "proposedClosures": [
+          "callbacks",
           "reads",
           "creates"
         ],
@@ -131,9 +88,60 @@
       },
       "shape": "callable"
     },
-    "summary-d19f5a1f55d9af75c02f24e19e666071c5655429456a962a33e1cc29e94484f9": {
+    "summary-16275f1977dc9de869a7d368fd999df6a965546f3a9b3b2c884482661202855b": {
       "call": {
+        "callbacks": [],
         "closed": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "composedFrom": {
+              "export": "otherReadSignal",
+              "operation": "read-0"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-3dbd7b48ccdc2ba34232feab44d213a018d339ea0f4b24d4757ef000619a828e": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
           "reads",
           "creates"
         ],
@@ -164,6 +172,7 @@
           }
         ],
         "proposedClosures": [
+          "callbacks",
           "reads",
           "creates"
         ],

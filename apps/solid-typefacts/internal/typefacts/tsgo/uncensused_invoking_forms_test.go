@@ -2785,3 +2785,217 @@ func TestEngineOwnedIndexReadRecordsNoForm(t *testing.T) {
 		}
 	}
 }
+
+const classConstructionSource = `export function makePlain(): unknown {
+	return new Plain(1);
+}
+
+class Plain {
+	stored: number;
+	#slot: number | undefined;
+	constructor(value: number) {
+		this.stored = value;
+	}
+}
+
+export function makeCompiled(): unknown {
+	return new Compiled(1);
+}
+
+const Compiled = class {
+	stored: number;
+	constructor(value: number) {
+		this.stored = value;
+	}
+};
+
+export function makeDerived(): unknown {
+	return new Derived(1);
+}
+
+class Base {
+	constructor(public readonly value: number) {}
+}
+
+class Derived extends Base {
+	constructor(value: number) {
+		super(value);
+	}
+}
+
+export function makeInitialized(): unknown {
+	return new Initialized();
+}
+
+class Initialized {
+	cache = new Map<string, number>();
+	constructor() {}
+}
+
+export function makeImplicit(): unknown {
+	return new Implicit();
+}
+
+class Implicit {
+	stored = 0;
+}
+
+export function makeComputed(): unknown {
+	return new Computed();
+}
+
+const key = "dynamic";
+
+class Computed {
+	[key]() {
+		return 1;
+	}
+	constructor() {}
+}
+
+export function makeStaticBlock(): unknown {
+	return new WithStaticBlock();
+}
+
+class WithStaticBlock {
+	static registry: number;
+	static {
+		WithStaticBlock.registry = 1;
+	}
+	constructor() {}
+}
+
+export function makeParameterProperty(): unknown {
+	return new ParameterProperty(1);
+}
+
+class ParameterProperty {
+	constructor(readonly value: number) {}
+}
+`
+
+// TestClassConstructionResolvesToItsConstructor pins § 79.2's gap and the gate
+// around it: `new C(…)` resolves to the constructor whose body it runs, in both
+// spellings, and every part of a construction this producer cannot see refuses
+// by name rather than being walked past.
+//
+// The refusals are the substance. A construction evaluates the heritage
+// clause's constructor, then every field initializer, then the constructor
+// body; a census that answered for the third while ignoring the first two would
+// be silent about code that runs, which is the failure mode this census exists
+// to prevent.
+func TestClassConstructionResolvesToItsConstructor(t *testing.T) {
+	analyzer, dir := markerProject(t, map[string]string{"classes.ts": classConstructionSource})
+	path := filepath.Join(dir, "classes.ts")
+
+	locate := func(needle string, length int) typefacts.Location {
+		start := strings.Index(classConstructionSource, needle)
+		if start < 0 {
+			t.Fatalf("fixture does not contain %q", needle)
+		}
+		return typefacts.Location{Path: path, StartByte: start, EndByte: start + length}
+	}
+	// The class node's own span: from its first keyword to its closing brace.
+	classAt := func(head string) typefacts.Location {
+		start := strings.Index(classConstructionSource, head)
+		if start < 0 {
+			t.Fatalf("fixture does not contain %q", head)
+		}
+		depth := 0
+		for i := start; i < len(classConstructionSource); i++ {
+			switch classConstructionSource[i] {
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if depth == 0 {
+					return typefacts.Location{Path: path, StartByte: start, EndByte: i + 1}
+				}
+			}
+		}
+		t.Fatalf("unterminated class at %q", head)
+		return typefacts.Location{}
+	}
+
+	for _, testCase := range []struct {
+		name    string
+		head    string
+		refusal string
+		why     string
+	}{
+		{
+			name: "Plain", head: "class Plain {",
+			why: "a class declaration with no heritage clause, no initialized field and an explicit constructor resolves to that constructor",
+		},
+		{
+			name: "Compiled", head: "class {\n\tstored: number;\n\tconstructor(value: number) {\n\t\tthis.stored = value;\n\t}\n}",
+			why: "and the compiled spelling `const C = class {…}` is the same construction — answering for one and not the other would be an accident of bundling",
+		},
+		{
+			name: "Derived", head: "class Derived extends Base {", refusal: classRefusalHeritageClause,
+			why: "`extends` runs another constructor — the engine's, this artifact's, or an expression's — and those are three different claims",
+		},
+		{
+			name: "Initialized", head: "class Initialized {", refusal: classRefusalFieldInitializer,
+			why: "`cache = new Map()` runs at construction and is a node the demand does not name; walking only the constructor would be silent about it",
+		},
+		{
+			name: "Implicit", head: "class Implicit {", refusal: classRefusalFieldInitializer,
+			why: "the field initializer is found before the missing constructor is, and either refusal is correct — this pins which one, so a later edit cannot silently reorder them",
+		},
+		{
+			name: "Computed", head: "class Computed {", refusal: classRefusalComputedMemberName,
+			why: "the key expression runs when the class is defined; ADR 0047 refuses it already",
+		},
+		{
+			name: "WithStaticBlock", head: "class WithStaticBlock {", refusal: classRefusalStaticBlock,
+			why: "a static block runs at class-definition time, which is module evaluation and a different question",
+		},
+		{
+			name: "ParameterProperty", head: "class ParameterProperty {", refusal: classRefusalParameterProperty,
+			why: "`constructor(readonly value)` assigns a field with no node of its own in the body, so a body census would not see the assignment",
+		},
+	} {
+		location := classAt(testCase.head)
+		answer, err := analyzer.ExportValueTranscripts(
+			context.Background(),
+			[]typefacts.ExportValueDemand{{
+				Location:                 locate("makePlain", len("makePlain")),
+				LocalDeclarationLocation: &location,
+			}},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		transcript := answer.Transcripts[0].LocalDeclaration
+		if transcript == nil {
+			t.Fatalf("%s: demand asked for a local declaration and got none", testCase.name)
+		}
+		if testCase.refusal == "" {
+			if len(transcript.OpenReasons) != 0 {
+				t.Fatalf("%s: open reasons %v, want none — %s", testCase.name, transcript.OpenReasons, testCase.why)
+			}
+			if transcript.Declaration == nil {
+				t.Fatalf("%s: no resolved declaration — %s", testCase.name, testCase.why)
+			}
+			// The resolved constructor must sit inside the demanded class, or
+			// the transcript would describe some other node entirely.
+			resolved := transcript.Declaration.Location
+			if resolved.Path != location.Path ||
+				resolved.StartByte < location.StartByte ||
+				resolved.EndByte > location.EndByte {
+				t.Fatalf(
+					"%s: resolved declaration %v is outside the demanded class %v",
+					testCase.name, resolved, location,
+				)
+			}
+			continue
+		}
+		if len(transcript.OpenReasons) != 1 || transcript.OpenReasons[0] != testCase.refusal {
+			t.Fatalf(
+				"%s: open reasons %v, want exactly [%s] — %s",
+				testCase.name, transcript.OpenReasons, testCase.refusal, testCase.why,
+			)
+		}
+	}
+}

@@ -40,6 +40,8 @@ mod factory_exports;
 pub(super) use factory_exports::FactoryReturnDependencyClaim;
 #[path = "graph_contexts.rs"]
 mod graph_contexts;
+#[path = "immutable_callee_alias.rs"]
+mod immutable_callee_alias;
 
 static EXECUTION_IMAGE_COUNTER: AtomicU64 = AtomicU64::new(1);
 static PRIVATE_PROJECT_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -3686,6 +3688,50 @@ fn verify_export_value_family(
                     // still missing here is a declaration that acquisition
                     // could not transcribe, and the census refuses rather
                     // than reading its absence as harmless.
+                    return Err(TypeFactsCertificationError::UnsupportedDemand {
+                        demand: proof.id.clone(),
+                        reason: format!(
+                            "implementation-census premise required: no implementation \
+                             transcript was acquired for the local declaration(s) {}",
+                            requested
+                                .iter()
+                                .map(|(location, premises)| format!(
+                                    "{}:{}..{} under {} premise(s)",
+                                    location.path,
+                                    location.start_byte,
+                                    location.end_byte,
+                                    premises.len()
+                                ))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
+                    });
+                }
+                sites.extend(census_sites);
+            } else if matches!(
+                &subject.path,
+                SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Callbacks))
+            ) {
+                // The same call walk the creates arm runs, read for the
+                // dispositions that arm excuses: a callee proven to be a
+                // caller-supplied callable is this export's invocation of it,
+                // which is this domain's item.
+                let (export, implementation) =
+                    require_export_implementation(plan, proof, transcript, &open)?;
+                require_census_decides_closure(
+                    proof,
+                    &subject.path,
+                    ClosureCensus::Implementation,
+                )?;
+                let (outcome, census_sites, requested) = census_callbacks_domain(
+                    plan,
+                    proof,
+                    export,
+                    transcript,
+                    implementation,
+                    census,
+                )?;
+                if outcome == CensusOutcome::NeedsTranscripts {
                     return Err(TypeFactsCertificationError::UnsupportedDemand {
                         demand: proof.id.clone(),
                         reason: format!(
@@ -8258,7 +8304,10 @@ fn require_census_decides_closure(
         (
             ClosureCensus::Implementation,
             SemanticClaimPath::Domain(ClaimPath::Call(
-                ClaimDomain::Creates | ClaimDomain::Returns | ClaimDomain::Reads,
+                ClaimDomain::Creates
+                | ClaimDomain::Returns
+                | ClaimDomain::Reads
+                | ClaimDomain::Callbacks,
             )),
         ) => Ok(()),
         (_, SemanticClaimPath::Domain(ClaimPath::Value { root, domain, .. })) => {
@@ -8278,8 +8327,9 @@ fn require_census_decides_closure(
         (ClosureCensus::Implementation, SemanticClaimPath::Domain(ClaimPath::Call(domain))) => {
             Err(unsupported(format!(
                 "implementation-census premise required: the implementation census decides the \
-                 creates, returns and reads call domains only; closing the {} call domain needs \
-                 its own census of every invoking form that reaches it, which does not exist yet",
+                 creates, returns, reads and callbacks call domains only; closing the {} call \
+                 domain needs its own census of every invoking form that reaches it, which does \
+                 not exist yet",
                 call_claim_domain_name(*domain)
             )))
         }
@@ -8425,6 +8475,37 @@ enum CensusDisposition {
 }
 
 impl CensusDisposition {
+    /// Whether this disposition ran code the **caller** supplied.
+    ///
+    /// The `callbacks` domain enumerates exactly this export's invocations of
+    /// caller-supplied callables, so a census that proposes `callbacks: []`
+    /// is contradicted by any one of them. `ParameterRooted` is the direct
+    /// case the disposition's own documentation already calls "a `callbacks`
+    /// item"; the accessor, iterable, element and coercion members run a
+    /// getter, a `Symbol.iterator`, a `Symbol.toPrimitive` or a
+    /// `Symbol.hasInstance` that reached this export on a caller-supplied
+    /// value, and that body is the caller's too.
+    ///
+    /// Deliberately the whole parameter-rooted family rather than the direct
+    /// call alone. Refusing a closure that would have been true costs a
+    /// candidate; certifying one that is false is the failure this project
+    /// exists to avoid, so the boundary is drawn on the conservative side and
+    /// a narrower reading needs its own review per member.
+    const fn runs_caller_supplied_code(self) -> bool {
+        matches!(
+            self,
+            Self::ParameterRooted
+                | Self::ParameterRootedAccessor
+                | Self::ParameterRootedAccessorWrite
+                | Self::ParameterRootedIterable
+                | Self::ParameterRootedElement
+                | Self::ParameterRootedCoercion
+                | Self::ParameterRootedHasInstance
+                | Self::ParameterOrOwnResultAccessor
+                | Self::ParameterOrOwnResultAccessorWrite
+        )
+    }
+
     const fn wire_name(self) -> &'static str {
         match self {
             Self::Unreachable => "unreachable",
@@ -8667,6 +8748,16 @@ type CensusPass = (
     Vec<(typefacts::Location, Vec<typefacts::ParameterPremise>)>,
 );
 
+/// A `CensusPass` plus the count of calls the walk dispositioned into the
+/// parameter-rooted family — the invocations of caller-supplied code that are
+/// the `callbacks` domain's items. `creates` ignores it; `callbacks` reads it
+/// as its enumeration.
+type CensusWalkPass = (
+    CensusOutcome,
+    Vec<String>,
+    Vec<(typefacts::Location, Vec<typefacts::ParameterPremise>)>,
+    usize,
+);
 /// Whether one census pass reached a verdict.
 ///
 /// `NeedsTranscripts` is the acquisition phase's signal, never a verdict: the
@@ -8715,6 +8806,34 @@ struct CensusRun<'a> {
     /// admissible only when it lies inside this frame, because that is the
     /// span whose calls are rows of the transcript under the walk.
     frame: Option<typefacts::Location>,
+    /// How many sites this walk dispositioned into the parameter-rooted
+    /// family — the invocations of caller-supplied code that are the
+    /// `callbacks` domain's items. Counted for every domain because the walk
+    /// is shared; only the callbacks census reads it.
+    caller_supplied_invocations: usize,
+}
+
+impl CensusRun<'_> {
+    /// Record one dispositioned site, counting it if it ran caller-supplied
+    /// code.
+    ///
+    /// Single-sourced deliberately. Calls and non-call invoking forms reach
+    /// this walk by **different paths** — the producer's call census records
+    /// `ast.IsCallExpression` and `ast.IsNewExpression` only, so a getter, an
+    /// iteration-protocol member, an `await`-`then` or a coercion arrives as an
+    /// uncensused invoking form instead (`semantic-model.md`, Decision
+    /// 2026-09-03). Counting at each `push` site independently is how the
+    /// callbacks census came to miss the form path: every one of those forms is
+    /// named by the `callbacks` domain's own definition, so missing them
+    /// certifies `callbacks: []` for an export that invokes a caller-supplied
+    /// getter. The site and the count now cannot disagree about what the walk
+    /// saw.
+    fn record(&mut self, disposition: CensusDisposition, site: String) {
+        if disposition.runs_caller_supplied_code() {
+            self.caller_supplied_invocations += 1;
+        }
+        self.sites.push(site);
+    }
 }
 
 /// One runtime source as the certifier reads it from the authenticated
@@ -8839,6 +8958,80 @@ fn census_span_contains(span: solid_facts::core::Span, start: u64, end: u64) -> 
 ///
 /// See `docs/adr/0008-implementation-census-for-creates.md` for the decision
 /// and for what still refuses.
+/// The shared call walk behind every implementation-census domain.
+///
+/// Extracted so `creates` and `callbacks` read one walk rather than two: the
+/// dispositions are identical and only their interpretation differs, and a
+/// second copy of this traversal is the dual-derivation hazard in the place it
+/// would do the most harm. The fourth element is
+/// `CensusRun::caller_supplied_invocations`, which `creates` ignores and
+/// `callbacks` reads as its enumeration.
+fn census_call_walk(
+    plan: &CertificationPlan,
+    refuse: &dyn Fn(String) -> TypeFactsCertificationError,
+    declared: &typefacts::ExportValueTranscript,
+    implementation: &typefacts::ExportImplementationTranscript,
+    evidence: CensusEvidence<'_>,
+) -> Result<CensusWalkPass, TypeFactsCertificationError> {
+    let mut run = CensusRun {
+        certified: &plan.snapshot,
+        plan: Some(plan),
+        evidence,
+        runtime_sources: certified_runtime_sources(plan),
+        visited: Vec::new(),
+        requested: Vec::new(),
+        sites: Vec::new(),
+        calls: 0,
+        deepest: 0,
+        sources: std::collections::BTreeMap::new(),
+        frame: None,
+        caller_supplied_invocations: 0,
+    };
+    // Seeded with the demanded export, so a helper calling back into it refuses
+    // as a cycle rather than running out of depth.
+    if let Some(identity) = implementation
+        .declaration
+        .as_ref()
+        .and_then(CensusDeclarationIdentity::of)
+    {
+        run.visited.push(identity);
+    }
+    // ADR 0038: the premise the root's form census was classified under, bound
+    // to the declared signature this same transaction samples the veto from,
+    // and recorded as a condition of the closure before any form is read.
+    census_root_premises(
+        &mut run,
+        implementation,
+        stated_call_signatures(declared).as_deref(),
+    )
+    .map_err(refuse)?;
+    let step = census_transcript(&mut run, implementation, 0, &[]).map_err(refuse)?;
+    let mut sites = std::mem::take(&mut run.sites);
+    let outcome = match step {
+        CensusStep::Decided => {
+            // One line for the whole census, and it is a *claim*: the producer
+            // classified every invoking form it walked in every transcript this
+            // census read, and none of them was a form the calls census does
+            // not record. A census that refused would never reach here.
+            sites.push("census-uncensused-forms:0".into());
+            sites.push(format!("census-total:{}:{}", run.calls, run.deepest));
+            CensusOutcome::Decided {
+                calls: run.calls,
+                depth: run.deepest,
+            }
+        }
+        CensusStep::NeedsTranscripts => CensusOutcome::NeedsTranscripts,
+    };
+    sites.sort();
+    sites.dedup();
+    Ok((
+        outcome,
+        sites,
+        run.requested,
+        run.caller_supplied_invocations,
+    ))
+}
+
 fn census_creates_domain(
     plan: &CertificationPlan,
     proof: &ScheduledProofDemand,
@@ -8984,57 +9177,9 @@ fn census_creates_domain(
             proposed.items().len()
         )));
     }
-    let mut run = CensusRun {
-        certified: &plan.snapshot,
-        plan: Some(plan),
-        evidence,
-        runtime_sources: certified_runtime_sources(plan),
-        visited: Vec::new(),
-        requested: Vec::new(),
-        sites: Vec::new(),
-        calls: 0,
-        deepest: 0,
-        sources: std::collections::BTreeMap::new(),
-        frame: None,
-    };
-    // Seeded with the demanded export, so a helper calling back into it refuses
-    // as a cycle rather than running out of depth.
-    if let Some(identity) = implementation
-        .declaration
-        .as_ref()
-        .and_then(CensusDeclarationIdentity::of)
-    {
-        run.visited.push(identity);
-    }
-    // ADR 0038: the premise the root's form census was classified under, bound
-    // to the declared signature this same transaction samples the veto from,
-    // and recorded as a condition of the closure before any form is read.
-    census_root_premises(
-        &mut run,
-        implementation,
-        stated_call_signatures(declared).as_deref(),
-    )
-    .map_err(refuse)?;
-    let step = census_transcript(&mut run, implementation, 0, &[]).map_err(refuse)?;
-    let mut sites = std::mem::take(&mut run.sites);
-    let outcome = match step {
-        CensusStep::Decided => {
-            // One line for the whole census, and it is a *claim*: the producer
-            // classified every invoking form it walked in every transcript this
-            // census read, and none of them was a form the calls census does
-            // not record. A census that refused would never reach here.
-            sites.push("census-uncensused-forms:0".into());
-            sites.push(format!("census-total:{}:{}", run.calls, run.deepest));
-            CensusOutcome::Decided {
-                calls: run.calls,
-                depth: run.deepest,
-            }
-        }
-        CensusStep::NeedsTranscripts => CensusOutcome::NeedsTranscripts,
-    };
-    sites.sort();
-    sites.dedup();
-    Ok((outcome, sites, run.requested))
+    let (outcome, sites, requested, _caller_supplied) =
+        census_call_walk(plan, &refuse, declared, implementation, evidence)?;
+    Ok((outcome, sites, requested))
 }
 
 /// The `returns` implementation census (ADR 0035): whether the demanded
@@ -9069,6 +9214,63 @@ fn census_creates_domain(
 /// is exactly the mistake the first admission of this domain made
 /// (`docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
 /// § 6).
+/// The `callbacks` implementation census: whether the demanded export's own
+/// implementation ever invokes a callable its caller supplied.
+///
+/// The same call walk the `creates` census runs, read for a different fact.
+/// `creates` **excuses** a parameter-rooted callee — what that callable does is
+/// the caller's behaviour, in the caller's artifact, under the caller's own
+/// contract (`census_call_disposition`). This domain enumerates exactly that
+/// act of invocation, so the disposition `creates` excuses is the item this
+/// census counts, and an empty enumeration is proven by there being none.
+///
+/// Decides the empty enumeration only. A nonempty proposal names invocations
+/// whose timing, tracking and owner this walk does not derive, and admitting it
+/// would certify the proposal's own word (objection 5 of ADR 0006).
+///
+/// ADR 0023 holds here by construction rather than by a rule of its own: the
+/// walk dispositions *calls*, and retaining a callable in a collection or on a
+/// returned object is not one.
+fn census_callbacks_domain(
+    plan: &CertificationPlan,
+    proof: &ScheduledProofDemand,
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    transcript: &typefacts::ExportValueTranscript,
+    implementation: &typefacts::ExportImplementationTranscript,
+    evidence: CensusEvidence<'_>,
+) -> Result<CensusPass, TypeFactsCertificationError> {
+    let refuse = |reason: String| TypeFactsCertificationError::UnsupportedDemand {
+        demand: proof.id.clone(),
+        reason,
+    };
+    // `Callbacks` carries `KnowledgeSet<CallbackInvocation>` of its own rather
+    // than an operation claim, so it is read through its own accessor.
+    let proposed = export.callbacks();
+    if !proposed.items().is_empty() {
+        return Err(refuse(format!(
+            "a callbacks closure candidate must enumerate no invocation, but the proposal names {}",
+            proposed.items().len()
+        )));
+    }
+    let (outcome, mut sites, requested, caller_supplied) =
+        census_call_walk(plan, &refuse, transcript, implementation, evidence)?;
+    if matches!(outcome, CensusOutcome::Decided { .. }) {
+        if caller_supplied > 0 {
+            // Not a premise gap: the walk decided, and what it decided is that
+            // the claim is false. Refused rather than closed, and named so the
+            // refusal is readable as evidence rather than as an absence.
+            return Err(refuse(format!(
+                "the callbacks closure candidate enumerates no invocation, but the implementation \
+                 census dispositioned {caller_supplied} call(s) into the parameter-rooted family: \
+                 this export invokes callable(s) its caller supplied"
+            )));
+        }
+        sites
+            .push("typefacts-implementation-census:callbacks:caller-supplied-invocations:0".into());
+    }
+    Ok((outcome, sites, requested))
+}
+
 fn census_reads_domain(
     plan: &CertificationPlan,
     proof: &ScheduledProofDemand,
@@ -9109,6 +9311,7 @@ fn census_reads_domain(
         deepest: 0,
         sources: std::collections::BTreeMap::new(),
         frame: None,
+        caller_supplied_invocations: 0,
     };
     let mut sites = Vec::new();
     for form in &implementation.uncensused_invoking_forms {
@@ -9636,7 +9839,7 @@ fn census_transcript_calls(
             continue;
         }
         if let Some(disposition) = census_form_disposition(run, form, depth) {
-            run.sites.push(census_form_site(form, disposition));
+            run.record(disposition, census_form_site(form, disposition));
             continue;
         }
         if form.kind == typefacts::UncensusedInvokingFormKind::Coercion
@@ -9670,7 +9873,7 @@ fn census_transcript_calls(
         let premises = census_call_premises(implementation, call);
         match census_call_disposition(run, call, depth, premises)? {
             Some((disposition, site)) => {
-                run.sites.push(site);
+                run.record(disposition, site);
                 if disposition == CensusDisposition::LocalRecursion
                     && census_local_recursion(run, call, depth, premises)?
                         == CensusStep::NeedsTranscripts
@@ -9691,35 +9894,33 @@ fn census_transcript_calls(
             if !census_local_literal_result_is_bound(run, implementation, form)? {
                 return Err(refuse_form(form));
             }
-            run.sites.push(census_form_site(
-                form,
-                if form.subject_write {
-                    CensusDisposition::LocalLiteralResultAccessorWrite
-                } else {
-                    CensusDisposition::LocalLiteralResultAccessor
-                },
-            ));
+            let disposition = if form.subject_write {
+                CensusDisposition::LocalLiteralResultAccessorWrite
+            } else {
+                CensusDisposition::LocalLiteralResultAccessor
+            };
+            run.record(disposition, census_form_site(form, disposition));
             continue;
         }
         if !form.subject_local_literal_results.is_empty() {
             if !census_parameter_or_own_result_is_bound(run, implementation, form)? {
                 return Err(refuse_form(form));
             }
-            run.sites.push(census_form_site(
-                form,
-                if form.subject_write {
-                    CensusDisposition::ParameterOrOwnResultAccessorWrite
-                } else {
-                    CensusDisposition::ParameterOrOwnResultAccessor
-                },
-            ));
+            let disposition = if form.subject_write {
+                CensusDisposition::ParameterOrOwnResultAccessorWrite
+            } else {
+                CensusDisposition::ParameterOrOwnResultAccessor
+            };
+            run.record(disposition, census_form_site(form, disposition));
             continue;
         }
         if !census_coercion_rests_on_primitive_calls(run, implementation, form)? {
             return Err(refuse_form(form));
         }
-        run.sites
-            .push(census_form_site(form, CensusDisposition::PrimitiveCoercion));
+        run.record(
+            CensusDisposition::PrimitiveCoercion,
+            census_form_site(form, CensusDisposition::PrimitiveCoercion),
+        );
     }
     Ok(step)
 }
@@ -10351,6 +10552,8 @@ fn census_call_disposition(
     depth: usize,
     premises: &[typefacts::ParameterPremise],
 ) -> Result<Option<(CensusDisposition, String)>, String> {
+    let rebound = immutable_callee_alias::rebind(run, call)?;
+    let call = rebound.as_ref().unwrap_or(call);
     let at = || {
         format!(
             "{}:{}..{}",
@@ -10742,6 +10945,24 @@ fn census_local_declaration_node(
             .collect();
     }
     if matches.is_empty() {
+        // A class is a callee too (ADR 0095). `new C(…)` runs C's constructor
+        // exactly as a call runs a function body, and the resolved declaration
+        // names the class rather than any function node — `class C {…}` by its
+        // own name, and the compiled `const C = class {…}` by the variable it
+        // is bound to. Neither can match `function_nodes`, because a class is
+        // not one. The node handed back is the *class*: the producer resolves
+        // it to the constructor and states which part of the construction it
+        // cannot see, which is a judgement about what runs and belongs there
+        // rather than here.
+        if let Some(class) = census_class_node_named_at(source, resolved) {
+            return Ok(typefacts::Location {
+                path: declaration.location.path.clone(),
+                start_byte: u64::from(class.start),
+                end_byte: u64::from(class.end),
+            });
+        }
+    }
+    if matches.is_empty() {
         // Third reading (2026-09-06): the resolved span is the binding
         // identifier of a variable declarator — `const helper = (el) => …`
         // resolved from another module of the same artifact names `helper`,
@@ -10954,6 +11175,118 @@ fn census_plain_binding_named_at(
         binding.array_slots.is_empty()
             && binding.object_slots.is_empty()
             && matches!(binding.names.as_slice(), [named] if (named.span.start, named.span.end) == name)
+    })
+}
+
+/// The class node a resolved declaration span names, in either spelling.
+///
+/// `class C {…}` carries its own name, so the resolved span is that identifier.
+/// The compiled `const C = class {…}` carries none — the class expression is
+/// anonymous and the name lives on the declarator — so the resolved span is the
+/// binding identifier and the class is its initializer. Both are the same
+/// construction; answering for one and not the other would make certification
+/// depend on which bundler emitted the artifact.
+///
+/// The span returned is the one a *demand* must carry, which is not always the
+/// class's own: Oxc's node for `export class C {}` starts at `class` while the
+/// producer's starts at `export`, the same two-parser seam `function_nodes`
+/// bridges, and it is bridged here the same way — through the export fact whose
+/// direct declaration names this class — rather than by scanning text for a
+/// modifier spelling.
+fn census_class_node_named_at(
+    source: &CensusSourceFacts,
+    resolved: (u32, u32),
+) -> Option<solid_facts::core::Span> {
+    let facts = &source.facts;
+    let class = facts
+        .classes
+        .iter()
+        // The class node itself. An anonymous `const C = class {…}` resolves
+        // here: the compiler names the class expression as the declaration,
+        // since the variable is a binding rather than a declaration of the
+        // callable. A named `class C {…}` resolves through its name below.
+        .find(|class| (class.span.start, class.span.end) == resolved)
+        .or_else(|| {
+            facts.classes.iter().find(|class| {
+                class
+                    .name
+                    .as_ref()
+                    .is_some_and(|name| (name.span.start, name.span.end) == resolved)
+            })
+        })
+        .or_else(|| {
+            let binding = census_plain_binding_named_at(facts, resolved)?;
+            let initializer = binding.initializer?;
+            facts.classes.iter().find(|class| class.span == initializer)
+        })?;
+    Some(census_class_demand_span(facts, class))
+}
+
+/// The span a demand must carry for a class, bridging the two parsers exactly
+/// as `function_nodes` does: Oxc's node for `export class C {}` starts at
+/// `class` and the producer's starts at `export`.
+fn census_class_demand_span(
+    facts: &solid_facts::ast::AstFacts,
+    class: &solid_facts::ast::ClassFact,
+) -> solid_facts::core::Span {
+    class
+        .name
+        .as_ref()
+        .map(|name| name.span)
+        .and_then(|name| {
+            facts
+                .exports
+                .iter()
+                .filter(|export| {
+                    export.module.is_none()
+                        && export.span.start <= class.span.start
+                        && export.span.end == class.span.end
+                        && export
+                            .declarations
+                            .iter()
+                            .any(|declaration| declaration.local.span == name)
+                })
+                .min_by_key(|export| export.span.end - export.span.start)
+                .map(|export| export.span)
+        })
+        .unwrap_or(class.span)
+}
+
+/// The class a demand span names, with the binding identifier the call runs
+/// through: the class's own name for `class C {…}`, and the declarator's for
+/// the compiled `const C = class {…}`. The binding is what
+/// `census_local_binding_is_stable` then holds to the same two questions it
+/// asks of a function — is it written anywhere in the file, is it declared
+/// again — because a class binding can be reassigned exactly as a function
+/// binding can.
+fn census_class_bound_at(
+    facts: &solid_facts::ast::AstFacts,
+    demand: (u32, u32),
+) -> Option<(solid_facts::core::Span, Option<solid_facts::core::Span>)> {
+    let class = facts.classes.iter().find(|class| {
+        let span = census_class_demand_span(facts, class);
+        (span.start, span.end) == demand
+    })?;
+    let name = class.name.as_ref().map(|name| name.span).or_else(|| {
+        census_plain_binding_initialized_by_span(facts, class.span)
+            .map(|binding| binding.names[0].span)
+    });
+    Some((class.span, name))
+}
+
+/// The variable declarator whose initializer is exactly `initializer`, binding
+/// one plain identifier. Unlike `census_plain_binding_initialized_by` this does
+/// not require the initializer to be a *function*: a class expression is not
+/// one, and `const C = class {…}` is the shape it exists for.
+fn census_plain_binding_initialized_by_span(
+    facts: &solid_facts::ast::AstFacts,
+    initializer: solid_facts::core::Span,
+) -> Option<&solid_facts::ast::BindingFact> {
+    facts.bindings.iter().find(|binding| {
+        binding.initializer == Some(initializer)
+            && binding.array_slots.is_empty()
+            && binding.object_slots.is_empty()
+            && binding.names.len() == 1
     })
 }
 
@@ -11287,21 +11620,34 @@ fn census_local_binding_is_stable(
         )
     };
     let source = census_source(run, relative)?;
-    let function = source
-        .function_nodes()
-        .find(|candidate| {
-            (
-                u64::from(candidate.demand_span.start),
-                u64::from(candidate.demand_span.end),
-            ) == (node.start_byte, node.end_byte)
-        })
-        .ok_or_else(|| {
-            format!(
-                "creates census lost the declaration node it bound for {}",
-                describe()
-            )
-        })?;
     let facts = &source.facts;
+    // A class callee resolved through the arm in `census_callee_declaration_node`
+    // has no function node at its demand span, and the binding it runs through
+    // is the class's — `class C {…}` by its own name, `const C = class {…}` by
+    // its declarator's. The stability questions below are the same either way:
+    // a class binding can be reassigned or redeclared exactly as a function
+    // binding can, and the census would then be reading a body that is not what
+    // runs.
+    let (bound_span, bound_name) = match source.function_nodes().find(|candidate| {
+        (
+            u64::from(candidate.demand_span.start),
+            u64::from(candidate.demand_span.end),
+        ) == (node.start_byte, node.end_byte)
+    }) {
+        Some(function) => (function.span, function.name),
+        None => {
+            let demand = (
+                u32::try_from(node.start_byte).map_err(|_| "declaration span overflows")?,
+                u32::try_from(node.end_byte).map_err(|_| "declaration span overflows")?,
+            );
+            census_class_bound_at(facts, demand).ok_or_else(|| {
+                format!(
+                    "creates census lost the declaration node it bound for {}",
+                    describe()
+                )
+            })?
+        }
+    };
     // An arrow or function expression has no name of its own. When it is the
     // whole initializer of a variable declarator binding one plain identifier
     // (2026-09-06), that identifier is the binding the call runs through, and
@@ -11316,10 +11662,10 @@ fn census_local_binding_is_stable(
     let name_span = match factory_identity
         .as_ref()
         .map(|identity| identity.binding)
-        .or(function.name)
+        .or(bound_name)
     {
         Some(span) => span,
-        None => match census_plain_binding_initialized_by(facts, function.span) {
+        None => match census_plain_binding_initialized_by(facts, bound_span) {
             Some(binding) => binding.names[0].span,
             None => {
                 return Err(format!(
@@ -20390,6 +20736,7 @@ mod tests {
             deepest: 0,
             sources: std::collections::BTreeMap::new(),
             frame: None,
+            caller_supplied_invocations: 0,
         }
     }
 
@@ -20607,6 +20954,115 @@ mod tests {
                 "census-dialect-axiom:@solidjs/signals@2.0.0-rc.3#sha512-/yPhTf3xS1FRR4MX:createTrackedEffect:creates",
                 "census-form:/project/node_modules/consumer/dist/index.js:260:270:property-access-unknown-accessor:reachable:parameter-rooted-accessor:parameter",
             ]
+        );
+    }
+
+    /// The regression for the `callbacks` census's first shipped form: a
+    /// caller-supplied **getter** counted as nothing.
+    ///
+    /// `callbacks: []` denies that this export invokes a callable it did not
+    /// itself define, and the domain's definition names "a getter or setter
+    /// reached by property access" among the forms that give rise to one
+    /// (`semantic-model.md`). But the producer's *call* census records
+    /// `ast.IsCallExpression` and `ast.IsNewExpression` only, so such a getter
+    /// arrives as an **uncensused invoking form** on a different path from the
+    /// calls (Decision 2026-09-03 in the same document). The count started life
+    /// incremented at the call disposition alone, so the whole form path was
+    /// invisible to it and an export that invoked a caller-supplied getter
+    /// certified the claim that it invoked nothing.
+    ///
+    /// Nothing in the corpus caught it: no fixture paired a callbacks-closing
+    /// export with a caller-supplied accessor. This pins the count at the walk
+    /// rather than at a certification, because that is where the two paths meet
+    /// and where a third path would have to join them.
+    #[test]
+    fn the_walk_counts_a_caller_supplied_accessor_form_as_an_invocation() {
+        let certified = consumer_snapshot();
+        let roots = vec![consumer_root(&certified)];
+        let source = "/project/node_modules/consumer/dist/index.js";
+        let form = |extra: serde_json::Value| {
+            let mut value = json!({
+                "kind": "property-access-unknown-accessor",
+                "nodeKind": "PropertyAccessExpression",
+                "location": {"path": source, "startByte": 260, "endByte": 270},
+                "reach": "reachable",
+            });
+            let object = value.as_object_mut().expect("an object");
+            for (key, replacement) in extra.as_object().expect("an object") {
+                object.insert(key.clone(), replacement.clone());
+            }
+            json!([value])
+        };
+
+        // The getter the caller installed. Its body is the caller's code, and
+        // reaching it is this export's invocation of it.
+        let mut run = census_run(&certified, &roots);
+        let transcript = census_transcript_with(
+            vec![],
+            form(json!({"subjectParameter": 0, "subjectRoot": "parameter"})),
+        );
+        assert_eq!(
+            census_transcript(&mut run, &transcript, 0, &[]),
+            Ok(CensusStep::Decided)
+        );
+        assert!(
+            run.sites[0].ends_with("parameter-rooted-accessor:parameter"),
+            "the walk must still name the disposition: {:?}",
+            run.sites
+        );
+        assert_eq!(
+            run.caller_supplied_invocations, 1,
+            "a caller-supplied accessor reaches the walk as a form, not as a call, and the              callbacks census enumerates it: {:?}",
+            run.sites
+        );
+
+        // A setter is the same premise in write position (ADR 0040), and the
+        // same invocation of the caller's code.
+        let mut run = census_run(&certified, &roots);
+        let written = census_transcript_with(
+            vec![],
+            form(json!({
+                "subjectParameter": 0,
+                "subjectWrite": true,
+                "subjectRoot": "parameter"
+            })),
+        );
+        assert_eq!(
+            census_transcript(&mut run, &written, 0, &[]),
+            Ok(CensusStep::Decided)
+        );
+        assert_eq!(run.caller_supplied_invocations, 1, "{:?}", run.sites);
+
+        // The control, and the reason the predicate is not "any accessor": an
+        // accessor on a literal this export wrote is a callable it *did* define,
+        // which the domain's definition excludes.
+        let mut run = census_run(&certified, &roots);
+        let own = census_transcript_with(
+            vec![],
+            json!([{
+                "kind": "property-access-unknown-accessor",
+                "nodeKind": "ElementAccessExpression",
+                "location": {"path": source, "startByte": 340, "endByte": 356},
+                "reach": "reachable",
+                "subjectRoot": "own-literal",
+                // The stated own-literal premise: the data-only object this
+                // export built, which runs no user code on access.
+                "subjectDeclaration": {"path": source, "startByte": 10, "endByte": 40},
+            }]),
+        );
+        assert_eq!(
+            census_transcript(&mut run, &own, 0, &[]),
+            Ok(CensusStep::Decided)
+        );
+        assert!(
+            run.sites[0].ends_with("own-literal-accessor:own-literal"),
+            "{:?}",
+            run.sites
+        );
+        assert_eq!(
+            run.caller_supplied_invocations, 0,
+            "an accessor on the export's own literal is not a caller-supplied invocation: {:?}",
+            run.sites
         );
     }
 

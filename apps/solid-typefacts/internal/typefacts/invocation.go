@@ -964,6 +964,23 @@ type ParameterValueSource struct {
 	Path           []PathSegment `cbor:"path,omitempty" json:"path,omitempty"`
 }
 
+// ImmutableCalleeAlias binds a same-file, immutable identifier chain to the
+// exact callable copied by its last initializer. It supplements, and never
+// replaces, the call's ordinary symbol/declaration identity.
+type ImmutableCalleeAlias struct {
+	Bindings              []ImmutableCalleeAliasBinding `cbor:"bindings" json:"bindings"`
+	Expression            Location                      `cbor:"expression" json:"expression"`
+	Declaration           ResolvedDeclaration           `cbor:"declaration" json:"declaration"`
+	Receiver              *ResolvedDeclaration          `cbor:"receiver,omitempty" json:"receiver,omitempty"`
+	DefaultLibraryInvoker DefaultLibraryInvoker         `cbor:"defaultLibraryInvoker,omitempty" json:"defaultLibraryInvoker,omitempty"`
+	InvokedArguments      []int                         `cbor:"invokedArguments,omitempty" json:"invokedArguments,omitempty"`
+}
+
+type ImmutableCalleeAliasBinding struct {
+	Declaration ResolvedDeclaration `cbor:"declaration" json:"declaration"`
+	Initializer Location            `cbor:"initializer" json:"initializer"`
+}
+
 type ImplementationCall struct {
 	Location Location     `cbor:"location" json:"location"`
 	Reach    Reachability `cbor:"reach" json:"reach"`
@@ -978,12 +995,13 @@ type ImplementationCall struct {
 	// A construct site deliberately carries no callee-parameter facts: the
 	// three CalleeXxxParameters fields below are about the body of a resolved
 	// *function*, and a constructor's resolution was not reviewed here.
-	Kind            CallKind              `cbor:"kind" json:"kind"`
-	Target          SymbolID              `cbor:"target,omitempty" json:"target,omitempty"`
-	TargetName      string                `cbor:"targetName,omitempty" json:"targetName,omitempty"`
-	TargetModule    string                `cbor:"targetModule,omitempty" json:"targetModule,omitempty"`
-	Declaration     *ResolvedDeclaration  `cbor:"declaration,omitempty" json:"declaration,omitempty"`
-	CalleeParameter *ParameterValueSource `cbor:"calleeParameter,omitempty" json:"calleeParameter,omitempty"`
+	Kind                 CallKind              `cbor:"kind" json:"kind"`
+	Target               SymbolID              `cbor:"target,omitempty" json:"target,omitempty"`
+	TargetName           string                `cbor:"targetName,omitempty" json:"targetName,omitempty"`
+	TargetModule         string                `cbor:"targetModule,omitempty" json:"targetModule,omitempty"`
+	Declaration          *ResolvedDeclaration  `cbor:"declaration,omitempty" json:"declaration,omitempty"`
+	ImmutableCalleeAlias *ImmutableCalleeAlias `cbor:"immutableCalleeAlias,omitempty" json:"immutableCalleeAlias,omitempty"`
+	CalleeParameter      *ParameterValueSource `cbor:"calleeParameter,omitempty" json:"calleeParameter,omitempty"`
 	// CalleeIteratedParameter names the parameter-rooted iterable whose
 	// iteration produced this call's callee: the binding a `for…of` head
 	// declares, called inside the loop (ADR 0042, handshake protocol 26).

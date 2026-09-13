@@ -175,3 +175,11 @@ export declare function engineModuleIndexRead(): unknown;
 export declare function engineComputedIndexRead(index: number): unknown;
 export declare function userIndexRead(): unknown;
 export declare function arrayLikeIndexRead(): unknown;
+// ADR 0095: a class is a callee. Both spellings resolve to the constructor the
+// construction runs; a heritage clause and a field initializer refuse, because
+// each is code the constructor's own body does not contain.
+export declare function constructOwnClass(value: number): unknown;
+export declare function constructCompiledClass(value: number): unknown;
+export declare function constructDerivedClass(value: number): unknown;
+export declare function constructInitializedClass(): unknown;
+export declare function constructImplicitClass(): unknown;

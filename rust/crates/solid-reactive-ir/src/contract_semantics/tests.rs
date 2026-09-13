@@ -1173,13 +1173,15 @@ fn a_proposed_closure_is_refused_over_an_open_domain_and_over_an_undecidable_one
     assert!(ClaimDomain::Creates.is_proposable());
     assert!(ClaimDomain::Returns.is_proposable());
     assert!(ClaimDomain::Reads.is_proposable());
+    assert!(ClaimDomain::Callbacks.is_proposable());
     assert!(!ClaimDomain::Writes.is_proposable());
     assert_eq!(
         ClaimDomain::PROPOSABLE,
         [
             ClaimDomain::Creates,
             ClaimDomain::Returns,
-            ClaimDomain::Reads
+            ClaimDomain::Reads,
+            ClaimDomain::Callbacks
         ]
     );
 }

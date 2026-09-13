@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:116184f3d28b4e665c06e07d7c6fc2801a559192a29a943a7f7ff9f9bc8818ea";
+    "sha256:a9dd85812162e7996b8dd531ee7b53a05b0aa65403a962c2298a6db34067dba9";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -290,7 +290,15 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // is its own storage and nothing user-written runs. This *removes* rows, so a
 // consumer that reviewed only protocol 53 would read the silence as a weaker
 // claim than it is, and the number moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 54;
+// Protocol 55 makes a class a callee (ADR 0095): a local-declaration demand
+// naming a class answers the constructor `new C(…)` runs, in both spellings,
+// with the class itself as the resolved declaration and the constructor as the
+// censused body. A heritage clause, a field initializer, a static block, a
+// computed member name, a decorator, a parameter property and an implicit
+// constructor each refuse by name through openReasons. A protocol-54 consumer
+// received `declarationNotExact` for every one of these, so the positive answer
+// is new and the number moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 55;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

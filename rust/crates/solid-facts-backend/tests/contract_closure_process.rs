@@ -800,3 +800,72 @@ fn a_contract_read_is_consumed_outside_a_tracking_scope() {
          the finding is the item's and not the fixture's: {stripped:#?}"
     );
 }
+
+/// What a `callbacks` closure is worth to a consumer, measured by difference.
+///
+/// `callbacks` became proposable on 2026-09-12
+/// (`phase21/2026-09-12-callbacks-census-scoping.md`), so the question its
+/// admission raises is the one this project keeps having to answer for a
+/// closure lever: does the closed domain change a *finding*, or only a count?
+///
+/// It is not one of SC9005's conjuncts — unlike `creates`, `reads`, `returns`
+/// and `asyncBehavior` it is demand-scoped at the call site, through
+/// `Indexes::unknown_contract_callback_export`, and the obligation is raised
+/// only where a call actually hands over a potentially-callable argument
+/// (`phase21/2026-09-10-sc9005-demand-scoping-design.md` § 1). So reopening it
+/// must add an obligation exactly at such a call and nowhere else, which is
+/// what makes the difference attributable.
+///
+/// Reported rather than asserted per fixture: the corpus that carries a
+/// hand-closed `callbacks` domain is small, and pinning a count here would
+/// break on every fixture added for an unrelated reason. The assertion is the
+/// one that matters — at least one project moves, so the closure is not inert.
+#[test]
+fn a_callbacks_closure_discharges_the_call_site_obligation_that_reopening_restores() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let incomplete = |rule: &str| rule.contains("package-contract-incomplete");
+    let incomplete_count = |findings: &[serde_json::Value]| {
+        findings
+            .iter()
+            .filter_map(|finding| finding["rule"].as_str())
+            .filter(|rule| incomplete(rule))
+            .count()
+    };
+    let mut moved = Vec::new();
+    let mut indifferent = Vec::new();
+    for (index, fixture) in catalog_bearing_fixtures().iter().enumerate() {
+        let closed = mint_and_analyze(fixture, &format!("callbacks-closed-{index}"), None);
+        let reopened = mint_and_analyze(
+            fixture,
+            &format!("callbacks-open-{index}"),
+            Some("callbacks"),
+        );
+        let (Ok(closed), Ok(reopened)) = (closed, reopened) else {
+            continue;
+        };
+        let (before, after) = (incomplete_count(&closed), incomplete_count(&reopened));
+        if after > before {
+            moved.push((fixture.clone(), before, after));
+        } else {
+            indifferent.push(fixture.clone());
+        }
+    }
+    println!(
+        "callbacks demand: {} of {} projects gain an obligation when the domain is reopened",
+        moved.len(),
+        moved.len() + indifferent.len()
+    );
+    for (fixture, before, after) in &moved {
+        println!("  consumes    {fixture}  SC9005 {before} -> {after}");
+    }
+    for fixture in &indifferent {
+        println!("  indifferent {fixture}");
+    }
+    assert!(
+        !moved.is_empty(),
+        "a closed callbacks domain must discharge at least one call-site obligation, or closing \
+         it buys a consumer nothing: {indifferent:?}"
+    );
+}

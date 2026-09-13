@@ -14,7 +14,7 @@
           },
           "exports": {
             "derive": "summary-8febf476466d284e05d25a2ba0aecd0ef5cad25494dceb742bd30689be0db109",
-            "plainStore": "summary-65c5999d1b92c4f484740ff9c8a1b381495ea34fe8b56b0d96f05ad2280dc428",
+            "plainStore": "summary-317184f7f1c0440a6325527d02af7bb585dfd2c34d4deb23c3616de41e85b6f4",
             "projectSeeded": "summary-f783919e54c73be75ea17b850e4e826e0475e812f43c050756871188e09b9923",
             "projectSeedless": "summary-f783919e54c73be75ea17b850e4e826e0475e812f43c050756871188e09b9923"
           },
@@ -40,9 +40,11 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-65c5999d1b92c4f484740ff9c8a1b381495ea34fe8b56b0d96f05ad2280dc428": {
+    "summary-317184f7f1c0440a6325527d02af7bb585dfd2c34d4deb23c3616de41e85b6f4": {
       "call": {
+        "callbacks": [],
         "closed": [
+          "callbacks",
           "reads",
           "creates"
         ],
@@ -70,6 +72,7 @@
           }
         ],
         "proposedClosures": [
+          "callbacks",
           "reads",
           "creates"
         ],

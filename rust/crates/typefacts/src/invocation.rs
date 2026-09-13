@@ -1110,6 +1110,31 @@ pub struct ParameterValueSource {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImmutableCalleeAliasBinding {
+    pub declaration: ResolvedDeclaration,
+    pub initializer: Location,
+}
+
+/// An immutable identifier chain, separate from the call's syntactic symbol.
+/// Every binding and initializer belongs to the call's authenticated runtime
+/// file. The terminal declaration and invoker metadata describe the copied
+/// callable; absence is no claim about an alias's value.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImmutableCalleeAlias {
+    pub bindings: Vec<ImmutableCalleeAliasBinding>,
+    pub expression: Location,
+    pub declaration: ResolvedDeclaration,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receiver: Option<ResolvedDeclaration>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub default_library_invoker: Arc<str>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub invoked_arguments: Vec<usize>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ImplementationCall {
     pub location: Location,
     pub reach: Reachability,
@@ -1140,6 +1165,8 @@ pub struct ImplementationCall {
     pub target_module: Arc<str>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declaration: Option<ResolvedDeclaration>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub immutable_callee_alias: Option<ImmutableCalleeAlias>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub callee_parameter: Option<ParameterValueSource>,
     /// The parameter-rooted iterable whose iteration produced this call's

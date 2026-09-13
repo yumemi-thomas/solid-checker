@@ -108,6 +108,16 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                     *domain != ClaimDomain::Reads
                         || !resolved.closure.installs_runtime_accessor()
                 })
+                // The callbacks census decides the empty enumeration only: it
+                // proves `callbacks: []` by the call walk dispositioning no
+                // caller-supplied invocation. A described invocation carries
+                // timing, tracking and owner the walk does not derive, so
+                // proposing it would publish a closure the census must refuse —
+                // the enumeration stays partial, exactly as it did before the
+                // domain became proposable.
+                .filter(|domain| {
+                    *domain != ClaimDomain::Callbacks || export.callbacks().items().is_empty()
+                })
                 .filter(|domain| {
                     *domain != ClaimDomain::Returns
                         || export

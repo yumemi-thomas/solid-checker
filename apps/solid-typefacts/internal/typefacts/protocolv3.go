@@ -4,7 +4,18 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 54 (ADR 0094): a **numeric-literal element
+// TypeFactsHandshakeProtocol is 55 (ADR 0095): **a class is a callee**. A
+// local-declaration demand naming a class resolves to the constructor whose
+// body `new C(…)` runs, in both spellings — `class C {…}` and the bundler's
+// `const C = class {…}` — and censuses that body as it would a function's. The
+// transcript's declaration stays the class, because that is what the consumer
+// demanded; what it censuses is the constructor. Everything a construction runs
+// that the constructor body does not contain refuses by name: a heritage
+// clause, a field initializer, a static block, a computed member name, a
+// decorator, a parameter property, and an implicit constructor. The refusals
+// need no number — a consumer refuses on any nonempty openReasons — but the
+// admitting side does, since protocol 54 could only answer for a function.
+// Protocol 54 (ADR 0094): a **numeric-literal element
 // access into an engine-owned indexed container records no form at all**. An
 // index signature declares no property symbol, so `arr[0]` and `match[1]`
 // resolved nothing and were recorded as unknown accessors; where the container
@@ -324,8 +335,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 54
-	TypeFactsSchemaSHA256             = "sha256:116184f3d28b4e665c06e07d7c6fc2801a559192a29a943a7f7ff9f9bc8818ea"
+	TypeFactsHandshakeProtocol uint64 = 55
+	TypeFactsSchemaSHA256             = "sha256:a9dd85812162e7996b8dd531ee7b53a05b0aa65403a962c2298a6db34067dba9"
 )
 
 type ServiceHandshake struct {

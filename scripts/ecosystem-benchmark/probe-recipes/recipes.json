@@ -427,6 +427,28 @@
         "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
         "NEVER EMITS: same as clamp -- no code path emits the expected event, so this module cannot contradict the closure and only ever yields a clean non-observation. See \u00a7 6: an unenumerated read is a read of a source the export owns, which is the half no recipe can instrument"
       ]
+    },
+    {
+      "claimId": "claim:v1:sha256:9bf79a95bb5290230a6eae1b844fd390ad37c7174f7844cd8ec88390045ef44a",
+      "module": "web-with-meta.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "return-outside-identity",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Reviewed @solidjs/web@2.0.0-rc.3 ./server-functions browser ESM artifact case b96615dd04979bffcad273098c3c1a82e42df3c1d839a23928516a4f8d8e217d only; server conditions and rc.0 are not covered",
+        "Four metadata updates on two publicly constructed branded server references; reference construction installs the RPC provider before call markers, and neither returned callable is invoked",
+        "Finite samples can contradict parameter-0 identity but cannot establish exhaustive returns; authenticated implementation census remains required"
+      ]
     }
   ]
 }

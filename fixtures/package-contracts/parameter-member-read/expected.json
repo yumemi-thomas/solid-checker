@@ -13,9 +13,9 @@
             "sha256": "162b4f2c69716687452b39cdf3a1076746b1fe05e98d0e264d136d089796cb51"
           },
           "exports": {
-            "drop": "summary-482d3b4e01fa58e8cd68c3b1eb7d895544bc7f1c9c95d4cd9f8a6a7e46c46188",
-            "readBodyLocal": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "readModuleLocal": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
+            "drop": "summary-dcb965f3f106b5cc37456e8fd1995cabc8368fc8724bbf03d2663a286e42c6b0",
+            "readBodyLocal": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "readModuleLocal": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -39,9 +39,29 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-482d3b4e01fa58e8cd68c3b1eb7d895544bc7f1c9c95d4cd9f8a6a7e46c46188": {
+    "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
       "call": {
+        "callbacks": [],
         "closed": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-dcb965f3f106b5cc37456e8fd1995cabc8368fc8724bbf03d2663a286e42c6b0": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
           "reads",
           "creates"
         ],
@@ -75,27 +95,13 @@
           }
         ],
         "proposedClosures": [
+          "callbacks",
           "reads",
           "creates"
         ],
         "reads": [
           "read-0"
         ]
-      },
-      "shape": "callable"
-    },
-    "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
-      "call": {
-        "closed": [
-          "reads",
-          "creates"
-        ],
-        "creates": [],
-        "proposedClosures": [
-          "reads",
-          "creates"
-        ],
-        "reads": []
       },
       "shape": "callable"
     }

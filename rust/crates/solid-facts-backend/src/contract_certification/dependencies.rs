@@ -871,10 +871,13 @@ pub fn certify_published_contract_graph_case_set(
 /// gating changed since their evidence was taken, and then either withdraws one
 /// more candidate by name -- a census that could not decide it, a veto run that
 /// did not complete -- and goes again, or synthesizes a veto for every node's
-/// recipe-less candidate that stated a call signature (once, before the first
-/// gate runs), or finalizes. Every pass withdraws at least one candidate or is
-/// the one synthesis pass, so the loop is bounded by the number of closure
-/// candidates in the case set plus two.
+/// recipe-less candidate that stated a call signature (once per node, before
+/// the first gate runs), or finalizes. Initial acquisition proceeds dependency
+/// first: a factory parent may need a child's synthesized return candidate to
+/// state its conditional evidence. Every pass withdraws a candidate or advances
+/// initial acquisition/synthesis, so closure candidates plus Type Facts nodes
+/// plus two bound the loop. Final receipt discharge still requires the child's
+/// independent census and completed veto; staging supplies no authority.
 ///
 /// A node's synthesized corpus and a node's withdrawals are keyed by its
 /// canonical identity digest, so nothing a child withheld or synthesized
@@ -882,6 +885,9 @@ pub fn certify_published_contract_graph_case_set(
 /// acquired once. Evidence is re-acquired only for nodes whose own gating moved:
 /// a gate changes a node's demand graph, never its resolution, and a parent's
 /// dependency demands hash the accepted proposal digest the gate leaves alone.
+/// Initial staging prevents a descendant from gaining synthesized claims after
+/// its parent's evidence was acquired; subsequent withdrawals must still pass
+/// exact dependency receipt discharge.
 fn certify_graphs_with_recipe_gating(
     graphs: &[PublishedContractGraphPlan],
     pin: &TypeFactsProducerPin,
@@ -902,10 +908,18 @@ fn certify_graphs_with_recipe_gating(
         .flat_map(|graph| graph.nodes.iter())
         .map(|node| node.plan.candidates.closure_candidates().len())
         .sum::<usize>();
-    let passes = candidate_count + 2;
+    let type_facts_nodes = graphs
+        .iter()
+        .map(PublishedContractGraphPlan::type_facts_requests)
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .flatten()
+        .map(|(digest, _)| digest)
+        .collect::<BTreeSet<_>>();
+    let passes = candidate_count + type_facts_nodes.len() + 2;
     let mut already_withheld = BTreeMap::<String, Vec<super::WithheldClosure>>::new();
     let mut synthesized = BTreeMap::<String, super::synthesized_vetoes::SynthesizedCorpus>::new();
-    let mut synthesis_attempted = false;
+    let mut synthesis_attempted = BTreeSet::new();
     let base_corpus = probes.map(super::ProbeHarnessConfiguration::recipe_corpus);
     // Evidence and gates persist across passes, each entry keyed by the gating
     // it was taken under: a node whose demand-graph root (and, for gates, whose
@@ -936,7 +950,12 @@ fn certify_graphs_with_recipe_gating(
         // while acquiring only the moved ones keeps the owner lookup whole.
         timing.nodes = gated.iter().map(|graph| graph.nodes.len()).sum();
         let acquisition_started = std::time::Instant::now();
-        let acquired = acquire_case_set_evidence(&gated, pin, &evidence_roots);
+        let acquired = acquire_case_set_evidence(
+            &gated,
+            pin,
+            &evidence_roots,
+            probes.map(|_| &synthesis_attempted),
+        );
         timing.acquisition_ns = elapsed_ns(acquisition_started);
         match acquired {
             Ok(fresh) => {
@@ -982,49 +1001,53 @@ fn certify_graphs_with_recipe_gating(
             }
             Err(error) => return Err(error),
         };
-        if !synthesis_attempted {
-            synthesis_attempted = true;
-            if let Some(base) = probes {
-                let synthesis_started = std::time::Instant::now();
-                let mut changed = false;
-                for node in gated.iter().flat_map(|graph| graph.nodes.iter()) {
-                    let digest = node.identity.digest();
-                    if synthesized.contains_key(digest) {
-                        continue;
-                    }
-                    let Some(evidence) = evidence_by_node.get(digest) else {
-                        continue;
-                    };
-                    let corpus = super::synthesized_vetoes::synthesize(
-                        &node.plan,
-                        evidence,
-                        base,
-                        &node.withheld,
-                    )
-                    .map_err(|error| {
-                        PublishedGraphCertificationError::FinalizationAtNode {
-                            node: digest.to_owned(),
-                            package: format!(
-                                "{}@{}",
-                                node.identity.package_name, node.identity.package_version
-                            ),
-                            source: super::Policy2FinalizationError::VetoSynthesis(
-                                error.to_string(),
-                            ),
-                        }
-                    })?;
-                    if let Some(corpus) = corpus {
-                        synthesized.insert(digest.to_owned(), corpus);
-                        changed = true;
-                        timing.synthesized += 1;
-                    }
-                }
-                timing.synthesis_ns = elapsed_ns(synthesis_started);
-                if changed {
-                    timing.emit(emit_timings, pass_started);
+        let attempted_before = synthesis_attempted.len();
+        let mut changed = false;
+        {
+            let synthesis_started = std::time::Instant::now();
+            for node in gated.iter().flat_map(|graph| graph.nodes.iter()) {
+                let digest = node.identity.digest();
+                let Some(evidence) = evidence_by_node.get(digest) else {
+                    continue;
+                };
+                if !synthesis_attempted.insert(digest.to_owned()) {
                     continue;
                 }
+                let Some(base) = probes else { continue };
+                let corpus = super::synthesized_vetoes::synthesize(
+                    &node.plan,
+                    evidence,
+                    base,
+                    &node.withheld,
+                )
+                .map_err(|error| {
+                    PublishedGraphCertificationError::FinalizationAtNode {
+                        node: digest.to_owned(),
+                        package: format!(
+                            "{}@{}",
+                            node.identity.package_name, node.identity.package_version
+                        ),
+                        source: super::Policy2FinalizationError::VetoSynthesis(error.to_string()),
+                    }
+                })?;
+                if let Some(corpus) = corpus {
+                    synthesized.insert(digest.to_owned(), corpus);
+                    changed = true;
+                    timing.synthesized += 1;
+                }
             }
+            timing.synthesis_ns = elapsed_ns(synthesis_started);
+        }
+        if changed || !type_facts_nodes.is_subset(&synthesis_attempted) {
+            if !changed && synthesis_attempted.len() == attempted_before {
+                return Err(
+                    PublishedGraphCertificationError::WithholdingDidNotConverge {
+                        passes: pass + 1,
+                    },
+                );
+            }
+            timing.emit(emit_timings, pass_started);
+            continue;
         }
         // Gate pre-pass: every node's veto set runs now, so one pass collects
         // every incomplete veto and every synthesized veto the interpreter
@@ -1118,7 +1141,9 @@ fn certify_graphs_with_recipe_gating(
                     // cannot be given (`@tanstack/custom-condition`), or
                     // one under which it would load a different file than
                     // the witness read (`solid` selecting `dist/solid.js`
-                    // where Node selects `dist/server.js`). The hand corpus
+                    // where Node selects `dist/server.js`), or a dependency
+                    // edge the private workspace cannot populate from its
+                    // authenticated snapshots. The hand corpus
                     // named nothing for these candidates and the checker's
                     // own veto cannot be executed, so they are withheld
                     // with that reason and the node keeps the hand corpus.
@@ -1129,6 +1154,7 @@ fn certify_graphs_with_recipe_gating(
                         super::Policy2FinalizationError::ProbeHarness(
                             super::probe_harness::ProbeHarnessError::Configuration(_)
                                 | super::probe_harness::ProbeHarnessError::ConditionMismatch(_)
+                                | super::probe_harness::ProbeHarnessError::UnauthenticatedDependency(_)
                         )
                     );
                     if cannot_run && synthesized.contains_key(digest) {
@@ -1298,10 +1324,14 @@ fn elapsed_ns(started: std::time::Instant) -> u64 {
 /// belongs to another node's snapshot finds its owner. Canonical nodes shared
 /// by several roots are acquired once; the same digest naming two different
 /// identities is refused.
+/// With synthesis enabled, a node waits for the initial acquisition/synthesis
+/// of all reachable Type Facts dependencies. Deferred requests remain in the
+/// owner lookup but retain no evidence, including reused importer evidence.
 fn acquire_case_set_evidence(
     graphs: &[PublishedContractGraphPlan],
     pin: &TypeFactsProducerPin,
     held: &BTreeMap<String, String>,
+    synthesis_attempted: Option<&BTreeSet<String>>,
 ) -> Result<
     BTreeMap<String, super::type_facts::VerifiedTypeFactsEvidence>,
     PublishedGraphCertificationError,
@@ -1325,8 +1355,28 @@ fn acquire_case_set_evidence(
                 .iter()
                 .find(|node| node.identity.digest() == identity)
                 .expect("Type Facts requests originate from retained graph nodes");
-            request.acquire =
-                held.get(&identity) != Some(&node.plan.demand_graph().root().as_str().to_owned());
+            // Retain deferred plans in the shared project and owner lookup.
+            // Only their acquisition waits, until every reachable Type Facts
+            // dependency has had its one synthesis attempt. Later withdrawals
+            // cannot grant a new premise and still require receipt discharge.
+            let waiting_for_dependency = synthesis_attempted.is_some_and(|attempted| {
+                graph.nodes.iter().any(|dependency| {
+                    !attempted.contains(dependency.identity.digest())
+                        && dependency
+                            .plan
+                            .demand_graph()
+                            .demands()
+                            .iter()
+                            .any(|demand| demand.family() == ProofFamily::RecursiveValueShape)
+                        && request
+                            .dependencies
+                            .iter()
+                            .any(|plan| std::ptr::eq(*plan, &dependency.plan))
+                })
+            });
+            request.acquire = !waiting_for_dependency
+                && held.get(&identity)
+                    != Some(&node.plan.demand_graph().root().as_str().to_owned());
             if identities
                 .insert(identity.clone(), node.identity.clone())
                 .is_some_and(|previous| previous != node.identity)
@@ -1364,8 +1414,16 @@ fn acquire_case_set_evidence(
             )?;
     Ok(request_keys
         .into_iter()
+        .zip(request_values)
         .zip(evidence)
-        .filter_map(|(digest, evidence)| evidence.map(|evidence| (digest, evidence)))
+        // Importer-variant grouping can return reused evidence even for a
+        // deferred request. Its dependencies must finish their own initial
+        // synthesis before this canonical node may retain that evidence.
+        .filter_map(|((digest, request), evidence)| {
+            evidence
+                .filter(|_| request.acquire)
+                .map(|evidence| (digest, evidence))
+        })
         .collect())
 }
 
@@ -1542,8 +1600,8 @@ pub enum PublishedGraphCertificationError {
         source: Box<super::RecipeGatingError>,
     },
     /// ADR 0036's withdraw-and-re-plan passes are bounded by the number of
-    /// closure candidates in the graph plus one synthesis pass; exceeding that
-    /// is a defect in the bookkeeping, not a property of the package.
+    /// closure candidates plus initial Type Facts acquisition/synthesis stages;
+    /// exceeding that is a bookkeeping defect, not a property of the package.
     #[error("recipe gating of the published graph did not converge within {passes} passes")]
     WithholdingDidNotConverge { passes: usize },
     #[error("graph node {0} reached finalization without an authenticated probe gate set")]

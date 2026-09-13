@@ -6166,3 +6166,79 @@ chipping at the 1,285 unproven in it. The 9,667 unproven in `reads` and
 `returns` — five times larger, with no premise standing in the way — had none of
 that attention. On these numbers the premise arc is the smaller half of the
 remaining work, and this section is the argument for pausing it.
+
+## 81. § 80 restated against a current pin, and the domain it was not counting (2026-09-12)
+
+§ 80 read a `benchmarks/ecosystem/report.json` that predated the closure
+telemetry: `closureCandidates` and `certifiedClosures` were zero on all 418 rows,
+so the ledger had no current numbers to work from. Re-pinned on the release binary
+with the recipe corpus (656 s, 418 rows, phase16 thresholds green). Three things
+change.
+
+### 81.1 The certification numbers
+
+| | count | share |
+| --- | ---: | ---: |
+| closure candidates | 17,191 | |
+| **certified closures** | **6,495** | **37.8%** |
+| withheld | 10,388 | 62.2% |
+
+Withheld splits `noRecipe` 8,577 (82.6%), `censusRefused` 1,640 (15.8%),
+`vetoThrew` 74, `vetoUnreproducible` 72, `vetoIncomplete` 25.
+
+**So § 80's "9,667 behind recipe authoring" is 8,577**, and a further **1,811** are
+things no recipe can serve. Carrying those as pending authorship overstates the
+frontier by about a fifth.
+
+### 81.2 `reads` is 24, and § 80's 0.5% was generous
+
+Every `reads` closure in the corpus — 24 of them — comes from
+`@solid-primitives/utils@7.0.0-next.4`, the one package that has received
+hand-authored recipes. Across rows whose candidate and closure lists are uncapped,
+`reads` closed **0 of 595** while `creates` closed 26.8% and `returns` 62.4%.
+
+That is § 6 measured rather than predicted: the domain closes only where a human
+wrote a recipe, and one package's effort is the corpus total.
+
+### 81.3 § 80.1's "six silent domains" understates the gap
+
+§ 80.1 observed that six of nine domains appear in neither the certified nor the
+withheld side and called it a gap in the instrument. It is larger than that: the
+generator *does* propose closures in one of them, and they are discarded before
+they reach any ledger.
+
+Counted over the same 418 rows (generation only, 381 valid plans), `callbacks`
+carries **1,111** closure candidates — **37.0% of all 3,000**, more than `reads`
+(990) and more than `creates` (516) and `returns` (267) together. 100% of it is
+discarded because the domain is not in `ClaimDomain::PROPOSABLE`.
+
+`owner-productions` (62), `object-properties` (27) and `tuple-items` (27) are
+discarded the same way.
+
+So the instrument was not merely silent about six domains; it was silent about the
+**largest candidate domain in the corpus**. Any statement of remaining work that
+counts only the three admitted domains — including § 80's — is quoting a
+denominator that excludes 41% of what the generator produced.
+
+### 81.4 The domain is now admitted, and it is worth +94 closures
+
+`ClaimDomain::Callbacks` joined `PROPOSABLE` on 2026-09-12 for the empty enumeration,
+with its own implementation census — the same call walk `creates` runs, reading the
+parameter-rooted dispositions that arm excuses — and a synthesized veto that observes
+invocation from inside the sampled callback.
+
+Measured over the same 418 rows: **408 export-cases gained a proven `callbacks`
+domain** where it was previously unknown (`certifiedClosures.count` 6,495 → 6,529, the
+smaller figure because it counts entries rather than domains), no row falling below the
+baseline, and `creates`, `reads` and `returns` unchanged to the
+entry over uncapped rows. (A first measurement said +94; 60 of those were false
+closures from counting only the call path, and are gone — see § 7.1 of the scoping
+document.) The closures are worth findings, not just count: over the catalog-bearing
+fixtures, **8 SC9005 obligations are discharged** by the closed domain across three
+projects, and `package-callback-consumer` goes from clean to four findings when it is
+reopened. It also turned up a latent dual-derivation trap in `withheld_weakening`, which
+now derives its gated-domain set from `PROPOSABLE` instead of restating it.
+
+The full design, the ordering trap in the observation, and the deliberate
+over-refusal are in
+[`2026-09-12-callbacks-census-scoping.md`](2026-09-12-callbacks-census-scoping.md).

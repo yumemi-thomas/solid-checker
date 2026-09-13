@@ -19928,3 +19928,136 @@ on ADR 0034's parameter root whatever this premise said. Every subject in the
 committed block is one no other premise roots: a rest parameter, which ADR 0034
 excludes, or a module binding initialized from a call, which ADR 0044 refuses.
 A control that would pass without the change under test is not a control.
+
+## ADR 0095: a class is a callee (2026-09-12)
+
+`new C(…)` where `C` is a class this artifact declares refused in both
+spellings, under two different sentences — "finds no function-like declaration
+node" for `class C {…}` and "not a function or arrow literal" for the
+`const C = class {…}` every bundler emits. Both were one absence:
+`census_callee_declaration_node` matches a resolved declaration against
+`facts.functions`, and a class is not one. § 79.2 measured the gap at 21 exports
+and 115 withheld closure entries, with nothing partially blocked by it.
+
+The census now resolves the class from its own Oxc facts — by the class node's
+span, by its name, or through the declarator binding an anonymous class
+expression — and the producer answers what the construction runs. Handshake
+protocol 54 → 55.
+
+**Remaining approximations, and they are most of a construction.** A
+construction evaluates the heritage clause's constructor, then every field
+initializer, then the constructor body; only the third is censused, and every
+other part refuses by name rather than being walked past: a **heritage clause**
+(`extends WeakMap` runs the engine's constructor, `extends WithPromise` this
+artifact's, `extends someExpression()` whatever that returned — three claims,
+none made here, and ADR 0047's `own-class` line is drawn at exactly this
+clause), a **field initializer** static or instance, a **static block** (which
+runs at class-definition time, not construction), a **computed member name**, a
+**decorator**, and a **parameter property** (it assigns a field with no node of
+its own in the body). The corpus contains both refused heritage shapes:
+`class ReactiveWeakMap extends WeakMap` and `class JSAnimation extends
+WithPromise`. A heritage premise is its own decision, and the engine-owned base
+is the easier half of it.
+
+**A deliberate over-refusal.** An **implicit constructor** refuses. With no
+heritage clause it runs nothing at all — the strongest possible answer — but
+"nothing runs" is a positive claim and there is no node to state it through.
+Refusing is the direction that cannot be wrong.
+
+**Why the refusals needed no protocol number but the admission did.** Every
+refusal is an `openReasons` entry, and a consumer refuses on any nonempty list
+whether or not it has seen the word, so the vocabulary grows without the
+consumer learning it. The number moves because a protocol-54 producer answered
+`declarationNotExact` for *every* class, and a consumer that reviewed only 54
+would otherwise receive a constructor census under a demand it believed could
+answer only for a function.
+
+**One identity subtlety worth keeping.** The transcript's resolved declaration
+is the **class** while the body censused is the constructor. Reporting the
+constructor as the declaration answers `"constructor"` to a query for `"C"`,
+which the session refuses outright — and correctly, since that check is what
+stops a producer describing a different node than the one demanded. The class
+binding is then held to the same two stability questions a function binding is:
+is it written anywhere in the file, is it declared again.
+
+## Synthesized whole-parameter return vetoes (2026-09-12)
+
+ADR 0096 supplies the missing automated veto for ADR 0075's existing exhaustive
+whole-parameter return proof. The observation compares each normal result with
+the original argument using `Object.is`; finite non-observation never supplies
+the implementation proof. No TypeScript diagnostic or new analyzer rule is
+introduced. The signed-zero, NaN, copied-object, wrong-argument, and throwing
+controls execute the actual generated JavaScript. Mutating object contents
+while returning that same object remains permitted by this identity claim.
+
+Selection is exact to artifact case/export/operation. Multiple return operations,
+member paths, missing/rest target positions, unreviewed domains, and an overload
+with no sampleable argument tuple remain withheld. Structured argument
+construction and variadic tails are not synthesized. All-throwing runs are
+incomplete vetoes; mixed runs observe only normal completions. The existing
+implementation census continues to refuse async/generator completion, wrong or
+mutated parameter identity, and incomplete return coverage independently.
+
+The retained-corpus inventory separates repeated entries from distinct semantic
+claims and package exports; it does not promise that removing the recipe gate
+will remove the next census or runtime blocker. See
+`docs/package-contract-v2/phase21/2026-09-12-returns-synthesis-inventory.md`.
+The reads experiment is separate evidence about observation limitations and
+changes no certification policy. Validation and any measured publication gains
+are recorded with the implementation handoff.
+
+**A graph scheduling limit remains.** Direct certification and one-node graphs
+can synthesize the identity veto, but a factory parent can need that closed
+identity during graph-wide Type Facts acquisition, before the graph reaches
+synthesis. The factory composition tracer pins this refusal. A safe recovery
+needs staged acquisition of dependencies; this change never supplies an
+ungated child proposal as evidence for the parent. The generated comparator
+also avoids the mutable global `Object.is`, with live controls for replacement
+of that intrinsic during subject import.
+
+**An unexecutable synthesized veto must not erase a package's other claims.**
+The full corpus exposed graph transactions and root entrypoints lost to a
+same-package dependency edge that the probe workspace cannot materialize.
+Missing authenticated dependency snapshots now use the existing synthesized
+cannot-run withholding path; the hand corpus is retried and retains its strict
+refusal behavior. Exact self-reference materialization remains unsupported by
+this change. The final corpus comparison must check published entrypoint/root
+coverage as well as the top-level certification status.
+
+## Authenticated self-package probes and bounded reads pilot (2026-09-12)
+
+ADR 0097 makes an authenticated package copy available to its own independently
+planned dependency entrypoints. Exact snapshot identity, condition replay and
+worker target comparison remain mandatory. One offline package comparison
+closed `dynamicProperty`, taking the measured graph from four to five return
+entries. Different snapshots, conflicting targets and missing sibling plans
+still refuse; no corpus-wide gain is asserted from this one measurement.
+
+A separate development-only pilot certified `@solid-primitives/utils`'s `noop`
+reads closure. Its live observer detects a module-private tracked read control
+but misses the explicit untracked control. It remains experimental, with no
+general production recipe or authorship inference. See
+`docs/package-contract-v2/phase21/2026-09-12-reads-development-pilot.md`.
+
+## Dependency-first synthesis unblocks factory parents (2026-09-12)
+
+ADR 0098 addresses ADR 0096's remaining graph scheduling limit. Initial Type
+Facts acquisition waits for reachable dependencies to have their own synthesis
+attempt. Deferred plans remain available for exact owner resolution, but no
+shared-importer evidence is retained early. The finalizer still requires the
+child's completed veto, exhaustive return proof and authenticated receipt.
+
+The same-artifact offline `seroval-plugins@1.5.6` `./web` graph comparison moves
+from refusal at `AbortSignalPlugin` to publication of production and development
+cases, each with fourteen plain-object export roots. Its dependency graph closes
+five creates and three returns entries; 28 reads and three creates remain
+withheld. This is a package publication gain, not a claim that every plugin
+behavior or a new consumer is certified. Ordinary case-set certification without
+dependency-graph acquisition remains refused. No ecosystem-wide gain is inferred.
+
+The factory regression covers empty hand recipes, a three-node graph, refused
+child census, contradictory/incomplete child gates, and exact returned argument,
+export and importer controls. Verification and the public audit projection are
+linked from ADR 0098. The repeated creates refusal inventory also establishes
+that the old 174-entry depth-exhaustion estimate was not an actual matching
+refusal count; no proof-search bound was raised.

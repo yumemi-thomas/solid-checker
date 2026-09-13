@@ -791,7 +791,14 @@ impl ClaimDomain {
     /// That hazard is computed twice, over two ASTs, and both must agree —
     /// see § 10 of
     /// `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`.
-    pub const PROPOSABLE: [Self; 3] = [Self::Creates, Self::Returns, Self::Reads];
+    /// `Callbacks` is admitted (2026-09-12) for the empty enumeration only:
+    /// "this export invokes none of the callable arguments it is handed". The
+    /// implementation census proves it by there being no parameter-rooted
+    /// disposition in the same call walk `creates` runs, and the synthesized
+    /// veto contradicts it by observing invocation from inside the sampled
+    /// callback. ADR 0023's line holds by construction: the walk dispositions
+    /// calls, and retaining a callable is not one.
+    pub const PROPOSABLE: [Self; 4] = [Self::Creates, Self::Returns, Self::Reads, Self::Callbacks];
 
     /// Whether a document may propose this domain for closure proof.
     #[must_use]
