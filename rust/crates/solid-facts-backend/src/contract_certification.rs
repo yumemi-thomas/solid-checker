@@ -607,7 +607,14 @@ impl CertificationPlan {
                         already_withheld.push(record);
                         continue;
                     }
-                    None => return Err(error),
+                    None => {
+                        let records = workspace_refusal_withholding(plan, &error);
+                        if records.is_empty() {
+                            return Err(error);
+                        }
+                        already_withheld.extend(records);
+                        continue;
+                    }
                 },
             };
             return finalization::finalize_value_only(
@@ -763,6 +770,58 @@ pub(super) fn incomplete_gate_withholding(
     })
 }
 
+/// The candidates whose mandatory vetoes could not *run at all* because the
+/// private probe workspace for this plan cannot be built: two authenticated
+/// snapshots of one dependency name at different versions, which one
+/// `node_modules/<name>` cannot both be (`probe_harness::authenticated_dependency_closure`).
+///
+/// That is not a contradiction and it is not one candidate's veto erroring;
+/// it is every scheduled gate of the plan being refused before any of them
+/// executes — the `refused_mode` disposition `runtime_probes.rs` already gives a
+/// worker that declines to run, here reached one level earlier. ADR 0036 § 2
+/// withholds a candidate whose veto ended in an error rather than refusing the
+/// row, and the harness module's own contract says a row that installs two
+/// versions "refuses its gate instead of being probed against a copy chosen
+/// here". Until the 1.x negative rows landed no measured row had both a gate
+/// and such a graph, so the error surfaced as a whole-node finalization
+/// failure and took every certified closure of `corvu@0.7.2`'s graph with it.
+/// Withholding all of the plan's candidates says exactly what happened, closes
+/// nothing, and lets the rest of the case set finalize.
+pub(super) fn workspace_refusal_withholding(
+    plan: &CertificationPlan,
+    error: &Policy2FinalizationError,
+) -> Vec<WithheldClosure> {
+    let Policy2FinalizationError::ProbeHarness(
+        refusal @ ProbeHarnessError::AmbiguousDependencyVersion { .. },
+    ) = error
+    else {
+        return Vec::new();
+    };
+    let Ok(schedule) = plan.probe_gate_schedule() else {
+        return Vec::new();
+    };
+    schedule
+        .gates()
+        .iter()
+        .filter_map(|gate| {
+            let subject = gate.subject();
+            let SemanticClaimPath::Domain(ClaimPath::Call(domain)) = subject.path else {
+                return None;
+            };
+            Some(WithheldClosure {
+                artifact_case: subject.artifact_case.clone(),
+                export: subject.export.clone(),
+                domain: type_facts::call_claim_domain_name(domain).to_owned(),
+                semantic_claim_id: gate.semantic_claim_id().to_owned(),
+                reason: format!(
+                    "{WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX}{} (the run was refused: {refusal})",
+                    gate.id()
+                ),
+            })
+        })
+        .collect()
+}
+
 /// Finalizes a complete set of alternative artifact cases while sharing only
 /// immutable Type Facts setup. Evidence and receipts remain one-per-plan and
 /// each is checked against its own demand graph before this returns anything.
@@ -845,7 +904,10 @@ pub fn certify_value_only_case_set(
             // authority with another.
             let probe_gates = match finalization::authenticate_probe_gates(plan, probes, pin) {
                 Ok(gates) => gates,
-                Err(error) if incomplete_gate_withholding(plan, &error).is_some() => {
+                Err(error)
+                    if incomplete_gate_withholding(plan, &error).is_some()
+                        || !workspace_refusal_withholding(plan, &error).is_empty() =>
+                {
                     return individually(original);
                 }
                 Err(error) => return Err(error),
@@ -14302,6 +14364,94 @@ export const value = phantom;
                 && rendered.contains("2.0.0-rc.3")
                 && rendered.contains("2.0.0-rc.4"),
             "the refusal must name the package and both versions: {rendered}"
+        );
+    }
+
+    /// The same refusal, as the per-plan loop consumes it: every scheduled
+    /// gate is withheld with the placement refusal as its reason, none is
+    /// closed, and the reason is the run-refused shape the ecosystem runner
+    /// counts as `vetoRunRefused`.
+    #[test]
+    fn a_two_version_workspace_withholds_every_gate_instead_of_refusing_the_plan() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("dependency-two-versions-withheld");
+        let mut plan = dependency_consumer_plan(true);
+        let stub = census_fixture().join("dependency-consumer/node_modules/solid-js");
+        let manifest =
+            String::from_utf8(std::fs::read(stub.join("package.json")).expect("stub manifest"))
+                .expect("the stub manifest is UTF-8")
+                .replace("2.0.0-rc.3", "2.0.0-rc.4");
+        let runtime = std::fs::read(stub.join("index.js")).expect("stub runtime");
+        let other = published_archive_for(
+            "solid-js",
+            "2.0.0-rc.4",
+            &[
+                ("package/package.json", manifest.as_bytes()),
+                ("package/index.js", runtime.as_slice()),
+            ],
+        );
+        let integrity = ArtifactSnapshot::from_published(&other, SnapshotLimits::policy_2())
+            .expect("the second stub archive assembles")
+            .package_integrity()
+            .to_owned();
+        let mut transaction = CertificationPlanningTransaction::new();
+        plan.certification_sources.extend(
+            dependencies_verify_for_test(
+                &mut transaction,
+                vec![PublishedGraphSourceRequest::new(
+                    other,
+                    graph_lock("solid-js", "2.0.0-rc.4", &integrity),
+                    DEPENDENCY_STUB_ROOT,
+                )],
+            )
+            .expect("the second stub authenticates too"),
+        );
+        let schedule = plan.probe_gate_schedule().unwrap();
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        let Some(configuration) = tracer_configuration_with_dependencies(
+            &census_fixture(),
+            scratch.path(),
+            "dependency-two-versions-withheld",
+            &[(
+                claim_id.as_str(),
+                "dependency-consumer.mjs",
+                &["solid-js"] as &[&str],
+            )],
+        ) else {
+            return;
+        };
+        let Err(error) =
+            super::finalization::authenticate_probe_gates(&plan, Some(&configuration), &pin)
+        else {
+            panic!("two versions refuse the workspace");
+        };
+        assert!(super::incomplete_gate_withholding(&plan, &error).is_none());
+        let withheld = super::workspace_refusal_withholding(&plan, &error);
+        assert_eq!(withheld.len(), schedule.gates().len());
+        assert!(!withheld.is_empty());
+        for (record, gate) in withheld.iter().zip(schedule.gates()) {
+            assert_eq!(record.semantic_claim_id, gate.semantic_claim_id());
+            assert!(
+                record
+                    .reason
+                    .starts_with(super::WITHHELD_CLOSURE_VETO_INCOMPLETE_PREFIX)
+            );
+            assert!(
+                record.reason.contains(
+                    "the run was refused: probe workspace cannot place dependency solid-js"
+                )
+            );
+            assert!(record.reason.contains("2.0.0-rc.4"));
+        }
+        // Any other finalization error withholds nothing here.
+        assert!(
+            super::workspace_refusal_withholding(
+                &plan,
+                &super::Policy2FinalizationError::ProbeAuthorityRequired
+            )
+            .is_empty()
         );
     }
 

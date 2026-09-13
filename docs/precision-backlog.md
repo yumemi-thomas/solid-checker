@@ -1,5 +1,45 @@
 # Precision backlog
 
+## The coercion census residue, sized: 24 sites, every one on a decided boundary (2026-09-13)
+
+Ranked as "the coercion premise, about 300 entries" after the 1.x audit. Read
+against the current corpus it is 400 withheld entries over **24 distinct
+sites**, and each site's refusal already names the premise it fell outside of
+(the `coerced operands rooted at …` tail the producer states):
+
+| shape | entries | sites | the boundary it sits on |
+| --- | ---: | ---: | --- |
+| every operand parameter-rooted, but inside a local-recursion frame (`binarySubdivide`, `scalePoint`, `translateAxis`, seroval helpers) | 92 | 6 | ADR 0092's depth gate, kept because a frame's slot may hold an object this program built; lifting it needs per-argument provenance on the call row into the frame, which `ImplementationCall` does not carry — a producer and protocol change, then an ADR |
+| `oppositeSideMap[side] + placement.slice(side.length)` (`@floating-ui/utils`, one site reached by every export) | 96 | 1 | an element access into a module-level data literal beside a default-library call result; ADR 0045 refuses library results by decision and no premise reads a module literal's element type |
+| a local initialized from a non-primitive root (`local-binding`, `-written`, `-from-call`, `-uninitialized`) | 134 | 8 | ADR 0045 follows a once-written initialized local only to where its initializer roots; compound assignment (`originPoint -= translate`) and `let` reassignment are outside it |
+| a call result the census cannot bind (`createCollator`, `toAttribute`, `calcAxisDelta`) | 23 | 4 | ADR 0045's "callee the census cannot bind" and cross-module helper premise mismatches (`twin … premised …`) |
+| a rest-parameter signature (`@solid-primitives/utils` `immutable/number.js`) | 22 | 10 | ADR 0038's helper premise refuses rest signatures |
+| a member of a parameter (`state.latest.originX`, `props.…`) | 21 | 10 | ADR 0048 did not join `nested-parameter` to the caller-provenance spellings: what the caller's object *holds* may be this program's |
+| a written parameter, mixed roots | 12 | 3 | ADR 0092 / 0045 refusals by name |
+
+No code changed for this item. The one shape worth an ADR is the first: six
+sites, 92 entries, and the argument is already half-written in ADR 0092's own
+refusal list ("whether ADR 0034's frame case survives that argument is its own
+question and is measured nowhere") — it is now measured. Everything else is one
+to three sites per shape and is better left to the refusal text, which already
+says which premise would have to be widened.
+
+## `callbacks` refusals measured by member: correct verdicts, not a lever (2026-09-13)
+
+The 1,161 `census refused: the callbacks closure candidate enumerates no
+invocation, but the implementation census dispositioned N call(s) into the
+parameter-rooted family` entries were ranked as a lever on the assumption that
+the family over-refuses. The refusal text now carries the walk's per-member
+counts, and the corpus splits as: accessor reads 1,266 sites, direct calls on
+the caller's argument 710, iteration over the caller's collection 276 + 276,
+coercions 127, `hasInstance` 62, accessor writes 13 (§ 10 of
+[the callbacks scoping note](package-contract-v2/phase21/2026-09-12-callbacks-census-scoping.md)).
+Every member is a `callbacks` item by `semantic-model.md` § callbacks' own
+list, so these are true refusals of a false `callbacks: []`. The path to
+closing them is proposing the described enumeration (`from`, `at`, tracking,
+owner per item), which is an ADR against the census and the generator, not a
+narrowing of the family. No closure moved; the instrument is the deliverable.
+
 ## Solid 1.x `creates` audit extended: `createContext`, `getOwner`, `mapArray`, `onCleanup`, `untrack` (2026-09-13)
 
 Five more rows for `solid-js@1.9.14`, read out of all six bundles by the same

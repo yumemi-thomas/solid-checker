@@ -265,3 +265,49 @@ usable gate here: an export can have a clean creates walk and still invoke a
 caller-supplied callable (`drop = (list, n = 1) => list.slice(n)` creates nothing and
 invokes `slice`), so reusing it would trade true closures for time on a predicate that
 does not mean what this domain needs. Scoped, not built.
+
+## 10. The refusal, measured by member (2026-09-13)
+
+§ 4's caveat — the family-wide refusal is deliberate and *unmeasured* — is now
+measured. The refusal text carries the walk's per-member counts
+(`CallerSuppliedInvocations` in `type_facts.rs`: `2 call(s) into the
+parameter-rooted family (parameter-rooted 1, parameter-rooted-coercion 1)`), and
+the 418-row corpus, release binary, checked-in recipe corpus, aggregates to:
+
+| member | sites | entries where it is the *only* member |
+| --- | ---: | ---: |
+| `parameter-rooted-accessor` | 1,266 | 165 |
+| `parameter-rooted` (the direct call) | 710 | 154 |
+| `parameter-rooted-element` + `parameter-rooted-iterable` | 276 + 276 | 0 (always together: `for (const cb of callbacks) cb()`) |
+| `parameter-rooted-coercion` | 127 | 62 (all `@solid-primitives/utils` `compare`) |
+| `parameter-or-own-result-accessor` | 90 | 0 |
+| `parameter-rooted-has-instance` | 62 | 0 (`ofClass`, with its `.constructor` read) |
+| `parameter-rooted-accessor-write` | 13 | 1 |
+
+1,161 refused `callbacks` entries in total, 47 rows, 1,070 of them on
+dependency nodes. The dominant shapes are a method call on a parameter
+(`arr.filter(isNonNullable)`, `node.contains(other)`: an accessor read of the
+member and then the call — 337 entries), a loop over a caller-supplied
+collection invoking each element (`chain`, `mergeRefs` — 276 entries), and a
+bare property read on a parameter (165 entries).
+
+**What this settles.** None of these members can be excused without changing
+the model: `semantic-model.md` § callbacks names a getter reached by property
+access, an iteration-protocol member, `Symbol.hasInstance` reached by
+`instanceof` and a coercion reaching `valueOf`/`toString` as `callbacks` items
+in so many words. The refusals are therefore *correct* verdicts on the claim
+`callbacks: []`, not over-refusal, and the split above says what a true
+enumeration for these exports would have to contain: mostly method invocations
+on the caller's argument and per-element invocations over the caller's
+collection, rarely a bare callback parameter.
+
+**What it would take.** Closing these needs the described enumeration this
+note withheld in § 4 — items with `from` (derivable now: the parameter the
+walk rooted the site at), `at` (call-time versus a later event, which needs
+the walk to know whether the site sits in the export's own frame or in a
+callable the export builds and hands out — `chain` is the latter), and the
+tracking and owner facts the walk does not derive at all. That is an ADR, not
+a patch, and its census would have to confirm each proposed item against a
+site and refuse any site without an item. Until then the domain closes only
+where the walk finds no caller-supplied invocation, which is what the +34 of
+§ 7 were.

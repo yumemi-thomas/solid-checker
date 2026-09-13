@@ -1136,6 +1136,21 @@ fn certify_graphs_with_recipe_gating(
                         withdrawals.push((digest.to_owned(), record));
                         continue;
                     }
+                    // A private workspace this node cannot have at all -- two
+                    // authenticated versions of one dependency name in its
+                    // closure -- refuses every gate of the node before any
+                    // runs. Withhold them all with that reason rather than
+                    // failing the case set (`workspace_refusal_withholding`).
+                    let workspace_refused =
+                        super::workspace_refusal_withholding(&node.plan, &source);
+                    if !workspace_refused.is_empty() {
+                        withdrawals.extend(
+                            workspace_refused
+                                .into_iter()
+                                .map(|record| (digest.to_owned(), record)),
+                        );
+                        continue;
+                    }
                     // A synthesized veto the pinned interpreter cannot run
                     // for this artifact case -- an export condition it
                     // cannot be given (`@tanstack/custom-condition`), or

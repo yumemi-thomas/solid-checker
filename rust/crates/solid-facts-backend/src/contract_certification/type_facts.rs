@@ -8756,8 +8756,51 @@ type CensusWalkPass = (
     CensusOutcome,
     Vec<String>,
     Vec<(typefacts::Location, Vec<typefacts::ParameterPremise>)>,
-    usize,
+    CallerSuppliedInvocations,
 );
+
+/// The sites a walk dispositioned into the parameter-rooted family, in total
+/// and by member.
+///
+/// The total is the `callbacks` census's verdict. The per-member breakdown is
+/// its instrument: the family spans the direct call and every non-call form
+/// the domain's definition names (`semantic-model.md` § callbacks), and a
+/// refusal that reported only the total could not say whether an export was
+/// refused for calling a callback or for comparing two parameters with `<`.
+/// The 2026-09-12 scoping note left that split unmeasured; the refusal text
+/// now carries it, so the ecosystem ledger can be aggregated by member.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct CallerSuppliedInvocations {
+    total: usize,
+    by_member: std::collections::BTreeMap<&'static str, usize>,
+}
+
+impl CallerSuppliedInvocations {
+    fn record(&mut self, disposition: CensusDisposition) {
+        self.total += 1;
+        *self.by_member.entry(disposition.wire_name()).or_insert(0) += 1;
+    }
+}
+
+impl std::fmt::Display for CallerSuppliedInvocations {
+    /// `2 call(s) into the parameter-rooted family (parameter-rooted 1,
+    /// parameter-rooted-coercion 1)` — the members in wire-name order.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} call(s) into the parameter-rooted family (",
+            self.total
+        )?;
+        for (index, (member, count)) in self.by_member.iter().enumerate() {
+            if index > 0 {
+                f.write_str(", ")?;
+            }
+            write!(f, "{member} {count}")?;
+        }
+        f.write_str(")")
+    }
+}
+
 /// Whether one census pass reached a verdict.
 ///
 /// `NeedsTranscripts` is the acquisition phase's signal, never a verdict: the
@@ -8810,7 +8853,7 @@ struct CensusRun<'a> {
     /// family — the invocations of caller-supplied code that are the
     /// `callbacks` domain's items. Counted for every domain because the walk
     /// is shared; only the callbacks census reads it.
-    caller_supplied_invocations: usize,
+    caller_supplied_invocations: CallerSuppliedInvocations,
 }
 
 impl CensusRun<'_> {
@@ -8830,7 +8873,7 @@ impl CensusRun<'_> {
     /// saw.
     fn record(&mut self, disposition: CensusDisposition, site: String) {
         if disposition.runs_caller_supplied_code() {
-            self.caller_supplied_invocations += 1;
+            self.caller_supplied_invocations.record(disposition);
         }
         self.sites.push(site);
     }
@@ -8985,7 +9028,7 @@ fn census_call_walk(
         deepest: 0,
         sources: std::collections::BTreeMap::new(),
         frame: None,
-        caller_supplied_invocations: 0,
+        caller_supplied_invocations: CallerSuppliedInvocations::default(),
     };
     // Seeded with the demanded export, so a helper calling back into it refuses
     // as a cycle rather than running out of depth.
@@ -9255,13 +9298,13 @@ fn census_callbacks_domain(
     let (outcome, mut sites, requested, caller_supplied) =
         census_call_walk(plan, &refuse, transcript, implementation, evidence)?;
     if matches!(outcome, CensusOutcome::Decided { .. }) {
-        if caller_supplied > 0 {
+        if caller_supplied.total > 0 {
             // Not a premise gap: the walk decided, and what it decided is that
             // the claim is false. Refused rather than closed, and named so the
             // refusal is readable as evidence rather than as an absence.
             return Err(refuse(format!(
                 "the callbacks closure candidate enumerates no invocation, but the implementation \
-                 census dispositioned {caller_supplied} call(s) into the parameter-rooted family: \
+                 census dispositioned {caller_supplied}: \
                  this export invokes callable(s) its caller supplied"
             )));
         }
@@ -9311,7 +9354,7 @@ fn census_reads_domain(
         deepest: 0,
         sources: std::collections::BTreeMap::new(),
         frame: None,
-        caller_supplied_invocations: 0,
+        caller_supplied_invocations: CallerSuppliedInvocations::default(),
     };
     let mut sites = Vec::new();
     for form in &implementation.uncensused_invoking_forms {
@@ -20736,7 +20779,7 @@ mod tests {
             deepest: 0,
             sources: std::collections::BTreeMap::new(),
             frame: None,
-            caller_supplied_invocations: 0,
+            caller_supplied_invocations: CallerSuppliedInvocations::default(),
         }
     }
 
@@ -21011,9 +21054,14 @@ mod tests {
             run.sites
         );
         assert_eq!(
-            run.caller_supplied_invocations, 1,
+            run.caller_supplied_invocations.total, 1,
             "a caller-supplied accessor reaches the walk as a form, not as a call, and the              callbacks census enumerates it: {:?}",
             run.sites
+        );
+        assert_eq!(
+            run.caller_supplied_invocations.to_string(),
+            "1 call(s) into the parameter-rooted family (parameter-rooted-accessor 1)",
+            "the refusal names the member, so the ledger can be aggregated by it"
         );
 
         // A setter is the same premise in write position (ADR 0040), and the
@@ -21031,7 +21079,7 @@ mod tests {
             census_transcript(&mut run, &written, 0, &[]),
             Ok(CensusStep::Decided)
         );
-        assert_eq!(run.caller_supplied_invocations, 1, "{:?}", run.sites);
+        assert_eq!(run.caller_supplied_invocations.total, 1, "{:?}", run.sites);
 
         // The control, and the reason the predicate is not "any accessor": an
         // accessor on a literal this export wrote is a callable it *did* define,
@@ -21060,7 +21108,7 @@ mod tests {
             run.sites
         );
         assert_eq!(
-            run.caller_supplied_invocations, 0,
+            run.caller_supplied_invocations.total, 0,
             "an accessor on the export's own literal is not a caller-supplied invocation: {:?}",
             run.sites
         );
