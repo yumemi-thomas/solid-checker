@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:d81ff5f1a8d3241f44418e54723ecbd3c77f4591afefe01a8dc52bc4776b9d0f";
+    "sha256:797e0d75efeee42d36c8214f960f06d8b1702f936087db7a5a48d09044a604d3";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -316,7 +316,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // refuse on `callSignatureNotUnique` or `implementationUnavailable` exactly as
 // before — but it would drop the new field, and a `deny_unknown_fields`
 // consumer would reject the transcript outright, so the number moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 58;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 59;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

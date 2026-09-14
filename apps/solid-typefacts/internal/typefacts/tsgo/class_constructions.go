@@ -2,6 +2,8 @@ package tsgo
 
 import (
 	"github.com/microsoft/typescript-go/shim/ast"
+	"github.com/microsoft/typescript-go/shim/checker"
+
 	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts"
 )
 
@@ -198,4 +200,35 @@ func exactClassDeclarationAt(
 	}
 	visit(sourceFile.AsNode())
 	return match
+}
+
+// classConstructSignaturesLocked answers the construct signatures of a value
+// whose call side is empty, for ADR 0105's premise, or nil.
+//
+// It asks the type at the demanded identifier, which in a value position is
+// the **constructor** rather than the instance — the distinction the ADR 0099
+// comment in `export_value_transcripts.go` records the hard way, where the
+// type at a class *declaration's own name* is the instance type and has no
+// construct signature at all.
+//
+// It states nothing for a value that is also callable. Such a value is two
+// claims, and selecting the construct side here would be choosing between them
+// silently; `classConstructorAt` is what decides whether the construction is
+// one this producer can census, and it runs on the declaration this selection
+// leads to.
+func (p *project) classConstructSignaturesLocked(valueType *checker.Type) []*checker.Signature {
+	if valueType == nil {
+		return nil
+	}
+	if len(p.checker.GetSignaturesOfType(valueType, checker.SignatureKindCall)) != 0 {
+		return nil
+	}
+	// The type at a class declaration's **own name** is the *instance* type,
+	// which has no construct signature -- the trap ADR 0099's comment in
+	// `export_value_transcripts.go` records, found there by the `Box` fixture.
+	// Asking the class node itself answers the same instance type, so a demand
+	// that lands on the declaring name states nothing and refuses. A demand at
+	// any value position -- the binding of `var C = class {…}`, or an
+	// `export { C }` specifier -- reaches the constructor and answers.
+	return p.checker.GetSignaturesOfType(valueType, checker.SignatureKindConstruct)
 }

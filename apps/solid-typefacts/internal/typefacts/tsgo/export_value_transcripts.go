@@ -304,6 +304,23 @@ func (p *project) exportImplementationTranscriptLocked(
 			transcript.Declaration = p.resolvedDeclaration(nil, target.ValueDeclaration, target)
 		}
 	}
+	// ADR 0105: a class export is **constructed**, not called. `new C(…)` runs
+	// the constructor body exactly as a call runs a function body, and the
+	// class-construction census below already knows how to walk it -- but
+	// `SignatureKindCall` yields nothing for a class, and `!= 1` reports the
+	// same reason for "none" as for "several", so the transcript returned
+	// before any implementation was looked for and the census was unreachable
+	// for a class export.
+	//
+	// Asked only when the call side is *empty*. A value with both a call and a
+	// construct signature is two claims, and picking one of them here would be
+	// choosing which without saying so.
+	callKind := typefacts.CallKindCall
+	if len(signatures) == 0 {
+		if constructs := p.classConstructSignaturesLocked(valueType); len(constructs) == 1 {
+			signatures, callKind = constructs, typefacts.CallKindConstruct
+		}
+	}
 	if len(signatures) != 1 {
 		transcript.OpenReasons = append(transcript.OpenReasons, "callSignatureNotUnique")
 		return transcript
@@ -336,19 +353,70 @@ func (p *project) exportImplementationTranscriptLocked(
 		transcript.OpenReasons = append(transcript.OpenReasons, "implementationUnavailable")
 		return transcript
 	}
+	// ADR 0105: selecting the construct signature found a constructor *body*,
+	// and a construction runs more than that. The heritage clause's
+	// constructor, every field initializer, a static block, a computed member
+	// name, a decorator and a parameter property each run code this body
+	// census would be silent about, and silence is the failure this census
+	// exists to prevent. `classConstructorAt` is ADR 0047's line, already
+	// drawn and already tested; it is asked here rather than re-derived, and
+	// every one of its reasons refuses.
+	if callKind == typefacts.CallKindConstruct {
+		constructor, refusal := classConstructorAt(implementation.Parent)
+		if refusal != "" {
+			transcript.OpenReasons = append(transcript.OpenReasons, refusal)
+			return transcript
+		}
+		// Overload resolution picked a constructor; the gate walked the class
+		// and picked one too. A disagreement means one of them is describing a
+		// different node, which is never something to census through.
+		if constructor != implementation {
+			transcript.OpenReasons = append(transcript.OpenReasons, "declarationAmbiguous")
+			return transcript
+		}
+	}
 	if implementationOf != nil {
 		transcript.Declaration = p.resolvedDeclaration(nil, target.ValueDeclaration, target)
 		transcript.ImplementationOf = implementationOf
 	} else {
-		transcript.Declaration = p.resolvedDeclaration(nil, implementation, target)
+		declared := implementation
+		if callKind == typefacts.CallKindConstruct {
+			// The transcript is about the **class** the consumer demanded;
+			// what it censuses is the constructor. A constructor has no name
+			// of its own, so reporting it here would answer "constructor" to a
+			// query for "Store" -- which the session refuses outright, and
+			// correctly: that check is what stops a producer describing some
+			// other node than the one demanded. The same indirection
+			// `localDeclarationImplementationTranscriptLocked` takes when a
+			// consumer resolves a callee to a class.
+			if class := implementation.Parent; class != nil &&
+				(ast.IsClassDeclaration(class) || ast.IsClassExpression(class)) {
+				declared = class
+				// `var Store = class {…}` is what every bundler emits for
+				// `class Store {…}`, and the class expression itself is
+				// anonymous. The enclosing variable declaration is what
+				// carries the name, which is the same indirection the arrow
+				// case takes for `const helper = () => …`.
+				if class.Name() == nil {
+					if binding := class.Parent; binding != nil &&
+						ast.IsVariableDeclaration(binding) {
+						declared = binding
+					}
+				}
+			}
+		}
+		transcript.Declaration = p.resolvedDeclaration(nil, declared, target)
 	}
 	if transcript.Declaration == nil {
 		transcript.OpenReasons = append(transcript.OpenReasons, "declarationUnavailable")
 		return transcript
 	}
+	if callKind == typefacts.CallKindConstruct {
+		transcript.Invocation = typefacts.CallKindConstruct
+	}
 	transcript.CompletionForm = implementationCompletionForm(implementation)
 	selected := p.selectedSignatureLocked(
-		signatures[0], selectedDeclaration, target, typefacts.CallKindCall, callableDepth,
+		signatures[0], selectedDeclaration, target, callKind, callableDepth,
 	)
 	transcript.Signature = &selected
 	transcript.ParameterUses = p.parameterUseCensusLocked(ctx, implementation)

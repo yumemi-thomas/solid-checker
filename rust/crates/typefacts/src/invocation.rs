@@ -852,6 +852,21 @@ pub struct ExportImplementationTranscript {
     /// "not stated", never "not a built-in".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_library_alias: Option<DefaultLibraryAlias>,
+    /// The form the selected signature is invoked through: `Some("construct")`
+    /// for a class export, and **absent for a call** (ADR 0105, handshake
+    /// protocol 59).
+    ///
+    /// Absence has to mean `call`, because that is what every producer below
+    /// this protocol meant by saying nothing; the handshake refuses protocol
+    /// and digest together, so no consumer that has not reviewed this field
+    /// ever sees a producer that states it.
+    ///
+    /// **A consumer must read it.** The census of a construction is a census
+    /// of a constructor body — `new C(…)` — and a consumer that took this
+    /// transcript for a call would be describing an invocation the class
+    /// cannot accept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invocation: Option<Arc<str>>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub primitive_completion: bool,
     /// The conjunction of seven independent gates, every one of which the

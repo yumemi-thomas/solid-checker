@@ -805,6 +805,7 @@
         "primitiveCompletion": { "type": "boolean" },
         "notCallableValue": { "$ref": "#/$defs/notCallableValue" },
         "defaultLibraryAlias": { "$ref": "#/$defs/defaultLibraryAlias" },
+        "invocation": { "enum": ["construct"], "description": "The form the selected signature is invoked through (ADR 0105, handshake protocol 59). Stated as \"construct\" for a class export and absent for a call, because absence is what every producer below this protocol meant by saying nothing. A consumer must read it: the census of a construction is a census of a constructor body, and reading it as a call would describe an invocation the class cannot accept." },
         "complete": { "type": "boolean" },
         "openReasons": { "type": "array", "maxItems": 1000000, "items": { "type": "string" } }
       }

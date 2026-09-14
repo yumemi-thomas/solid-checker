@@ -531,9 +531,22 @@ type ExportImplementationTranscript struct {
 	// the transcript, and a consumer with no reviewed entry for the named
 	// member must keep refusing on them.
 	DefaultLibraryAlias *DefaultLibraryAlias `cbor:"defaultLibraryAlias,omitempty" json:"defaultLibraryAlias,omitempty"`
-	PrimitiveCompletion bool                 `cbor:"primitiveCompletion,omitempty" json:"primitiveCompletion,omitempty"`
-	Complete            bool                 `cbor:"complete,omitempty" json:"complete,omitempty"`
-	OpenReasons         []string             `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+	// Invocation is the form the selected signature is invoked through, stated
+	// as `construct` for a class export and **absent for a call** (ADR 0105,
+	// handshake protocol 59).
+	//
+	// Absence has to mean `call`, because that is what every producer below
+	// this protocol meant by saying nothing. What makes that safe is the
+	// handshake: protocol and digest are refused together, so no consumer that
+	// has not reviewed this field will ever see a producer that states it. A
+	// consumer *has* to read it, because the census of a construction is a
+	// census of different code -- `new C(…)` runs a constructor body, and a
+	// consumer that read this transcript as `C(…)` would be describing a call
+	// the class cannot even accept.
+	Invocation          CallKind `cbor:"invocation,omitempty" json:"invocation,omitempty"`
+	PrimitiveCompletion bool     `cbor:"primitiveCompletion,omitempty" json:"primitiveCompletion,omitempty"`
+	Complete            bool     `cbor:"complete,omitempty" json:"complete,omitempty"`
+	OpenReasons         []string `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
 }
 
 // ParameterPremise is one parameter's type binding under which an

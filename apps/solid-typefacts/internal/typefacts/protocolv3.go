@@ -355,8 +355,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 58
-	TypeFactsSchemaSHA256             = "sha256:d81ff5f1a8d3241f44418e54723ecbd3c77f4591afefe01a8dc52bc4776b9d0f"
+	TypeFactsHandshakeProtocol uint64 = 59
+	TypeFactsSchemaSHA256             = "sha256:797e0d75efeee42d36c8214f960f06d8b1702f936087db7a5a48d09044a604d3"
 )
 
 type ServiceHandshake struct {

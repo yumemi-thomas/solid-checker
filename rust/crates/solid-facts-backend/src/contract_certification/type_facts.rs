@@ -4370,6 +4370,20 @@ fn require_named_export_implementation<'a>(
         .implementation
         .as_ref()
         .ok_or_else(|| open("runtime implementation transcript is absent"))?;
+    // ADR 0105: which invocation form this transcript censused. Absence is
+    // `call`, which is what every producer below protocol 59 meant by saying
+    // nothing; `construct` is a class export, whose census walked a
+    // constructor body because that is the code `new C(…)` runs. Any other
+    // spelling is one this build has not reviewed, and reading it as either of
+    // the two would be inventing a claim -- so it refuses, and a form a later
+    // producer adds arrives as a refusal rather than as silence.
+    if let Some(invocation) = implementation.invocation.as_deref()
+        && invocation != "construct"
+    {
+        return Err(open(&format!(
+            "runtime implementation transcript states an unreviewed invocation form {invocation:?}"
+        )));
+    }
     let control_flow_only_open = !implementation.complete
         && !implementation.open_reasons.is_empty()
         && implementation
@@ -9061,6 +9075,13 @@ const CENSUS_OWN_LITERAL_SUBJECT_PROTOCOL: u64 = 28;
 /// dependency rather than guarding a field that could be misread.
 const CENSUS_DEPENDENCY_MEMBER_SUBJECT_PROTOCOL: u64 = 58;
 
+/// The handshake protocol at which an implementation transcript states whether
+/// it censused a call or a construction (ADR 0105). Below it a class export
+/// never reached an implementation at all -- the call-signature check refused
+/// it first -- so there was no construction transcript to misread; above it
+/// there is, and this build has to be the one that reads the field.
+const CENSUS_INVOCATION_FORM_PROTOCOL: u64 = 59;
+
 const CENSUS_SUBJECT_ROOT_DERIVATION_PROTOCOL: u64 = 27;
 
 const CENSUS_PARAMETER_ROOTED_ITERATION_PROTOCOL: u64 = 26;
@@ -9622,6 +9643,13 @@ fn census_creates_domain(
             "implementation-census premise required: a coercion's operand calls and a transcript's \
              primitive completion arrived at handshake protocol \
              {CENSUS_PRIMITIVE_COMPLETION_PROTOCOL} and this build speaks {}",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_INVOCATION_FORM_PROTOCOL {
+        return Err(refuse(format!(
+            "implementation-census premise required: a transcript's invocation form arrived at \
+             handshake protocol {CENSUS_INVOCATION_FORM_PROTOCOL} and this build speaks {}",
             typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
         )));
     }
