@@ -1,5 +1,39 @@
 # Precision backlog
 
+## The two largest cases censused: B-1 is 188 rows, and its premise needs revising (2026-09-14)
+
+`9887e137` (`@solid-primitives/utils@6.4.1`, 336 rows) and `9bc68a12`
+(`@floating-ui/utils@0.2.12`, 80 rows) are the two biggest cases on the
+1,884-row frontier. Both are now censused; addendum in
+`docs/package-contract-v2/phase21/2026-09-14-tier-a-pass-2-census.md`.
+
+**`9887e137` yields nothing to authoring** — all eight of its still-withheld
+exports are census refused — and it is not one premise away from closing. Its
+eight refusals split across five: `keys`/`entries` (B-1),
+`defaultEquals`/`tryOnCleanup` (B-2), `createHydratableSignal`/
+`createHydrateSignal` on `sharedConfig` (B-3), `createMicrotask` (B-4) and
+`defer` (B-6). B-1 reaches 84 of its 336 rows.
+
+**The correction B-1 needs.** The depth plan describes B-1's refusal as
+`implementationUnavailable` — "the alias hop lands on `lib.es2017.object.d.ts`,
+which has no body to census". That holds for the `Math.*` aliases
+(`floor`/`max`/`min`/`round` on `9bc68a12`) and is **wrong for the `Object.*`
+ones**: `keys` and `entries` refuse with `callSignatureNotUnique`, because both
+are overloaded and the census cannot select a signature. A premise built to the
+plan's single description would close the four `Math.*` exports and leave
+`keys`/`entries` untouched — two thirds of B-1's rows. B-1 has to lift both
+reasons on one stated fact; once the identity is stated, which signature the
+checker would have selected stops mattering.
+
+Measured reach: **B-1 188 rows** (`entries` 62, `keys` 62, `floor`/`max`/`min`/
+`round` 16 each), **B-2 124 rows** (`defaultEquals` 62, `tryOnCleanup` 62).
+B-1 is the largest single premise on the frontier and is still 10% of it.
+`9bc68a12`'s `getOppositePlacement` and `getOppositeAxisPlacements` refuse on a
+coercion with no reviewed root (B-5).
+
+Neither tier is authoring: both need a producer fact, a certifier arm, a
+synthesized veto, a fixture pair and a protocol bump.
+
 ## Tier A authoring closed: ten refs and scheduled recipes, 42 rows (2026-09-14)
 
 The remainder of what the pass-2 census found decidable:

@@ -131,3 +131,64 @@ node pass2.mjs --label gl-accordion --dep @corvu/utils --dep-version 0.4.2 \
 Audited Solid versions are 1.9.14 and 2.0.0-rc.3; `motion-solidjs@0.7.0-beta.4`
 resolves `solid-js@2.0.0-rc.8` transitively, which is deliberately **not**
 substituted here.
+
+## Addendum: the two largest remaining cases, censused (2026-09-14)
+
+Run after Tier A authoring closed, against the 1,884-row frontier.
+
+### `9887e137` — `@solid-primitives/utils@6.4.1`, 336 rows
+
+**Zero gainable by authoring.** All eight exports the corpus still withholds
+are census refused. The thirty decidable exports on this case are already
+closed, which is why they carry no recipe-less rows.
+
+What the eight refuse with matters more than the count, because they do not
+share a premise — they split across five:
+
+| export | refusal | premise |
+| --- | --- | --- |
+| `keys`, `entries` | `domain-exhaustiveness` / **`callSignatureNotUnique`** | B-1 |
+| `defaultEquals`, `tryOnCleanup` | `domain-exhaustiveness` / `implementationUnavailable` | B-2 |
+| `createHydratableSignal`, `createHydrateSignal` | `property-access-unknown-accessor` at `index.js:5439..5459` | B-3 (`sharedConfig`) |
+| `createMicrotask` | `iteration-protocol (SpreadElement)` at `4711..4718` | B-4 |
+| `defer` | `property-access-unknown-accessor (ElementAccessExpression)` at `3427..3435` | B-6 |
+
+So the single largest case in the corpus is not one premise away from closing;
+it is five, and B-1 reaches 84 of its 336 rows.
+
+### `9bc68a12` — `@floating-ui/utils@0.2.12`, 80 rows
+
+`floor`, `max`, `min`, `round` refuse with `domain-exhaustiveness` /
+`implementationUnavailable`; `getOppositePlacement` and
+`getOppositeAxisPlacements` refuse on a `coercion (BinaryExpression)` with no
+reviewed subject root (B-5). The other eighteen exports are decidable and
+already closed.
+
+### The correction this forces on B-1
+
+The depth plan describes B-1's refusal as `implementationUnavailable`, "the
+producer's alias hop lands on `lib.es2017.object.d.ts`, which has no body to
+census". That is right for the `Math.*` aliases and **wrong for the `Object.*`
+ones**: `keys` and `entries` refuse with `callSignatureNotUnique`, because
+`Object.keys` and `Object.entries` are overloaded and the census cannot pick a
+signature. A premise built to the plan's single description would have closed
+`floor`/`max`/`min`/`round` and left `keys`/`entries` exactly where they are —
+two thirds of B-1's rows.
+
+B-1 therefore has to lift **two** refusal reasons on the same stated fact: that
+the binding is an immutable alias of a reviewed default-library callable. Which
+signature the checker would otherwise have selected stops mattering once the
+identity is stated, so `callSignatureNotUnique` is not an obstacle to the
+premise — but it is an obstacle to a premise that only looks for a missing
+body.
+
+### Measured reach
+
+| premise | rows | exports |
+| --- | --- | --- |
+| B-1 default-library alias | **188** | `entries` 62, `keys` 62, `floor`/`max`/`min`/`round` 16 each |
+| B-2 dependency-export alias | **124** | `defaultEquals` 62, `tryOnCleanup` 62 |
+
+B-1 is the largest single premise on the frontier and is still only 10% of the
+1,884 recipe-less rows. Nothing here is authoring: both tiers need a producer
+fact and a certifier arm.
