@@ -26,7 +26,8 @@ here, so every run below is validated before it is counted:
   certified through `motion-solidjs@0.7.0-beta.4` with `status: certified` and
   **zero** withheld closures — which reads as "nothing to do" and is in fact a
   case set that never contained the closures. Zero overlap with the five
-  artifact cases the pin carries for it. **Discarded, not reported.**
+  artifact cases the pin carries for it. Discarded, and re-run on that
+  package's own `reused-proposal` root row, which reproduces two of the five.
 - **A verdict attributed across cases.** A pinned row is matched to a verdict
   by `(artifactCase, export)` first; only where that case was not reproduced is
   the export's verdict from another case used, and the count of each is given.
@@ -38,7 +39,14 @@ here, so every run below is validated before it is counted:
 | `@corvu/utils@0.4.2` | 13 | 6 | 98 | 87 | 11 |
 | `@floating-ui/utils@0.2.12` | 2 | 2 | 96 | 96 | 0 |
 | `@corvu-next/utils@0.1.4` | 14 | 6 | 88 | 46 | 42 |
-| | | | **488** | **435** | **53** |
+| `@solid-primitives/utils@7.0.0-next.4` | 5 | 2 | 142 | 34 | 108 |
+| | | | **630** | **469** | **161** |
+
+`@solid-primitives/utils@7.0.0-next.4` is the weakest attribution here — 108 of
+its 142 rows are export-inferred. It is corroborated rather than trusted: the
+three exports it shares with the case-exact `6.4.1` run — `defaultEquals`,
+`tryOnCleanup`, `defer` — draw the same premise in both, which is the only
+reason its inferred rows are counted at all.
 
 ## Measured
 
@@ -49,14 +57,15 @@ here, so every run below is validated before it is counted:
 | `@corvu/utils@0.4.2` | 98 | 6 | 87 | 5 |
 | `@floating-ui/utils@0.2.12` | 96 | 0 | 96 | 0 |
 | `@corvu-next/utils@0.1.4` | 88 | 56 | 14 | 18 |
-| | **488** | **62** | **403** | **23** |
+| `@solid-primitives/utils@7.0.0-next.4` | 142 | 0 | 142 | 0 |
+| | **630** | **62** | **545** | **23** |
 
-**62 of 488 rows — 13% — are recipe work.** The first four clusters measured
+**62 of 630 rows — 10% — are recipe work.** The first four clusters measured
 were 6 of 400, and reporting that as the shape of the frontier was premature:
 `@corvu-next/utils` is 64% decidable on its own and moved the figure by a
 factor of ten. Four clusters agreeing is not the population.
 
-The direction still holds — 83% of measured rows are census refusals wearing
+The direction still holds — 87% of measured rows are census refusals wearing
 the `no recipe in corpus` label — but the recipe share is an order of magnitude
 larger than four clusters suggested, and no further cluster should be
 extrapolated from.
@@ -125,20 +134,21 @@ is two premises split differently than the export names suggest.
 
 | rows | form | shape |
 | ---: | --- | --- |
-| 120 | `property-access-unknown-accessor` | `PropertyAccessExpression` |
-| 84 | `domain-exhaustiveness` | `"implementationUnavailable"` |
+| 124 | `domain-exhaustiveness` | `"implementationUnavailable"` |
+| 122 | `property-access-unknown-accessor` | `PropertyAccessExpression` |
+| 92 | `property-access-unknown-accessor` | `ElementAccessExpression` |
 | 80 | `property-access-unknown-accessor` | `SpreadAssignment` |
 | **62** | *(decidable — hand recipes)* | |
-| 42 | `property-access-unknown-accessor` | `ElementAccessExpression` |
+| 40 | `domain-exhaustiveness` | `"callSignatureNotUnique"` |
 | 32 | `instanceof` | `BinaryExpression` |
+| 26 | `coercion` | `BinaryExpression` |
 | 18 | `iteration-protocol` | `ArrayBindingPattern` |
 | 18 | `coercion` | `PostfixUnaryExpression` *(mixed with decidable)* |
-| 16 | `coercion` | `BinaryExpression` |
 | 8 | `property-access-unknown-accessor` | `BindingElement` |
 | 8 | `jsx-element` | `JsxFragment` *(5 mixed)* |
 
-Grouped by form family, `property-access-unknown-accessor` is **250 of 488,
-51%**. It is one refusal — "states no reviewed subject root, so whose value it
+Grouped by form family, `property-access-unknown-accessor` is **302 of 630,
+48%**. It is one refusal — "states no reviewed subject root, so whose value it
 reads is undecided" — over four AST shapes, and the subject-root machinery is
 per-shape: ADR 0104 added an arm for a dependency member, ADR 0106 another for
 a rest-parameter alias. So this is one family and probably four premises, and
@@ -152,9 +162,10 @@ phase has already made twice. The fixture comes first, for each shape.
 
 ## Coverage
 
-488 of 1,470 rows (33%) re-censused across five clusters.
-`@solid-primitives/utils@7.0.0-next.4` (142) is outstanding — the graph-lane
-attempt through `motion-solidjs` was invalid, and 34 of its rows are a
-`reused-proposal` root row that can be certified directly. `motion-utils` (234)
+630 of 1,470 rows (43%) re-censused across six clusters. `motion-utils` (234)
 is settled independently by a focused producer fixture and needs no re-census;
-with it, 722 of the 1,470 have a measured cause.
+with it, **864 of the 1,470 — 59% — have a measured cause**. What remains
+un-censused is the long tail: `@kobalte/utils` (55 rows in 55 closures),
+`@kobalte/core` (29), `@solidjs/meta` (32), and forty-odd packages below 25
+rows each, where the row-per-closure ratio approaches one and no premise has
+leverage.
