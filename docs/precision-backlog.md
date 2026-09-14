@@ -29,7 +29,15 @@ importer key is exactly what stops one file's resolution speaking for another's.
 
 Measurement in
 [`phase21/2026-09-14-which-closures-change-a-consumer-finding.md`](package-contract-v2/phase21/2026-09-14-which-closures-change-a-consumer-finding.md)
-§ 7.
+§ 7, and what changing it would cost in
+[`phase21/2026-09-14-acceptance-identity-spike.md`](package-contract-v2/phase21/2026-09-14-acceptance-identity-spike.md).
+The short version of the second: the importer is **signed**, not merely indexed
+— it is a field of `Policy2ReceiptBindings` and of the `ResolvedImport` whose
+hash is `resolved_import_root` — so binding acceptance to the resolved artifact
+is a change to what the receipt attests, not an indexing change. It is feasible
+(the content roots it needs are already signed) and its real argument is what
+the analyzer's own resolver is worth, not cache keys. `Policy2Portable` is the
+false lead: it selects the issuer trust chain, not what the receipt binds to.
 
 ## A pnpm-installed project can accept a contract (ADR 0108, 2026-09-14)
 
