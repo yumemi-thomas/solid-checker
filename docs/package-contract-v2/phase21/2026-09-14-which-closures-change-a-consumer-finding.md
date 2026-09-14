@@ -234,3 +234,60 @@ Not yet demonstrated end to end on a real package: that needs an
 `@solid-primitives/event-listener` contract whose `creates`/cleanups domain
 closes with the requirement, and a consumer calling it unowned. That is the
 measurement to run, and it is now a specific one rather than an open question.
+
+## 9. The measurement, run: the contract states nothing about the primitive
+
+§ 8 named the specific test — an `@solid-primitives/event-listener` contract
+whose owner requirement makes `SC4001` fire at an unowned call. Run on
+2026-09-15 against the real installed `@solid-primitives/event-listener@2.4.5`
+(pnpm tree, graph lane, fresh release of the B′ binding).
+
+**It certifies — 44 closed entries, `reads` 35, `creates` 22, `callbacks` 16,
+`returns` 10 — and says nothing at all about its own primitives.** Every one of
+those 44 is a dependency node: `access`, `accessArray`, `asArray`, `clamp`,
+`chain`, `createMicrotask` — the `@solid-primitives/utils` helpers reached
+through the graph. `makeEventListener` and `createEventListener` publish
+
+~~~json
+{"call": {}, "shape": "callable"}
+~~~
+
+no claim in any domain. No owner requirement, so `contract_owner_requirements`
+returns nothing, so `missing-owner` cannot fire however the acceptance is
+delivered.
+
+This is § 8 of `2026-09-12-consumer-demand-measurement.md` again, on a different
+package: 35 of `@kobalte/utils`' 59 exports publish that same empty summary.
+
+### Why, and why it is structural rather than incidental
+
+The audit refuses the package's own primitives at the census — its reasons name
+`onCleanup` 63 times. `@solid-primitives/event-listener@2.4.5` is a Solid **1.x**
+package, and § 8.1 of that measurement recorded the cause: the 1.x dialect's
+negative authority was withdrawn as inadmissible under ADR 0005, so "the census
+refuses every 1.x callee by name", and `creates` can close only for an export
+that calls *no* Solid primitive at all.
+
+An owner requirement arises precisely from calling a Solid primitive —
+`onCleanup`, `createEffect`. So on Solid 1.x an owner requirement is not merely
+unproven, it is **unstatable**: the fact that would produce it is the fact the
+census refuses. The helpers that do close (`clamp`, `asArray`) are the ones that
+require no owner and can raise no such defect.
+
+The mechanism itself is live on **Solid 2.0**, where the audited core does state
+these: `"requires": "required"` appears in the bundled `solid-js`, `signals` and
+`web` contracts. So the path is not theoretical — it is blocked for 1.x packages
+specifically.
+
+### What this settles
+
+A consumer of a Solid 1.x package gets **silence removal** from a contract, not
+defect detection: SC9005 goes away for the exports that close, and nothing new is
+raised, because the exports that could raise something state nothing. The
+delivery work of 2026-09-14/15 (ADR 0108, B′) is necessary and is not what stands
+in the way here.
+
+The next measurement is the same one against a Solid **2.0** package, where the
+owner authority exists. If it fires there, the 1.x creates audit is the single
+thing standing between this system and usage-level feedback for the 1.x
+ecosystem — which is most of it today.
