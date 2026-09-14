@@ -91,3 +91,53 @@ every new import, and the catalog stops being reviewable.
 Neither is chosen here. What this spike settles is that B cannot be done as a
 quiet indexing change, and that its real argument is about the analyzer's
 resolver rather than about cache keys.
+
+## 5. Second pass: what the analyzer can actually re-derive (and the revised cost)
+
+§ 2 said the ingredients for an import-independent identity are "already
+signed". True, and not sufficient: the identity also has to be **derivable by
+the analyzer**, and that was assumed rather than checked. Checked now, it
+changes the cost.
+
+What the analyzer holds for an import at analysis time is
+`solid_facts::AttestedImport` — the specifier text, the resolved *declaration*
+file (realpath-normalized), its extension, the symlink spelling, and the nearest
+manifest's `name`. That is all.
+
+| identity ingredient | analyzer can derive it? |
+| --- | --- |
+| package name, version | yes, from the nearest installed manifest |
+| requested entrypoint | yes, from the specifier |
+| package integrity | **npm only today** — `installed_package_integrity` reads `package-lock.json` and npm's hidden lockfile, so a pnpm or bun project has none |
+| manifest / declarations file digests | yes, by hashing the resolved files |
+| runtime file, export bindings, module closure | **no** — resolution is performed in Node (`artifact-resolution.mjs`); the Rust side only *validates* a supplied `ResolvedImport` |
+| `manifestRoot`, `artifactsRoot`, `closureRoot` … | **no** — Merkle families built from the registry archive inside certification |
+| **export conditions** | **no** — there are no condition facts at all, in `resolution.rs`, `project.rs` or `diagnostics.rs` |
+
+The last row is the one that decides the shape. Conditions select the artifact:
+a contract proven under `import` must not be applied to a consumer that resolved
+the same specifier under `require`. So conditions belong in any acceptance
+identity — and the analyzer cannot establish its own.
+
+### Revised cost
+
+**B as scoped is not one ADR and a binding.** It is:
+
+1. Type Facts reports the export-condition set it resolved under — a producer
+   change and a **handshake protocol bump**.
+2. A new import-independent binding in the receipt.
+3. `installed_package_integrity` extended past npm, which the lockfile readers
+   added by ADR 0108 now make straightforward.
+4. Catalog reader and analyzer matching on the new identity.
+5. The ADR for the trust posture, plus migration for issued receipts.
+
+### B′, which avoids the protocol bump
+
+Include conditions in the identity, and have the analyzer **match only when the
+receipt's condition set is the default single `import`** — refusing to match
+anything else rather than guessing. Unmatched imports stay at the acceptance
+gate exactly as they are today, so this is a narrowing, not a weakening.
+
+Every certification in the corpus records `exportConditions: ["import"]`, so B′
+covers the ordinary case with no producer change, and leaves the protocol bump
+for whenever a multi-condition consumer actually needs it.
