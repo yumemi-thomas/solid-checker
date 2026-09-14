@@ -21,32 +21,45 @@ answer.
 
 | cluster | pinned rows | decidable | census refused |
 | --- | ---: | ---: | ---: |
-| `@tanstack/store@0.11.1` | 80 | **0** | **80** |
-| `@solid-primitives/utils@6.4.1` | 126 | **0** | **126** |
-| | **206** | **0** | **206** |
+| `@tanstack/store@0.11.1` | 80 | 0 | 80 |
+| `@solid-primitives/utils@6.4.1` | 126 | 0 | 126 |
+| `@corvu/utils@0.4.2` | 98 | 6 | 92 |
+| `@floating-ui/utils@0.2.12` | 96 | 0 | 96 |
+| | **400** | **6** | **394** |
 
-Not one of the 206 is recipe work.
+**Six of four hundred rows are recipe work.** The rest are census refusals
+wearing the `no recipe in corpus` label.
 
 ### `@tanstack/store` — 80 rows
 
-| rows | export | verdict |
-| ---: | --- | --- |
-| 40 | `flush` | refused: `property-access-unknown-accessor (PropertyAccessExpression)` |
-| 40 | `toObserver` | refused: `property-access-unknown-accessor (PropertyAccessExpression)` |
-
-Eight further exports are decidable and carry no frontier row.
+`flush` (40) and `toObserver` (40), both refused on
+`property-access-unknown-accessor (PropertyAccessExpression)`. Eight further
+exports are decidable and carry no frontier row.
 
 ### `@solid-primitives/utils@6.4.1` — 126 rows
 
-| rows | export | verdict |
-| ---: | --- | --- |
-| 42 | `defaultEquals` | refused: `domain-exhaustiveness "implementationUnavailable"` |
-| 42 | `tryOnCleanup` | refused: `domain-exhaustiveness "implementationUnavailable"` |
-| 42 | `defer` | refused: `property-access-unknown-accessor (ElementAccessExpression)` |
+`defaultEquals` (42) and `tryOnCleanup` (42) refused on
+`domain-exhaustiveness "implementationUnavailable"`; `defer` (42) on
+`property-access-unknown-accessor (ElementAccessExpression)`. Forty-one further
+exports — `access`, `chain`, `clamp`, `pipe`, `noop` and the rest — measure
+decidable and carry **no frontier row**. The census reports 394 decidable
+candidates on this case; their contribution to the 1,470 is zero.
 
-Forty-one further exports — `access`, `chain`, `clamp`, `pipe`, `noop` and the
-rest — measure decidable and carry **no frontier row**. The census reports 394
-decidable candidates on this case; their contribution to the 1,470 is zero.
+### `@corvu/utils@0.4.2` — 98 rows
+
+`combineStyle` (66) refused on `property-access-unknown-accessor
+(SpreadAssignment)` — the reason behind a refusal this phase had recorded
+twice without naming. `getScrollAtLocation` (16) on `iteration-protocol
+(ArrayBindingPattern)`; `default` (10) mixed with `jsx-element (JsxFragment)`.
+Only `createKeyedContext`, `getKeyedContext` and `useKeyedContext` — 6 rows —
+are decidable. Seventy-nine census candidates carry no frontier row.
+
+### `@floating-ui/utils@0.2.12` — 96 rows
+
+Entirely refused, across four shapes: `property-access-unknown-accessor` on
+`PropertyAccessExpression` (40) and `BindingElement` (8), `instanceof
+(BinaryExpression)` (32), and `coercion (BinaryExpression)` (16). Seventy-four
+census candidates carry no frontier row.
 
 ## Why the frontier is mostly refusals
 
@@ -75,29 +88,39 @@ as `flush` and `toObserver`, not a separate small item. The ×62 multiplicity
 shared by `defaultEquals`, `defer` and `tryOnCleanup` was a real signal, but it
 is two premises split differently than the export names suggest.
 
-## The premise ranking so far
+## The premise ranking, measured
 
-| premise | measured rows | where |
-| --- | ---: | --- |
-| `property-access-unknown-accessor` subject root | 122 | `defer` 42, `flush` 40, `toObserver` 40 |
-| `domain-exhaustiveness: implementationUnavailable` | 84 | `defaultEquals` 42, `tryOnCleanup` 42 |
+| rows | form | shape |
+| ---: | --- | --- |
+| 120 | `property-access-unknown-accessor` | `PropertyAccessExpression` |
+| 84 | `domain-exhaustiveness` | `"implementationUnavailable"` |
+| 66 | `property-access-unknown-accessor` | `SpreadAssignment` |
+| 42 | `property-access-unknown-accessor` | `ElementAccessExpression` |
+| 32 | `instanceof` | `BinaryExpression` |
+| 16 | `iteration-protocol` | `ArrayBindingPattern` |
+| 16 | `coercion` | `BinaryExpression` |
+| 10 | `jsx-element` | `JsxFragment` |
+| 8 | `property-access-unknown-accessor` | `BindingElement` |
+| 6 | *(decidable — recipe work)* | |
 
-Both are premises, not recipes, and neither has a fixture yet. `shallow` (40
-rows, already unmasked in the pin as refused) and `EventClient` (11,
-`implementationUnavailable`) belong to the same two families, which would take
-them to 162 and 95 — but those are read off the pin rather than re-censused,
-so they are not counted above.
+Grouped by form family, `property-access-unknown-accessor` is **236 of the 400
+rows measured, 59%**. It is one refusal — "states no reviewed subject root, so
+whose value it reads is undecided" — over four different AST shapes, and the
+subject-root machinery is per-shape: ADR 0104 added one arm for a dependency
+member, ADR 0106 another for a rest-parameter alias. So this is one family and
+probably four premises, not one, and the per-shape row counts above are what
+each is worth.
 
 **Nothing here should be built from yet.** `implementationUnavailable` means
 the selected signature's implementation declaration has no available body; why
 that fires on ordinary `dist/*.js` exports is not established, and asserting a
 cause from reading source rather than from a focused fixture is the error this
-phase has already made twice. The fixture comes first.
+phase has already made twice. The fixture comes first, for each shape.
 
 ## Coverage
 
-206 of 1,470 rows (14%) re-censused. `@corvu/utils` (98) and
-`@floating-ui/utils` (96) are in progress; `@solid-primitives/utils@7.0.0-next.4`
-(142) and the `@corvu-next` pair (114) are the next largest. `motion-utils`
-(234) is settled independently by a focused producer fixture and needs no
-re-census.
+400 of 1,470 rows (27%) re-censused, four clusters, four for four on "the
+frontier rows are refusals". `@solid-primitives/utils@7.0.0-next.4` (142) and
+the `@corvu-next` pair (140) are in progress and would take it past 46%.
+`motion-utils` (234) is settled independently by a focused producer fixture and
+needs no re-census; with it, 634 of the 1,470 have a measured cause.
