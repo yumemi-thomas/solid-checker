@@ -111,3 +111,58 @@ not at the call event at all — turned out to be moot for `defer`, because the
 captured parameter already roots. It remains a real question for the
 `filterInstance`/`filterOutInstance` shape the Tier A census found, and should
 be asked there, against measured rows, rather than here.
+
+## Corrected again, 2026-09-14 (later): the transcript is complete, and the fact is on the wire
+
+The section above concluded that "the blocker *is* the premise … there is no
+resolver fix to land first and no two-stage estimate: one premise, 234 rows",
+and costed it as the returned-body census, ADR 0035/0096 territory. A fixture
+against the real shape — JS, not TypeScript, because `motion-utils` ships `.mjs`
+and the two answer differently — says otherwise.
+
+~~~
+plain   (an arrow bound directly)     complete=true  implDecl=ease.js
+easeIn  (bound to a factory's result) complete=true  implDecl=cubic-bezier.js
+~~~
+
+**`easeIn`'s implementation transcript is complete.** No open reasons, a
+selected signature, a resolved declaration, a control-flow census. There is no
+missing fact and nothing for a returned-body census to supply. `query_name` is
+`"easeIn"` and matches the runtime export. The *only* thing that refuses is the
+path comparison in `census_implementation_subject`:
+
+~~~rust
+let actual_path = declaration.location.path;         // …/cubic-bezier.js
+let expected_suffix = format!("/{}", runtime_path);  // …/ease.js
+if implementation.query_name.as_ref() != runtime_export
+    || !actual_path.ends_with(&expected_suffix)
+~~~
+
+And the transcript already carries what distinguishes this from a producer
+resolving to some unrelated declaration:
+
+| field | value |
+| --- | --- |
+| `declaration` | `VariableDeclaration easeIn` in **ease.js** — the binding |
+| `callablePaths` | `ArrowFunction` in cubic-bezier.js, via `FunctionDeclaration cubicBezier` |
+| `implementation.declaration` | that same `ArrowFunction` |
+
+`callable_paths` is not a new fact: the checker consumes it already, in
+`require_export_callable_paths_closed` and the root-resolution machinery.
+
+So the shape is what the earlier section said, and the **cost is not**. This
+looks like the ADR 0107 pattern a second time — a binding check whose scope is
+narrower than the facts available, rather than a census that needs building. The
+architecture already separates the two bindings: `transcript.declaration` is
+checked against the snapshot's *declaration* (typings) binding, and
+`implementation.declaration` against its *runtime* binding. `easeIn` passes the
+first and fails the second, because a `const` bound to a call result runs a body
+declared in another file of the same package.
+
+**Not yet built, deliberately.** Relaxing a binding check is the one kind of
+change that can weaken certification silently, and the soundness condition —
+what exactly ties the implementation to the binding, and what keeps a
+dependency's declaration out — needs its own argument rather than being
+inferred from one fixture. What is established here is that the 234 rows are
+not blocked on a missing fact, and that costing them as a returned-body census
+was wrong.
