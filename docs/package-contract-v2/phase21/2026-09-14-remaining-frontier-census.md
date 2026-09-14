@@ -166,3 +166,58 @@ dependency's declaration out — needs its own argument rather than being
 inferred from one fixture. What is established here is that the 234 rows are
 not blocked on a missing fact, and that costing them as a returned-body census
 was wrong.
+
+## Attempted checker-side, and reverted: the tie is not on the wire (2026-09-14)
+
+The section above proposed that `motion-utils` was ADR 0107's pattern a second
+time — a binding check narrower than the available facts — and that the
+transcript's `callablePaths` already tied the binding to the implementation.
+**It was built, measured against the real package, and reverted.** Nothing of it
+is kept.
+
+The arm admitted an implementation declared in another file when three things
+held: the transcript's own declaration was a variable declaration at the runtime
+binding path; the implementation's declaration was the declaration of the
+transcript's *root* callable path; and that file was a Runtime entry of the
+verified closure. Seven negative unit cases pinned each as load-bearing, and the
+containment case was mutation-checked.
+
+One instrumented run against `motion-solidjs@0.6.0` answered it:
+
+~~~
+runtime_path  = dist/es/easing/back.mjs
+implLoc       = …/dist/es/easing/back.mjs:347..353   the producer answered at the binding
+queryName     = "backIn"                             matches
+tdeclPath     = …/dist/index.d.ts                    the TYPINGS declaration
+implDecl      = …/easing/modifiers/reverse.mjs       the body
+callablePaths = 1, seg=0, complete=true, decl=None
+~~~
+
+Two of the three conditions are unsatisfiable here, and both for reasons the
+fixture hid:
+
+1. **`transcript.declaration` is the declaration-side (`.d.ts`) declaration**,
+   not a runtime `VariableDeclaration`. The architecture separates the two
+   deliberately — `transcript.declaration` is checked against the snapshot's
+   *declaration* binding, `implementation.declaration` against its *runtime*
+   binding — and the design conflated them.
+2. **The root callable path carries no declaration.** `decl=None` on the real
+   package, where the synthetic fixture produced one. The fact claimed to tie
+   binding to implementation is simply absent.
+
+What remains linking `backIn`'s binding in `back.mjs` to the body in
+`reverse.mjs` is the producer's resolution and nothing else. `implementation.location`
+is the checker's own demand span, so it corroborates nothing. Admitting the
+implementation on that basis would remove this check's only teeth without
+substituting anything — which is precisely the weakening it exists to prevent.
+
+**So the cost estimate returns to where it started, and the correction that
+moved it was wrong.** Closing these rows needs the producer to *state* the link
+— an initializer transcript, or a callable path that carries its declaration —
+which is a new fact, a handshake protocol bump, and the returned-body census
+after all.
+
+Also learned, and worth more than the attempt: a synthetic fixture agreed with
+the design and the real package did not. The fixture omitted the re-export
+barrel and the `.d.ts`, and both mattered. A fixture that does not reproduce the
+packaging reproduces the wrong question.
