@@ -435,6 +435,10 @@ pub(super) fn prepare_value_only(
         importer: plan.import_request.importer.clone(),
         specifier: plan.import_request.specifier.clone(),
         resolved_import_root: super::policy2_resolved_import_root(&plan.resolved_import)?,
+        artifact_acceptance_root: super::policy2_artifact_acceptance_root(
+            &plan.resolved_import,
+            &plan.import_request.export_conditions,
+        )?,
         semantic_digest,
         artifact_provenance_root: plan.snapshot.provenance_root().to_owned(),
         snapshot_root: plan.snapshot.root().to_owned(),

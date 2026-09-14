@@ -35,7 +35,8 @@ use solid_facts_backend::{
     ConfiguredReceiptIssuer, Policy2ReceiptBindings, Policy2ReceiptProvenance,
     RECEIPT_WITNESS_FAMILIES, ResolvedImport, authenticate_policy2_receipt,
     canonicalize_policy2_main, encode_policy2_trust_configuration, issue_policy2_receipt,
-    policy2_main_closed_claims_root, policy2_main_semantic_digest, policy2_resolved_import_root,
+    policy2_artifact_acceptance_root, policy2_main_closed_claims_root,
+    policy2_main_semantic_digest, policy2_resolved_import_root,
     policy2_trust_configuration_for_issuer, publish_policy2_catalog,
 };
 
@@ -252,6 +253,8 @@ fn mint_and_analyze(
         importer: resolved.importer.clone(),
         specifier: resolved.specifier.clone(),
         resolved_import_root: policy2_resolved_import_root(&resolved).unwrap(),
+        artifact_acceptance_root: policy2_artifact_acceptance_root(&resolved, &["import".into()])
+            .unwrap(),
         semantic_digest: policy2_main_semantic_digest(&canonical_main).unwrap(),
         artifact_provenance_root: root(1),
         snapshot_root: root(2),

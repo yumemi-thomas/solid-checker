@@ -123,9 +123,9 @@ pub use contract_certification::{
     certify_published_contract_graph_case_set, certify_value_only_case_set,
     decode_policy2_trust_configuration, encode_policy2_trust_configuration,
     issue_builtin_policy2_receipt, issue_policy2_receipt, plan_certification,
-    plan_published_contract_graph, policy2_main_closed_claims_root, policy2_main_semantic_digest,
-    policy2_policy_digest, policy2_resolved_import_root, policy2_trust_configuration_for_issuer,
-    publish_policy2_catalog,
+    plan_published_contract_graph, policy2_artifact_acceptance_root,
+    policy2_main_closed_claims_root, policy2_main_semantic_digest, policy2_policy_digest,
+    policy2_resolved_import_root, policy2_trust_configuration_for_issuer, publish_policy2_catalog,
 };
 #[cfg(feature = "dialect-v2")]
 pub use contract_certification::{

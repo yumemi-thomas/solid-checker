@@ -85,6 +85,12 @@ pub struct Policy2ReceiptBindings {
     pub importer: String,
     pub specifier: String,
     pub resolved_import_root: String,
+    /// The importer-free, path-free identity of the artifact this contract was
+    /// proven about. `resolved_import_root` answers "which resolver answer,
+    /// from which file"; this answers "which published artifact", so a consumer
+    /// that resolved the same artifact from its own file can match the
+    /// acceptance. See `policy2_artifact_acceptance_root`.
+    pub artifact_acceptance_root: String,
     pub semantic_digest: String,
     pub artifact_provenance_root: String,
     pub snapshot_root: String,
@@ -123,6 +129,7 @@ impl Policy2ReceiptBindings {
         for (field, value) in [
             ("semanticDigest", &self.semantic_digest),
             ("resolvedImportRoot", &self.resolved_import_root),
+            ("artifactAcceptanceRoot", &self.artifact_acceptance_root),
             ("artifactProvenanceRoot", &self.artifact_provenance_root),
             ("snapshotRoot", &self.snapshot_root),
             ("packageRoot", &self.package_root),
@@ -574,6 +581,7 @@ struct ReceiptPayload {
     importer: String,
     specifier: String,
     resolved_import_root: String,
+    artifact_acceptance_root: String,
     semantic_digest: String,
     artifact_provenance_root: String,
     snapshot_root: String,
@@ -707,6 +715,60 @@ pub fn policy2_resolved_import_root(
             .to_be_bytes(),
     );
     hash.update(encoded);
+    Ok(format!("sha256:{:x}", hash.finalize()))
+}
+
+/// Canonical identity of the *artifact* a contract was proven about, with no
+/// importer and no absolute path in it.
+///
+/// The twin of [`policy2_resolved_import_root`], and deliberately a much
+/// smaller commitment. That root answers "which resolver answer, from which
+/// file"; this one answers "which published artifact, reached how", so an
+/// acceptance can be matched by a consumer that resolved the same artifact from
+/// one of its own files.
+///
+/// What it commits to, and why each is load-bearing:
+///
+/// - **package name, version and integrity** — the integrity is the tarball
+///   hash, so it fixes every byte the contract was proven about. Name and
+///   version are redundant against it and are included so a mismatch names
+///   itself rather than reading as an unrelated digest.
+/// - **requested entrypoint** — `.` and `./immutable` are different artifacts
+///   of the same package with different exports.
+/// - **export conditions** — these *select* the artifact. A contract proven
+///   under `import` must never be applied to a consumer that resolved the same
+///   specifier under `require`, so the condition set is part of the identity
+///   rather than context around it.
+///
+/// Deliberately excluded: the importer, every absolute path, and the resolver
+/// trace. Those are what make `resolvedImportRoot` unmatchable by a consumer,
+/// and none of them is a property of the artifact.
+pub fn policy2_artifact_acceptance_root(
+    resolved: &ResolvedImport,
+    export_conditions: &[String],
+) -> Result<String, Policy2ReceiptError> {
+    resolved
+        .validate()
+        .map_err(|error| Policy2ReceiptError::ResolvedImport(error.to_string()))?;
+    let mut conditions = export_conditions.to_vec();
+    conditions.sort();
+    conditions.dedup();
+    let mut hash = Sha256::new();
+    hash.update(b"solid-checker:policy2-artifact-acceptance:v1");
+    // Length-prefix every field: without it "a" + "bc" and "ab" + "c" are the
+    // same preimage, and a package could be renamed into another's identity.
+    let mut field = |value: &str| {
+        hash.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_be_bytes());
+        hash.update(value.as_bytes());
+    };
+    field(&resolved.package_name);
+    field(&resolved.package_version);
+    field(&resolved.package_integrity);
+    field(&resolved.requested_entrypoint);
+    field(&conditions.len().to_string());
+    for condition in &conditions {
+        field(condition);
+    }
     Ok(format!("sha256:{:x}", hash.finalize()))
 }
 
@@ -920,6 +982,7 @@ fn payload_bindings(payload: &ReceiptPayload) -> Policy2ReceiptBindings {
         importer: payload.importer.clone(),
         specifier: payload.specifier.clone(),
         resolved_import_root: payload.resolved_import_root.clone(),
+        artifact_acceptance_root: payload.artifact_acceptance_root.clone(),
         semantic_digest: payload.semantic_digest.clone(),
         artifact_provenance_root: payload.artifact_provenance_root.clone(),
         snapshot_root: payload.snapshot_root.clone(),
@@ -953,6 +1016,10 @@ fn binding_mismatch(
         (
             "resolvedImportRoot",
             actual.resolved_import_root == expected.resolved_import_root,
+        ),
+        (
+            "artifactAcceptanceRoot",
+            actual.artifact_acceptance_root == expected.artifact_acceptance_root,
         ),
         (
             "semanticDigest",
@@ -1049,6 +1116,7 @@ fn payload(
         main_digest: digest_bytes(main),
         importer: bindings.importer.clone(),
         specifier: bindings.specifier.clone(),
+        artifact_acceptance_root: bindings.artifact_acceptance_root.clone(),
         resolved_import_root: bindings.resolved_import_root.clone(),
         semantic_digest: bindings.semantic_digest.clone(),
         artifact_provenance_root: bindings.artifact_provenance_root.clone(),

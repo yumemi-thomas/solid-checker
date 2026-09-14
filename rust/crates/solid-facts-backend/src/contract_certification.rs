@@ -81,8 +81,9 @@ pub use policy2_receipt::{
     RECEIPT_WITNESS_FAMILIES, ReceiptIssuerKind, ReceiptPublicationError,
     authenticate_policy2_receipt, canonicalize_policy2_main, decode_policy2_trust_configuration,
     encode_policy2_trust_configuration, issue_builtin_policy2_receipt, issue_policy2_receipt,
-    policy2_main_closed_claims_root, policy2_main_semantic_digest, policy2_policy_digest,
-    policy2_resolved_import_root, policy2_trust_configuration_for_issuer, publish_policy2_catalog,
+    policy2_artifact_acceptance_root, policy2_main_closed_claims_root,
+    policy2_main_semantic_digest, policy2_policy_digest, policy2_resolved_import_root,
+    policy2_trust_configuration_for_issuer, publish_policy2_catalog,
 };
 pub use probe_gates::{ProbeGate, ProbeGateError, ProbeGateSchedule, VerifiedProbeGateBatch};
 pub use probe_harness::{ProbeHarnessConfiguration, ProbeHarnessError};
@@ -9530,6 +9531,11 @@ export const value = phantom;
             specifier: plan.import_request.specifier.clone(),
             resolved_import_root: super::policy2_resolved_import_root(&plan.resolved_import)
                 .unwrap(),
+            artifact_acceptance_root: super::policy2_artifact_acceptance_root(
+                &plan.resolved_import,
+                &plan.import_request.export_conditions,
+            )
+            .unwrap(),
             semantic_digest,
             artifact_provenance_root: plan.snapshot.provenance_root().into(),
             snapshot_root: plan.snapshot.root().into(),
