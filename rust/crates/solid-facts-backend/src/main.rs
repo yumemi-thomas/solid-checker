@@ -786,7 +786,8 @@ fn certification_plan_from_request_in(
 fn certification_source_request(
     source: ContractCertificationSourceRequest,
 ) -> Result<solid_facts_backend::PublishedGraphSourceRequest, Box<dyn std::error::Error>> {
-    let lock = solid_facts_backend::PublishedGraphLockSelection::from_bun_lock(
+    let lock = solid_facts_backend::PublishedGraphLockSelection::from_lockfile(
+        std::path::Path::new(&source.lockfile),
         &fs::read(&source.lockfile)?,
         source.lock_locator,
         source.package_name.clone(),
@@ -845,8 +846,9 @@ fn certification_graph_node_from_request(
         fs::read(&planning.archive)?,
     )?;
     prove_declared_applicability(&archive, &planning.inapplicable_cases)?;
-    let lock = solid_facts_backend::PublishedGraphLockSelection::from_bun_lock(
-        &fs::read(lockfile)?,
+    let lock = solid_facts_backend::PublishedGraphLockSelection::from_lockfile(
+        std::path::Path::new(&lockfile),
+        &fs::read(&lockfile)?,
         lock_locator,
         planning.resolution.package_name.clone(),
         planning.resolution.package_version.clone(),
@@ -8128,6 +8130,100 @@ mod certification_source_request_tests {
             !proved.contains("declared artifact-case applicability"),
             "{proved}"
         );
+        fs::remove_dir_all(&directory).ok();
+    }
+
+    /// A graph node reads its lockfile through the format its *file name*
+    /// declares, so a pnpm-installed project reaches the same call site a Bun
+    /// one does.
+    ///
+    /// This is the only path that reaches `from_pnpm_lock` at all: certifying a
+    /// root package never does, which is why an end-to-end run cannot stand in
+    /// for this test. The major-6 case is the proof of dispatch rather than a
+    /// second refusal case -- only the pnpm reader emits it.
+    #[test]
+    fn a_graph_node_reads_a_pnpm_lockfile_named_by_its_file_name() {
+        let directory = std::env::temp_dir().join(format!(
+            "solid-checker-graph-pnpm-lock-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let (archive, metadata) = published_archive_bytes(&[
+            (
+                "package/package.json",
+                br#"{"name":"root-package","version":"1.0.0","exports":{".":"./dist/index.js"}}"#,
+            ),
+            ("package/dist/index.js", b"export const answer = 42;"),
+        ]);
+        let archive_path = directory.join("root-package-1.0.0.tgz");
+        let metadata_path = directory.join("root-package.json");
+        let proposal_path = directory.join("proposal.json");
+        fs::write(&archive_path, &archive).unwrap();
+        fs::write(&metadata_path, &metadata).unwrap();
+        fs::write(&proposal_path, b"{}\n").unwrap();
+
+        // `specifier: workspace:*` is carried deliberately: every lockfile in
+        // the demand corpus has it, and both readers once mistook it for a YAML
+        // alias and refused the whole file.
+        let integrity = "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+        let pnpm_lock = |major: &str| {
+            format!(
+                "lockfileVersion: '{major}'\n\nimporters:\n\n  .:\n    dependencies:\n      root-package:\n        specifier: workspace:*\n        version: link:packages/root\n\npackages:\n\n  'root-package@1.0.0':\n    resolution: {{integrity: {integrity}}}\n"
+            )
+        };
+        let write = |name: &str, body: String| {
+            let path = directory.join(name);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, body).unwrap();
+            path
+        };
+        // The pre-9 file keeps the same name in its own directory: the name is
+        // what selects the reader, so changing it would test something else.
+        let selecting = write("pnpm-lock.yaml", pnpm_lock("9.0"));
+        let stale_major = write("stale/pnpm-lock.yaml", pnpm_lock("6.0"));
+        let misnamed = write("bun.lock", pnpm_lock("9.0"));
+
+        let node = |lockfile: &std::path::Path| -> ContractCertificationGraphNodeRequest {
+            let mut planning: serde_json::Value =
+                serde_json::from_str(&planning(Vec::new())).unwrap();
+            planning["proposal"] = serde_json::json!(proposal_path.to_string_lossy());
+            planning["archive"] = serde_json::json!(archive_path.to_string_lossy());
+            planning["registryMetadata"] = serde_json::json!(metadata_path.to_string_lossy());
+            serde_json::from_value(serde_json::json!({
+                "planning": planning,
+                "lockfile": lockfile.to_string_lossy(),
+                "lockLocator": "root-package@1.0.0",
+                "sourceDependencies": [],
+            }))
+            .unwrap()
+        };
+
+        // The pnpm reader ran and selected: whatever this request fails on
+        // afterwards, it is not the lockfile.
+        if let Err(error) = certification_graph_node_from_request(node(&selecting)) {
+            let error = error.to_string();
+            assert!(!error.contains("pnpm lockfile"), "{error}");
+            assert!(!error.contains("no lockfile format"), "{error}");
+        }
+
+        // Only `from_pnpm_lock` emits this, so reaching it proves the dispatch.
+        let Err(stale) = certification_graph_node_from_request(node(&stale_major)) else {
+            panic!("a pre-9 pnpm lockfile must refuse the node");
+        };
+        assert!(stale.to_string().contains("is not 9"), "{stale}");
+
+        // Named `bun.lock`, so the Bun reader gets it and refuses; nothing
+        // retries it against the other parser.
+        let Err(misnamed) = certification_graph_node_from_request(node(&misnamed)) else {
+            panic!("a pnpm lockfile named bun.lock must refuse the node");
+        };
+        assert!(
+            misnamed
+                .to_string()
+                .contains("Bun lockfile cannot be decoded"),
+            "{misnamed}"
+        );
+
         fs::remove_dir_all(&directory).ok();
     }
 

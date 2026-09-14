@@ -68,10 +68,10 @@ import {
   prepareArtifact
 } from "./generate-package-contract.mjs";
 import {
-  bunLockLocatorForInstalledPackage,
-  createBunLockSelectionIndex,
-  exactBunLockSelection,
-  publishedGraphRequestKey
+  createLockSelectionIndex,
+  exactLockSelection,
+  publishedGraphRequestKey,
+  SUPPORTED_LOCKFILES
 } from "./published-contract-graph.mjs";
 
 export const contractCertifyHelp = `Usage:
@@ -908,11 +908,29 @@ function reviewGraphProposal(generated) {
   };
 }
 
-function findBunLock(packageRoot) {
+/// Finds the nearest lockfile above an installed package, and names the package
+/// manager that wrote it.
+///
+/// The file name is the format decision, here and in Rust: nothing sniffs
+/// content, and a directory holding two lockfiles is refused rather than ordered
+/// by preference, because which one installed this tree would then be a guess.
+function findLockfile(packageRoot) {
   let directory = resolve(packageRoot);
   while (true) {
-    const candidate = join(directory, "bun.lock");
-    if (existsSync(candidate)) return candidate;
+    const found = SUPPORTED_LOCKFILES.flatMap(({ fileName, packageManager }) => {
+      const candidate = join(directory, fileName);
+      return existsSync(candidate) ? [{ path: candidate, packageManager }] : [];
+    });
+    if (found.length > 1) {
+      throw new CertificationRefusal({
+        stage: "artifact-acquisition",
+        owner: "package-manager",
+        reason: `${directory} holds ${found.length} lockfiles (${found
+          .map(entry => entry.packageManager)
+          .join(", ")}); which one installed ${packageRoot} is not decidable`
+      });
+    }
+    if (found.length === 1) return found[0];
     const parent = dirname(directory);
     if (parent === directory) break;
     directory = parent;
@@ -920,7 +938,9 @@ function findBunLock(packageRoot) {
   throw new CertificationRefusal({
     stage: "artifact-acquisition",
     owner: "package-manager",
-    reason: `no exact Bun text lockfile exists above ${packageRoot}`
+    reason:
+      `no exact lockfile exists above ${packageRoot}; expected one of ` +
+      SUPPORTED_LOCKFILES.map(entry => entry.fileName).join(", ")
   });
 }
 
@@ -940,8 +960,9 @@ function findBunLock(packageRoot) {
 /// program then cannot resolve the reference, and the demands that needed it
 /// stay open exactly as they were.
 function createCompilerSourceCollector({
-  bunLockPath,
-  bunLockIndex,
+  lockfilePath,
+  lockPackageManager,
+  lockIndex,
   scratch,
   resolutionSession,
   scratchPrefix,
@@ -965,12 +986,14 @@ function createCompilerSourceCollector({
     const dependencyManifest = JSON.parse(
       readFileSync(join(dependencyRoot, "package.json"), "utf8")
     );
-    const dependencyLock = exactBunLockSelection(
-      bunLockIndex,
-      dependencyManifest.name,
-      dependencyManifest.version,
-      bunLockLocatorForInstalledPackage(bunLockPath, dependencyRoot)
-    );
+    const dependencyLock = exactLockSelection({
+      index: lockIndex,
+      packageManager: lockPackageManager,
+      lockfilePath,
+      packageRoot: dependencyRoot,
+      packageName: dependencyManifest.name,
+      packageVersion: dependencyManifest.version
+    });
     return {
       ...dependency,
       dependencyImporter,
@@ -1032,7 +1055,7 @@ function createCompilerSourceCollector({
         scratch: sourceScratch,
         packageName: located.dependencyManifest.name,
         packageVersion: located.dependencyManifest.version,
-        lockfile: resolve(bunLockPath),
+        lockfile: resolve(lockfilePath),
         lockLocator: located.dependencyLock.locator,
         installedPackageRoot: installedRoot
       };
@@ -1610,7 +1633,7 @@ export function mergeProposalDependencies(dependencies, outputRoot) {
 function graphNodeExecutionInput(state) {
   return {
     planning: state.planning,
-    lockfile: state.node.bunLockPath,
+    lockfile: state.node.lockfilePath,
     lockLocator: state.node.lockLocator,
     sourceDependencies: (state.sourceDependencies ?? []).map(source => ({
       packageName: source.packageName,
@@ -2163,9 +2186,13 @@ export async function preparePublishedGraphCases({
   if (!rootArtifactSnapshot) {
     rootArtifactSnapshot = await acquirePublishedArtifact({ options, manifest, scratch, fetch_ });
   }
-  const bunLockPath = findBunLock(options.packageRoot);
-  const bunLock = readFileSync(bunLockPath, "utf8");
-  const bunLockIndex = createBunLockSelectionIndex(bunLock);
+  const { path: lockfilePath, packageManager: lockPackageManager } = findLockfile(
+    options.packageRoot
+  );
+  const lockIndex = createLockSelectionIndex(
+    readFileSync(lockfilePath, "utf8"),
+    lockPackageManager
+  );
   const preparedCases = [];
   const demandPlans = [];
   // The artifact-case set is one acquisition transaction. Reuse a node only
@@ -2212,8 +2239,9 @@ export async function preparePublishedGraphCases({
     sourceArtifacts,
     compilerSourceClosureCount
   } = createCompilerSourceCollector({
-    bunLockPath,
-    bunLockIndex,
+    lockfilePath,
+    lockPackageManager,
+    lockIndex,
     scratch,
     resolutionSession: graphResolutionSession,
     scratchPrefix: "graph"
@@ -2232,15 +2260,17 @@ export async function preparePublishedGraphCases({
       const nodeManifest = JSON.parse(
         readFileSync(join(resolved.packageRoot, "package.json"), "utf8")
       );
-      const lock = exactBunLockSelection(
-        bunLockIndex,
-        resolved.packageName,
-        resolved.packageVersion,
-        bunLockLocatorForInstalledPackage(bunLockPath, resolved.packageRoot)
-      );
+      const lock = exactLockSelection({
+        index: lockIndex,
+        packageManager: lockPackageManager,
+        lockfilePath,
+        packageRoot: resolved.packageRoot,
+        packageName: resolved.packageName,
+        packageVersion: resolved.packageVersion
+      });
       if (lock.integrity !== request.integrity) {
         throw new Error(
-          `Bun lock integrity for ${resolved.packageName}@${resolved.packageVersion} disagrees with acquisition`
+          `${lockPackageManager} lock integrity for ${resolved.packageName}@${resolved.packageVersion} disagrees with acquisition`
         );
       }
       const canonicalPackageRoot = realpathSync(resolve(resolved.packageRoot));
@@ -2264,7 +2294,7 @@ export async function preparePublishedGraphCases({
         entrypoint: resolved.requestedEntrypoint,
         conditions,
         lockLocator: lock.locator,
-        bunLockPath: resolve(bunLockPath),
+        lockfilePath: resolve(lockfilePath),
         dependencies: []
       };
       const nodeIndex = nextNodeIndex++;
@@ -2699,8 +2729,14 @@ export async function preparePublishedGraphCases({
   }
   let retainedRoots = [];
   if (retainedProposalCases.length) {
-    const lock = exactBunLockSelection(bunLockIndex, manifest.name, manifest.version,
-      bunLockLocatorForInstalledPackage(bunLockPath, options.packageRoot));
+    const lock = exactLockSelection({
+      index: lockIndex,
+      packageManager: lockPackageManager,
+      lockfilePath,
+      packageRoot: options.packageRoot,
+      packageName: manifest.name,
+      packageVersion: manifest.version
+    });
     if (lock.integrity !== options.integrity) {
       throw new Error("retained proposal lock integrity disagrees with its archive");
     }
@@ -2710,7 +2746,7 @@ export async function preparePublishedGraphCases({
     retainedRoots = retainedProposalGraphCases({
       plannings: certificationPlannings(generated, rootArtifactSnapshot, options),
       sourceDependenciesByInput, coordinates: retainedProposalCases,
-      lockfile: resolve(bunLockPath), lockLocator: lock.locator
+      lockfile: resolve(lockfilePath), lockLocator: lock.locator
     });
     demandPlans.push(...await planDemands({ options, generated,
       artifactSnapshot: rootArtifactSnapshot, scratch }));
@@ -2798,15 +2834,21 @@ export async function preparePublishedGraphCases({
 /// Returns one array of acquired sources per certification input, positionally.
 export async function acquireRootCompilerSources({ options, generated, scratch, fetch_ }) {
   const empty = generated.certificationInputs.map(() => []);
-  let bunLockPath;
+  let lockfilePath;
+  let lockPackageManager;
   try {
-    bunLockPath = findBunLock(options.packageRoot);
+    ({ path: lockfilePath, packageManager: lockPackageManager } = findLockfile(
+      options.packageRoot
+    ));
   } catch {
     return empty;
   }
-  let bunLockIndex;
+  let lockIndex;
   try {
-    bunLockIndex = createBunLockSelectionIndex(readFileSync(bunLockPath, "utf8"));
+    lockIndex = createLockSelectionIndex(
+      readFileSync(lockfilePath, "utf8"),
+      lockPackageManager
+    );
   } catch {
     return empty;
   }
@@ -2816,8 +2858,9 @@ export async function acquireRootCompilerSources({ options, generated, scratch, 
   const sourceScratch = mkdtempSync(join(scratch, "root-sources-"));
   const withheldNames = new Set();
   const collector = createCompilerSourceCollector({
-    bunLockPath,
-    bunLockIndex,
+    lockfilePath,
+    lockPackageManager,
+    lockIndex,
     scratch: sourceScratch,
     resolutionSession: new ArtifactResolutionSession(),
     scratchPrefix: "root",

@@ -85,10 +85,16 @@ version the corpus certifies) and not completed:
 - the published-graph lane, which the pin uses for this package, refuses
   earlier still — `no exact Bun text lockfile exists above` a pnpm store path.
 
-Neither refusal is a defect found here: the graph lane is built for the
-benchmark's Bun scratch projects. What they establish is that a consumer using
-its own package manager cannot today run the path that would make any closure
-visible to it.
+**The second of those is now fixed.** [ADR 0108](../../adr/0108-a-lockfile-is-named-by-its-file-name.md)
+makes the lockfile's file name the format decision and adds a `pnpm-lock.yaml`
+reader to both the acquisition and authority sides; against the real lockfile,
+`@solid-primitives/utils@6.4.1` issues a receipt into this same project's
+catalog. The first is unchanged and is a census premise, not a packaging one:
+`@kobalte/utils` certifies no root case under either package manager.
+
+So a consumer using its own package manager *can* now run the path. Whether
+running it moves a finding is § 5's conditional, and still unmeasured — this
+corpus's highest-demand package is the one that does not certify.
 
 ## 5. The ranking, for after acceptance
 

@@ -1,5 +1,43 @@
 # Precision backlog
 
+## A pnpm-installed project can accept a contract (ADR 0108, 2026-09-14)
+
+The measurement below found that no closure changes a consumer finding because
+no consumer accepts a contract. One reason it could not was mechanical:
+certification refused any package not under a **Bun** text lockfile, and the
+whole demand corpus installs with pnpm. The lane worked only for the ecosystem
+benchmark's own Bun scratch projects.
+
+[ADR 0108](adr/0108-a-lockfile-is-named-by-its-file-name.md) makes the
+lockfile's **file name** the format decision on both sides — Node acquires,
+Rust authenticates, nothing sniffs content — and adds a strict `pnpm-lock.yaml`
+reader to each. Verified against the real lockfile with no `bun.lock` present:
+`@solid-primitives/utils@6.4.1` issued a receipt into
+`kobalte/packages/core/.solid-checker/accepted-contracts.json`, closing 61
+entries.
+
+That run exercises the **acquisition** reader only, and finding out cost an A/B:
+certifying a root package reads the lockfile in Node alone, so a build with the
+authority's token rule deliberately broken certified the same package unchanged.
+The Rust reader is reached from `certification_graph_node_from_request` and
+nowhere else, and is covered by a test that drives that path and asserts the
+pre-9 refusal only that reader emits. The two readers had in fact diverged, and
+no end-to-end run could have shown it.
+
+The load-bearing part is why pnpm needs no installed-path locator: Bun's tree can
+hold one `name@version` at two paths with different integrity, pnpm's
+content-addressed store cannot, so the `packages:` key *is* the locator. That
+holds for major 9 only — major 6 wrote peer suffixes into those keys — so
+earlier majors are refused rather than approximated. Measured across the corpus's
+three lockfiles (3,871 packages): no duplicate keys, no entry without integrity,
+no peer-suffixed key, no non-registry entry.
+
+Still not read: **Yarn Berry**, whose `checksum` is a zip content hash rather
+than a registry tarball integrity. Still open: `@kobalte/utils` certifies no root
+case under either package manager (`scrollIntoViewport`, `recursive-value-shape`),
+so the corpus's highest-demand export set remains unacceptable for a reason that
+has nothing to do with lockfiles.
+
 ## No closure changes a consumer finding yet: the gate is acceptance (2026-09-14)
 
 Row counts rank the campaign by what is closeable, not by what a consumer sees.

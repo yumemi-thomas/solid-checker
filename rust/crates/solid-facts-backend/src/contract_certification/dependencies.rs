@@ -75,6 +75,302 @@ pub(super) struct VerifiedGraphSourcePackage {
     pub(super) snapshot: super::ArtifactSnapshot,
 }
 
+/// Rejects the YAML features the pnpm reader does not implement.
+///
+/// Not conservatism: an anchor, alias or merge key can move a value from one
+/// entry to another, and a second document can redefine `packages:` wholesale,
+/// so a reader that skipped what it did not understand would answer confidently
+/// from the wrong bytes.
+fn refuse_pnpm_yaml_beyond_subset(text: &str) -> Result<(), super::ArtifactSnapshotError> {
+    let refuse = |detail: String| super::ArtifactSnapshotError::InvalidProvenance(detail);
+    if text.contains('\t') {
+        return Err(refuse(
+            "pnpm lockfile contains a tab, which YAML does not permit for indentation".into(),
+        ));
+    }
+    for (index, line) in text.lines().enumerate() {
+        let at = index + 1;
+        let trimmed = line.trim_end();
+        if trimmed == "---" || trimmed == "..." {
+            return Err(refuse(format!(
+                "pnpm lockfile has a document marker at line {at}; only a single document is read"
+            )));
+        }
+        if line.trim_start().starts_with("<<")
+            && line.trim_start()[2..].trim_start().starts_with(':')
+        {
+            return Err(refuse(format!(
+                "pnpm lockfile uses a YAML merge key at line {at}"
+            )));
+        }
+        let mut quote: Option<char> = None;
+        let mut previous_breaks_token = true;
+        for character in line.chars() {
+            if let Some(active) = quote {
+                if character == active {
+                    quote = None;
+                }
+                continue;
+            }
+            if character == '\'' || character == '"' {
+                quote = Some(character);
+                previous_breaks_token = false;
+                continue;
+            }
+            if (character == '&' || character == '*') && previous_breaks_token {
+                return Err(refuse(format!(
+                    "pnpm lockfile uses a YAML anchor or alias at line {at}"
+                )));
+            }
+            // Whitespace and the flow indicators only. A bare `:` does not end
+            // a token -- `workspace:*` is one plain scalar, and every lockfile
+            // in the demand corpus carries that line.
+            previous_breaks_token = matches!(character, ' ' | '\t' | '[' | '{' | ',');
+        }
+    }
+    Ok(())
+}
+
+/// Requires `lockfileVersion` to declare major 9; see `from_pnpm_lock`.
+fn require_pnpm_lockfile_major_9(text: &str) -> Result<(), super::ArtifactSnapshotError> {
+    let declared = text
+        .lines()
+        .find_map(|line| line.strip_prefix("lockfileVersion:"))
+        .map(pnpm_scalar)
+        .ok_or_else(|| {
+            super::ArtifactSnapshotError::InvalidProvenance(
+                "pnpm lockfile does not declare a lockfileVersion".into(),
+            )
+        })?
+        .ok_or_else(|| {
+            super::ArtifactSnapshotError::InvalidProvenance(
+                "pnpm lockfile declares an unreadable lockfileVersion".into(),
+            )
+        })?;
+    let major = declared
+        .split('.')
+        .next()
+        .and_then(|part| part.parse::<u32>().ok());
+    if major != Some(9) {
+        return Err(super::ArtifactSnapshotError::InvalidProvenance(format!(
+            "pnpm lockfile major {declared:?} is not 9; earlier majors write peer suffixes \
+             into packages keys, so one name@version can appear under several keys and exact \
+             selection is not decidable here"
+        )));
+    }
+    Ok(())
+}
+
+/// Reads one YAML scalar: plain, single- or double-quoted.
+///
+/// pnpm quotes any key containing `@`, and a formatter may have rewritten single
+/// quotes to double, so both styles are ordinary input rather than an oddity.
+fn pnpm_scalar(text: &str) -> Option<String> {
+    let trimmed = text.trim();
+    if let Some(inner) = trimmed.strip_prefix('\'') {
+        let inner = inner.strip_suffix('\'')?;
+        return Some(inner.replace("''", "'"));
+    }
+    if trimmed.starts_with('"') {
+        return serde_json::from_str::<String>(trimmed).ok();
+    }
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(trimmed.to_owned())
+}
+
+/// Finds the exact `packages:` entry for `exact` and returns its registry
+/// integrity.
+///
+/// A repeated key is a refusal rather than a last-one-wins read: two records for
+/// one `name@version` is exactly the ambiguity the Bun locator exists to
+/// separate, and pnpm's key space gives nothing to separate them with.
+fn pnpm_packages_integrity(
+    text: &str,
+    exact: &str,
+) -> Result<String, super::ArtifactSnapshotError> {
+    let lines: Vec<&str> = text.lines().collect();
+    let start = lines
+        .iter()
+        .position(|line| *line == "packages:")
+        .ok_or_else(|| {
+            super::ArtifactSnapshotError::InvalidProvenance(
+                "pnpm lockfile has no packages block".into(),
+            )
+        })?;
+    let mut selected: Option<String> = None;
+    let mut seen = false;
+    let mut key: Option<String> = None;
+    let mut index = start + 1;
+    while index < lines.len() {
+        let line = lines[index];
+        if line.trim().is_empty() {
+            index += 1;
+            continue;
+        }
+        if !line.starts_with(' ') {
+            break;
+        }
+        if let Some(rest) = entry_key_line(line) {
+            let parsed = pnpm_scalar(rest).ok_or_else(|| {
+                super::ArtifactSnapshotError::InvalidProvenance(format!(
+                    "pnpm lockfile has an unreadable packages key on line {}",
+                    index + 1
+                ))
+            })?;
+            if parsed == exact {
+                if seen {
+                    return Err(super::ArtifactSnapshotError::InvalidProvenance(format!(
+                        "pnpm lockfile repeats packages key {exact}"
+                    )));
+                }
+                seen = true;
+            }
+            key = Some(parsed);
+            index += 1;
+            continue;
+        }
+        let resolution = line
+            .strip_prefix("    resolution:")
+            .filter(|_| key.as_deref() == Some(exact));
+        let Some(head) = resolution else {
+            index += 1;
+            continue;
+        };
+        let mut body = head.trim().to_owned();
+        // pnpm writes this inline; a formatter may wrap it across lines. Gather
+        // until the braces balance rather than assuming either layout.
+        while !body.ends_with('}') && index + 1 < lines.len() {
+            index += 1;
+            if !lines[index].starts_with("    ") {
+                break;
+            }
+            body.push_str(lines[index].trim());
+        }
+        if let Some(integrity) = pnpm_flow_mapping(&body, exact)?
+            .into_iter()
+            .find_map(|(name, value)| (name == "integrity").then_some(value))
+            .filter(|value| is_pnpm_integrity(value))
+        {
+            selected = Some(integrity);
+        }
+        index += 1;
+    }
+    selected.ok_or_else(|| {
+        super::ArtifactSnapshotError::InvalidProvenance(format!(
+            "pnpm lockfile has no exact selection for {exact}"
+        ))
+    })
+}
+
+/// A `packages:` entry key line: exactly two spaces, then a scalar, then `:`.
+fn entry_key_line(line: &str) -> Option<&str> {
+    let rest = line.strip_prefix("  ")?;
+    if rest.starts_with(' ') || rest.is_empty() {
+        return None;
+    }
+    let trimmed = rest.trim_end();
+    trimmed.strip_suffix(':')
+}
+
+fn is_pnpm_integrity(value: &str) -> bool {
+    let Some((algorithm, digest)) = value.split_once('-') else {
+        return false;
+    };
+    matches!(algorithm, "sha512" | "sha384" | "sha256" | "sha1")
+        && !digest.is_empty()
+        && digest.trim_end_matches('=').chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '+' || character == '/'
+        })
+}
+
+/// Parses one flat YAML flow mapping (`{ a: b, c: d }`, trailing comma allowed).
+///
+/// Nested flow collections are refused rather than flattened: the only mapping
+/// this reader consumes is `resolution`, whose values pnpm writes as scalars.
+fn pnpm_flow_mapping(
+    text: &str,
+    at: &str,
+) -> Result<Vec<(String, String)>, super::ArtifactSnapshotError> {
+    let refuse = |detail: String| super::ArtifactSnapshotError::InvalidProvenance(detail);
+    let body = text.trim();
+    let inner = body
+        .strip_prefix('{')
+        .and_then(|rest| rest.strip_suffix('}'))
+        .ok_or_else(|| refuse(format!("pnpm lockfile has a non-flow resolution for {at}")))?;
+    let mut parts: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let mut depth: i32 = 0;
+    let mut quote: Option<char> = None;
+    for character in inner.chars() {
+        if let Some(active) = quote {
+            current.push(character);
+            if character == active {
+                quote = None;
+            }
+            continue;
+        }
+        match character {
+            '\'' | '"' => {
+                quote = Some(character);
+                current.push(character);
+            }
+            '{' | '[' => {
+                depth += 1;
+                current.push(character);
+            }
+            '}' | ']' => {
+                depth -= 1;
+                if depth < 0 {
+                    return Err(refuse(format!(
+                        "pnpm lockfile has an unbalanced resolution for {at}"
+                    )));
+                }
+                current.push(character);
+            }
+            ',' if depth == 0 => {
+                parts.push(std::mem::take(&mut current));
+            }
+            _ => current.push(character),
+        }
+    }
+    if quote.is_some() || depth != 0 {
+        return Err(refuse(format!(
+            "pnpm lockfile has an unterminated resolution for {at}"
+        )));
+    }
+    parts.push(current);
+    let mut entries: Vec<(String, String)> = Vec::new();
+    for part in parts {
+        if part.trim().is_empty() {
+            continue;
+        }
+        if part.contains('{') || part.contains('[') {
+            return Err(refuse(format!(
+                "pnpm lockfile nests a collection inside the resolution for {at}"
+            )));
+        }
+        let (name, value) = part.split_once(':').ok_or_else(|| {
+            refuse(format!(
+                "pnpm lockfile has a non-mapping item in the resolution for {at}"
+            ))
+        })?;
+        let name = pnpm_scalar(name).ok_or_else(|| {
+            refuse(format!(
+                "pnpm lockfile has an unreadable key in the resolution for {at}"
+            ))
+        })?;
+        if entries.iter().any(|(existing, _)| *existing == name) {
+            return Err(refuse(format!(
+                "pnpm lockfile repeats {name} in the resolution for {at}"
+            )));
+        }
+        entries.push((name, pnpm_scalar(value).unwrap_or_default()));
+    }
+    Ok(entries)
+}
+
 impl PublishedGraphLockSelection {
     /// Replays an exact Bun text lock selection. The digest binds the original
     /// bytes (including formatting), while selection uses a conservative
@@ -152,6 +448,85 @@ impl PublishedGraphLockSelection {
             package_version,
             integrity,
         )
+    }
+
+    /// Reads one exact selection from untrusted pnpm lockfile bytes.
+    ///
+    /// The twin of `from_bun_lock`, and deliberately a reader for one block of
+    /// one lockfile major rather than a YAML parser. The acquisition side
+    /// (`published-contract-graph.mjs`) implements the same subset; this is the
+    /// authority, so anything either does not implement is refused here.
+    ///
+    /// Only major 9 is read. Major 6 wrote peer suffixes into `packages:` keys
+    /// (`foo@1.0.0(bar@2.0.0)`), so one `name@version` could appear under
+    /// several keys with no installed-path locator to separate them, and exact
+    /// selection would not be decidable. Major 9 keys are exactly
+    /// `name@version` and its store is content-addressed, which is why the
+    /// locator here is the key itself rather than an install path.
+    pub fn from_pnpm_lock(
+        lockfile: &[u8],
+        locator: impl Into<String>,
+        package_name: impl Into<String>,
+        package_version: impl Into<String>,
+    ) -> Result<Self, super::ArtifactSnapshotError> {
+        if lockfile.len() > 8 * 1024 * 1024 {
+            return Err(super::ArtifactSnapshotError::ResourceLimit(
+                "lockfile bytes exceed graph policy limit".into(),
+            ));
+        }
+        let locator = locator.into();
+        let package_name = package_name.into();
+        let package_version = package_version.into();
+        let source = std::str::from_utf8(lockfile).map_err(|_| {
+            super::ArtifactSnapshotError::InvalidProvenance(
+                "pnpm lockfile is not valid UTF-8".into(),
+            )
+        })?;
+        let text = source.replace("\r\n", "\n");
+        refuse_pnpm_yaml_beyond_subset(&text)?;
+        let exact = format!("{package_name}@{package_version}");
+        if locator != exact {
+            return Err(super::ArtifactSnapshotError::InvalidProvenance(format!(
+                "pnpm lock locator {locator:?} is not the exact key {exact:?}"
+            )));
+        }
+        require_pnpm_lockfile_major_9(&text)?;
+        let integrity = pnpm_packages_integrity(&text, &exact)?;
+        Self::new(
+            "pnpm",
+            format!("sha256:{:x}", Sha256::digest(lockfile)),
+            locator,
+            package_name,
+            package_version,
+            integrity,
+        )
+    }
+
+    /// Dispatches to the reader for the package manager that wrote this
+    /// lockfile, named by the file's own name.
+    ///
+    /// The name is the whole format decision, on both sides of the boundary: no
+    /// tag travels the wire and no reader sniffs content, so a file the table
+    /// does not name is refused rather than tried against each parser in turn.
+    pub fn from_lockfile(
+        path: &std::path::Path,
+        lockfile: &[u8],
+        locator: impl Into<String>,
+        package_name: impl Into<String>,
+        package_version: impl Into<String>,
+    ) -> Result<Self, super::ArtifactSnapshotError> {
+        match path.file_name().and_then(|name| name.to_str()) {
+            Some("bun.lock") => {
+                Self::from_bun_lock(lockfile, locator, package_name, package_version)
+            }
+            Some("pnpm-lock.yaml") => {
+                Self::from_pnpm_lock(lockfile, locator, package_name, package_version)
+            }
+            other => Err(super::ArtifactSnapshotError::InvalidProvenance(format!(
+                "{} names no lockfile format this certifier reads",
+                other.unwrap_or("<unnamed path>")
+            ))),
+        }
     }
 
     pub(crate) fn new(
@@ -3668,5 +4043,222 @@ mod tests {
             selection.integrity,
             "sha512-AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ=="
         );
+    }
+
+    const PNPM_INTEGRITY: &str = "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+
+    fn pnpm_lock(body: &str) -> String {
+        format!(
+            "lockfileVersion: '9.0'\n\nsettings:\n  autoInstallPeers: true\n\npackages:\n\n{body}"
+        )
+    }
+
+    fn pnpm_entry() -> String {
+        format!("  '@corvu/utils@0.3.2':\n    resolution: {{integrity: {PNPM_INTEGRITY}}}\n")
+    }
+
+    #[test]
+    fn pnpm_selection_is_derived_from_exact_bytes_and_rejects_absence() {
+        let lock = pnpm_lock(&format!("{}    engines: {{node: '>=10'}}\n", pnpm_entry()));
+        let selection = PublishedGraphLockSelection::from_pnpm_lock(
+            lock.as_bytes(),
+            "@corvu/utils@0.3.2",
+            "@corvu/utils",
+            "0.3.2",
+        )
+        .unwrap();
+        assert_eq!(selection.integrity, PNPM_INTEGRITY);
+        assert_eq!(selection.package_manager, "pnpm");
+        assert_eq!(selection.locator, "@corvu/utils@0.3.2");
+        assert_eq!(
+            selection.lockfile_digest,
+            format!("sha256:{:x}", Sha256::digest(lock.as_bytes()))
+        );
+        assert!(
+            PublishedGraphLockSelection::from_pnpm_lock(
+                lock.as_bytes(),
+                "missing@1.0.0",
+                "missing",
+                "1.0.0"
+            )
+            .is_err()
+        );
+    }
+
+    /// A real lockfile in the consumer corpus had been reformatted: keys
+    /// double-quoted, `resolution` wrapped across lines with a trailing comma.
+    /// A reader that assumed pnpm's own layout answers "no packages" for it --
+    /// fail-closed, but for the wrong reason -- so both layouts are pinned.
+    #[test]
+    fn pnpm_selection_reads_a_formatter_rewritten_lockfile() {
+        let lock = format!(
+            "lockfileVersion: \"9.0\"\n\npackages:\n  \"@corvu/utils@0.3.2\":\n    resolution:\n      {{\n        integrity: {PNPM_INTEGRITY},\n      }}\n    engines: {{ node: \">=10\" }}\n"
+        );
+        let selection = PublishedGraphLockSelection::from_pnpm_lock(
+            lock.as_bytes(),
+            "@corvu/utils@0.3.2",
+            "@corvu/utils",
+            "0.3.2",
+        )
+        .unwrap();
+        assert_eq!(selection.integrity, PNPM_INTEGRITY);
+    }
+
+    /// Major 6 wrote peer suffixes into `packages:` keys, so one `name@version`
+    /// could appear under several keys with no installed path to separate them.
+    /// Refusing the major is what makes "the key is the locator" sound.
+    #[test]
+    fn pnpm_selection_refuses_a_lockfile_major_before_9() {
+        let lock = format!(
+            "lockfileVersion: '6.0'\n\npackages:\n\n  /@corvu/utils@0.3.2:\n    resolution: {{integrity: {PNPM_INTEGRITY}}}\n"
+        );
+        let error = PublishedGraphLockSelection::from_pnpm_lock(
+            lock.as_bytes(),
+            "@corvu/utils@0.3.2",
+            "@corvu/utils",
+            "0.3.2",
+        )
+        .unwrap_err();
+        assert!(format!("{error}").contains("is not 9"), "{error}");
+    }
+
+    #[test]
+    fn pnpm_selection_refuses_a_repeated_packages_key() {
+        let lock = pnpm_lock(&format!(
+            "{}  '@corvu/utils@0.3.2':\n    resolution: {{integrity: sha512-BBBB==}}\n",
+            pnpm_entry()
+        ));
+        let error = PublishedGraphLockSelection::from_pnpm_lock(
+            lock.as_bytes(),
+            "@corvu/utils@0.3.2",
+            "@corvu/utils",
+            "0.3.2",
+        )
+        .unwrap_err();
+        assert!(
+            format!("{error}").contains("repeats packages key"),
+            "{error}"
+        );
+    }
+
+    /// Each of these can move a value from one entry to another, or redefine
+    /// `packages:` wholesale. A reader that skipped what it did not understand
+    /// would answer confidently from the wrong bytes.
+    #[test]
+    fn pnpm_selection_refuses_yaml_beyond_the_subset_it_reads() {
+        let entry = pnpm_entry();
+        for (name, lock) in [
+            ("anchor", pnpm_lock(&format!("  base: &shared\n{entry}"))),
+            ("alias", pnpm_lock(&format!("{entry}    extra: *shared\n"))),
+            ("merge key", pnpm_lock(&format!("{entry}    <<: *shared\n"))),
+            (
+                "second document",
+                format!("{}---\npackages:\n{entry}", pnpm_lock(&entry)),
+            ),
+            ("tab", pnpm_lock(&entry).replace("  '@corvu", "\t'@corvu")),
+        ] {
+            assert!(
+                PublishedGraphLockSelection::from_pnpm_lock(
+                    lock.as_bytes(),
+                    "@corvu/utils@0.3.2",
+                    "@corvu/utils",
+                    "0.3.2",
+                )
+                .is_err(),
+                "{name} was read instead of refused"
+            );
+        }
+    }
+
+    /// pnpm's locator is the `packages:` key itself, so a caller supplying any
+    /// other string is naming a record this lockfile does not hold.
+    /// `workspace:*` is a plain scalar, not an alias: in YAML `*` opens a node
+    /// only at a token boundary, and a bare `:` is not one. Every lockfile in
+    /// the demand corpus carries this line, so treating it as an alias refuses
+    /// all of them.
+    #[test]
+    fn pnpm_selection_reads_a_workspace_specifier_as_a_scalar() {
+        let lock = format!(
+            "lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      '@corvu/utils':\n        specifier: workspace:*\n        version: link:packages/utils\n\npackages:\n\n{}",
+            pnpm_entry()
+        );
+        let selection = PublishedGraphLockSelection::from_pnpm_lock(
+            lock.as_bytes(),
+            "@corvu/utils@0.3.2",
+            "@corvu/utils",
+            "0.3.2",
+        )
+        .unwrap();
+        assert_eq!(selection.integrity, PNPM_INTEGRITY);
+    }
+
+    #[test]
+    fn pnpm_selection_refuses_a_locator_that_is_not_the_exact_key() {
+        let lock = pnpm_lock(&pnpm_entry());
+        let error = PublishedGraphLockSelection::from_pnpm_lock(
+            lock.as_bytes(),
+            "accordion/@corvu/utils",
+            "@corvu/utils",
+            "0.3.2",
+        )
+        .unwrap_err();
+        assert!(
+            format!("{error}").contains("is not the exact key"),
+            "{error}"
+        );
+    }
+
+    /// A tarball, git or link dependency has no registry integrity. Leaving it
+    /// unselected refuses the graph; inventing a locator would authorize bytes
+    /// no registry can authenticate.
+    #[test]
+    fn pnpm_selection_refuses_a_package_with_no_registry_integrity() {
+        let lock = pnpm_lock(
+            "  '@corvu/utils@0.3.2':\n    resolution: {tarball: https://example.invalid/utils.tgz}\n",
+        );
+        assert!(
+            PublishedGraphLockSelection::from_pnpm_lock(
+                lock.as_bytes(),
+                "@corvu/utils@0.3.2",
+                "@corvu/utils",
+                "0.3.2",
+            )
+            .is_err()
+        );
+    }
+
+    /// The file name is the whole format decision, on both sides of the
+    /// boundary. Nothing sniffs content, so a lockfile under the wrong name is
+    /// refused rather than tried against the other reader.
+    #[test]
+    fn lockfile_dispatch_follows_the_file_name() {
+        let pnpm = pnpm_lock(&pnpm_entry());
+        let bun = format!(
+            r#"{{"packages":{{"@corvu/utils":["@corvu/utils@0.3.2","",{{}},"{PNPM_INTEGRITY}"],}},}}"#
+        );
+        let read = |path: &str, bytes: &[u8], locator: &str| {
+            PublishedGraphLockSelection::from_lockfile(
+                std::path::Path::new(path),
+                bytes,
+                locator,
+                "@corvu/utils",
+                "0.3.2",
+            )
+        };
+        assert_eq!(
+            read("/w/pnpm-lock.yaml", pnpm.as_bytes(), "@corvu/utils@0.3.2")
+                .unwrap()
+                .package_manager,
+            "pnpm"
+        );
+        assert_eq!(
+            read("/w/bun.lock", bun.as_bytes(), "@corvu/utils")
+                .unwrap()
+                .package_manager,
+            "bun"
+        );
+        assert!(read("/w/bun.lock", pnpm.as_bytes(), "@corvu/utils@0.3.2").is_err());
+        assert!(read("/w/pnpm-lock.yaml", bun.as_bytes(), "@corvu/utils").is_err());
+        assert!(read("/w/yarn.lock", pnpm.as_bytes(), "@corvu/utils@0.3.2").is_err());
     }
 }
