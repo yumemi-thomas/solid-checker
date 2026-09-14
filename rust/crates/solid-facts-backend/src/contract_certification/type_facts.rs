@@ -729,8 +729,7 @@ fn acquire_census_local_transcripts(
                 let ProofDemandSubject::DomainClosure { subject, .. } = &proof.subject else {
                     continue;
                 };
-                // The two censuses that walk into local declarations. `reads`
-                // reads the root transcript's forms only and asks for nothing;
+                // The censuses that reach into local declarations.
                 // `callbacks` shares the `creates` walk, and an export whose
                 // `creates` walk declined at proposal time still proposes
                 // `callbacks` — so acquiring for `creates` alone left every
@@ -738,10 +737,21 @@ fn acquire_census_local_transcripts(
                 // transcript nobody had asked for (192 rows on 47 sites in the
                 // 2026-09-13 pin, `@tanstack/solid-pacer`'s `batch` and
                 // `createStore` among them).
+                //
+                // ADR 0107 adds `reads`, which asks for far less: not a walk
+                // at all, only the callees a `parameter-or-own-result` subject
+                // premise already names. Before it, `reads` asked for nothing
+                // and ADR 0093's derivation — implemented, and stated by the
+                // producer on the corpus's commonest compiled shape — was
+                // unreachable from this domain, refusing 80 rows on
+                // `combineStyle` alone.
                 let domain = match &subject.path {
                     SemanticClaimPath::Domain(ClaimPath::Call(domain))
                         if proof.family == ProofFamily::DomainExhaustiveness
-                            && matches!(domain, ClaimDomain::Creates | ClaimDomain::Callbacks) =>
+                            && matches!(
+                                domain,
+                                ClaimDomain::Creates | ClaimDomain::Callbacks | ClaimDomain::Reads
+                            ) =>
                     {
                         *domain
                     }
@@ -760,7 +770,9 @@ fn acquire_census_local_transcripts(
                     locals: &locals,
                     dependencies,
                 };
-                let pass = if domain == ClaimDomain::Creates {
+                let pass = if domain == ClaimDomain::Reads {
+                    census_reads_domain(plan, proof, export, implementation, evidence)
+                } else if domain == ClaimDomain::Creates {
                     census_creates_domain(plan, proof, export, transcript, implementation, evidence)
                 } else {
                     census_callbacks_domain(
@@ -3852,13 +3864,34 @@ fn verify_export_value_family(
                     &subject.path,
                     ClosureCensus::Implementation,
                 )?;
-                sites.extend(census_reads_domain(
-                    plan,
-                    proof,
-                    export,
-                    implementation,
-                    census,
-                )?);
+                let (outcome, census_sites, requested) =
+                    census_reads_domain(plan, proof, export, implementation, census)?;
+                if outcome == CensusOutcome::NeedsTranscripts {
+                    // The same argument `creates` makes one branch up:
+                    // acquisition batches every local declaration a census
+                    // names, so one still missing at verification is a
+                    // declaration that could not be transcribed, and reading
+                    // its absence as harmless is exactly the silence this
+                    // census refuses to certify from.
+                    return Err(TypeFactsCertificationError::UnsupportedDemand {
+                        demand: proof.id.clone(),
+                        reason: format!(
+                            "reads-census premise required: no implementation transcript was                              acquired for the local declaration(s) {}",
+                            requested
+                                .iter()
+                                .map(|(location, premises)| format!(
+                                    "{}:{}..{} under {} premise(s)",
+                                    location.path,
+                                    location.start_byte,
+                                    location.end_byte,
+                                    premises.len()
+                                ))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
+                    });
+                }
+                sites.extend(census_sites);
             } else if matches!(
                 &subject.path,
                 SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Returns))
@@ -10047,7 +10080,7 @@ fn census_reads_domain(
     export: &solid_reactive_ir::contract_semantics::ExportSemantics,
     implementation: &typefacts::ExportImplementationTranscript,
     evidence: CensusEvidence<'_>,
-) -> Result<Vec<String>, TypeFactsCertificationError> {
+) -> Result<CensusPass, TypeFactsCertificationError> {
     let refuse = |reason: String| TypeFactsCertificationError::UnsupportedDemand {
         demand: proof.id.clone(),
         reason,
@@ -10071,7 +10104,7 @@ fn census_reads_domain(
              {reason}"
         ))
     })?;
-    let run = CensusRun {
+    let mut run = CensusRun {
         certified: &plan.snapshot,
         plan: Some(plan),
         evidence,
@@ -10085,15 +10118,55 @@ fn census_reads_domain(
         frame: None,
         caller_supplied_invocations: CallerSuppliedInvocations::default(),
     };
+    // ADR 0107: the one premise here whose other half lives in a callee, so
+    // the transcripts it needs are demanded before any form is decided.
+    // Asking first keeps the decision below single-valued: a form either has
+    // its callee's transcript or this census has not finished asking, and
+    // those two must never arrive at the same refusal.
+    if census_reads_demands_own_result_callees(&mut run, implementation) {
+        return Ok((CensusOutcome::NeedsTranscripts, Vec::new(), run.requested));
+    }
     let mut sites = Vec::new();
     for form in &implementation.uncensused_invoking_forms {
         if form.reach == Reachability::Unreachable {
             continue;
         }
-        // No deferral. The `creates` census holds a coercion or a local
-        // literal result back until its call walk has demanded the callees'
-        // transcripts; this census has no call walk, so a form it cannot
-        // decide here it cannot decide at all.
+        // ADR 0093's derivation, reachable from `reads` since ADR 0107. It is
+        // decided here rather than in `census_form_disposition` because
+        // confirming it reads the callee's own transcript, which that
+        // function — pure, and shared with the walk that has no such need —
+        // cannot do. The conditions are entirely
+        // `census_parameter_or_own_result_is_bound`'s; nothing is relaxed for
+        // this domain.
+        if !form.subject_local_literal_results.is_empty() {
+            if !census_parameter_or_own_result_is_bound(&mut run, implementation, form)
+                .map_err(refuse)?
+            {
+                return Err(refuse(format!(
+                    "reads-census premise required: the {} form ({}) at {}:{}..{} ({}) states a \
+                     parameter-or-own-result subject whose local-literal-result premise this \
+                     census could not bind",
+                    uncensused_invoking_form_kind_name(form.kind),
+                    form.node_kind,
+                    form.location.path,
+                    form.location.start_byte,
+                    form.location.end_byte,
+                    reachability_name(form.reach)
+                )));
+            }
+            let disposition = if form.subject_write {
+                CensusDisposition::ParameterOrOwnResultAccessorWrite
+            } else {
+                CensusDisposition::ParameterOrOwnResultAccessor
+            };
+            sites.push(census_form_site(form, disposition));
+            continue;
+        }
+        // No deferral past this point. The `creates` census holds a coercion
+        // back until its call walk has demanded the callees' transcripts;
+        // this census has no call walk, and ADR 0107 gave it only the one
+        // targeted demand above, so a form it cannot decide here it cannot
+        // decide at all.
         // Depth 0: this census walks the export's own implementation and
         // recurses into nothing, so every form it sees is in the declaration
         // whose parameters the caller filled.
@@ -10119,7 +10192,72 @@ fn census_reads_domain(
     // described enumeration in both directions; counted only under the empty
     // one.
     sites.push(confirm_described_reads(described.as_deref(), implementation).map_err(refuse)?);
-    Ok(sites)
+    // The witness lines the premise bindings above recorded on the run.
+    sites.append(&mut run.sites);
+    // Zero on both counts, and truthfully: this census dispositions no call
+    // and recurses into no declaration. The transcripts ADR 0107 demands are
+    // read as a premise's other half, never walked.
+    Ok((
+        CensusOutcome::Decided { calls: 0, depth: 0 },
+        sites,
+        run.requested,
+    ))
+}
+
+/// The local declarations a `reads` census needs transcripts for, requested.
+///
+/// `true` when at least one is still missing, which the caller turns into
+/// [`CensusOutcome::NeedsTranscripts`]. This is the whole of the "call walk"
+/// ADR 0107 gives this census, and it is deliberately not one: `creates`
+/// dispositions *every* call it reaches and recurses through them, while this
+/// asks only for the callees a `parameter-or-own-result` premise already
+/// names. A form states that premise or it does not, so nothing here decides
+/// which calls matter — the producer already did.
+fn census_reads_demands_own_result_callees(
+    run: &mut CensusRun<'_>,
+    implementation: &typefacts::ExportImplementationTranscript,
+) -> bool {
+    let mut wanted = false;
+    for form in &implementation.uncensused_invoking_forms {
+        if form.reach == Reachability::Unreachable {
+            continue;
+        }
+        for premise in &form.subject_local_literal_results {
+            let mut calls = implementation
+                .calls
+                .iter()
+                .filter(|call| call.location == premise.call);
+            let Some(call) = calls.next() else { continue };
+            // Every one of these also refuses in the binding check below. Here
+            // they only mean "nothing to ask for", so the census reaches that
+            // refusal by its own name instead of by an unanswered demand.
+            if calls.next().is_some() || call.kind != CallKind::Call {
+                continue;
+            }
+            let Some(declaration) = &call.declaration else {
+                continue;
+            };
+            let Some((_, relative)) = census_local_declaration_identity(run, declaration) else {
+                continue;
+            };
+            let Ok(node) = census_local_declaration_node(run, &relative, declaration) else {
+                continue;
+            };
+            let premises = census_call_premises(implementation, call);
+            if run.evidence.local(&node, premises).is_some() {
+                continue;
+            }
+            if !run
+                .requested
+                .iter()
+                .any(|(pending, pending_premises)| *pending == node && pending_premises == premises)
+            {
+                run.requested.push((node, premises.to_vec()));
+            }
+            wanted = true;
+        }
+    }
+    wanted
 }
 
 /// The parameter-rooted reads a proposal's `reads` enumeration describes, when
@@ -23017,6 +23155,128 @@ mod tests {
                 "{variant}"
             );
         }
+    }
+
+    /// ADR 0107: the `reads` census asks for the callee a
+    /// `parameter-or-own-result` premise names, and asks only for that.
+    ///
+    /// Before it, `reads` requested nothing, so the premise could never bind
+    /// and `combineStyle`'s eighty rows refused against a derivation the
+    /// producer states and ADR 0093 implemented. The cases that request
+    /// *nothing* are the point: this is a targeted demand, not a call walk, so
+    /// a form with no such premise, an unreachable one, and a premise naming a
+    /// call this transcript does not carry must all leave the request list
+    /// empty — the last so the census reaches its own refusal rather than an
+    /// unanswered demand.
+    #[test]
+    fn reads_census_demands_only_the_callees_its_own_result_premises_name() {
+        let path = "/project/node_modules/consumer/dist/index.js";
+        let source = "export function value(a, b) { if (typeof b === \"string\") { b = helper(b); } return { ...a, ...b }; }\nfunction helper(s) { const result = {}; return result; }";
+        let location = |needle: &str| {
+            let start = source.find(needle).unwrap() as u64;
+            typefacts::Location {
+                path: path.into(),
+                start_byte: start,
+                end_byte: start + needle.len() as u64,
+            }
+        };
+        let certified = super::super::ArtifactSnapshot {
+            package_name: "consumer".into(),
+            package_version: "1.0.0".into(),
+            package_integrity: "sha512-consumer".into(),
+            files: std::sync::Arc::new(
+                [(
+                    "dist/index.js".to_owned(),
+                    std::sync::Arc::<[u8]>::from(source.as_bytes()),
+                )]
+                .into_iter()
+                .collect(),
+            ),
+            directories: std::sync::Arc::new(std::collections::BTreeSet::new()),
+            root: "/snapshot/consumer".into(),
+            provenance_root: "/snapshot/consumer".into(),
+        };
+        let roots = vec![SnapshotSourceRoot {
+            path: "/project/node_modules/consumer/".into(),
+            evidence_prefix: "/node_modules/consumer/".into(),
+            snapshot: &certified,
+            dependency: false,
+        }];
+        let callee = location("function helper(s) { const result = {}; return result; }");
+        let declaration = json!({"symbol":"symbol:helper", "name":"helper", "kind":"FunctionDeclaration", "sourceFile":path,
+            "location":{"path":path,"startByte":callee.start_byte+9,"endByte":callee.start_byte+15}});
+        let call = signals_call(
+            "helper",
+            json!({"location": location("helper(b)"), "targetModule":"", "declaration": declaration}),
+        );
+        let form = |reach: &str, call_needle: &str| {
+            json!({"kind":"property-access-unknown-accessor", "nodeKind":"SpreadAssignment",
+                "location":location("...b"), "reach":reach, "subjectRoot":"parameter-or-own-result",
+                "subjectParameter":1,
+                "subjectLocalLiteralResults":[{"call":location(call_needle),"callee":callee,
+                    "allocation":location("result = {}"),"returns":[location("return result;")]}]})
+        };
+        let mut helper_transcript = census_transcript_with(vec![], json!([]));
+        helper_transcript.location = callee.clone();
+        helper_transcript.declaration = Some(serde_json::from_value(declaration).unwrap());
+        helper_transcript.query_name = "helper".into();
+        let locals = vec![LocalDeclarationTranscript {
+            location: callee.clone(),
+            premises: vec![],
+            transcript: helper_transcript,
+        }];
+        for (name, forms, have_local, wants) in [
+            (
+                "transcript missing",
+                form("reachable", "helper(b)"),
+                false,
+                true,
+            ),
+            (
+                "transcript present",
+                form("reachable", "helper(b)"),
+                true,
+                false,
+            ),
+            (
+                "unreachable form",
+                form("unreachable", "helper(b)"),
+                false,
+                false,
+            ),
+            (
+                "premise names no call of this transcript",
+                form("reachable", "typeof b"),
+                false,
+                false,
+            ),
+        ] {
+            let implementation = census_transcript_with(vec![call.clone()], json!([forms]));
+            let mut run = census_run(&certified, &roots);
+            run.evidence = CensusEvidence {
+                roots: &roots,
+                locals: if have_local { &locals } else { &[] },
+                dependencies: &[],
+            };
+            assert_eq!(
+                census_reads_demands_own_result_callees(&mut run, &implementation),
+                wants,
+                "{name}"
+            );
+            assert_eq!(run.requested.is_empty(), !wants, "{name}");
+        }
+
+        // A form with no own-result premise at all asks for nothing, which is
+        // every `reads` census that existed before this ADR.
+        let plain = census_transcript_with(
+            vec![call],
+            json!([{"kind":"property-access-unknown-accessor", "nodeKind":"SpreadAssignment",
+                "location":location("...a"), "reach":"reachable", "subjectRoot":"parameter",
+                "subjectParameter":0}]),
+        );
+        let mut run = census_run(&certified, &roots);
+        assert!(!census_reads_demands_own_result_callees(&mut run, &plain));
+        assert!(run.requested.is_empty());
     }
 
     #[test]
