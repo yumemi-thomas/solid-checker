@@ -6654,6 +6654,182 @@
         "One scheduling sample: the coalescing path, where several calls collapse into one microtask, is covered by the implementation census alone",
         "NEVER EMITS: the export reads nothing of its own, so the samples assert zero and prove the getter is live by reading it once outside the window; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
       ]
+    },
+    {
+      "claimId": "claim:v1:sha256:27e9d969933908c144b0beaac7297e798ccd029e926bba193f70cf0164c3a2f5",
+      "module": "corvu-utils-dom-combine-style-reads-f34410e8.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS combineStyle, artifact artifact-case:f34410e88fd1b098ba717edf6bb3dff50d8733870160d4b80667a5a2a052d3ce; finite samples over a small pure export, which can contradict the closure but cannot establish it",
+        "The string arm is exercised through stringStyleToObject's own regex; samples cover a declaration, a custom property and the empty string, not the whole CSS grammar",
+        "NEVER EMITS: `read-operation`. Every property the export reads is an own enumerable property of an object its caller supplied (ADR 0034) or of the plain object `stringStyleToObject` allocates and fills during this same call (ADR 0044). The export owns no reactive source to observe."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:86db990167c4c7b200ba441f9f61ea18da03fe6670e0e0f67d7a01130321e7ca",
+      "module": "corvu-utils-dom-combine-style-reads-fd42a1d9.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS combineStyle, artifact artifact-case:fd42a1d9dda954dae8c911fad3e828d82b47a4e85f5447e264836f53e6557e5e; finite samples over a small pure export, which can contradict the closure but cannot establish it",
+        "The string arm is exercised through stringStyleToObject's own regex; samples cover a declaration, a custom property and the empty string, not the whole CSS grammar",
+        "NEVER EMITS: `read-operation`. Every property the export reads is an own enumerable property of an object its caller supplied (ADR 0034) or of the plain object `stringStyleToObject` allocates and fills during this same call (ADR 0044). The export owns no reactive source to observe."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:e85b262ed5d1dd93f07bd2da98da525da94e5c82f2ed4c11ac6839060ca90a52",
+      "module": "corvu-next-utils-dom-combine-style-reads-7496b629.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS combineStyle, artifact artifact-case:7496b629e31ec3f10581c7dd83dafccecffa97f846df9e3254a1d3e5f53b5860; finite samples over a small pure export, which can contradict the closure but cannot establish it",
+        "The string arm is exercised through stringStyleToObject's own regex; samples cover a declaration, a custom property and the empty string, not the whole CSS grammar",
+        "NEVER EMITS: `read-operation`. Every property the export reads is an own enumerable property of an object its caller supplied (ADR 0034) or of the plain object `stringStyleToObject` allocates and fills during this same call (ADR 0044). The export owns no reactive source to observe."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:b78c453957e7f6cf8df581537b95f61c3678d2fa04c8977c4626316a0726cb15",
+      "module": "corvu-next-utils-dom-combine-style-reads-95369190.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS combineStyle, artifact artifact-case:953691902e861bd4851d5547b7298e97d125a8548b171b15087e835bcdb8f081; finite samples over a small pure export, which can contradict the closure but cannot establish it",
+        "The string arm is exercised through stringStyleToObject's own regex; samples cover a declaration, a custom property and the empty string, not the whole CSS grammar",
+        "NEVER EMITS: `read-operation`. Every property the export reads is an own enumerable property of an object its caller supplied (ADR 0034) or of the plain object `stringStyleToObject` allocates and fills during this same call (ADR 0044). The export owns no reactive source to observe."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:a5bfa625948380380ba5c6985b2686344c7ad0243f37273e9bd77e746a29a086",
+      "module": "corvu-utils-dom-combine-style-reads-84d6a8cd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS combineStyle, artifact artifact-case:84d6a8cd6af86d14ff90de35550d57a163b19ad8eec05d481a9580502fd55911; finite samples over a small pure export, which can contradict the closure but cannot establish it",
+        "The string arm is exercised through stringStyleToObject's own regex; samples cover a declaration, a custom property and the empty string, not the whole CSS grammar",
+        "NEVER EMITS: `read-operation`. Every property the export reads is an own enumerable property of an object its caller supplied (ADR 0034) or of the plain object `stringStyleToObject` allocates and fills during this same call (ADR 0044). The export owns no reactive source to observe."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:faab419b4f30e640514697d4d300ed7b6f0524928bdea22a68fdb24bf7bc5b54",
+      "module": "corvu-utils-dom-combine-style-reads-2c64155d.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS combineStyle, artifact artifact-case:2c64155d6b415641eb0be641c8621113ba9df853637e7af49c48f260beacd045; finite samples over a small pure export, which can contradict the closure but cannot establish it",
+        "The string arm is exercised through stringStyleToObject's own regex; samples cover a declaration, a custom property and the empty string, not the whole CSS grammar",
+        "NEVER EMITS: `read-operation`. Every property the export reads is an own enumerable property of an object its caller supplied (ADR 0034) or of the plain object `stringStyleToObject` allocates and fills during this same call (ADR 0044). The export owns no reactive source to observe."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:94b92bb68c9dcc78c5c8ca64f61305a35bf933d72d855d23ebf6f560329f5062",
+      "module": "corvu-next-utils-dom-combine-style-reads-3c29eec4.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS combineStyle, artifact artifact-case:3c29eec4eb9196a19474b6bcdb91a44faf4ce109978d1a761e530e13bf585b96; finite samples over a small pure export, which can contradict the closure but cannot establish it",
+        "The string arm is exercised through stringStyleToObject's own regex; samples cover a declaration, a custom property and the empty string, not the whole CSS grammar",
+        "NEVER EMITS: `read-operation`. Every property the export reads is an own enumerable property of an object its caller supplied (ADR 0034) or of the plain object `stringStyleToObject` allocates and fills during this same call (ADR 0044). The export owns no reactive source to observe."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:da08d7077f889c1625760975b79323ac93521e46fd409bc65c14a45cc38e1df5",
+      "module": "corvu-next-utils-dom-combine-style-reads-dfb5ffda.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS combineStyle, artifact artifact-case:dfb5ffdab3577940d2df6d0553416b3b2bc599711e75e0cdb7cda11db8ec449b; finite samples over a small pure export, which can contradict the closure but cannot establish it",
+        "The string arm is exercised through stringStyleToObject's own regex; samples cover a declaration, a custom property and the empty string, not the whole CSS grammar",
+        "NEVER EMITS: `read-operation`. Every property the export reads is an own enumerable property of an object its caller supplied (ADR 0034) or of the plain object `stringStyleToObject` allocates and fills during this same call (ADR 0044). The export owns no reactive source to observe."
+      ]
     }
   ]
 }

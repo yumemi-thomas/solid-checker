@@ -73,7 +73,7 @@ test("the frozen Phase 20 cohort remains the exact authority for the Phase 21 le
   // passes against the rewritten ledger.
   assert.deepEqual(ledger.authority.currentReport, {
     path: "benchmarks/ecosystem/report.json",
-    sha256: "737c0dfc57e4a2540c35f11d5d6d6961f4103b46cea8aafc6b8c0bb12a3b4ae1"
+    sha256: "39e6656e79c680702fc2c7b4067cd8987290b49a428caf8e16b1e48037ecc5a7"
   });
   assert.equal(ledger.rows.filter(row => row.phase21Disposition == null).length, 0);
   // One row moved, `@solid-primitives/geolocation@1.5.5|solid1|only`:
@@ -136,6 +136,9 @@ test("the frozen Phase 20 cohort remains the exact authority for the Phase 21 le
     // 2026-09-14 repin (twenty-four carried and DOM-predicate reads recipes on
     // the corvu-next reactivity and floating-ui DOM cases): no disposition
     // moved; only the report digest above changed.
+    // 2026-09-14 repin (ADR 0107's reads-census callee demand and the eight
+    // combineStyle vetoes it makes serviceable, 1,470 -> 1,380 recipe-less
+    // reads rows): no disposition moved; only the report digest above changed.
     // 2026-09-13 third repin (seventy-three reads recipes at four cases): no
     // disposition moved; only the report digest above changed.
     // 2026-09-13 second repin (ADR 0099 not-callable value premise, the two

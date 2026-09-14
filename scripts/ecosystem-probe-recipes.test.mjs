@@ -355,7 +355,10 @@ describe("the checked-in fixture recipe corpora", () => {
   // `phase21/2026-09-10-reads-veto-observation-design.md` found all five of
   // them in the `reads` domain and none anywhere else, which is § 6's
   // argument measured: an unenumerated read is a read of a source the export
-  // *owns*, and no observation from outside can see it.
+  // *owns*, and no observation from outside can see it. ADR 0107's eight
+  // `combineStyle` vetoes join them, for the same reason and in the same
+  // domain: every property that export reads belongs to its caller or to the
+  // object it just allocated, so there is nothing of its own to observe.
   //
   // Pinning the list is what makes a sixth one a decision. A `creates` or
   // `returns` recipe going silent would land here as a diff, where today the
@@ -372,6 +375,10 @@ describe("the checked-in fixture recipe corpora", () => {
       "corvu-next-utils-dom-after-paint-reads-95369190.mjs",
       "corvu-next-utils-dom-call-event-handler-reads-7496b629.mjs",
       "corvu-next-utils-dom-call-event-handler-reads-95369190.mjs",
+      "corvu-next-utils-dom-combine-style-reads-3c29eec4.mjs",
+      "corvu-next-utils-dom-combine-style-reads-7496b629.mjs",
+      "corvu-next-utils-dom-combine-style-reads-95369190.mjs",
+      "corvu-next-utils-dom-combine-style-reads-dfb5ffda.mjs",
       "corvu-next-utils-reactivity-access-reads-08b3dc34.mjs",
       "corvu-next-utils-reactivity-access-reads-b6145c3d.mjs",
       "corvu-next-utils-reactivity-access-reads-d1cba274.mjs",
@@ -408,6 +415,10 @@ describe("the checked-in fixture recipe corpora", () => {
       "corvu-utils-dom-call-event-handler-reads-84d6a8cd.mjs",
       "corvu-utils-dom-call-event-handler-reads-f34410e8.mjs",
       "corvu-utils-dom-call-event-handler-reads-fd42a1d9.mjs",
+      "corvu-utils-dom-combine-style-reads-2c64155d.mjs",
+      "corvu-utils-dom-combine-style-reads-84d6a8cd.mjs",
+      "corvu-utils-dom-combine-style-reads-f34410e8.mjs",
+      "corvu-utils-dom-combine-style-reads-fd42a1d9.mjs",
       "corvu-utils-is-button-reads-1b8ce990.mjs",
       "corvu-utils-is-button-reads-77550142.mjs",
       "corvu-utils-is-function-reads-1b8ce990.mjs",
