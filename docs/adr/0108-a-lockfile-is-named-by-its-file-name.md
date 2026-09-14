@@ -118,6 +118,9 @@ rosters are mirrored case for case.
   registry tarball integrity, so it cannot feed this path without a conversion
   this ADR does not attempt.
 - What this does **not** change: no closure, no census, no claim domain. It
-  removes the reason a consumer could not accept a contract at all; whether
-  accepting one moves a finding is the separate measurement in
+  removes *one* reason a consumer could not accept a contract. Measured
+  immediately afterwards, a second one stands: the acceptance index is keyed on
+  `(importer, specifier)`, and certification binds its acceptance to a synthetic
+  importer it writes inside the package, so accepting a certified contract still
+  moves no consumer finding. See § 7 of
   `phase21/2026-09-14-which-closures-change-a-consumer-finding.md`.

@@ -1,5 +1,36 @@
 # Precision backlog
 
+## Accepting a certified contract still moves no consumer finding: the key is the importer (2026-09-14)
+
+With ADR 0108 landed, the acceptance path could finally be run end to end on a
+real consumer, and it was. `@solid-primitives/props@3.1.11` certified from
+`kobalte`'s own pnpm tree (47 closures, receipt validated with
+`--receipt-trust-configuration`) into `kobalte/packages/core`'s catalog.
+`SC9005` before: **632**. After: **632**. That package's 39 sites stayed at the
+acceptance gate.
+
+The accepted-contract index is keyed on **`(importer, specifier)`**
+(`contract_semantics/consumer.rs`), because the same specifier resolves
+differently from different files and an acceptance may only speak for the
+resolution it verified. Certification binds its acceptance to a synthetic
+`.solid-checker-certification-<digest>.mjs` importer it writes inside the
+package directory, so nothing in the consumer's sources matches and `bound == 0`.
+The fixtures show the shape that works — they name `App.tsx`, the consumer's own
+file — so the mechanism is sound and the **producer** is the gap:
+`certify-contract.mjs` takes no importer argument, and the ecosystem benchmark
+inspects the catalog it writes without ever analyzing a consumer against it.
+
+Scale, for one project of 146: `kobalte/packages/core` would need **251**
+entries across its importing files (204 for `@kobalte/utils` alone). So the fix
+is not hand-written catalogs. It is either certification accepting a set of
+importers, or an acceptance identity that binds to the resolved artifact rather
+than the importing file — and which of those is sound is an ADR, because the
+importer key is exactly what stops one file's resolution speaking for another's.
+
+Measurement in
+[`phase21/2026-09-14-which-closures-change-a-consumer-finding.md`](package-contract-v2/phase21/2026-09-14-which-closures-change-a-consumer-finding.md)
+§ 7.
+
 ## A pnpm-installed project can accept a contract (ADR 0108, 2026-09-14)
 
 The measurement below found that no closure changes a consumer finding because

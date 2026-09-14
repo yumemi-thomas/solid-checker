@@ -142,3 +142,55 @@ The corpus is also not identical to 2026-09-12's — `solid-primitives` is a
 newer local checkout with 116 projects rather than 70 — so the totals moved
 (233 → 242 exports, 2,056 → 2,585 sites) for reasons unrelated to any change
 in the checker.
+
+## 7. Measured: accepting a contract changes nothing yet, for a second reason
+
+§ 4 said a consumer could not run the acceptance path at all. ADR 0108 removed
+that obstacle, so the experiment could finally be run — and the answer is still
+no.
+
+`@solid-primitives/props@3.1.11` was certified from `kobalte`'s own pnpm tree
+(47 closures, `policy2-persistent-local`) into
+`kobalte/packages/core/.solid-checker/accepted-contracts.json`, and the project
+re-analyzed with `--receipt-trust-configuration` pointing at the issued trust
+configuration. Before and after, to the finding:
+
+| | before | after |
+| --- | ---: | ---: |
+| `SC9005` total | 632 | 632 |
+| at the acceptance gate | 597 | 597 |
+| `@solid-primitives/props` | 39 | 39 |
+
+**The acceptance index is keyed on `(importer, specifier)`** —
+`contract_semantics/consumer.rs`, reached from `accepted_package_contract_statuses`
+via `contracts.contract(importer, &import.text)`. The importer is the exact
+importing file, because the same specifier resolves differently from different
+files, and an acceptance may only speak for the resolution it verified.
+
+Certification binds its acceptance to an importer it creates itself: a synthetic
+`.solid-checker-certification-<digest>.mjs` written inside the package
+directory. Nothing in `kobalte/packages/core/src` matches it, so `bound == 0`
+and every import stays at the acceptance gate. The fixture catalogs show the
+shape that does work — `fixtures/reactive-ir/package-return-consumer` names
+`App.tsx`, the consumer's own file.
+
+So the mechanism is sound and the producer is the gap: there is no way to
+certify *for* a consumer's importers. `certify-contract.mjs` takes no importer
+argument, and the ecosystem benchmark never noticed because it inspects the
+catalog it writes and never analyzes a consumer against it.
+
+The scale, for this one project:
+
+| package | sites | distinct importing files |
+| --- | ---: | ---: |
+| `@kobalte/utils` | 471 | 204 |
+| `@solidjs/testing-library` | 66 | 38 |
+| `@solid-primitives/props` | 39 | 39 |
+| `solid-presence` | 13 | 13 |
+| **total** | **597** | **251** |
+
+251 entries for one project, one of 146. Whatever closes this is not hand-written
+catalogs; it is either certification accepting a set of importers, or an
+acceptance identity that binds to the resolved artifact rather than the
+importing file. Which of those is sound is an ADR, not a patch — the importer
+key is what stops one file's resolution speaking for another's.
