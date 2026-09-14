@@ -6539,6 +6539,121 @@
         "Construction only: what the constructed instance does when its own methods are later called is a different claim, and the samples call get() solely to pin the seeding",
         "NEVER EMITS: construction reads nothing of the caller's, so the samples assert zero inside the window and prove the getter is live by reading it once outside; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
       ]
+    },
+    {
+      "claimId": "claim:v1:sha256:d423732b0f5f650d13bea9656ee3ae221a7072a9da9a43043892fcb879c883f0",
+      "module": "solid-primitives-utils-create-microtask-reads-9887e137.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 2
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@6.4.1; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "One scheduling sample: the coalescing path, where several calls collapse into one microtask, is covered by the implementation census alone",
+        "NEVER EMITS: the export reads nothing of its own, so the samples assert zero and prove the getter is live by reading it once outside the window; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:95418796ebbdeb28a7daef7d7b80b99afb74f7046f2ea24921687b5733d82947",
+      "module": "solid-primitives-utils-create-microtask-reads-2bf41ff6.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 2
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "One scheduling sample: the coalescing path, where several calls collapse into one microtask, is covered by the implementation census alone",
+        "NEVER EMITS: the export reads nothing of its own, so the samples assert zero and prove the getter is live by reading it once outside the window; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:a7407857eb8684894fa330f447f4259e99771e07b546165498d2009dd8ef4588",
+      "module": "solid-primitives-utils-create-microtask-reads-6cd714eb.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 2
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "One scheduling sample: the coalescing path, where several calls collapse into one microtask, is covered by the implementation census alone",
+        "NEVER EMITS: the export reads nothing of its own, so the samples assert zero and prove the getter is live by reading it once outside the window; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:80d393d207ac16a3630fffe7736ea0bb98a714e4c0148e873e35a3af09f0e370",
+      "module": "solid-primitives-utils-create-microtask-reads-f81b5488.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 2
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "One scheduling sample: the coalescing path, where several calls collapse into one microtask, is covered by the implementation census alone",
+        "NEVER EMITS: the export reads nothing of its own, so the samples assert zero and prove the getter is live by reading it once outside the window; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:a55a2ea143ed933bb3bdfd20213d41a692a7fbbb7de9b41370340fc713f639b5",
+      "module": "solid-primitives-utils-create-microtask-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 2
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "One scheduling sample: the coalescing path, where several calls collapse into one microtask, is covered by the implementation census alone",
+        "NEVER EMITS: the export reads nothing of its own, so the samples assert zero and prove the getter is live by reading it once outside the window; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
     }
   ]
 }
