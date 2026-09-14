@@ -31,6 +31,14 @@ import sys
 DEMAND = re.compile(
     r"the reactivity contract for (\S+) has no entrypoint/export summary for imported export (\S+);"
 )
+# Which gate an SC9005 import-site finding stopped at. The message alone cannot
+# say: the no-summary text above is emitted both when a contract is accepted and
+# leaves the export out, and when no contract is accepted at all. The
+# analysis_context separates them, and the distinction is the whole answer to
+# "which closures change a consumer-side finding" -- a closure moves a finding
+# only at `unknown-contract-claims`. Measured 2026-09-14: 2,585 of 2,585 stop at
+# the acceptance gate, so no closure in any domain moves any of them.
+ACCEPTANCE_GATE = "no receipt-accepted contract matches this exact import"
 LEG = re.compile(r"derivation: ([a-z-]+)")
 
 
@@ -87,6 +95,7 @@ def main():
     demand = collections.Counter()
     projects = collections.defaultdict(set)
     status = collections.Counter()
+    gates = collections.Counter()
     analyzed = 0
     for root in args.roots:
         for project in sorted(projects_under(root)):
@@ -99,6 +108,17 @@ def main():
             for finding in result.get("findings", []):
                 if finding.get("id") != "SC9005":
                     continue
+                context = finding.get("analysisContext", "")
+                if context == ACCEPTANCE_GATE:
+                    gates["acceptance gate"] += 1
+                elif context.startswith("unknown-contract-claims:"):
+                    gates["open claims: " + context.split(":", 1)[1]] += 1
+                elif context.startswith("unbound-contract-claims:"):
+                    gates["unbound claims"] += 1
+                elif context.startswith("obsolete-policy1"):
+                    gates["obsolete policy 1"] += 1
+                else:
+                    gates["callback execution (not an import site)"] += 1
                 match = DEMAND.search(finding.get("message", ""))
                 if match:
                     key = (match.group(1), match.group(2))
@@ -120,6 +140,10 @@ def main():
     in_corpus = {key[0] for key in list(closed) + list(withheld)}
 
     print(f"projects analyzed: {analyzed}; status: {dict(status)}")
+    # Print this before the demand totals: a corpus whose findings all stop at
+    # the acceptance gate has no closure-sensitive demand at all, whatever the
+    # per-export table below says a closure would move after acceptance.
+    print("SC9005 by gate:", gates.most_common())
     print(f"distinct (module, export) demanded: {len(demand)}; call sites: {sum(demand.values())}")
     by_package = collections.Counter()
     for (module, _), count in demand.items():

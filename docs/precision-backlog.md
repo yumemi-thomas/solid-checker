@@ -1,5 +1,39 @@
 # Precision backlog
 
+## No closure changes a consumer finding yet: the gate is acceptance (2026-09-14)
+
+Row counts rank the campaign by what is closeable, not by what a consumer sees.
+Measured over 146 real consumer projects (`solid-primitives`, `corvu`,
+`kobalte`, `solid-docs`, dependencies installed from their own lockfiles),
+**2,585 of 2,585 `SC9005` import-site findings stop at the acceptance gate** —
+`no receipt-accepted contract matches this exact import` — and **none** names an
+open claim domain. `push_unknown_contract_claims`, the only place a domain
+becomes a consumer finding, is never reached, because no third-party contract is
+accepted anywhere in the corpus and none is bundled
+(`pkg/contracts/bundled/README.md`: both dialect indexes empty, "external
+packages still require independently accepted contracts").
+
+Stated as an experiment rather than a code reading: 21 demanded exports at
+**473 call sites** are already closed in every domain in the pin —
+`@solid-primitives/utils` `noop` (98 sites, 39 projects), `INTERNAL_OPTIONS`
+(91), `asArray` (51) — and every one of those sites still raises `SC9005`
+unchanged. Certifying `@kobalte/utils@0.9.2` into the corpus's highest-demand
+project (`kobalte/packages/core`, 471 sites) was attempted and does not
+complete: the plain lane refuses at `scrollIntoViewport`
+(`recursive-value-shape`), and the published-graph lane the pin uses wants a Bun
+text lockfile above the package root, which a pnpm consumer does not have.
+
+The 2026-09-12 measurement could not see this: both gates emit the same message
+and it matched on messages, so "233 exports, 2,056 call sites" was read as demand
+for closures when it was demand for *contracts*.
+`2026-09-12-consumer-demand-measurement.py` now prints the gate split first, and
+the per-export table is committed as
+[`phase21/2026-09-14-consumer-demand-recensus.json`](package-contract-v2/phase21/2026-09-14-consumer-demand-recensus.json)
+rather than left in a temporary directory. Conditional ranking for after
+acceptance, and the two `@kobalte/utils` exports (`mergeRefs` 164 sites,
+`access` 66) that have no ledger entry at all, in
+[`phase21/2026-09-14-which-closures-change-a-consumer-finding.md`](package-contract-v2/phase21/2026-09-14-which-closures-change-a-consumer-finding.md).
+
 ## The two largest cases censused: B-1 is 188 rows, and its premise needs revising (2026-09-14)
 
 `9887e137` (`@solid-primitives/utils@6.4.1`, 336 rows) and `9bc68a12`

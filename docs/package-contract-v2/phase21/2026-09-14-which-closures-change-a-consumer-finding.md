@@ -1,0 +1,138 @@
+# Which closures change a consumer-side finding (2026-09-14)
+
+- **Status:** measurement and one instrument fix. No analyzer, generator or
+  certifier code changed; no closure was authored.
+- **Question:** row counts rank the campaign by what is *closeable*. The
+  question they cannot answer is which closures change what a consumer sees.
+- **Answer:** none of them, today. Over 146 real consumer projects, **2,585 of
+  2,585** `SC9005` import-site findings stop at the *acceptance* gate — no
+  receipt-accepted contract matches the import — and **zero** name an open
+  claim domain. Closure depth is invisible to every one of these projects
+  because no third-party contract is accepted anywhere in the corpus.
+
+## 1. What a closure can change, mechanically
+
+`push_unknown_contract_claims` (`contracts.rs`) is the only place a claim
+domain becomes a consumer finding. It emits `SC9005` with
+`analysis_context: unknown-contract-claims:<claims>` when, for an export whose
+contract *is* accepted, `reactiveReads`, `returns`, `ownerRequirements`
+(the `creates` domain) or `asyncBehavior` is open. If none is open it returns
+and no finding is emitted.
+
+Two consequences follow from the code and matter for any ranking:
+
+- **The claims are conjunctive.** The finding disappears only when every
+  demanded domain closes. Closing `reads` on an export whose `creates` is also
+  open shortens the claim list and removes nothing.
+- **Read *items* are not gated on closure.** The doc comment on
+  `reads_completeness_demanded` says it outright: rules consume `reads` items,
+  which arrive whether or not the domain is closed, and only `SC9005` consumes
+  the completeness. A closed but empty `reads: []` enables no new violation
+  finding — it removes an uncertifiable one.
+
+`callbacks` reaches consumers by a second path, `interproc.rs`, which raises
+the same defect kind at the *callback-argument* span rather than at every
+import. So the four domains do not have the same site set even in principle.
+
+## 2. What real consumers actually hit
+
+146 projects: `solidjs-community/solid-primitives` (local checkout, 116
+projects), `corvudev/corvu`, `kobaltedev/kobalte`, `solidjs/solid-docs`
+(shallow clones, `pnpm install --frozen-lockfile --ignore-scripts`). Release
+binary, one process per project. Status: 105 `uncertifiable`, 32 `violation`,
+9 `certified`.
+
+| `SC9005` by gate | findings |
+| --- | ---: |
+| acceptance gate (`no receipt-accepted contract matches this exact import`) | **2,585** |
+| open claims (`unknown-contract-claims:…`) | **0** |
+| callback execution (not an import site) | 983 |
+
+The instrument could not previously see this distinction: both gates produce
+the same *message*, and the 2026-09-12 sweep read messages only. The regex
+matched, the table filled in, and the number it reported — "233 exports, 2,056
+call sites" — was read as demand for closures when it was demand for
+*contracts*. `2026-09-12-consumer-demand-measurement.py` now prints the gate
+split first, so a corpus with no closure-sensitive demand says so in line two.
+
+## 3. The demonstration, in the corpus's own numbers
+
+Twenty-one demanded exports are already **ALL CLOSED** in the pin across every
+domain, at **473 call sites** — `@solid-primitives/utils` `noop` (98 sites, 39
+projects), `INTERNAL_OPTIONS` (91), `asArray` (51), `entries` (37), `trueFn`,
+`accessWith`, `createMicrotask`; `@kobalte/utils` `visuallyHiddenStyles` (28).
+
+Every one of those 473 sites still raises `SC9005` in this corpus. There is no
+closure left to write for them and the finding is unchanged. That is the
+finding stated as an experiment rather than as a code reading.
+
+## 4. Why acceptance never happens
+
+`pkg/contracts/bundled/README.md`: both dialect bundle indexes are empty, and
+"external packages still require independently accepted contracts". Nothing
+ships a third-party contract. The 18,350 certified claims live in
+`benchmarks/ecosystem/report.json`, a benchmark artifact, and a consumer
+reaches them only by running certification itself and registering the exact
+document/receipt pair in its own `.solid-checker/accepted-contracts.json`.
+
+Attempted directly on the highest-demand project in the corpus
+(`kobalte/packages/core`, 471 sites on `@kobalte/utils@0.9.2` — the exact
+version the corpus certifies) and not completed:
+
+- the plain lane refuses at the root case
+  (`recursive-value-shape … scrollIntoViewport: parameter-rooted read lacks
+  positive original-input identity`);
+- the published-graph lane, which the pin uses for this package, refuses
+  earlier still — `no exact Bun text lockfile exists above` a pnpm store path.
+
+Neither refusal is a defect found here: the graph lane is built for the
+benchmark's Bun scratch projects. What they establish is that a consumer using
+its own package manager cannot today run the path that would make any closure
+visible to it.
+
+## 5. The ranking, for after acceptance
+
+Stated as a conditional, because § 2 says it is one. Of the 1,958 in-corpus
+call sites, by the domains their export leaves open:
+
+| domain open | call sites |
+| --- | ---: |
+| `callbacks` | 917 |
+| `reads` | 834 |
+| `creates` | 804 |
+| `returns` | 36 |
+
+| state | exports | sites |
+| --- | ---: | ---: |
+| every demanded domain closed | 21 | 473 |
+| at least one open | 91 | 1,141 |
+| no ledger entry at all | 47 | 344 |
+
+Read with § 1's conjunction, the per-domain column overstates each domain:
+563 of those sites have `callbacks`, `creates` **and** `reads` open at once, so
+closing any one of the three moves nothing there. The largest single-domain
+group is `callbacks` alone at 216 sites over 15 exports.
+
+`@kobalte/utils` `mergeRefs` (164 sites) and `access` (66) have **no ledger
+entry** — the certification never proposed them, so there is no closure to
+rank. That is 230 sites of demand with nothing on the board, and it is a
+larger gap than any single recipe cluster closed this week.
+
+The per-export table is
+[`2026-09-14-consumer-demand-recensus.json`](2026-09-14-consumer-demand-recensus.json),
+committed this time: the 2026-09-12 run wrote its `demand.json` to a temporary
+directory and the numbers had to be re-measured from scratch to answer this
+question.
+
+## 6. What this does not say
+
+It does not say the closures are worthless. It says their value is gated behind
+a step no consumer performs, and that the gate is distribution and acceptance
+rather than depth. It also does not generalize past this corpus: five upstream
+Solid repositories are not the ecosystem, and a project that *does* accept
+contracts would see exactly the § 5 ranking.
+
+The corpus is also not identical to 2026-09-12's — `solid-primitives` is a
+newer local checkout with 116 projects rather than 70 — so the totals moved
+(233 → 242 exports, 2,056 → 2,585 sites) for reasons unrelated to any change
+in the checker.
