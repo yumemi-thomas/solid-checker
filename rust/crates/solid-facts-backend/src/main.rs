@@ -3393,6 +3393,10 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut dialect_id: Option<String> = None;
     let mut accepted_contract_catalog = String::new();
     let mut receipt_trust_configuration = String::new();
+    // The export conditions this project resolves its imports under. Declared
+    // by the host because the analyzer has no condition facts of its own, and
+    // conditions select the artifact an acceptance was issued for.
+    let mut export_conditions = std::collections::BTreeSet::<String>::new();
     let mut proposal_dependency_catalog = String::new();
     let mut presets = Vec::new();
     let mut enable_rules = Vec::new();
@@ -3634,6 +3638,18 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
                     .next()
                     .ok_or("--receipt-trust-configuration needs a path")?
             }
+            "--conditions" => {
+                let value = args
+                    .next()
+                    .ok_or("--conditions needs a comma-separated list")?;
+                export_conditions.extend(
+                    value
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|condition| !condition.is_empty())
+                        .map(str::to_owned),
+                );
+            }
             "--preset" => presets.push(args.next().ok_or("--preset needs a name")?),
             "--enable-rule" => {
                 enable_rules.push(args.next().ok_or("--enable-rule needs a rule name")?)
@@ -3855,7 +3871,10 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         contract_package_root,
         help,
         serve,
-        runtime,
+        runtime: RuntimeEnvironment {
+            conditions: export_conditions,
+            ..runtime
+        },
     })
 }
 

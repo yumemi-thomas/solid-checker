@@ -291,3 +291,55 @@ The next measurement is the same one against a Solid **2.0** package, where the
 owner authority exists. If it fires there, the 1.x creates audit is the single
 thing standing between this system and usage-level feedback for the 1.x
 ecosystem — which is most of it today.
+
+## 10. The Solid 2.0 half: the contract *does* state the owner requirement
+
+§ 9 left one question: the owner-requirement path is blocked on Solid 1.x
+because the requirement arises from calling a Solid primitive, which is what the
+1.x census refuses. Does it work where the dialect has an admissible authority?
+
+Measured 2026-09-15 against a real published Solid 2.0 package —
+`@solid-primitives/utils@7.0.0-next.4`, peer `solid-js@^2.0.0-rc.0`, installed
+into a fresh **pnpm** project (which is itself only certifiable because of
+ADR 0108) and certified through the graph lane.
+
+**It does.** 64 closed entries, and the emitted document carries, for export
+`createMicrotask` at entrypoint `.`:
+
+~~~json
+{
+  "id": "owner-requirement-0",
+  "kind": "cleanup",
+  "owner": { "requires": "required", "requiresCleanup": "required",
+             "source": "ambient-at-call" }
+}
+~~~
+
+That is exactly the shape `project_owner_requirements` converts into
+`ContractOwnerRequirement { operation: Cleanup }` — `kind: cleanup`,
+`requires: required`, and a `source` that is not `created` — the same triple its
+unit test pins. `owners.rs` reads it at any call outside an owner-providing
+region, and that is `SC4001 missing-owner`.
+
+The package's source is the reason: `createMicrotask` calls `onCleanup` directly
+(`dist/index.js:191`). On 1.x that call is what silences the export; on 2.0 it is
+what the contract reports.
+
+**So the usage-level feedback is real and is a Solid 2.0 capability.** A consumer
+that calls `createMicrotask` at module scope has registered a cleanup no owner
+will ever run, and only a contract can tell the checker that.
+
+### Not yet observed firing, and why
+
+A consumer project was built (`createMicrotask` called at module scope, contract
+staged, `--conditions import` declared through a flag added for this) and the
+acceptance still did not bind: the analysis reports `SC9005` with the
+*no-summary* branch, so the catalog is accepted but the artifact case selected
+for that import is not the one carrying the summary. That is hand-assembly of a
+graph-lane case set into a consumer tree — a delivery problem in the harness of
+this measurement, not a question about the contract, whose content is quoted
+above.
+
+What remains to see `SC4001` printed is making the acceptance bind the right
+case, which is the same delivery work as B′ rather than anything about whether
+the feedback exists.
