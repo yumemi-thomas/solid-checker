@@ -8933,6 +8933,143 @@
     ],
     "absent": []
    }
+  },
+  {
+   "id": "invalid-refresh-target/typescript-owned/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { refresh } from \"solid-js\";\n\nrefresh({});\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "invalid-refresh-target",
+      "code": "SC7003",
+      "span": {
+       "marker": "{}"
+      },
+      "typescript": {
+       "ownership": "typescript-owned",
+       "diagnostics": [
+        {
+         "code": "TS2345",
+         "span": {
+          "marker": "{}"
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "absent": []
+   }
+  },
+  {
+   "id": "affects-keys-on-accessor/typescript-owned/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { affects, createMemo } from \"solid-js\";\n\nconst target = createMemo(() => 1);\naffects(target, \"value\");\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "affects-keys-on-accessor",
+      "code": "SC7004",
+      "span": {
+       "marker": "\"value\""
+      },
+      "typescript": {
+       "ownership": "typescript-owned",
+       "diagnostics": [
+        {
+         "code": "TS2345",
+         "span": {
+          "marker": "\"value\""
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "absent": []
+   }
+  },
+  {
+   "id": "sync-computation-received-async/positive/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createMemo } from \"solid-js\";\n\nexport const value = createMemo(async () => 1, { sync: true });\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "createMemo",
+       "occurrence": 2
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   }
+  },
+  {
+   "id": "action-called-in-owned-scope/positive/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { action, createSignal } from \"solid-js\";\n\nconst [, setCount] = createSignal(0);\nconst update = action(() => setCount(5));\n\nexport function Panel() {\n  update();\n  return <div />;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "update()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   }
   }
  ]
 }
