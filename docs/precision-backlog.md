@@ -1,5 +1,45 @@
 # Precision backlog
 
+## Tier A authoring closed: ten refs and scheduled recipes, 42 rows (2026-09-14)
+
+The remainder of what the pass-2 census found decidable:
+`@solid-primitives/refs@1.1.4` (four exports on `b97f9095`, 24 rows) and
+`@solid-primitives/scheduled` (three exports on 1.5.3's `e1a524fa` and
+2.0.0-next.2's `6f867f0c`, 18 rows). **All 42 rows close**, which ends Tier A
+authoring: 206 gainable rows found by the census, 206 now closed.
+
+Corpus effect (release binary, 418 rows, `--timeout 1800`): certified closure
+entries 10,420 -> 10,456 (+36); `reads`-closed entries 6,356 -> 6,398 (+42);
+`no recipe in corpus` `reads` detail rows 1,926 -> 1,884; visible `reads`
+census refusals unchanged; no row below the pin, no status move; wall 597 s ->
+619 s. Across the day the recipe-less `reads` frontier went 2,242 -> 1,884 with
+every targeted row closing.
+
+**The finding worth carrying forward: the probe harness realm resolves Solid's
+client condition, and a scratch Node realm does not.** A scratch realm resolves
+the server condition, where `isServer` is true, `defaultElementPredicate` is a
+`"t" in item` membership test and `debounce` returns a no-op — so all ten
+modules' samples passed against the published packages and were still written
+against the wrong branch. The first certification threw `ReferenceError:
+Element is not defined`, which only `item instanceof Element` can raise. The
+predicate recipe now installs a stand-in `Element` (the shim pattern already
+used for `requestAnimationFrame`), and every module declares the client branch
+as its limitation; the draft had declared the server branch, which is worse
+than declaring nothing, because it describes coverage the sample never reaches.
+Sample-level validation cannot catch this class of error — only a certification
+against the real harness can, which is the second time in two batches that the
+scratch-corpus closure check paid for itself.
+
+What is left on the Tier A cases is census refusal, not authoring: `Ref` and
+`resolveElements` (12 rows, unrooted property access), `throttle`,
+`scheduleIdle`, `leadingAndTrailing` (18 rows, B-4/B-5 shapes), `./immutable`
+(22) and `combineStyle` (66). `@solid-primitives/refs@3.0.0-next.0` (24 rows)
+is still unmeasured behind the `motion-utils` snapshot-replay blocker, though
+the 2026-09-14 certification rework touched that path and it is worth
+re-testing. The frontier from here is census premises (Tier B) and the
+unmeasured bulk: the top three cases — `9887e137` (336 rows), `9a3a41a5` (234)
+and `0bdfa1cb` (160) — are 38% of what remains and none has been censused.
+
 ## Ten corvu `./create/*` `reads` recipes: 164 rows (2026-09-14)
 
 The first batch authored from a pass-2 census instead of a reading of the

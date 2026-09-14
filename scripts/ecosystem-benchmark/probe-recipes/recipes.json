@@ -6039,6 +6039,230 @@
         "The returned accessor and setter are exercised, but what they read when invoked -- the signal this export built, or the caller's `value` accessor -- happens at the caller's invocation and is not a read at this export's call event",
         "NEVER EMITS: `read-operation`. At its call event the export reads `initialValue` off the props object its caller supplied, which is the caller's own (ADR 0034), and builds a signal; building a source is not reading one."
       ]
+    },
+    {
+      "claimId": "claim:v1:sha256:c5d8b18b11ce3a3165b089d64e7759a6fff833a0a7f5e4fefd771eb664ee2a4d",
+      "module": "solid-primitives-scheduled-create-scheduled-reads-6f867f0c.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm resolves Solid's client condition, so `isServer` is false and these samples exercise the client branch only; the server branch is not covered",
+        "The returned accessor is sampled outside any observer, which is the branch that reports false; the tracked branch that reads the signal this export built is not covered",
+        "NEVER EMITS: `read-operation`. At its call event the export builds a signal and invokes the scheduler its caller supplied; building a source is not reading one, and the returned accessor's reads happen at the caller's invocation."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:3210f2058afa009323e5eefe0a71d675f53bff6c3887e6fdeaa9f3f83c2945ca",
+      "module": "solid-primitives-scheduled-debounce-reads-6f867f0c.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm resolves Solid's client condition, so `isServer` is false and these samples exercise the client branch only; the server branch is not covered",
+        "NEVER EMITS: `read-operation`. At its call event the export builds a closure and, on the client branch, registers a cleanup with `solid-js`; it reads no source of its own."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:515164f942073afde66a55f1e2686e6bd84c1ca19d1a1613a4fdb4e8957ae50b",
+      "module": "solid-primitives-scheduled-leading-reads-6f867f0c.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm resolves Solid's client condition, so `isServer` is false and these samples exercise the client branch only; the server branch is not covered",
+        "NEVER EMITS: `read-operation`. The export invokes the scheduler its caller supplied and closes over one plain boolean; neither is a read of a source this package owns."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:79739113b64d0bd6cf35537acd18d22448db7cd7450803d0416c55c5835804dd",
+      "module": "solid-primitives-refs-default-element-predicate-reads-b97f9095.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm resolves Solid's client condition, so `isServer` is false and these samples exercise the client branch only; the server branch is not covered",
+        "`Element` is a host constructor the harness realm does not provide, so this module installs a stand-in before calling the export and says nothing about a real DOM `Element`",
+        "NEVER EMITS: `read-operation`. The export applies one `instanceof` test to the value its caller supplied; a prototype-chain walk is not a read of a reactive source, and the value is the caller's own (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:8b159f983c925d385dbd5de5c38c4fe834a91c2a14aec597405bcc14d55e7c2e",
+      "module": "solid-primitives-refs-get-first-child-reads-b97f9095.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm resolves Solid's client condition, so `isServer` is false and these samples exercise the client branch only; the server branch is not covered",
+        "NEVER EMITS: `read-operation`. The export invokes the predicate its caller supplied and walks the value its caller supplied, including calling a zero-arity thunk of the caller's; every value it inspects is the caller's (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:5e9fd7a639b2f9792535e5d283816cbc66e51df97f21e95b884f742d1a2b16e3",
+      "module": "solid-primitives-refs-get-resolved-elements-reads-b97f9095.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm resolves Solid's client condition, so `isServer` is false and these samples exercise the client branch only; the server branch is not covered",
+        "NEVER EMITS: `read-operation`. Same walk as `getFirstChild`, collecting every match instead of the first; the predicate and the value walked are both the caller's (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:b7b06b4ac18810401e319961b712fa71d4170057e96075d409e01590284f1538",
+      "module": "solid-primitives-refs-resolve-first-reads-b97f9095.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm resolves Solid's client condition, so `isServer` is false and these samples exercise the client branch only; the server branch is not covered",
+        "Sampled inside a recipe-owned root, because the memos this export builds need an owner to compute; the root is the caller's and is disposed before the sample ends",
+        "NEVER EMITS: `read-operation`. The export builds two memos which compute at the call event; what they invoke is the caller's `fn` and the caller's predicate, so the reads are the caller's (ADR 0034)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:b4f8fb75e509f08874427a06974fc0806aed9c265ac559526c1bd91157b7f360",
+      "module": "solid-primitives-scheduled-create-scheduled-reads-e1a524fa.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm resolves Solid's client condition, so `isServer` is false and these samples exercise the client branch only; the server branch is not covered",
+        "The returned accessor is sampled outside any observer, which is the branch that reports false; the tracked branch that reads the signal this export built is not covered",
+        "NEVER EMITS: `read-operation`. At its call event the export builds a signal and invokes the scheduler its caller supplied; building a source is not reading one, and the returned accessor's reads happen at the caller's invocation."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:cf172ca53deda91e74ebb8d3d3453c99a586ea67132883c58e194da29f0b29ca",
+      "module": "solid-primitives-scheduled-debounce-reads-e1a524fa.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm resolves Solid's client condition, so `isServer` is false and these samples exercise the client branch only; the server branch is not covered",
+        "NEVER EMITS: `read-operation`. At its call event the export builds a closure and, on the client branch, registers a cleanup with `solid-js`; it reads no source of its own."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:30c5db56e556afe2a92d8d3a624e24a619f702a228ee605fedae6878a401ab2a",
+      "module": "solid-primitives-scheduled-leading-reads-e1a524fa.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The harness realm resolves Solid's client condition, so `isServer` is false and these samples exercise the client branch only; the server branch is not covered",
+        "NEVER EMITS: `read-operation`. The export invokes the scheduler its caller supplied and closes over one plain boolean; neither is a read of a source this package owns."
+      ]
     }
   ]
 }

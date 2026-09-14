@@ -73,7 +73,7 @@ test("the frozen Phase 20 cohort remains the exact authority for the Phase 21 le
   // passes against the rewritten ledger.
   assert.deepEqual(ledger.authority.currentReport, {
     path: "benchmarks/ecosystem/report.json",
-    sha256: "684cdfb680ed416af8913076f08c6a4eca626782aa717973f6110b1abdb92555"
+    sha256: "f2a4aec97f5b228311e94f4de6c1983b1445caafd307b22480bc13f3d510a36b"
   });
   assert.equal(ledger.rows.filter(row => row.phase21Disposition == null).length, 0);
   // One row moved, `@solid-primitives/geolocation@1.5.5|solid1|only`:
@@ -124,6 +124,9 @@ test("the frozen Phase 20 cohort remains the exact authority for the Phase 21 le
     // refusal set on 2026-09-03 (declaration-owner harness fix) and certifies
     // through an ordinary receipt, so the geolocation-style secondary gap books
     // it as pending-phase21-checker-work rather than verified.
+    // 2026-09-14 fourth repin (ten @solid-primitives/refs and /scheduled
+    // reads recipes finishing Tier A, 42 rows): no disposition moved; only
+    // the report digest above changed.
     // 2026-09-14 third repin (certification speed fix; wall 1,316 s -> 597 s
     // with identical closure, 10,420 entries and no status move): no
     // disposition moved; only the report digest above changed.

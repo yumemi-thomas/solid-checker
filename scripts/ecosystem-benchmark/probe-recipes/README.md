@@ -473,6 +473,55 @@ rows, `--timeout 1800`): certified closure entries 10,352 -> 10,420 (+68);
 detail rows 2,090 -> 1,926; visible `reads` census refusals unchanged at 225;
 no row below the pin, no status move; wall 1,198 s -> 1,316 s.
 
+## Ten `@solid-primitives/refs` and `/scheduled` recipes, finishing Tier A (2026-09-14)
+
+The last of the rows the 2026-09-14 pass-2 census found decidable:
+`@solid-primitives/refs@1.1.4` (`defaultElementPredicate`, `getFirstChild`,
+`getResolvedElements`, `resolveFirst` on `b97f9095`, 24 rows) and
+`@solid-primitives/scheduled` (`createScheduled`, `debounce`, `leading` on
+1.5.3's `e1a524fa` and 2.0.0-next.2's `6f867f0c`, 18 rows).
+
+**The harness realm resolves Solid's client condition**, and that is the thing
+to know before writing against either package. A scratch Node realm resolves
+the *server* condition, where `isServer` is true, `defaultElementPredicate` is
+a `"t" in item` membership test and `debounce` returns a no-op. Every sample
+here passed against the published packages in that realm and was still wrong:
+the first certification threw `ReferenceError: Element is not defined`, which
+only `item instanceof Element` can raise. So the predicate recipe installs a
+stand-in `Element` constructor -- the shim pattern the `afterPaint` recipes use
+for `requestAnimationFrame` -- and every module in the batch declares the
+client branch as its coverage limitation. An earlier draft declared the
+opposite, which is worse than declaring nothing: it would have told a later
+reader the samples covered a branch they never reach.
+
+What the recipes assert: the predicate matches an `Element` instance and
+rejects a plain object, `null` and a primitive; `getFirstChild` takes the first
+match depth-first and invokes a zero-arity thunk; `getResolvedElements`
+flattens nested matches in document order; `resolveFirst` resolves through the
+memos it builds, sampled inside a recipe-owned root that is disposed;
+`debounce` and `leading` return a callable carrying `clear` without invoking
+the caller's callback at the call event, and `leading` fires once on the
+leading edge; `createScheduled` invokes the caller's scheduler exactly once and
+reports false untracked.
+
+Closure was verified in a scratch corpus before check-in, on all three cases --
+`b97f9095` through a graph-lane certification of `@kobalte/utils@0.9.2`,
+`e1a524fa` through `@corvu/drawer@0.2.4`, and `6f867f0c` standalone as the root
+row it is.
+
+**Measured outcome: all 42 rows close.** Corpus effect (release binary, 418
+rows, `--timeout 1800`): certified closure entries 10,420 -> 10,456 (+36);
+`reads`-closed entries 6,356 -> 6,398 (+42); `no recipe in corpus` `reads`
+detail rows 1,926 -> 1,884; visible `reads` census refusals unchanged; no row
+below the pin, no status move; wall 597 s -> 619 s.
+
+This closes Tier A authoring. What remains on those cases is census refusal, not
+missing recipes: `Ref` and `resolveElements` (12 rows, unrooted property
+access), `throttle`, `scheduleIdle` and `leadingAndTrailing` (18 rows, spread
+and element access with no reviewed subject root), `./immutable` (22) and
+`combineStyle` (66). `@solid-primitives/refs@3.0.0-next.0` (24 rows) stays
+unmeasured behind the `motion-utils` snapshot-replay blocker.
+
 `scripts/ecosystem-probe-recipes.test.mjs` pins the manifest's shape, that every
 declared module exists and exports `runProbeSession`, and that no module names
 `session` or `harness` in a position that hands either to a package.
