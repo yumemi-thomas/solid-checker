@@ -281,6 +281,7 @@ mod policy2_receipt_tests {
             importer: "/workspace/src/App.tsx".into(),
             specifier: "fixture-package".into(),
             resolved_import_root: root(0),
+            artifact_acceptance_root: root(19),
             semantic_digest: policy2_main_semantic_digest(main).unwrap(),
             artifact_provenance_root: root(1),
             snapshot_root: root(2),

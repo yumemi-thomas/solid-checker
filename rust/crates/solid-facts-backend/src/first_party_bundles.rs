@@ -588,6 +588,7 @@ pub fn bundled_first_party_contract_index(
                 importer: key.0,
                 specifier: key.1,
                 contract: contract.clone(),
+                artifact_identity: None,
             });
         }
     }

@@ -41,6 +41,11 @@ pub struct AcceptedContractInput {
     pub importer: String,
     pub specifier: String,
     pub contract: AcceptedContract,
+    /// The receipt's importer-free artifact identity, when the loader could
+    /// establish it. `None` keeps this acceptance importer-only: it is the
+    /// fail-closed direction, and the loader uses it for anything it cannot
+    /// state exactly — see `artifact_identity` below.
+    pub artifact_identity: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -88,6 +93,11 @@ impl AcceptedContractUse<'_> {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct AcceptedContractIndex {
     imports: BTreeMap<(String, String), Vec<AcceptedContract>>,
+    /// Acceptances reachable by the artifact they were proven about, rather
+    /// than by the file that imported it during certification. An entry here
+    /// is an addition to `imports`, never a replacement: a consumer that
+    /// matches by importer is answered exactly as before.
+    by_artifact: BTreeMap<String, Vec<AcceptedContract>>,
     uncertifiable_imports: BTreeMap<(String, String), UncertifiableImportReason>,
     identity: Vec<AcceptedImportIdentity>,
 }
@@ -136,12 +146,30 @@ impl AcceptedContractIndex {
         inputs: impl IntoIterator<Item = AcceptedContractInput>,
     ) -> Result<Self, SemanticQueryError> {
         let mut imports = BTreeMap::<_, Vec<_>>::new();
+        let mut by_artifact = BTreeMap::<String, Vec<AcceptedContract>>::new();
         for input in inputs {
+            if let Some(identity) = input.artifact_identity {
+                by_artifact
+                    .entry(identity)
+                    .or_default()
+                    .push(input.contract.clone());
+            }
             imports
                 .entry((input.importer, input.specifier))
                 .or_default()
                 .push(input.contract);
         }
+        // An artifact identity naming two different contracts is not a
+        // preference to resolve: it is two answers about the same bytes, and
+        // neither may be applied. Dropping the entry leaves those acceptances
+        // importer-only rather than failing the catalog, because the
+        // importer-keyed answers are still exactly as sound as they were.
+        by_artifact.retain(|_, contracts| {
+            contracts.len() == 1
+                || contracts
+                    .windows(2)
+                    .all(|pair| pair[0].semantic_identity() == pair[1].semantic_identity())
+        });
         let mut identity = Vec::new();
         for ((importer, specifier), contracts) in &imports {
             if contracts.len() != 1 {
@@ -159,6 +187,7 @@ impl AcceptedContractIndex {
         identity.sort();
         Ok(Self {
             imports,
+            by_artifact,
             uncertifiable_imports: BTreeMap::new(),
             identity,
         })
@@ -348,6 +377,23 @@ impl AcceptedContractIndex {
                 importer: importer.into(),
                 specifier: specifier.into(),
             })
+    }
+
+    /// Finds the acceptance issued for exactly this artifact, whatever file
+    /// imported it when the contract was certified.
+    ///
+    /// The caller supplies an identity it derived from its *own* resolution,
+    /// and equality of that identity is the whole check: it commits to the
+    /// package's tarball integrity, its entrypoint and the export conditions,
+    /// so an equal identity is the same published bytes reached the same way.
+    /// The importer is deliberately not consulted — it is what this lookup
+    /// exists to stop requiring — and an identity the loader could not state
+    /// exactly is simply absent here.
+    #[must_use]
+    pub fn contract_for_artifact(&self, artifact_identity: &str) -> Option<&AcceptedContract> {
+        self.by_artifact
+            .get(artifact_identity)
+            .and_then(|contracts| contracts.first())
     }
 
     /// Enumerates the runtime surface of the one receipt-authenticated

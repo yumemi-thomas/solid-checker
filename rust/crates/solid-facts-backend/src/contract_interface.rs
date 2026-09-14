@@ -426,6 +426,10 @@ pub fn read_proposal_dependency_catalog_for_generation(
             importer: entry.import.importer,
             specifier: entry.import.specifier,
             contract,
+            // Unauthenticated projection material for one generation process;
+            // it carries no receipt, so there is no signed artifact identity
+            // to match and this stays importer-only.
+            artifact_identity: None,
         });
     }
     AcceptedContractIndex::new(projected).map_err(|error| ContractFailure::IdentityMismatch {
@@ -564,6 +568,7 @@ fn read_catalog_with_trust(
                     importer: entry.import.importer.clone(),
                     specifier: entry.import.specifier.clone(),
                     contract,
+                    artifact_identity: default_condition_artifact_identity(&entry.import, bindings),
                 });
             }
         }
@@ -577,6 +582,33 @@ fn read_catalog_with_trust(
                 .into_iter()
                 .map(|key| (key, UncertifiableImportReason::ObsoletePolicy1)),
         ))
+}
+
+/// The receipt's importer-free artifact identity, but only when this
+/// acceptance was issued under the default single `import` condition.
+///
+/// Conditions select the artifact, and they are not written in the catalog's
+/// import record — only folded into the signed root. So the check is a
+/// recomputation: derive the identity assuming `["import"]` and keep it only if
+/// it reproduces what the receipt signed. A multi-condition acceptance does not
+/// reproduce it, yields `None`, and stays importer-only, which is the
+/// fail-closed direction — those imports keep raising the obligation they raise
+/// today rather than matching on a condition set nobody checked.
+///
+/// The narrowing exists because the analyzer has no condition facts at all
+/// (`2026-09-14-acceptance-identity-spike.md` § 5). When it has them, this
+/// becomes a comparison against the consumer's own conditions and the
+/// restriction lifts.
+fn default_condition_artifact_identity(
+    import: &crate::artifact_resolution::ResolvedImport,
+    bindings: &crate::contract_certification::Policy2ReceiptBindings,
+) -> Option<String> {
+    let derived = crate::contract_certification::policy2_artifact_acceptance_root(
+        import,
+        std::slice::from_ref(&"import".to_owned()),
+    )
+    .ok()?;
+    (derived == bindings.artifact_acceptance_root).then_some(derived)
 }
 
 fn catalog_field(message: impl Into<String>) -> ContractFailure {
@@ -943,6 +975,7 @@ pub fn load_accepted_contract_index<'a>(
             importer: source.import.importer.clone(),
             specifier: source.import.specifier.clone(),
             contract: load_accepted_contract(source.document, source.receipt, source.import)?,
+            artifact_identity: None,
         });
     }
     AcceptedContractIndex::new(inputs).map_err(|error| ContractFailure::IdentityMismatch {

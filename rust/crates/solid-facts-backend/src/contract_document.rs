@@ -3747,6 +3747,7 @@ mod tests {
             importer: "/pkg/index.js".into(),
             specifier: "dependency".into(),
             contract: accepted,
+            artifact_identity: None,
         }])
         .unwrap();
         let used = index
