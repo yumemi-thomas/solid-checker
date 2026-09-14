@@ -372,6 +372,12 @@ fn pnpm_flow_mapping(
 }
 
 impl PublishedGraphLockSelection {
+    /// The registry integrity this lockfile selected for the package.
+    #[must_use]
+    pub fn integrity(&self) -> &str {
+        &self.integrity
+    }
+
     /// Replays an exact Bun text lock selection. The digest binds the original
     /// bytes (including formatting), while selection uses a conservative
     /// trailing-comma normalization matching Bun's JSON-like lock syntax.

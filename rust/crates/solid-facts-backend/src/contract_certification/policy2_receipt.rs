@@ -90,6 +90,10 @@ pub struct Policy2ReceiptBindings {
     /// from which file"; this answers "which published artifact", so a consumer
     /// that resolved the same artifact from its own file can match the
     /// acceptance. See `policy2_artifact_acceptance_root`.
+    ///
+    /// Empty means the receipt states none -- it was issued before this binding
+    /// existed -- and that acceptance stays importer-only.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub artifact_acceptance_root: String,
     pub semantic_digest: String,
     pub artifact_provenance_root: String,
@@ -129,7 +133,6 @@ impl Policy2ReceiptBindings {
         for (field, value) in [
             ("semanticDigest", &self.semantic_digest),
             ("resolvedImportRoot", &self.resolved_import_root),
-            ("artifactAcceptanceRoot", &self.artifact_acceptance_root),
             ("artifactProvenanceRoot", &self.artifact_provenance_root),
             ("snapshotRoot", &self.snapshot_root),
             ("packageRoot", &self.package_root),
@@ -150,6 +153,15 @@ impl Policy2ReceiptBindings {
             ("verifierBuildDigest", &self.verifier_build_digest),
         ] {
             validate_digest(value).map_err(|_| Policy2ReceiptError::InvalidBinding { field })?;
+        }
+        // Stated or absent, never malformed: an acceptance issued before this
+        // binding existed carries none, and gets importer-only matching.
+        if !self.artifact_acceptance_root.is_empty() {
+            validate_digest(&self.artifact_acceptance_root).map_err(|_| {
+                Policy2ReceiptError::InvalidBinding {
+                    field: "artifactAcceptanceRoot",
+                }
+            })?;
         }
         if self.witness_roots.len() != RECEIPT_WITNESS_FAMILIES.len()
             || !RECEIPT_WITNESS_FAMILIES
@@ -581,6 +593,11 @@ struct ReceiptPayload {
     importer: String,
     specifier: String,
     resolved_import_root: String,
+    // Added after the first receipts were issued. Absent means "this receipt
+    // states no artifact identity", which keeps it importer-only; it is skipped
+    // when empty so an older receipt re-encodes to the exact bytes it was
+    // signed over.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     artifact_acceptance_root: String,
     semantic_digest: String,
     artifact_provenance_root: String,

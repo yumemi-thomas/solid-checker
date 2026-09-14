@@ -98,6 +98,11 @@ pub struct AcceptedContractIndex {
     /// is an addition to `imports`, never a replacement: a consumer that
     /// matches by importer is answered exactly as before.
     by_artifact: BTreeMap<String, Vec<AcceptedContract>>,
+    /// Specifiers whose installed artifact in *this* project is one an
+    /// acceptance was issued for, so any file may import them. Populated only
+    /// by `with_admitted_artifacts`; empty otherwise, which is every path that
+    /// does not derive identities.
+    admitted: BTreeMap<String, AcceptedContract>,
     uncertifiable_imports: BTreeMap<(String, String), UncertifiableImportReason>,
     identity: Vec<AcceptedImportIdentity>,
 }
@@ -188,6 +193,7 @@ impl AcceptedContractIndex {
         Ok(Self {
             imports,
             by_artifact,
+            admitted: BTreeMap::new(),
             uncertifiable_imports: BTreeMap::new(),
             identity,
         })
@@ -373,6 +379,7 @@ impl AcceptedContractIndex {
         self.imports
             .get(&(importer.to_owned(), specifier.to_owned()))
             .and_then(|contracts| contracts.first())
+            .or_else(|| self.admitted.get(specifier))
             .ok_or_else(|| SemanticQueryError::MissingImport {
                 importer: importer.into(),
                 specifier: specifier.into(),
@@ -389,6 +396,41 @@ impl AcceptedContractIndex {
     /// The importer is deliberately not consulted — it is what this lookup
     /// exists to stop requiring — and an identity the loader could not state
     /// exactly is simply absent here.
+    /// Admits a specifier project-wide when this project's *installed* artifact
+    /// is the one an accepted contract was proven about.
+    ///
+    /// Each entry is `(specifier, artifact identity)` derived by the caller from
+    /// the installed tree: the package's registry integrity, its entrypoint and
+    /// the host's declared export conditions. An identity that matches no
+    /// acceptance is skipped.
+    ///
+    /// This is where an acceptance stops being bound to the file that imported
+    /// it during certification. What justifies dropping the importer is that the
+    /// identity commits to the tarball integrity: if the installed bytes, the
+    /// entrypoint and the conditions are the same, every importer in this
+    /// project reaches the artifact the contract was proven about, whatever file
+    /// it was certified from. A nested install with different bytes derives a
+    /// different identity and is not admitted — the caller must refuse to state
+    /// an identity when the project's installs disagree, rather than pick one.
+    ///
+    /// Importer-keyed acceptances still win: `contract` consults them first, so
+    /// a catalog entry naming an exact file is never displaced by this.
+    #[must_use]
+    pub fn with_admitted_artifacts(
+        mut self,
+        admitted: impl IntoIterator<Item = (String, String)>,
+    ) -> Self {
+        for (specifier, identity) in admitted {
+            let Some(contract) = self.by_artifact.get(&identity).and_then(|it| it.first()) else {
+                continue;
+            };
+            self.admitted
+                .entry(specifier)
+                .or_insert_with(|| contract.clone());
+        }
+        self
+    }
+
     #[must_use]
     pub fn contract_for_artifact(&self, artifact_identity: &str) -> Option<&AcceptedContract> {
         self.by_artifact

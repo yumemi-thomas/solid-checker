@@ -3014,6 +3014,24 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                         .transpose()?
                         .unwrap_or_default()
                         .with_fallback(requirements);
+                    // An acceptance is issued for the file that imported the
+                    // package during certification. Admit the specifier
+                    // project-wide when this project's installed artifact is the
+                    // one that acceptance names — same integrity, entrypoint and
+                    // declared conditions. With no declared conditions this
+                    // admits nothing, because conditions select the artifact and
+                    // the analyzer has no facts of its own about them.
+                    let contracts = match discovered_catalog.as_deref() {
+                        Some(path) => contracts.with_admitted_artifacts(
+                            solid_facts_backend::admitted_project_artifacts(
+                                path,
+                                trust.as_ref(),
+                                &package_root,
+                                &request.runtime.conditions,
+                            )?,
+                        ),
+                        None => contracts,
+                    };
                     let contracts = if request.proposal_dependency_catalog.is_empty() {
                         contracts
                     } else {

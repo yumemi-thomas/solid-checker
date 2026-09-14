@@ -867,6 +867,49 @@ struct PackageManifest {
 /// Ambient-module and virtual test projects have no installed package and no
 /// manifest; both cases yield `None`, which every caller reads as "there is no
 /// installed version to disagree with".
+/// The specifiers this project may import under an existing acceptance,
+/// because its own installed artifact is the one that acceptance names.
+///
+/// Lives here rather than beside the catalog reader because the answer depends
+/// on the installed tree, which is this module's business: the package the
+/// specifier resolves to, its version, and the registry integrity its lockfile
+/// selected. A package whose installs disagree yields no integrity at all
+/// (`installed_package_integrity` returns `None`), so a project with two
+/// versions of one dependency admits neither — which is the nested-install case
+/// the importer key used to guard.
+pub fn admitted_project_artifacts(
+    catalog: &Path,
+    trust: Option<&crate::contract_certification::Policy2TrustConfiguration>,
+    project_directory: &Path,
+    conditions: &std::collections::BTreeSet<String>,
+) -> Result<Vec<(String, String)>, BackendError> {
+    let installed = |specifier: &str| -> Option<(String, String, String)> {
+        let module = package_name_of_specifier(specifier)?;
+        let (directory, manifest) =
+            installed_package_manifest(project_directory, &module).ok()??;
+        let integrity = installed_package_integrity(project_directory, &directory).ok()??;
+        Some((module, manifest.version, integrity))
+    };
+    crate::contract_interface::admitted_project_artifacts(
+        catalog,
+        trust,
+        project_directory,
+        conditions,
+        &installed,
+    )
+    .map_err(|error| BackendError::Contract(error.to_string()))
+}
+
+fn package_name_of_specifier(specifier: &str) -> Option<String> {
+    let mut parts = specifier.split('/');
+    let first = parts.next()?;
+    if first.starts_with('@') {
+        let second = parts.next()?;
+        return Some(format!("{first}/{second}"));
+    }
+    (!first.is_empty()).then(|| first.to_owned())
+}
+
 fn installed_package_manifest(
     project_directory: &Path,
     module: &str,
@@ -1105,7 +1148,62 @@ pub(crate) fn installed_package_integrity(
             }
         }
     }
+    if found.is_none() {
+        found = pnpm_installed_package_integrity(project_directory, package_directory)?;
+    }
     Ok(found)
+}
+
+/// The pnpm arm of the search above.
+///
+/// Separate from the ancestor walk because pnpm needs the installed package's
+/// own name and version to form its lock key -- its store path
+/// (`.pnpm/<name>@<version>_<peers>/node_modules/<name>`) is not one -- and
+/// because its `packages:` keys are unique, so there is no per-path
+/// disambiguation to fold into the loop. Consulted only when no npm or Bun
+/// lockfile answered, so an npm-installed tree keeps its existing answer.
+fn pnpm_installed_package_integrity(
+    project_directory: &Path,
+    package_directory: &Path,
+) -> Result<Option<String>, BackendError> {
+    let manifest = package_directory.join("package.json");
+    let Ok(bytes) = fs::read(&manifest) else {
+        return Ok(None);
+    };
+    // Only the identity fields matter here, and `PackageManifest` does not
+    // carry the name, so read the two directly rather than widening a struct
+    // the rest of this module uses for dependency edges.
+    let Ok(manifest) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return Ok(None);
+    };
+    let (Some(name), Some(version)) = (
+        manifest.get("name").and_then(serde_json::Value::as_str),
+        manifest.get("version").and_then(serde_json::Value::as_str),
+    ) else {
+        return Ok(None);
+    };
+    for ancestor in project_directory.ancestors() {
+        let candidate = ancestor.join("pnpm-lock.yaml");
+        let data = match fs::read(&candidate) {
+            Ok(data) => data,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        // A lockfile this checker cannot read is not a malformed *contract* and
+        // must not fail the run, exactly as for the npm arm.
+        let Ok(selection) =
+            crate::contract_certification::PublishedGraphLockSelection::from_pnpm_lock(
+                &data,
+                format!("{name}@{version}"),
+                name,
+                version,
+            )
+        else {
+            return Ok(None);
+        };
+        return Ok(Some(selection.integrity().to_owned()));
+    }
+    Ok(None)
 }
 
 fn manifest_uses_solid(manifest: &PackageManifest) -> bool {

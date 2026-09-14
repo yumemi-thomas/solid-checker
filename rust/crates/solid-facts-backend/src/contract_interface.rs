@@ -603,12 +603,84 @@ fn default_condition_artifact_identity(
     import: &crate::artifact_resolution::ResolvedImport,
     bindings: &crate::contract_certification::Policy2ReceiptBindings,
 ) -> Option<String> {
+    if bindings.artifact_acceptance_root.is_empty() {
+        return None;
+    }
     let derived = crate::contract_certification::policy2_artifact_acceptance_root(
         import,
         std::slice::from_ref(&"import".to_owned()),
     )
     .ok()?;
     (derived == bindings.artifact_acceptance_root).then_some(derived)
+}
+
+/// What the caller can state about a specifier's installed package: its name,
+/// its version, and the registry integrity its lockfile selected. `None` for
+/// anything the project cannot state exactly — an absent lockfile entry, or two
+/// installs that disagree.
+pub type InstalledArtifactIdentity<'a> = dyn Fn(&str) -> Option<(String, String, String)> + 'a;
+
+/// Derives, for every specifier this catalog accepts, whether *this* project's
+/// installed artifact is the one the acceptance was issued for.
+///
+/// The identity is recomputed from the installed tree — the package's registry
+/// integrity from its lockfile, the entrypoint the specifier names, and the
+/// host's declared export conditions — and admitted only when it reproduces the
+/// signed root. Anything the project cannot state exactly is skipped, so this
+/// adds acceptances and never removes one.
+///
+/// `conditions` is the host's declaration, not a guess: the analyzer has no
+/// condition facts of its own, and conditions select the artifact, so an empty
+/// set admits nothing rather than assuming `import`.
+pub fn admitted_project_artifacts(
+    catalog: &Path,
+    trust: Option<&Policy2TrustConfiguration>,
+    project_directory: &Path,
+    conditions: &std::collections::BTreeSet<String>,
+    installed_integrity: &InstalledArtifactIdentity,
+) -> Result<Vec<(String, String)>, ContractFailure> {
+    if conditions.is_empty() {
+        return Ok(Vec::new());
+    }
+    let _ = (project_directory, trust);
+    let (catalog, _) = decode_accepted_contract_catalog(catalog)?;
+    let conditions = conditions.iter().cloned().collect::<Vec<_>>();
+    let mut admitted = Vec::new();
+    for entry in catalog.contracts {
+        if !matches!(
+            entry.status,
+            AcceptedCatalogStatus::Policy2PersistentLocal | AcceptedCatalogStatus::Policy2Portable
+        ) {
+            continue;
+        }
+        let Some(bindings) = entry
+            .bindings
+            .as_ref()
+            .filter(|bindings| !bindings.artifact_acceptance_root.is_empty())
+        else {
+            continue;
+        };
+        let Some((name, version, integrity)) = installed_integrity(&entry.import.specifier) else {
+            continue;
+        };
+        // Recompute against the *installed* identity rather than the catalog's
+        // record of it: the catalog states what certification resolved, and the
+        // question here is whether this project resolved the same thing.
+        let mut installed = entry.import.clone();
+        installed.package_name = name;
+        installed.package_version = version;
+        installed.package_integrity = integrity;
+        let Ok(derived) = crate::contract_certification::policy2_artifact_acceptance_root(
+            &installed,
+            &conditions,
+        ) else {
+            continue;
+        };
+        if derived == bindings.artifact_acceptance_root {
+            admitted.push((entry.import.specifier.clone(), derived));
+        }
+    }
+    Ok(admitted)
 }
 
 fn catalog_field(message: impl Into<String>) -> ContractFailure {
