@@ -160,6 +160,60 @@ that fires on ordinary `dist/*.js` exports is not established, and asserting a
 cause from reading source rather than from a focused fixture is the error this
 phase has already made twice. The fixture comes first, for each shape.
 
+## The node kind is not the premise (fixtured 2026-09-14)
+
+The ranking above groups by the AST node the form sits on, because that is what
+the refusal names. That grouping is **not** the premise grouping, and the
+largest row of it is the least homogeneous. Reading the actual source behind
+every `property-access-unknown-accessor` refusal in the six clusters:
+
+| export | what the subject really is |
+| --- | --- |
+| `toObserver` | a ternary over two parameters |
+| `getNodeName` | `(param.x \|\| '')` — a parameter joined with an own literal |
+| `flush` | an element of a module-level mutable array |
+| `getComputedStyle` | a package-own function's call result |
+| `getParentNode` | a local binding from a mixed `\|\|` chain |
+
+`PropertyAccessExpression`'s 122 rows are at least five premises of ten to
+forty rows each. `SpreadAssignment`'s 80 are the most homogeneous block in the
+frontier, which makes it the right first target — but not for the reason the
+ranking suggested.
+
+### What the spread fixture found
+
+`spread_assignment_subject_roots_test.go` probes the shape directly, and the
+premise is not "a spread of a parameter": **the producer already states that
+one.** What refuses is `written-parameter`.
+
+~~~js
+function combineStyle(a, b) {                     // @corvu/utils, 80 rows
+  if (typeof b === "string") b = stringStyleToObject(b);
+  return { ...a, ...b };                          // ...a roots; ...b refuses
+}
+~~~
+
+| the parameter is assigned | roots? |
+| --- | --- |
+| nothing | `parameter` |
+| itself (`b = b`) | `parameter` |
+| another parameter (`b = a`) | **refuses** |
+| an own literal (`b = { x: 1 }`) | **refuses** |
+| a package-own function's result | **refuses** |
+| `Object.create(null)` | **refuses** |
+| a default (`b: any = {}`) | `parameter-default-literal` |
+
+So one refusal spelling hides four premises worth very different amounts. The
+narrowest — every assigned value is a parameter — is the argument ADR 0034
+already makes, and it still refuses.
+
+**It does not close `combineStyle`.** That second arm is
+`stringStyleToObject(b)`, whose body returns a `const object = {}` it fills
+itself: an own literal one function hop away. The eighty rows need the
+parameter join **and** a hop through a package-own result — two premises
+stacked, not the one the ranking implied. Anything costed off the node-kind
+table above is costed too low.
+
 ## Coverage
 
 630 of 1,470 rows (43%) re-censused across six clusters. `motion-utils` (234)
