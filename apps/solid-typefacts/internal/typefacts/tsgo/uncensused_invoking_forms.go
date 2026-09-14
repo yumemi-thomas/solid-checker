@@ -2097,10 +2097,76 @@ func (p *project) iterationProtocolFormLocked(
 	if operand == nil {
 		return typefacts.UncensusedIterationProtocol, true
 	}
-	if p.isUnwrittenRestParameterReferenceLocked(operand) {
+	if p.isUnwrittenRestParameterReferenceLocked(operand) ||
+		p.isRestParameterAliasLocked(operand) {
 		return "", false
 	}
 	return p.iterationProtocolClearedLocked(p.formChecker().GetTypeAtLocation(operand))
+}
+
+// isRestParameterAliasLocked answers whether `operand` is a binding whose
+// **every** value is the array a rest parameter's own binding holds (ADR 0106).
+//
+// This is `isUnwrittenRestParameterReferenceLocked`'s argument followed one
+// hop, and nothing more: the engine builds a rest array with ArrayCreate at
+// every call, so it is an ordinary Array whose `Symbol.iterator` is
+// `Array.prototype`'s, and a binding that can only ever hold such an array
+// spreads through the same iterator. The shape is what every compiled
+// debounce-alike emits:
+//
+//	export function createMicrotask(fn) {
+//	    let args;
+//	    return (...a) => {
+//	        (args = a), calls++;
+//	        queueMicrotask(() => --calls === 0 && fn(...args));
+//	    };
+//	}
+//
+// `bindingValueSourcesLocked` is what makes "every value" real: it refuses the
+// whole binding when some write is one it cannot read a single value out of --
+// a compound assignment, an update, a destructuring target, a `for…of` head --
+// so a source left out cannot quietly become a claim about some of the values.
+//
+// A binding with no initializer and no assignment holds `undefined`, whose
+// spread throws before any lookup and reaches no user code. It is refused here
+// anyway: clearing a form on a value that can only throw states nothing worth
+// stating, and the empty source list is more likely to mean this walk saw
+// nothing than that the code does nothing.
+//
+// One hop, deliberately. A binding assigned from *another* such binding is a
+// join this does not attempt, because each hop is another place a write could
+// be missed and the corpus shows no case that needs it.
+func (p *project) isRestParameterAliasLocked(operand *ast.Node) bool {
+	operand = identityPreservingUnwrap(operand)
+	if operand == nil || !ast.IsIdentifier(operand) {
+		return false
+	}
+	symbol := p.canonicalSymbol(p.formChecker().GetSymbolAtLocation(operand))
+	if symbol == nil || len(symbol.Declarations) != 1 || symbol.Declarations[0] == nil {
+		return false
+	}
+	declaration := symbol.Declarations[0]
+	if !ast.IsVariableDeclaration(declaration) {
+		return false
+	}
+	name := declaration.Name()
+	if name == nil || !ast.IsIdentifier(name) {
+		return false
+	}
+	sourceFile := ast.GetSourceFileOfNode(declaration)
+	if sourceFile == nil || !p.formIsRuntimeSourceFile(sourceFile) {
+		return false
+	}
+	sources, ok := p.bindingValueSourcesLocked(sourceFile, symbol, declaration)
+	if !ok || len(sources) == 0 {
+		return false
+	}
+	for _, source := range sources {
+		if !p.isUnwrittenRestParameterReferenceLocked(source) {
+			return false
+		}
+	}
+	return true
 }
 
 // isUnwrittenRestParameterReferenceLocked answers whether `operand` is a
