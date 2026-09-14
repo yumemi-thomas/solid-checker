@@ -6493,6 +6493,52 @@
         "Only the branch this realm takes is exercised: the samples assert which one ran, and the other branch's onSettled deferral is covered by the implementation census alone",
         "NEVER EMITS: the recipe's own equals getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
       ]
+    },
+    {
+      "claimId": "claim:v1:sha256:05e1e663f3409d6b05b21c5461d7142a205372815ad774d2f4703846e65ce3cc",
+      "module": "tanstack-store-store-reads-0bdfa1cb.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @tanstack/store@0.11.1; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/store.js installs no accessor and there is no owned trap for this recipe to count",
+        "Construction only: what the constructed instance does when its own methods are later called is a different claim, and the samples call get() solely to pin the seeding",
+        "NEVER EMITS: construction reads nothing of the caller's, so the samples assert zero inside the window and prove the getter is live by reading it once outside; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:b30f77fb03c4bd39fbde666b40bda469af4b7911fa3682c4d926387b87eea90b",
+      "module": "tanstack-store-readonly-store-reads-0bdfa1cb.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @tanstack/store@0.11.1; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/store.js installs no accessor and there is no owned trap for this recipe to count",
+        "Construction only: what the constructed instance does when its own methods are later called is a different claim, and the samples call get() solely to pin the seeding",
+        "NEVER EMITS: construction reads nothing of the caller's, so the samples assert zero inside the window and prove the getter is live by reading it once outside; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
     }
   ]
 }

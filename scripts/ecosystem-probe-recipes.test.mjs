@@ -647,6 +647,8 @@ describe("the checked-in fixture recipe corpora", () => {
       "tanstack-store-create-async-atom-reads-0bdfa1cb.mjs",
       "tanstack-store-create-atom-reads-0bdfa1cb.mjs",
       "tanstack-store-create-store-reads-0bdfa1cb.mjs",
+      "tanstack-store-readonly-store-reads-0bdfa1cb.mjs",
+      "tanstack-store-store-reads-0bdfa1cb.mjs",
     ]);
     assert.equal(
       manifest.recipes.length - silent.length,
