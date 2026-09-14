@@ -6830,6 +6830,358 @@
         "The string arm is exercised through stringStyleToObject's own regex; samples cover a declaration, a custom property and the empty string, not the whole CSS grammar",
         "NEVER EMITS: `read-operation`. Every property the export reads is an own enumerable property of an object its caller supplied (ADR 0034) or of the plain object `stringStyleToObject` allocates and fills during this same call (ADR 0044). The export owns no reactive source to observe."
       ]
+    },
+    {
+      "claimId": "claim:v1:sha256:ab3dac29663ffb748db93a6aada806ed67759257954b7e142d11c0f69e123493",
+      "module": "corvu-next-utils-015-dom-after-paint-reads-3c29eec4.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS afterPaint, artifact-case:3c29eec4eb9196a19474b6bcdb91a44faf4ce109978d1a761e530e13bf585b96; finite samples over a small export, which can contradict the closure but cannot establish it",
+        "Samples are this fork's own, measured against the installed 0.1.5 package rather than carried across from the same-named @corvu/utils export",
+        "NEVER EMITS: `read-operation`. The export schedules its callback through two animation frames and reads nothing itself."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:a855f43f3153487b0acef76c44b30961cb22482df7e8f4aadea3ced7c5d9eb46",
+      "module": "corvu-next-utils-015-dom-after-paint-reads-dfb5ffda.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS afterPaint, artifact-case:dfb5ffdab3577940d2df6d0553416b3b2bc599711e75e0cdb7cda11db8ec449b; finite samples over a small export, which can contradict the closure but cannot establish it",
+        "Samples are this fork's own, measured against the installed 0.1.5 package rather than carried across from the same-named @corvu/utils export",
+        "NEVER EMITS: `read-operation`. The export schedules its callback through two animation frames and reads nothing itself."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:d6120343b8e2ac71f9a094f3104f666ad387d0978a1db205a0d9a1d43156ef23",
+      "module": "corvu-next-utils-015-dom-call-event-handler-reads-3c29eec4.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS callEventHandler, artifact-case:3c29eec4eb9196a19474b6bcdb91a44faf4ce109978d1a761e530e13bf585b96; finite samples over a small export, which can contradict the closure but cannot establish it",
+        "Samples are this fork's own, measured against the installed 0.1.5 package rather than carried across from the same-named @corvu/utils export",
+        "NEVER EMITS: `read-operation`. A function handler is called; a bound-handler tuple is called with its data; the returned flag is the event's own `defaultPrevented`."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:45808e55885ba167872cf6e2194005e40db18781ffc8e4773f3e3328a27a96dd",
+      "module": "corvu-next-utils-015-dom-call-event-handler-reads-dfb5ffda.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS callEventHandler, artifact-case:dfb5ffdab3577940d2df6d0553416b3b2bc599711e75e0cdb7cda11db8ec449b; finite samples over a small export, which can contradict the closure but cannot establish it",
+        "Samples are this fork's own, measured against the installed 0.1.5 package rather than carried across from the same-named @corvu/utils export",
+        "NEVER EMITS: `read-operation`. A function handler is called; a bound-handler tuple is called with its data; the returned flag is the event's own `defaultPrevented`."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:967b3902d116e7c3a6113a39ce9ce8a9d50c71566d6553e23794ec7d24aa785d",
+      "module": "corvu-next-utils-015-create-keyed-context-create-keyed-context-reads-012784a7.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS createKeyedContext, artifact-case:012784a7b42a2fbb4e8898f17fa7695e7074946e64f7c1fb147edf816379da23; finite samples over a small export, which can contradict the closure but cannot establish it",
+        "Samples are this fork's own, measured against the installed 0.1.5 package rather than carried across from the same-named @corvu/utils export",
+        "NEVER EMITS: `read-operation`. The export builds a context and registers it under the caller's key; building a source is not reading one."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:e03e677d3d78fbb68a119437593692aa8721ea771e9a230d89c6c9f626678df0",
+      "module": "corvu-next-utils-015-create-keyed-context-create-keyed-context-reads-9d31fed1.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS createKeyedContext, artifact-case:9d31fed16de4a03416f4534ddcdc1fa4b478c5ed00f27caa6a69f1282f14d607; finite samples over a small export, which can contradict the closure but cannot establish it",
+        "Samples are this fork's own, measured against the installed 0.1.5 package rather than carried across from the same-named @corvu/utils export",
+        "NEVER EMITS: `read-operation`. The export builds a context and registers it under the caller's key; building a source is not reading one."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:676f393e374e830ceda5e0e264a69965ea3949c5b2d18493ad586878a6c2b675",
+      "module": "corvu-next-utils-015-data-if-reads-53e25b58.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS dataIf, artifact-case:53e25b58fac21ef5ad1b0b5bf8d2eb3d6f4f01dff5761d3ea94c6218ad20efd3; finite samples over a small export, which can contradict the closure but cannot establish it",
+        "Samples are this fork's own, measured against the installed 0.1.5 package rather than carried across from the same-named @corvu/utils export",
+        "NEVER EMITS: `read-operation`. One conditional over the caller's own argument, returning a literal or `undefined`."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:832817b763b5633fe2fb04f3b87e24de18945f3eeb071755dad41d46b21208a6",
+      "module": "corvu-next-utils-015-data-if-reads-89831f74.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS dataIf, artifact-case:89831f74dfb8be8f38a3becc762f3e96d7666e442c43bed9fd32140097b641fd; finite samples over a small export, which can contradict the closure but cannot establish it",
+        "Samples are this fork's own, measured against the installed 0.1.5 package rather than carried across from the same-named @corvu/utils export",
+        "NEVER EMITS: `read-operation`. One conditional over the caller's own argument, returning a literal or `undefined`."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:8ed4223a3a74c7172f0dba5d4238e05e46ec9a8ef4c2554d42216ae72932a171",
+      "module": "corvu-next-utils-015-create-keyed-context-get-keyed-context-reads-012784a7.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS getKeyedContext, artifact-case:012784a7b42a2fbb4e8898f17fa7695e7074946e64f7c1fb147edf816379da23; finite samples over a small export, which can contradict the closure but cannot establish it",
+        "Samples are this fork's own, measured against the installed 0.1.5 package rather than carried across from the same-named @corvu/utils export",
+        "NEVER EMITS: `read-operation`. A lookup in the package's own registry returns the context object itself; the context's *value* is never observed here, and the registry is not a reactive source."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:2718c3230fd175fdbfb7bf119d2d81c2f4506f02084e96a0f00b60bb519cd071",
+      "module": "corvu-next-utils-015-create-keyed-context-get-keyed-context-reads-9d31fed1.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS getKeyedContext, artifact-case:9d31fed16de4a03416f4534ddcdc1fa4b478c5ed00f27caa6a69f1282f14d607; finite samples over a small export, which can contradict the closure but cannot establish it",
+        "Samples are this fork's own, measured against the installed 0.1.5 package rather than carried across from the same-named @corvu/utils export",
+        "NEVER EMITS: `read-operation`. A lookup in the package's own registry returns the context object itself; the context's *value* is never observed here, and the registry is not a reactive source."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:a79d2cdf4d0b0929ee9ab6f9be367672072ad75221623258889243e1e81a3440",
+      "module": "corvu-next-utils-015-is-button-reads-53e25b58.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS isButton, artifact-case:53e25b58fac21ef5ad1b0b5bf8d2eb3d6f4f01dff5761d3ea94c6218ad20efd3; finite samples over a small export, which can contradict the closure but cannot establish it",
+        "Samples are this fork's own, measured against the installed 0.1.5 package rather than carried across from the same-named @corvu/utils export",
+        "NEVER EMITS: `read-operation`. Two string comparisons and an `indexOf` over a module-local array of literals; no argument is dereferenced beyond its own value."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:4a5baafac5260cedb7222e801283a39db06780c42e6f697bcc424bf6cb7ebeee",
+      "module": "corvu-next-utils-015-is-button-reads-89831f74.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS isButton, artifact-case:89831f74dfb8be8f38a3becc762f3e96d7666e442c43bed9fd32140097b641fd; finite samples over a small export, which can contradict the closure but cannot establish it",
+        "Samples are this fork's own, measured against the installed 0.1.5 package rather than carried across from the same-named @corvu/utils export",
+        "NEVER EMITS: `read-operation`. Two string comparisons and an `indexOf` over a module-local array of literals; no argument is dereferenced beyond its own value."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:35dab733ac4c484a41a9d3c5d54bff6dc27769388c7fe281a31f184d80a8aed3",
+      "module": "corvu-next-utils-015-is-function-reads-53e25b58.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS isFunction, artifact-case:53e25b58fac21ef5ad1b0b5bf8d2eb3d6f4f01dff5761d3ea94c6218ad20efd3; finite samples over a small export, which can contradict the closure but cannot establish it",
+        "Samples are this fork's own, measured against the installed 0.1.5 package rather than carried across from the same-named @corvu/utils export",
+        "NEVER EMITS: `read-operation`. A `typeof` test and the callable's own `length`; nothing is invoked and nothing is read off a source this package owns."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:804264e3d2f43d28eee0f3251787890b1e0e2766c9728f704992912d773e7265",
+      "module": "corvu-next-utils-015-is-function-reads-89831f74.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS isFunction, artifact-case:89831f74dfb8be8f38a3becc762f3e96d7666e442c43bed9fd32140097b641fd; finite samples over a small export, which can contradict the closure but cannot establish it",
+        "Samples are this fork's own, measured against the installed 0.1.5 package rather than carried across from the same-named @corvu/utils export",
+        "NEVER EMITS: `read-operation`. A `typeof` test and the callable's own `length`; nothing is invoked and nothing is read off a source this package owns."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:16df5f33f274b3c25f8c508338b345707c09569b6a52ffa54c5989ac8871008f",
+      "module": "corvu-next-utils-015-create-keyed-context-use-keyed-context-reads-012784a7.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS useKeyedContext, artifact-case:012784a7b42a2fbb4e8898f17fa7695e7074946e64f7c1fb147edf816379da23; finite samples over a small export, which can contradict the closure but cannot establish it",
+        "Samples are this fork's own, measured against the installed 0.1.5 package rather than carried across from the same-named @corvu/utils export",
+        "NEVER EMITS: `read-operation`. The export reads the context value through Solid's own `useContext`, which is `solid-js`'s source and not one this package owns (ADR 0034's argument, one package out)."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:f4e01920e5ebe557ca5bdf3f6babd1f48c745c14ef450fa35f39d8878e8af26c",
+      "module": "corvu-next-utils-015-create-keyed-context-use-keyed-context-reads-9d31fed1.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Published JS useKeyedContext, artifact-case:9d31fed16de4a03416f4534ddcdc1fa4b478c5ed00f27caa6a69f1282f14d607; finite samples over a small export, which can contradict the closure but cannot establish it",
+        "Samples are this fork's own, measured against the installed 0.1.5 package rather than carried across from the same-named @corvu/utils export",
+        "NEVER EMITS: `read-operation`. The export reads the context value through Solid's own `useContext`, which is `solid-js`'s source and not one this package owns (ADR 0034's argument, one package out)."
+      ]
     }
   ]
 }

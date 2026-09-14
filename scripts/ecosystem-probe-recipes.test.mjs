@@ -358,7 +358,11 @@ describe("the checked-in fixture recipe corpora", () => {
   // *owns*, and no observation from outside can see it. ADR 0107's eight
   // `combineStyle` vetoes join them, for the same reason and in the same
   // domain: every property that export reads belongs to its caller or to the
-  // object it just allocated, so there is nothing of its own to observe.
+  // object it just allocated, so there is nothing of its own to observe. The
+  // sixteen `@corvu-next/utils@0.1.5` vetoes join them on the same footing --
+  // small pure helpers, a context registry that is not a reactive source, and
+  // `useKeyedContext`, whose read goes through Solid's own `useContext` and so
+  // belongs to `solid-js` rather than to this package.
   //
   // Pinning the list is what makes a sixth one a decision. A `creates` or
   // `returns` recipe going silent would land here as a diff, where today the
@@ -371,6 +375,22 @@ describe("the checked-in fixture recipe corpora", () => {
       }
     }
     assert.deepEqual(silent.sort(), [
+      "corvu-next-utils-015-create-keyed-context-create-keyed-context-reads-012784a7.mjs",
+      "corvu-next-utils-015-create-keyed-context-create-keyed-context-reads-9d31fed1.mjs",
+      "corvu-next-utils-015-create-keyed-context-get-keyed-context-reads-012784a7.mjs",
+      "corvu-next-utils-015-create-keyed-context-get-keyed-context-reads-9d31fed1.mjs",
+      "corvu-next-utils-015-create-keyed-context-use-keyed-context-reads-012784a7.mjs",
+      "corvu-next-utils-015-create-keyed-context-use-keyed-context-reads-9d31fed1.mjs",
+      "corvu-next-utils-015-data-if-reads-53e25b58.mjs",
+      "corvu-next-utils-015-data-if-reads-89831f74.mjs",
+      "corvu-next-utils-015-dom-after-paint-reads-3c29eec4.mjs",
+      "corvu-next-utils-015-dom-after-paint-reads-dfb5ffda.mjs",
+      "corvu-next-utils-015-dom-call-event-handler-reads-3c29eec4.mjs",
+      "corvu-next-utils-015-dom-call-event-handler-reads-dfb5ffda.mjs",
+      "corvu-next-utils-015-is-button-reads-53e25b58.mjs",
+      "corvu-next-utils-015-is-button-reads-89831f74.mjs",
+      "corvu-next-utils-015-is-function-reads-53e25b58.mjs",
+      "corvu-next-utils-015-is-function-reads-89831f74.mjs",
       "corvu-next-utils-dom-after-paint-reads-7496b629.mjs",
       "corvu-next-utils-dom-after-paint-reads-95369190.mjs",
       "corvu-next-utils-dom-call-event-handler-reads-7496b629.mjs",
