@@ -194,3 +194,43 @@ catalogs; it is either certification accepting a set of importers, or an
 acceptance identity that binds to the resolved artifact rather than the
 importing file. Which of those is sound is an ADR, not a patch — the importer
 key is what stops one file's resolution speaking for another's.
+
+## 8. Correction: a contract *can* raise a usage defect, and here is the path
+
+§ 6 and the summary that went with it said no accepted contract was observed
+producing a finding about how a consumer uses the package. That was drawn from
+fixture snapshots, and snapshots are the wrong instrument for the question: they
+show what fires in the fixtures that exist, not what the rules consume.
+
+Read from the rule inputs instead, the path is there and is unit-tested at both
+ends:
+
+1. A contract operation of `kind: cleanup` (or an effect) whose
+   `owner.requires` is `required` and whose `source` is not `created` projects
+   to `ContractOwnerRequirement { operation: Cleanup }` —
+   `contracts.rs::project_owner_requirements`, pinned by
+   `a_cleanup_requirement_projects_from_the_cleanups_domain_without_opening_it`.
+2. `owners.rs` reads exactly that through `lookup.contract_owner_requirements`
+   at any call **outside an owner-providing region**, and pushes an owner
+   requirement for the call site.
+3. That becomes `SC4001 missing-owner`, whose remedy names `onCleanup` for a
+   cleanup requirement.
+
+So a package export that calls `onCleanup` internally — `makeEventListener` and
+`createEventListener` in `@solid-primitives/event-listener`, `tryOnCleanup` in
+`utils`, the `rootless` singletons — called at module top level or from a plain
+helper, is a listener that is never removed. **Without a contract the checker
+cannot know the package cleans up and stays silent; with one it raises the
+defect at the call site.** That is a usage bug found because a contract was
+accepted, not a silence removed.
+
+What the fixture evidence *did* show remains true and is the other direction:
+`v1-reactivity`'s contract for `described` states its first argument is tracked,
+which **certifies** a call that would otherwise be uncertifiable, while
+`observe` — described by nothing — keeps raising
+`v1/reactive-source-uncaptured`. Contracts resolve uncertainty both ways.
+
+Not yet demonstrated end to end on a real package: that needs an
+`@solid-primitives/event-listener` contract whose `creates`/cleanups domain
+closes with the requirement, and a consumer calling it unowned. That is the
+measurement to run, and it is now a specific one rather than an open question.
