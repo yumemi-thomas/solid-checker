@@ -643,6 +643,33 @@ pub struct NotCallableValue {
     pub r#type: Arc<str>,
 }
 
+/// [`ExportImplementationTranscript::default_library_alias`] (ADR 0103).
+///
+/// The producer proved the export binding *is* this default-library member,
+/// by identity. It deliberately states nothing about what the member does:
+/// `Object.keys` invokes no caller callable and reads nothing but its
+/// argument's own keys, while `Array.prototype.map` invokes one per element,
+/// and the producer states both identically. Deciding which members a call
+/// domain may close on is the certifier's reviewed act, so a member with no
+/// entry in that table reads as "not stated".
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DefaultLibraryAlias {
+    /// The container the member was read from: `Object`, `Math`, …
+    pub container: Arc<str>,
+    /// The member name: `keys`, `entries`, `floor`, …
+    pub member: Arc<str>,
+}
+
+impl DefaultLibraryAlias {
+    /// The `Container.member` spelling the reviewed table is keyed by, and
+    /// the spelling a receipt records.
+    #[must_use]
+    pub fn qualified_name(&self) -> String {
+        format!("{}.{}", self.container, self.member)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExportImplementationTranscript {
@@ -788,6 +815,15 @@ pub struct ExportImplementationTranscript {
     /// "not stated", never "callable".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub not_callable_value: Option<NotCallableValue>,
+    /// ADR 0103, handshake protocol 57: the export **is** a default-library
+    /// member, by identity. Stated beside the transcript's existing open
+    /// reason rather than instead of it — `Object.keys` stays
+    /// `callSignatureNotUnique` and `Math.floor` stays
+    /// `implementationUnavailable` — so a consumer that does not recognize the
+    /// named member keeps refusing exactly as protocol 56 did. Absent means
+    /// "not stated", never "not a built-in".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_library_alias: Option<DefaultLibraryAlias>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub primitive_completion: bool,
     /// The conjunction of seven independent gates, every one of which the

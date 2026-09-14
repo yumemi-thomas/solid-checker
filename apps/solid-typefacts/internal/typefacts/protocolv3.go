@@ -4,7 +4,19 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 56 (ADR 0099): **a value export that cannot
+// TypeFactsHandshakeProtocol is 57 (ADR 0103): **an export that is a
+// default-library member by identity** states so. A `const` binding whose
+// initializer is a property access on a default-library container, where
+// container and member are both default-library symbols, the member is
+// declared on that container's interface, and neither is written, deleted or
+// allowed to escape anywhere in the file, answers an implementation demand
+// with DefaultLibraryAlias naming the container and member. The fact is stated
+// *beside* the existing open reason, never instead of it: `Object.keys` stays
+// callSignatureNotUnique and `Math.floor` stays implementationUnavailable, so
+// a consumer with no reviewed entry for the named member keeps refusing
+// exactly as protocol 56 did. The positive fact is new and the number moves.
+//
+// Protocol 56 (ADR 0099): **a value export that cannot
 // be invoked** states so. An export whose runtime value type has no call and
 // no construct signature on any constituent, and is not any/unknown/never or
 // instantiable, answers an implementation demand with NotCallableValue beside
@@ -343,8 +355,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 56
-	TypeFactsSchemaSHA256             = "sha256:be5e16f32dd5ea6a560c1be5b9e1fab60f290855016e4b1535db8f40bb9b1f11"
+	TypeFactsHandshakeProtocol uint64 = 57
+	TypeFactsSchemaSHA256             = "sha256:69924d7599f081fc4726bf42bb57e0e09e742ca4b17fa4c0ae112dda118d1d39"
 )
 
 type ServiceHandshake struct {

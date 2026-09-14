@@ -36,7 +36,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:be5e16f32dd5ea6a560c1be5b9e1fab60f290855016e4b1535db8f40bb9b1f11";
+    "sha256:69924d7599f081fc4726bf42bb57e0e09e742ca4b17fa4c0ae112dda118d1d39";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -305,7 +305,18 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // the single open reason `valueNotCallable`, where protocol 55 answered
 // `callSignatureNotUnique`. A protocol-55 consumer would read the new open
 // reason as a refusal, so the number moves.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 56;
+// Protocol 57 states that an export is a default-library member by identity
+// (ADR 0103): a `const` binding, never written in its file, whose initializer
+// is a property access whose object and member both resolve to default-library
+// symbols, with the member declared on the named container's interface and
+// neither container nor member written, deleted or escaping as anything but a
+// read or a call, answers an implementation demand with `defaultLibraryAlias`
+// naming the container and member. The fact is stated *beside* the existing
+// open reason, never instead of it, so a protocol-56 consumer would still
+// refuse on `callSignatureNotUnique` or `implementationUnavailable` exactly as
+// before — but it would drop the new field, and a `deny_unknown_fields`
+// consumer would reject the transcript outright, so the number moves.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 57;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

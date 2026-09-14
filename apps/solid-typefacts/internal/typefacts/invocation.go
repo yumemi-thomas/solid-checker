@@ -375,6 +375,27 @@ type NotCallableValue struct {
 	Type string `cbor:"type" json:"type"`
 }
 
+// DefaultLibraryAlias is ExportValueTranscript.DefaultLibraryAlias (ADR 0103).
+//
+// It names the container and member an export binding is an immutable alias
+// of -- `export const keys = Object.keys` states {"Object", "keys"} -- and is
+// stated only when the producer proved all of: the binding is a `const` with
+// no write anywhere in the file, its initializer is a property access whose
+// object and member both resolve to default-library symbols, and neither the
+// container nor the member is written, deleted, or allowed to escape as
+// anything but a read or a call (`immutableAliasLibrarySourceIsStable`).
+//
+// The producer states identity and nothing else. **Whether a member is safe
+// to close a domain on is the certifier's reviewed decision**, not this
+// fact's: `Object.keys` invokes no caller callable, while
+// `Array.prototype.map` does, and the two are indistinguishable here. A
+// consumer that has no entry for the named member must treat the fact as not
+// stated.
+type DefaultLibraryAlias struct {
+	Container string `cbor:"container" json:"container"`
+	Member    string `cbor:"member" json:"member"`
+}
+
 type ExportImplementationTranscript struct {
 	Location    Location             `cbor:"location" json:"location"`
 	QueryName   string               `cbor:"queryName,omitempty" json:"queryName,omitempty"`
@@ -500,10 +521,19 @@ type ExportImplementationTranscript struct {
 	// denies an operation "one invocation of this export" gives rise to, and
 	// a value with no [[Call]] and no [[Construct]] has no invocation.
 	// Absent means "not stated", never "callable".
-	NotCallableValue    *NotCallableValue `cbor:"notCallableValue,omitempty" json:"notCallableValue,omitempty"`
-	PrimitiveCompletion bool              `cbor:"primitiveCompletion,omitempty" json:"primitiveCompletion,omitempty"`
-	Complete            bool              `cbor:"complete,omitempty" json:"complete,omitempty"`
-	OpenReasons         []string          `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+	NotCallableValue *NotCallableValue `cbor:"notCallableValue,omitempty" json:"notCallableValue,omitempty"`
+	// DefaultLibraryAlias states that this export *is* a default-library
+	// member, by identity (ADR 0103). It is stated beside an open reason
+	// rather than instead of one: the two refusals it answers --
+	// `callSignatureNotUnique` for an overloaded member like `Object.keys`,
+	// and `implementationUnavailable` for one whose only declaration is a
+	// body-less `.d.ts` signature like `Math.floor` -- are both still true of
+	// the transcript, and a consumer with no reviewed entry for the named
+	// member must keep refusing on them.
+	DefaultLibraryAlias *DefaultLibraryAlias `cbor:"defaultLibraryAlias,omitempty" json:"defaultLibraryAlias,omitempty"`
+	PrimitiveCompletion bool                 `cbor:"primitiveCompletion,omitempty" json:"primitiveCompletion,omitempty"`
+	Complete            bool                 `cbor:"complete,omitempty" json:"complete,omitempty"`
+	OpenReasons         []string             `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
 }
 
 // ParameterPremise is one parameter's type binding under which an

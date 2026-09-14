@@ -1042,7 +1042,16 @@ pub fn certify_value_only_case_set(
                         && (evidence.call_signatures(&record.export).is_some()
                             // ADR 0099: a not-callable value gets its
                             // typeof veto from the same synthesis pass.
-                            || evidence.not_callable_value(&record.export).is_some())
+                            || evidence.not_callable_value(&record.export).is_some()
+                            // ADR 0103: so does a reviewed default-library
+                            // alias, whose identity veto needs no signature
+                            // at all -- `Object.keys` is overloaded, so its
+                            // overload set may not be describable, and
+                            // `Math.floor` has one signature and no body.
+                            // Without this arm the synthesis pass is never
+                            // entered for them and the candidate stays
+                            // withheld for want of a recipe it can never get.
+                            || evidence.default_library_alias(&record.export).is_some())
                 })
                 && let Some(corpus) =
                     synthesized_vetoes::synthesize(plan, &evidence, base, gated.withheld())
@@ -13438,34 +13447,142 @@ export const value = phantom;
         assert_eq!(records[0].semantic_claim_id, gates[1].semantic_claim_id());
     }
 
-    /// The boundary of ADR 0099, pinned from both sides: a callable alias
-    /// whose signature is overloaded and a class, which is invoked by `new`,
-    /// state no not-callable fact, so with no recipe their candidates are
-    /// withheld exactly as before -- and `helper`, an ordinary function, still
-    /// closes through the implementation census, not through this premise.
+    /// ADR 0103's safety property: **the producer proving an identity is not
+    /// the certifier admitting it.** Every member a call domain may close on
+    /// was audited against three questions — does it invoke a caller callable,
+    /// does it read anything but its arguments' own properties, can it run
+    /// caller code through a trap — and a member that answers yes to any of
+    /// them, or that nobody has looked at, must not be admitted.
+    ///
+    /// The three named refusals are the ones most likely to be added by
+    /// someone pattern-matching on "looks pure": `Array.prototype.map` invokes
+    /// a caller callback per element, `JSON.stringify` calls `toJSON` on its
+    /// argument, and `Date.now` reads ambient state rather than its arguments.
+    #[test]
+    fn the_reviewed_default_library_alias_table_admits_only_audited_members() {
+        use super::type_facts::reviewed_default_library_alias_index;
+        for admitted in [
+            "Object.keys",
+            "Object.entries",
+            "Math.floor",
+            "Array.isArray",
+        ] {
+            assert!(
+                reviewed_default_library_alias_index(admitted).is_some(),
+                "{admitted} must be admitted"
+            );
+        }
+        for refused in [
+            "Array.prototype.map",
+            "JSON.stringify",
+            "Date.now",
+            "Math.random",
+            "Object.defineProperty",
+            "Object.getOwnPropertyNames",
+        ] {
+            assert!(
+                reviewed_default_library_alias_index(refused).is_none(),
+                "{refused} must not be admitted by the reviewed table"
+            );
+        }
+        // The index a veto carries always names a member of the table, so a
+        // veto can never be synthesized for one the table does not hold.
+        for admitted in ["Object.keys", "Math.min"] {
+            let index = reviewed_default_library_alias_index(admitted)
+                .expect("the member is admitted just above");
+            assert_eq!(
+                super::type_facts::reviewed_default_library_alias(index),
+                Some(admitted)
+            );
+        }
+    }
+
+    /// ADR 0103 from both sides on one fixture: `entries` **is**
+    /// `Object.entries`, a member the reviewed table admits, so its empty
+    /// `reads`, `creates` and `callbacks` close by identity with no recipe and
+    /// no sample.
+    ///
+    /// This is the end-to-end half of the premise. The other half — a stated
+    /// identity the reviewed table does not admit stays refused — is pinned by
+    /// `the_reviewed_default_library_alias_table_admits_only_audited_members`
+    /// as a unit test, for the fixture reason recorded on the ADR 0099
+    /// boundary test below.
+    #[test]
+    fn a_reviewed_default_library_alias_closes_by_identity() {
+        let Some((_plan, outcome)) = value_exports_certify("entries", ClaimDomain::Reads) else {
+            return;
+        };
+        let finalized = outcome.expect("entries: the alias premise must certify the row");
+        assert!(
+            finalized
+                .withheld_closures()
+                .iter()
+                .all(|record| record.export != "entries"),
+            "entries must not be withheld: {:?}",
+            finalized.withheld_closures()
+        );
+        assert!(
+            call_domain_is_closed_in(finalized.canonical_main(), "entries", ClaimDomain::Reads),
+            "entries reads must close on the stated identity"
+        );
+
+        // `returns` is deliberately outside the premise: these members do
+        // return values, and whether the returned value is one the `returns`
+        // domain denies is a different question this fact does not answer.
+        if let Some((_plan, outcome)) = value_exports_certify("entries", ClaimDomain::Returns) {
+            let finalized = outcome.expect("entries returns: the row still certifies");
+            assert!(
+                !call_domain_is_closed_in(
+                    finalized.canonical_main(),
+                    "entries",
+                    ClaimDomain::Returns
+                ),
+                "the alias premise must not close returns"
+            );
+        }
+    }
+
+    /// The boundary of ADR 0099, pinned from both sides: a class, which is
+    /// invoked by `new`, and an overloaded callable alias of a default-library
+    /// member the ADR 0103 table **excludes**, both state no not-callable
+    /// fact, so with no recipe their candidates are withheld exactly as
+    /// before -- and `helper`, an ordinary function, still closes through the
+    /// implementation census, not through this premise.
+    ///
+    /// The overloaded half of this boundary used to be `entries`, which is
+    /// `Object.entries` and now closes by identity under ADR 0103. That half
+    /// did not move to another fixture export: adding a second
+    /// default-library alias here refuses in the unrelated
+    /// `recursive-value-shape` family ("export root is not compiler-proved
+    /// non-callable and non-constructable"), which fails the whole row for a
+    /// reason that has nothing to do with either premise. The property it
+    /// carried — a stated identity the reviewed table does not admit stays
+    /// refused — is pinned instead by
+    /// `the_reviewed_default_library_alias_table_admits_only_audited_members`,
+    /// which is a unit test rather than an end-to-end one. That is a real gap
+    /// and is recorded in ADR 0103 rather than papered over.
     #[test]
     fn an_export_with_a_construct_or_overloaded_signature_stays_outside_the_premise() {
-        for export in ["entries", "Box"] {
-            let Some((_plan, outcome)) = value_exports_certify(export, ClaimDomain::Reads) else {
-                return;
-            };
-            let finalized = outcome.unwrap_or_else(|error| {
-                panic!("{export}: withholding must still certify the row: {error}")
-            });
-            let withheld = finalized.withheld_closures();
-            assert_eq!(withheld.len(), 1, "{export}: {withheld:?}");
-            assert_eq!(withheld[0].export, export);
-            assert_eq!(
-                withheld[0].reason,
-                super::WITHHELD_CLOSURE_NO_RECIPE,
-                "{export}"
-            );
-            assert!(!call_domain_is_closed_in(
-                finalized.canonical_main(),
-                export,
-                ClaimDomain::Reads
-            ));
-        }
+        let export = "Box";
+        let Some((_plan, outcome)) = value_exports_certify(export, ClaimDomain::Reads) else {
+            return;
+        };
+        let finalized = outcome.unwrap_or_else(|error| {
+            panic!("{export}: withholding must still certify the row: {error}")
+        });
+        let withheld = finalized.withheld_closures();
+        assert_eq!(withheld.len(), 1, "{export}: {withheld:?}");
+        assert_eq!(withheld[0].export, export);
+        assert_eq!(
+            withheld[0].reason,
+            super::WITHHELD_CLOSURE_NO_RECIPE,
+            "{export}"
+        );
+        assert!(!call_domain_is_closed_in(
+            finalized.canonical_main(),
+            export,
+            ClaimDomain::Reads
+        ));
         // `parsed` is typed `any`: the callability classifier refuses it, so no
         // fact is stated and the premise never applies; its candidates stay
         // withheld and no `not-callable` site is minted for it.

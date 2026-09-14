@@ -290,6 +290,20 @@ func (p *project) exportImplementationTranscriptLocked(
 			}
 		}
 	}
+	// ADR 0103: an export that is an immutable alias of a default-library
+	// member is that member, by identity. Stated before the signature check
+	// and carried past it, because the two refusals it answers sit on
+	// opposite sides: an overloaded member (`Object.keys`) never reaches the
+	// implementation path at all, while a body-less one (`Math.floor`)
+	// reaches it and finds no body. The open reason is still appended in
+	// both cases -- this fact does not make the transcript complete, it
+	// gives a reviewed consumer something to close on instead.
+	if alias := p.defaultLibraryAliasFactLocked(target); alias != nil {
+		transcript.DefaultLibraryAlias = alias
+		if transcript.Declaration == nil && target.ValueDeclaration != nil {
+			transcript.Declaration = p.resolvedDeclaration(nil, target.ValueDeclaration, target)
+		}
+	}
 	if len(signatures) != 1 {
 		transcript.OpenReasons = append(transcript.OpenReasons, "callSignatureNotUnique")
 		return transcript

@@ -86,6 +86,20 @@ pub(crate) fn synthesize(
                 .iter()
                 .find(|case| case.id.as_str() == record.artifact_case)?;
             let export = case.exports.get(&record.export)?;
+            // ADR 0103: an export that *is* a reviewed default-library member
+            // is served by an identity witness, whether or not the checker
+            // could select a signature -- `Object.keys` is overloaded and has
+            // several, `Math.floor` has one and no body. The identity decides
+            // the claim outright, so it is preferred over any sampled
+            // observation for the three domains it closes.
+            if let Some(alias) = evidence.default_library_alias(&record.export)
+                && matches!(record.domain.as_str(), "reads" | "creates" | "callbacks")
+                && empty_enumeration(&record.domain, export)
+                && let Some(index) =
+                    super::type_facts::reviewed_default_library_alias_index(&alias.qualified_name())
+            {
+                return Some((record, &[][..], Observation::DefaultLibraryAlias(index)));
+            }
             let Some(signatures) = evidence.call_signatures(&record.export) else {
                 // ADR 0099: no call signature, but the producer stated the
                 // value cannot be invoked. The veto observes `typeof`; it
@@ -452,6 +466,14 @@ enum Observation {
     /// observes `typeof` of the exported value and emits when it is a
     /// function: the one way the stated fact could be false at run time.
     NotCallable,
+    /// ADR 0103: the export *is* a reviewed default-library member. The
+    /// contradiction is an exact identity witness rather than a sample —
+    /// `Object.is(subject, Container.member)` is false in the probe realm —
+    /// which is stronger than any finite call could be: it decides the whole
+    /// claim in one comparison instead of probing behaviour one tuple at a
+    /// time. The index is into `REVIEWED_DEFAULT_LIBRARY_ALIASES`, so a
+    /// variant can never name a member the certifier has not reviewed.
+    DefaultLibraryAlias(u16),
 }
 
 /// Whether the proposal closes `domain` with an empty enumeration -- the only
@@ -593,6 +615,11 @@ impl Observation {
                 observation: "exact: typeof of the exported runtime value is \"function\"",
                 emit: "",
             },
+            Self::DefaultLibraryAlias(_) => ReviewedObservation {
+                marker: "alias-identity",
+                observation: "exact: the exported runtime value is not the same function object as the named default-library member, by Object.is in the probe realm",
+                emit: "",
+            },
             Self::ParameterReturn(_) => ReviewedObservation {
                 marker: "return-outside-identity",
                 observation: "exact on a normal completion: Object.is(result, original argument at the claimed index) is false; object contents and throwing calls are not observed",
@@ -604,7 +631,7 @@ impl Observation {
     fn sample_tuples(self, signatures: &[typefacts::SelectedSignature]) -> Vec<Vec<String>> {
         match self {
             Self::ParameterReturn(index) => identity_sample_tuples(signatures, index),
-            Self::NotCallable => Vec::new(),
+            Self::NotCallable | Self::DefaultLibraryAlias(_) => Vec::new(),
             Self::DescribedCallbacks(_) => sample_tuples_with(signatures, true),
             Self::DescribedReads(mask) => reads_sample_tuples(signatures, mask),
             _ => sample_tuples(signatures),
@@ -621,6 +648,9 @@ impl Observation {
             }
             Self::NotCallable => {
                 "no call is sampled: the observation is typeof of the exported value in the probe realm, so a value that is callable only through a construct signature the checker did not see, or only in another realm, is not observed"
+            }
+            Self::DefaultLibraryAlias(_) => {
+                "no call is sampled: the observation compares the exported value with the named default-library member by Object.is in the probe realm. It cannot see a realm whose built-in differs from the probe realm's, and it says nothing about what the member does -- that the member is safe to close these domains on is the certifier's reviewed decision, not this observation's"
             }
             Self::ParameterReturn(_) => {
                 "identity samples use distinct object/callable identities and vary the returned slot separately; at most twelve tuples per overload, no variadic tail or structural object construction; throwing-only runs are incomplete and cannot satisfy the veto"
@@ -786,6 +816,9 @@ fn module_source(
     if observation == Observation::NotCallable {
         return not_callable_module_source(specifier, export);
     }
+    if let Observation::DefaultLibraryAlias(index) = observation {
+        return default_library_alias_module_source(specifier, export, index);
+    }
     if let Observation::DescribedCallbacks(mask) = observation {
         return described_callbacks_module_source(specifier, export, mask, signatures);
     }
@@ -798,6 +831,7 @@ fn module_source(
         Observation::EmptyCallbacks => "callbacks",
         Observation::ParameterReturn(_)
         | Observation::NotCallable
+        | Observation::DefaultLibraryAlias(_)
         | Observation::DescribedCallbacks(_)
         | Observation::DescribedReads(_) => unreachable!(),
     };
@@ -1091,6 +1125,45 @@ fn not_callable_module_source(specifier: &str, export: &str) -> String {
          }}\n",
         specifier_json = serde_json::to_string(specifier).unwrap_or_default(),
         export_json = serde_json::to_string(export).unwrap_or_default(),
+    )
+}
+
+fn default_library_alias_module_source(specifier: &str, export: &str, index: u16) -> String {
+    // The index was assigned from the reviewed table, so this cannot name a
+    // member the certifier has not reviewed. A slot out of range would be a
+    // construction bug rather than a claim about the package, and refusing to
+    // emit a module is the fail-closed answer: the gate stays incomplete and
+    // the candidate stays withheld.
+    let Some(qualified) = super::type_facts::reviewed_default_library_alias(index) else {
+        return String::new();
+    };
+    let (container, member) = qualified
+        .split_once('.')
+        .expect("a reviewed alias is spelled Container.member");
+    format!(
+        "// Synthesized veto (ADR 0103) for the empty `reads`, `creates` and\n\
+         // `callbacks` domains of `{export}`.\n\
+         // The producer states this export *is* `{qualified}`, by identity. This\n\
+         // observes that identity directly -- one Object.is, no sample -- and emits\n\
+         // only if the runtime value is some other function after all.\n\
+         // It observes, it never proves: the stated identity fact is the proof, and\n\
+         // that `{qualified}` may close these domains is a reviewed decision made in\n\
+         // the certifier, not here.\n\
+         import * as subjectModule from {specifier_json};\n\
+         \n\
+         const subject = subjectModule[{export_json}];\n\
+         \n\
+         export async function runProbeSession(_session, harness) {{\n\
+         \x20 harness.emit({{ marker: \"call\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 const builtin = typeof {container} === \"undefined\" ? undefined : {container}[{member_json}];\n\
+         \x20 if (builtin === undefined || !Object.is(subject, builtin)) {{\n\
+         \x20   harness.emit({{ marker: \"alias-identity\", kind: \"call\", phase: \"enter\" }});\n\
+         \x20 }}\n\
+         \x20 harness.emit({{ marker: \"call\", kind: \"call\", phase: \"exit\" }});\n\
+         }}\n",
+        specifier_json = serde_json::to_string(specifier).unwrap_or_default(),
+        export_json = serde_json::to_string(export).unwrap_or_default(),
+        member_json = serde_json::to_string(member).unwrap_or_default(),
     )
 }
 

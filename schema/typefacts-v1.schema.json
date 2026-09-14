@@ -803,6 +803,7 @@
         "callArgumentPremises": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/callArgumentPremise" } },
         "primitiveCompletion": { "type": "boolean" },
         "notCallableValue": { "$ref": "#/$defs/notCallableValue" },
+        "defaultLibraryAlias": { "$ref": "#/$defs/defaultLibraryAlias" },
         "complete": { "type": "boolean" },
         "openReasons": { "type": "array", "maxItems": 1000000, "items": { "type": "string" } }
       }
@@ -836,6 +837,16 @@
       "properties": {
         "kind": { "type": "string", "enum": ["primitive", "object"] },
         "type": { "type": "string" }
+      }
+    },
+    "defaultLibraryAlias": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["container", "member"],
+      "description": "The demanded export is a default-library member by identity (ADR 0103, handshake protocol 57): a const binding, never written in the file, whose initializer is a property access whose object and member both resolve to default-library symbols, with the member declared on the named container's interface and neither container nor member written, deleted, or escaping as anything but a read or a call. Stated beside the transcript's existing open reason rather than instead of it, because whether the named member is safe to close a call domain on is the consumer's reviewed decision: Object.keys invokes no caller callable, Array.prototype.map does, and the two are stated identically here. A consumer with no reviewed entry for the member must read this as not stated.",
+      "properties": {
+        "container": { "type": "string", "minLength": 1 },
+        "member": { "type": "string", "minLength": 1 }
       }
     },
     "callArgumentPremise": {

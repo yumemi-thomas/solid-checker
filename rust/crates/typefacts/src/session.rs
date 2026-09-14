@@ -3908,6 +3908,7 @@ mod tests {
             call_argument_premises: Vec::new(),
             primitive_completion: false,
             not_callable_value: None,
+            default_library_alias: None,
             complete: false,
             open_reasons: Vec::new(),
         }

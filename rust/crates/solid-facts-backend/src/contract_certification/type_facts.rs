@@ -418,6 +418,7 @@ pub struct VerifiedTypeFactsEvidence {
     /// synthesis, for the same reason as `call_signatures`: a fact here proves
     /// nothing and binds nothing; the census reads it from the transcript.
     not_callable_exports: std::collections::BTreeMap<String, typefacts::NotCallableValue>,
+    default_library_aliases: std::collections::BTreeMap<String, typefacts::DefaultLibraryAlias>,
 }
 
 impl VerifiedTypeFactsEvidence {
@@ -538,6 +539,16 @@ impl VerifiedTypeFactsEvidence {
     /// transcript stated, if any.
     pub(super) fn not_callable_value(&self, export: &str) -> Option<&typefacts::NotCallableValue> {
         self.not_callable_exports.get(export)
+    }
+
+    /// ADR 0103: the default-library alias fact the export's implementation
+    /// transcript stated, if any. Present only for a member the certifier has
+    /// reviewed, so a caller reading it may rely on the reviewed properties.
+    pub(super) fn default_library_alias(
+        &self,
+        export: &str,
+    ) -> Option<&typefacts::DefaultLibraryAlias> {
+        self.default_library_aliases.get(export)
     }
 
     pub fn witness_bindings(&self) -> &[WitnessBinding] {
@@ -2913,6 +2924,7 @@ pub(super) fn verify_live_answer(
         session_evidence_root: identity.evidence_root().to_owned(),
         call_signatures: std::collections::BTreeMap::new(),
         not_callable_exports: std::collections::BTreeMap::new(),
+        default_library_aliases: std::collections::BTreeMap::new(),
     })
 }
 
@@ -3125,6 +3137,7 @@ fn verify_live_export_value_answer_with_project_census(
     let mut bindings = Vec::with_capacity(expected_ids.len());
     let mut call_signatures = std::collections::BTreeMap::new();
     let mut not_callable_exports = std::collections::BTreeMap::new();
+    let mut default_library_aliases = std::collections::BTreeMap::new();
     let mut census_refusals = Vec::<CensusRefusal>::new();
     for (index, scheduled) in schedule.export_values.iter().enumerate() {
         let transcript = &answer.transcripts[index];
@@ -3141,6 +3154,17 @@ fn verify_live_export_value_answer_with_project_census(
         {
             let (_, export) = proof_artifact_export(&proof.subject);
             not_callable_exports
+                .entry(export.to_owned())
+                .or_insert_with(|| fact.clone());
+        }
+        // ADR 0103: collected only for a reviewed member, so every later
+        // reader of this map is looking at one whose properties were audited.
+        if let Some(proof) = scheduled.proof_demands.first()
+            && let Some(fact) = stated_default_library_alias(transcript)
+            && reviewed_default_library_alias_index(&fact.qualified_name()).is_some()
+        {
+            let (_, export) = proof_artifact_export(&proof.subject);
+            default_library_aliases
                 .entry(export.to_owned())
                 .or_insert_with(|| fact.clone());
         }
@@ -3223,6 +3247,7 @@ fn verify_live_export_value_answer_with_project_census(
         session_evidence_root: identity.evidence_root().to_owned(),
         call_signatures,
         not_callable_exports,
+        default_library_aliases,
     })
 }
 
@@ -3705,7 +3730,15 @@ fn verify_export_value_family(
                     reason: "domain-exhaustiveness demand has no closure subject".into(),
                 });
             };
-            if let Some(vacuous) =
+            if let Some(aliased) =
+                census_default_library_alias_export(plan, proof, &subject.path, transcript, &open)?
+            {
+                // ADR 0103: the export *is* a reviewed default-library member,
+                // by identity, so `reads`, `creates` and `callbacks` close on
+                // the producer's stated fact. `returns` is not closed here and
+                // falls through to the arms below.
+                sites.extend(aliased);
+            } else if let Some(vacuous) =
                 census_not_callable_export(plan, proof, &subject.path, transcript, &open)?
             {
                 // ADR 0099: the export's value cannot be invoked, so every
@@ -3998,6 +4031,194 @@ fn stated_not_callable_value(
         && implementation.open_reasons[0].as_ref() == "valueNotCallable";
     (!implementation.complete && only_reason && implementation.declaration.is_some())
         .then_some(fact)
+}
+
+/// ADR 0103: the members a default-library alias may close a call domain on.
+///
+/// **Membership is a reviewed act, not a list of things that looked safe.**
+/// Every entry was read against three questions, and an entry is admitted only
+/// when all three answer no:
+///
+///   1. Does it invoke a callable its caller supplied? `Object.keys` does not;
+///      `Array.prototype.map`, `Array.prototype.filter` and
+///      `Object.defineProperty` (which runs accessor descriptors) do, and are
+///      absent for that reason.
+///   2. Does it read anything but its arguments' own properties? Reading an
+///      argument's own property — which `Object.entries` does, invoking a
+///      getter the caller installed — is the *caller's* read under ADR 0034,
+///      and is not this package's. Reading ambient state is not, and is why
+///      `Date.now` and `Math.random` are absent: both read a source outside
+///      their arguments, and neither is a pure function of them.
+///   3. Can it run caller code through a trap? `JSON.stringify` calls
+///      `toJSON` on its argument, which is caller code, so it is absent
+///      despite looking pure.
+///
+/// A member outside this table leaves the fact unread and the transcript
+/// refusing exactly as it did before ADR 0103. Growing the table means
+/// answering the three questions for the new member, not noticing that a
+/// corpus row would close.
+const REVIEWED_DEFAULT_LIBRARY_ALIASES: &[&str] = &[
+    // Enumerate own enumerable keys/values/pairs. Invoke no caller callable.
+    // A getter on the argument is the caller's own code (ADR 0034).
+    "Object.keys",
+    "Object.entries",
+    "Object.values",
+    // Total numeric functions of their arguments.
+    "Math.floor",
+    "Math.ceil",
+    "Math.round",
+    "Math.trunc",
+    "Math.abs",
+    "Math.sign",
+    "Math.max",
+    "Math.min",
+    "Math.pow",
+    "Math.sqrt",
+    // Total predicates over one argument.
+    "Array.isArray",
+    "Number.isFinite",
+    "Number.isInteger",
+    "Number.isNaN",
+    "Object.is",
+];
+
+/// The reviewed alias at `index`, for the synthesized veto that has to name
+/// the member in generated source. `None` when the index is out of range,
+/// which is a construction bug and fails closed at the caller.
+pub(super) fn reviewed_default_library_alias(index: u16) -> Option<&'static str> {
+    REVIEWED_DEFAULT_LIBRARY_ALIASES
+        .get(usize::from(index))
+        .copied()
+}
+
+/// The index of `qualified` in the reviewed table, or `None` when the member
+/// is not reviewed. The index is what an [`super::synthesized_vetoes`]
+/// observation carries, so a veto can never name an unreviewed member.
+pub(super) fn reviewed_default_library_alias_index(qualified: &str) -> Option<u16> {
+    REVIEWED_DEFAULT_LIBRARY_ALIASES
+        .iter()
+        .position(|entry| *entry == qualified)
+        .and_then(|index| u16::try_from(index).ok())
+}
+
+/// ADR 0103: the default-library alias fact an export's implementation
+/// transcript states, exactly as the producer states it.
+///
+/// The producer states the fact *beside* the open reason it does not remove,
+/// so this accepts a transcript that is open with exactly one reason and that
+/// reason is one of the two the premise answers: `callSignatureNotUnique` for
+/// an overloaded member, `implementationUnavailable` for a body-less one. Any
+/// other shape — a complete transcript, a second open reason, a missing
+/// declaration — is a producer disagreement and reads as "not stated".
+fn stated_default_library_alias(
+    transcript: &ExportValueTranscript,
+) -> Option<&typefacts::DefaultLibraryAlias> {
+    let implementation = transcript.implementation.as_ref()?;
+    let fact = implementation.default_library_alias.as_ref()?;
+    let only_reason = implementation.open_reasons.len() == 1
+        && matches!(
+            implementation.open_reasons[0].as_ref(),
+            "callSignatureNotUnique" | "implementationUnavailable"
+        );
+    (!implementation.complete && only_reason && implementation.declaration.is_some())
+        .then_some(fact)
+}
+
+/// ADR 0103: close `reads`, `creates` or `callbacks` for an export that *is* a
+/// reviewed default-library member.
+///
+/// The export is the built-in, by identity. A reviewed member invokes no
+/// callable its caller supplied (`callbacks`), builds no reactive source
+/// (`creates`), and reads nothing but its arguments' own properties, which is
+/// the caller's read under ADR 0034 (`reads`).
+///
+/// `returns` is deliberately **not** closed. These members do return values —
+/// `Object.keys` returns a fresh array — and whether that value is one the
+/// `returns` domain denies is a different question this premise does not
+/// answer. Leaving it open costs nothing: no corpus row's `returns` is
+/// withheld behind this fact.
+///
+/// `Ok(None)` when the demand is not such a case, so the other census arms run
+/// as before. The runtime half is the synthesized veto that observes
+/// `Object.is(subject, Container.member)` in the probe realm — an exact
+/// identity witness, not a sample ([`super::synthesized_vetoes`]).
+fn census_default_library_alias_export(
+    plan: &CertificationPlan,
+    proof: &ScheduledProofDemand,
+    path: &SemanticClaimPath,
+    transcript: &ExportValueTranscript,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+) -> Result<Option<Vec<String>>, TypeFactsCertificationError> {
+    let SemanticClaimPath::Domain(ClaimPath::Call(domain)) = path else {
+        return Ok(None);
+    };
+    if !matches!(
+        domain,
+        ClaimDomain::Reads | ClaimDomain::Creates | ClaimDomain::Callbacks
+    ) {
+        return Ok(None);
+    }
+    let Some(fact) = stated_default_library_alias(transcript) else {
+        return Ok(None);
+    };
+    let qualified = fact.qualified_name();
+    if reviewed_default_library_alias_index(&qualified).is_none() {
+        // Not a refusal of its own: the transcript is still open on its own
+        // reason, and this premise simply does not reach the member.
+        return Ok(None);
+    }
+    let implementation = transcript
+        .implementation
+        .as_ref()
+        .expect("stated_default_library_alias read the implementation transcript");
+    let (artifact_case, export_name) = proof_artifact_export(&proof.subject);
+    let export = plan
+        .candidates
+        .proposal()
+        .artifact_case(artifact_case)
+        .and_then(|case| case.exports.get(export_name))
+        .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason: "demanded implementation export is absent from the candidate".into(),
+        })?;
+    let empty = match domain {
+        ClaimDomain::Callbacks => export.callbacks().items().is_empty(),
+        other => export
+            .operation_claim(*other)
+            .is_some_and(|claim| claim.items().is_empty()),
+    };
+    if !empty {
+        return Err(open(
+            "a default-library alias closes only an empty enumeration, and this proposal names an operation",
+        ));
+    }
+    let (runtime_path, runtime_export, _, _) =
+        plan.verified_exports
+            .runtime_binding(export_name)
+            .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+                demand: proof.id.clone(),
+                reason: "demanded export has no exact identifier runtime binding".into(),
+            })?;
+    let declaration = implementation
+        .declaration
+        .as_ref()
+        .expect("stated_default_library_alias required a declaration");
+    let actual_path = declaration.location.path.replace('\\', "/");
+    let expected_suffix = format!("/{}", runtime_path.trim_start_matches("./"));
+    if implementation.query_name.as_ref() != runtime_export
+        || !actual_path.ends_with(&expected_suffix)
+    {
+        return Err(TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason:
+                "default-library alias fact does not match the snapshot-replayed export binding"
+                    .into(),
+        });
+    }
+    require_census_decides_closure(proof, path, ClosureCensus::Implementation)?;
+    Ok(Some(vec![format!(
+        "typefacts-value-export:default-library-alias:{qualified}"
+    )]))
 }
 
 /// ADR 0099: close a proposable call domain vacuously for an export whose value
