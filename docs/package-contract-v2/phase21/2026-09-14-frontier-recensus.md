@@ -214,6 +214,70 @@ parameter join **and** a hop through a package-own result — two premises
 stacked, not the one the ranking implied. Anything costed off the node-kind
 table above is costed too low.
 
+## What the eighty rows are actually blocked on (fixtured 2026-09-14)
+
+The section above concluded that `combineStyle`'s eighty rows need "the
+parameter join **and** a hop through a package-own result — two premises
+stacked". **That is wrong, and the error was a bad fixture.** The probe behind
+it wrote the helper as `function toObject(s) { return { y: 2 }; }` — a literal
+returned directly. `combineStyle`'s real helper returns a *binding*:
+
+~~~js
+function stringStyleToObject(style) {
+  const object = {};
+  while (match = re.exec(style)) { object[match[1]] = match[2]; }
+  return object;                    // an unwritten, data-only literal binding
+}
+~~~
+
+which is exactly what ADR 0093's local-literal-result premise requires. Probed
+against the real shape, the producer states:
+
+~~~
+[0] root="parameter"                 (...a)
+[1] root="parameter-or-own-result"   (...b)   localLiteralResults=1
+~~~
+
+**The producer already roots it.** ADR 0093 closed this shape in 2026-09-12, and
+nothing in the Type Facts layer refuses these rows.
+
+### The blocker is that the `reads` census has no call walk
+
+`parameter-or-own-result` is consumed in exactly one place — `census_transcript`'s
+*deferred* arm, which runs after the call walk has demanded the callees'
+transcripts. It has to be deferred: confirming the premise means reading
+`stringStyleToObject`'s own transcript. And `census_reads_domain` says in its
+own comment why it cannot go there:
+
+> No deferral. The `creates` census holds a coercion or a local literal result
+> back until its call walk has demanded the callees' transcripts; **this census
+> has no call walk**, so a form it cannot decide here it cannot decide at all.
+
+So ADR 0093 is implemented for `creates` and unreachable for `reads`. The
+eighty rows need the `reads` census to demand one hop of callee transcripts —
+not a new premise, and nothing at all in the producer.
+
+That capability is shared. The `call-result` refusals — `getComputedStyle`,
+`isContainingBlock`, `isOverflowElement`, `sortBy`, 26 rows — are the same
+missing hop, and so is any later premise whose confirmation lives in a callee.
+
+### The two-parameter join, costed
+
+The other candidate, measured at **40 rows** (`toObserver`'s
+`(isObserver ? nextHandler.error : errorHandler)`), refuses as
+`not-a-reference`: the subject is a ConditionalExpression, so the root walk
+stops before it looks at the arms. Both arms do root at `parameter` — a
+property chain on a parameter roots, and parentheses are transparent — but at
+**different slots**, and the accessor family's wire carries a single
+`subjectParameter`. Admitting it therefore needs a new plural field, a new
+derivation, a handshake protocol bump, a matched producer/checker rebuild and a
+corpus re-pin: the campaign's highest ceremony for its smallest gain, against
+ADR 0103's 148 rows, 0104's 124, 0105's 80 and 0106's 62.
+
+**Recommendation: the call walk, not the join.** It is checker-only, it closes
+80 rows against 40, it needs no protocol bump, and it unlocks a class rather
+than a shape.
+
 ## Coverage
 
 630 of 1,470 rows (43%) re-censused across six clusters. `motion-utils` (234)
