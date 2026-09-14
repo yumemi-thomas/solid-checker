@@ -278,9 +278,62 @@ ADR 0103's 148 rows, 0104's 124, 0105's 80 and 0106's 62.
 80 rows against 40, it needs no protocol bump, and it unlocks a class rather
 than a shape.
 
+## The tail is recipe work, at one recipe per row (2026-09-14)
+
+Six tail clusters, all on the `reused-proposal` root-row lane, all validated
+against the pin's artifact cases:
+
+| cluster | rows | decidable | refused |
+| --- | ---: | ---: | ---: |
+| `@corvu-next/utils@0.1.5` | 24 | 21 | 3 |
+| `@kobalte/utils@2.0.0-alpha.0` | 24 | 20 | 4 |
+| `@tanstack/devtools-ui@0.7.1` | 23 | 21 | 2 |
+| `@tanstack/devtools-utils@0.7.0` | 21 | 15 | 6 |
+| `@solidjs/meta@0.29.4` | 16 | 11 | 5 |
+| `@kobalte/solidbase@0.6.13` | 14 | 2 | 12 |
+| | **122** | **90 (74%)** | 32 |
+
+The head clusters measured 10% decidable. The tail measures **74%**, and that
+is structural rather than noise: the head is a few closures of high
+multiplicity each blocked by one premise, the tail is many distinct closures
+each wanting its own veto.
+
+### What it costs, measured
+
+**93 decidable rows across 93 distinct (artifact case, claim) pairs — 1.0 rows
+per recipe.**
+
+Against ADR 0107's `combineStyle`, which was 90 rows in 8 recipes, 11.3 to 1.
+The same instrument, the same domain, a fourteenfold difference in what a
+recipe is worth. A hand-authored veto is not a fixed-value unit of work, and
+any plan that prices recipes without this ratio is pricing the wrong thing.
+
+Each of the 93 needs its own reading of the export's source, its own samples
+measured against the installed package, and its own `NEVER EMITS` declaration
+in the roster test. None of that is shared between them.
+
+### The recipe floor, stated
+
+This is the decision the opening plan deferred to a fifth step, now measurable
+rather than estimated. The remaining frontier splits into:
+
+- **Premise-shaped**, high multiplicity: `motion-utils` 234 rows in 9 closures,
+  `property-access-unknown-accessor` ~212 across three shapes,
+  `implementationUnavailable` 124. Expensive per premise, cheap per row.
+- **Recipe-shaped**, unit multiplicity: the tail, at one recipe per row. Cheap
+  per unit, and exactly as expensive per row as it is large.
+
+Nothing makes the second class cheaper — no premise has leverage over a closure
+that appears once. Writing them is a decision about how much hand-authoring the
+frontier number is worth, not a technical question, and it should be taken
+deliberately rather than drifted into one cluster at a time.
+
 ## Coverage
 
-630 of 1,470 rows (43%) re-censused across six clusters. `motion-utils` (234)
+After ADR 0107 closed 90, the frontier is 1,380. 752 of those rows are
+re-censused across twelve clusters (630 in the head six, 122 in the tail six);
+596 remain un-censused, in a genuine tail whose largest cluster is 31 rows.
+Originally, before ADR 0107: `motion-utils` (234)
 is settled independently by a focused producer fixture and needs no re-census;
 with it, **864 of the 1,470 — 59% — have a measured cause**. What remains
 un-censused is the long tail: `@kobalte/utils` (55 rows in 55 closures),
