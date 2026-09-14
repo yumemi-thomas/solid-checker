@@ -465,6 +465,20 @@ from 88 s to 31 s alone. Corpus-wide the gates are about 400 thread-seconds of
 a roughly 2,000 CPU-second run; the census is a policy choice, not a tuning
 knob, and is discussed in docs/precision-backlog.md.
 
+A third fact (2026-09-14): the pinned 1,316 s run was four rows' serial
+recovery chains, not the drain. The growing-prefix case selection and the
+per-session re-hash of the pinned images are gone (ADR 0059 amended, ADR
+0102); `phase21/2026-09-14-corpus-wall-levers.md` under
+docs/package-contract-v2/ has the decomposition and the single-row
+before/after. The runner hands certification children
+`SOLID_CHECKER_RECOVERY_TRIAL_CONCURRENCY` (recovery trials of one row side by
+side, set to 4). `SOLID_CHECKER_CERTIFICATION_PARALLELISM` caps the verifier's
+own fan-out and exists for hosts that want it; the runner deliberately leaves
+it unset, because a cap sized to a child's core share serialized the tail row
+(see the phase note's second pass). Note that `--timeout`
+bounds certification as well as generation, so a single-row measurement of a
+recovery row needs the Makefile's 1800.
+
 `contract certify` no longer regenerates the proposal inside the benchmark:
 generation runs under the probe's certification importer and its emission
 (document, plan, refusal audit and the new `.certification-inputs.json`

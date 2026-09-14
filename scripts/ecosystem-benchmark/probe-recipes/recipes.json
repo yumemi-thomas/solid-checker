@@ -5817,6 +5817,228 @@
         "The harness realm defines no `window`, so `isNode`, `isElement` and `isHTMLElement` all answer false and these samples exercise only the non-DOM branch of each export; the sample says nothing about the branch a browser realm takes",
         "NEVER EMITS: `read-operation`. The export reads the host `CSS` global once and memoizes the answer in a module-local binding; neither is a reactive source this package owns."
       ]
+    },
+    {
+      "claimId": "claim:v1:sha256:8c87481c1be5b5b52833c72b4909a4db689f52bb84e352ddd3fc9293c048e51f",
+      "module": "corvu-utils-create-controllable-signal-default-reads-0702583f.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The returned accessor and setter are exercised, but what they read when invoked -- the signal this export built, or the caller's `value` accessor -- happens at the caller's invocation and is not a read at this export's call event",
+        "NEVER EMITS: `read-operation`. At its call event the export reads `initialValue` off the props object its caller supplied, which is the caller's own (ADR 0034), and builds a signal; building a source is not reading one."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:b3010bd67e941e5292db1371a9041f77339baa5f9b98f1e33135016cd49a7d44",
+      "module": "corvu-utils-create-keyed-context-create-reads-0cf47e45.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The keyed-context registry is module state that outlives a call, so these samples use keys private to this module and say nothing about a key another consumer registered",
+        "NEVER EMITS: `read-operation`. The export reads a module-local `Map` this package owns, which is not a reactive source -- no proxy, no getter, no accessor -- and returns a context `solid-js` built, which is that package's claim."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:109d46a6fca3998811a0473a3665bf238e6519e3d9585f519de39ba88b99e8d8",
+      "module": "corvu-utils-create-keyed-context-get-reads-0cf47e45.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The keyed-context registry is module state that outlives a call, so these samples use keys private to this module and say nothing about a key another consumer registered",
+        "NEVER EMITS: `read-operation`. The export performs one `Map.get` on a module-local registry this package owns; a `Map` is not a reactive source."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:19ef7cbbc2d862b96eaffe64666f89f4b8f0d29cec4250d54254bb8cef4e8ef6",
+      "module": "corvu-utils-create-keyed-context-use-reads-0cf47e45.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The keyed-context registry is module state that outlives a call, so these samples use keys private to this module and say nothing about a key another consumer registered",
+        "Sampled outside any provider, so the context read returns the registered default; the value a provider would supply is not covered",
+        "NEVER EMITS: `read-operation`. The export reads a module-local `Map` this package owns and then calls `solid-js`'s `useContext`; the context it observes is `solid-js`'s source, not one this package owns."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:6ec28e332594c333375954bd5170fa4d19da424e4339717503eef51862e0c017",
+      "module": "corvu-utils-create-keyed-context-create-reads-1116a60f.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The keyed-context registry is module state that outlives a call, so these samples use keys private to this module and say nothing about a key another consumer registered",
+        "NEVER EMITS: `read-operation`. The export reads a module-local `Map` this package owns, which is not a reactive source -- no proxy, no getter, no accessor -- and returns a context `solid-js` built, which is that package's claim."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:7e2bb597ca3ee673609937400cd68255b39361cc2d803a751e1d92b198c3b8f2",
+      "module": "corvu-utils-create-keyed-context-get-reads-1116a60f.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The keyed-context registry is module state that outlives a call, so these samples use keys private to this module and say nothing about a key another consumer registered",
+        "NEVER EMITS: `read-operation`. The export performs one `Map.get` on a module-local registry this package owns; a `Map` is not a reactive source."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:6f0d8b6f172177f033b66774c9023d4713dcdd7e52358cd68edf76cd2f9e5aaf",
+      "module": "corvu-utils-create-keyed-context-use-reads-1116a60f.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The keyed-context registry is module state that outlives a call, so these samples use keys private to this module and say nothing about a key another consumer registered",
+        "Sampled outside any provider, so the context read returns the registered default; the value a provider would supply is not covered",
+        "NEVER EMITS: `read-operation`. The export reads a module-local `Map` this package owns and then calls `solid-js`'s `useContext`; the context it observes is `solid-js`'s source, not one this package owns."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:45f61527130e895846200933fb5cb642abafd2d6c640a86a519eb37a30c1bee6",
+      "module": "corvu-utils-create-once-default-reads-1b08bdc4.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The returned closure is exercised to show the memo is built once, but what it reads when invoked is that closure's behavior at its caller's invocation, not a read at this export's call event",
+        "NEVER EMITS: `read-operation`. Calling the export only builds and returns a closure over two plain locals; it does not invoke the supplied function and reads nothing."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:329250850db8027450ea1f910ce8474fbd638b15b290f59af48db79c32e71196",
+      "module": "corvu-utils-create-once-default-reads-9b53a55f.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The returned closure is exercised to show the memo is built once, but what it reads when invoked is that closure's behavior at its caller's invocation, not a read at this export's call event",
+        "NEVER EMITS: `read-operation`. Calling the export only builds and returns a closure over two plain locals; it does not invoke the supplied function and reads nothing."
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:0a5899b240203d89b21dfd6ccc65dc2268aca5ce9584156a130c3a60970fe750",
+      "module": "corvu-utils-create-controllable-signal-default-reads-a18d59ef.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over a small export; they can contradict the closure but cannot establish it, and the implementation census remains the proof",
+        "The returned accessor and setter are exercised, but what they read when invoked -- the signal this export built, or the caller's `value` accessor -- happens at the caller's invocation and is not a read at this export's call event",
+        "NEVER EMITS: `read-operation`. At its call event the export reads `initialValue` off the props object its caller supplied, which is the caller's own (ADR 0034), and builds a signal; building a source is not reading one."
+      ]
     }
   ]
 }

@@ -1,5 +1,55 @@
 # Precision backlog
 
+## Ten corvu `./create/*` `reads` recipes: 164 rows (2026-09-14)
+
+The first batch authored from a pass-2 census instead of a reading of the
+source, and the two rows that census ranked highest — both of which the depth
+plan had guessed would wait on a withheld `solid-js` claim.
+`@corvu/utils@0.4.2` `./create/keyedContext` (`createKeyedContext`,
+`getKeyedContext`, `useKeyedContext`, two artifact cases, 96 rows),
+`./create/once` and `./create/controllableSignal` (`default`, two cases each,
+68 rows). **All 164 rows close**; the `solid-js` wait does not materialize, and
+`createContext`, `useContext`, `createMemo` and `createSignal` all resolve as
+dependency claims.
+
+Corpus effect (release binary, 418 rows, `--timeout 1800`): certified closure
+entries 10,352 -> 10,420 (+68); `reads`-closed entries 6,192 -> 6,356 (+164);
+`no recipe in corpus` `reads` detail rows 2,090 -> 1,926; visible `reads` census
+refusals unchanged at 225; no row below the pin, no status move; wall 1,198 s ->
+1,316 s. Cumulatively with the carried batch earlier the same day, the
+recipe-less `reads` frontier has gone 2,242 -> 1,926, every targeted row
+closing.
+
+Three preconditions, each of which could have produced a plausible wrong
+recipe, recorded because none is obvious from the material:
+
+- The audit names a source file only for a candidate the census *refuses*, so
+  the `./create/*` subpath behind a decidable `default` case has to be
+  recovered another way: `controllableSignal` from the `callbacks`-domain
+  refusal text on the same cases, and `once` from a falsifiable test —
+  `@corvu/disclosure@0.2.2`'s closure imports exactly `controllableSignal`,
+  `keyedContext` and `once`, and all four `default` cases appear in it, so none
+  is `register`.
+- The graph-lane certification that reproduces the corpus cases also reproduces
+  the claim ids byte for byte, which is what lets a recipe validated in a
+  scratch corpus be the one checked in.
+- Closure was verified in that scratch corpus *before* anything landed: ten
+  closed, none withheld. Given the `solid-primitives-utils` precedent of
+  2026-09-11, decidable is not the same as closing, and the difference is one
+  certification away.
+
+One recipe defect the validation caught: sharing keyed-context registry keys
+between two case variants made `getKeyedContext`'s "unregistered key" assertion
+fail whenever both ran in one realm. The harness isolates realms, so it would
+likely never have fired in the corpus — but an assertion that depends on
+isolation stops testing what it claims to. Keys now carry the artifact case.
+
+What is left on the Tier A frontier after this: `@solid-primitives/refs`
+(24 gainable of 36) and `@solid-primitives/scheduled` (18 of 36), then the
+census premises of Tier B. `./immutable` (22) and `combineStyle` (66) remain
+zero-gain census refusals, and `refs@3.0.0-next.0` (24) remains unmeasured
+behind the `motion-utils` snapshot-replay blocker.
+
 ## Twenty-four carried and DOM-predicate `reads` recipes (2026-09-14)
 
 The first two rows of the 2026-09-13 depth plan's Tier A, both already known
@@ -20634,3 +20684,66 @@ export and importer controls. Verification and the public audit projection are
 linked from ADR 0098. The repeated creates refusal inventory also establishes
 that the old 174-entry depth-exhaustion estimate was not an actual matching
 refusal count; no proof-search bound was raised.
+
+## The corpus wall: recovery subdivision and fingerprinted pinned images (2026-09-14)
+
+The pinned corpus run is 1,316 s for 418 rows with a 1.8 s median because four
+rows take about 1,200 s each, and each of those is one serial chain inside
+`witnessAcquisition`. Measured on `solid-js@1.9.14` in isolation with
+`SOLID_CHECKER_TIMINGS=1` (308 s alone; 1,245 s under corpus load): 36 native
+transactions, because the verified-retained-floor path and independent
+recovery for sets of 32 cases and under certified a growing prefix, one
+transaction per case, each transaction re-acquiring Type Facts for every case
+in the prefix (292 producer launches) and re-running every probe gate (292
+batches, 2,190 censuses); and 181 of about 230 census CPU-seconds spent
+re-hashing the pinned Node executable, the verifier image and the Type Facts
+image, which never changed.
+
+What changed (ADR 0059 amended, ADR 0102, and
+`docs/package-contract-v2/phase21/2026-09-14-corpus-wall-levers.md` for the
+full decomposition): every selection path subdivides, starting at the halves
+of the set that just refused, with trials of one selection running side by side
+up to `SOLID_CHECKER_RECOVERY_TRIAL_CONCURRENCY` (default 1; the runner sets
+4); the three pinned images are hashed once per process and re-asserted by
+inode fingerprint on every census and pin check; a workspace copies only the
+recipes its batch schedules; the `private-dependency:*` digests derive from
+the single `private-node-modules` walk; certification children receive
+`SOLID_CHECKER_CERTIFICATION_PARALLELISM`, their share of the cores.
+
+Same row, same host, release binary: 308 s → 46 s; floor transactions 33 → 14;
+producer launches 292 → 44; censuses 2,190 → 636 and census time 123 s → 31 s.
+Outcome identical — 129 certified closures over 61 cases with the same
+per-domain split, the same 39 published cases and 2 refusals, the same 64
+`censusRefused` withholdings with reason texts identical modulo the temp path.
+This resolves the "left alone" item of 2026-09-06 above by decision rather than
+by tuning: what ADR 0102 gives up is a writer that can rewrite bytes and
+restore ctime, which is root's, not the probe's.
+
+What remains, in order of size: each row certifies its dependency graph nodes
+into its own catalog, so every corvu-family row re-certifies `solid-js`'s 61
+cases and `@corvu/utils` (a run-shared dependency catalog is an ADR, since it
+changes which receipts a publication depends on); workspace materialization
+rewrites the snapshot per batch; the `private-node-modules` and
+`recipe-modules` trees are still hashed from bytes, deliberately. Full corpus
+(`make ecosystem-regression` against the 1,316 s pin): wall 829 s, summed row
+time 15,462 s → 9,359 s, all 418 rows identical to the pin on class, status,
+certified closures, withheld count, published recovery cases and coverage. The
+first full run had found a real defect the single-row run could not: the
+graph-lane request file was named by its first case, which every trial of a
+retained-floor selection shares, so concurrent trials handed one verifier
+another's planning and two rows lost published cases to a graph node they did
+not depend on; both native lanes now number their request files per
+execution. The wall is now the `corvu@0.7.2` graph row.
+
+Second pass, same day, on that row (phase note § "Second pass"): the
+parallelism cap the first pass introduced was 1 for a child sharing fourteen
+cores with thirteen others and serialized the tail row's 343 gate batches, so
+the runner no longer sets it; the recipe corpus was re-read and re-hashed once
+per node per gating pass and now goes through the fingerprint memo with the
+per-node re-gating on the bounded pool; and ADR 0102 is extended to the
+private trees, so a census between sessions is a stat walk that re-hashes only
+files whose fingerprint moved. `corvu@0.7.2` alone: 276 s → 220 s, pass-10
+gate wall 165 s → 95 s, summed census 901 s → 401 s under fourteen walkers,
+same 1,342 certified closures and 964 withheld. Full corpus: 829 s → 647 s,
+all 418 rows identical to the pin. What remains of that row is metadata churn
+from writing and removing a private tree per batch.

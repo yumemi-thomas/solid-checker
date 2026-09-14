@@ -24,10 +24,20 @@ use std::sync::{
 
 /// The worker count for `jobs` independent units: one per available core, and
 /// never more than there are units.
+///
+/// `SOLID_CHECKER_CERTIFICATION_PARALLELISM` caps the core count. A harness
+/// that already runs many certifications side by side (the ecosystem runner
+/// holds up to twenty) sets it to each child's share, so twenty children do
+/// not each fan out to every core and contend for the same fourteen.
 #[must_use]
 pub(super) fn workers_for(jobs: usize) -> usize {
-    std::thread::available_parallelism()
-        .map_or(1, usize::from)
+    let cores = std::thread::available_parallelism().map_or(1, usize::from);
+    let configured = std::env::var("SOLID_CHECKER_CERTIFICATION_PARALLELISM")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<usize>().ok())
+        .filter(|value| *value > 0);
+    configured
+        .map_or(cores, |cap| cap.min(cores))
         .min(jobs)
         .max(1)
 }

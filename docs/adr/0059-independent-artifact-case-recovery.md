@@ -6,12 +6,27 @@ supports selecting those independent cases for a new value-only publication.
 
 The complete proposal is tried first. Following a native proof refusal, at most
 1,024 artifact cases may be considered, matching the contract document limit.
-Up to 32 cases, each candidate is verified together with all cases selected so
-far. Larger selections use binary subdivision of refused batches. A successful
-batch supplies selection hints only; the final union receives another complete
-native transaction, including duplicate and conflict checks. Subdivision uses
-at most 2 × case count native transactions including the initial and final
-transactions. Trial receipts never become inputs. Empty successful selections,
+Every selection uses binary subdivision of refused batches, starting at the two
+halves of the set that just refused. A successful batch supplies selection
+hints only; the final union receives another complete native transaction,
+including duplicate and conflict checks. Subdivision uses at most 2 × case
+count native transactions including the initial and final transactions.
+
+*Amended 2026-09-14.* Sets of 32 cases and under originally verified each
+candidate together with every case selected so far. That growing prefix spent
+one native transaction per case and re-certified every accepted case inside
+each of them: the 31 retained cases of `solid-js@1.9.14` cost 33 transactions
+and 292 Type Facts acquisitions, and that one row's serial chain was the
+ecosystem corpus's 20-minute wall. All three selection paths — independent
+recovery, the retained-proposal floor and its non-retained remainder, and the
+ADR 0070 prepared-set selection — now share one subdivision
+(`selectBySubdivision` in packages/cli/scripts/retained-proposal-graphs.mjs).
+Trials of one selection may run side by side up to
+`SOLID_CHECKER_RECOVERY_TRIAL_CONCURRENCY` (default 1, so trial order stays
+deterministic; the ecosystem runner sets 4 for certification children); the
+accepted and refused sets are sorted by case index, so the selection does not
+depend on how trials were scheduled, and every trial still writes its own
+private catalog and request file. Trial receipts remain hints only. Trial receipts never become inputs. Empty successful selections,
 non-proof failures and final publication failures remain errors. A destination
 that already existed at transaction entry cannot be replaced by a smaller
 selection through this lane.

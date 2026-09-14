@@ -810,6 +810,11 @@ fn run_probe_gates_inner(
     } = reproduced;
     let environment = probe_environment(&node, &node_version, &requested, &reproduction, &observed);
     let runtime_plan = plan.runtime_probe_plan(schedule, &corpus, environment.clone())?;
+    let scheduled_claims = runtime_plan
+        .sessions()
+        .iter()
+        .map(|session| session.claim_id().as_str().to_owned())
+        .collect::<BTreeSet<String>>();
 
     let workspace_inputs = PrivateWorkspaceInputs {
         plan,
@@ -824,6 +829,7 @@ fn run_probe_gates_inner(
         type_facts_pin,
         interpreter_conditions: &interpreter_conditions,
         dependencies: &dependencies,
+        scheduled_claims: &scheduled_claims,
     };
     let workspace_started = Instant::now();
     let workspace = if inert.is_some() {
@@ -2150,7 +2156,10 @@ fn verify_node_executable(path: &Path, pin: &ProbeHarnessPin) -> Result<String, 
             "the pinned Node executable must be a regular file".into(),
         ));
     }
-    let observed = hash_file(path).map_err(|error| {
+    // Once per process for the same inode: every batch of a transaction pins
+    // the same executable, and the fingerprint (see `pinned_bytes`) still
+    // forces a fresh hash when the bytes are rewritten or the file replaced.
+    let observed = super::pinned_bytes::fingerprinted_digest(path).map_err(|error| {
         ProbeHarnessError::NodeProvenance(format!("could not hash the Node executable: {error}"))
     })?;
     if observed != pin.node_executable_sha256 {
@@ -2490,11 +2499,15 @@ impl RecipeCorpus {
             }
         }
         let manifest_path = directory.join(RECIPE_CORPUS_MANIFEST);
-        let bytes = read_bounded_regular_file(&manifest_path, MAX_CORPUS_BYTES)
-            .map_err(|error| ProbeHarnessError::CorpusInvalid(error.to_string()))?;
-        let manifest: WireRecipeCorpus = serde_json::from_slice(&bytes).map_err(|error| {
-            ProbeHarnessError::CorpusInvalid(format!("invalid probe recipe corpus: {error}"))
-        })?;
+        // Read once per fingerprint (ADR 0102's discipline): the graph lane
+        // loads the corpus once per node per gating pass.
+        let manifest_file =
+            super::pinned_bytes::fingerprinted_read(&manifest_path, MAX_CORPUS_BYTES)
+                .map_err(|error| ProbeHarnessError::CorpusInvalid(error.to_string()))?;
+        let manifest: WireRecipeCorpus =
+            serde_json::from_slice(&manifest_file.bytes).map_err(|error| {
+                ProbeHarnessError::CorpusInvalid(format!("invalid probe recipe corpus: {error}"))
+            })?;
         if manifest.format != RECIPE_CORPUS_FORMAT
             || manifest.schema_version != RECIPE_CORPUS_SCHEMA_VERSION
         {
@@ -2522,10 +2535,12 @@ impl RecipeCorpus {
             }
             let file_name = single_relative_component(&entry.module)?;
             let module_path = directory.join(&file_name);
-            let module_bytes = read_bounded_regular_file(&module_path, MAX_RECIPE_BYTES)
-                .map_err(|error| ProbeHarnessError::RecipeProvenance(error.to_string()))?;
-            let construction = Digest::parse(format!("sha256:{:x}", Sha256::digest(&module_bytes)))
-                .expect("SHA-256 formatting is canonical");
+            let module_file =
+                super::pinned_bytes::fingerprinted_read(&module_path, MAX_RECIPE_BYTES)
+                    .map_err(|error| ProbeHarnessError::RecipeProvenance(error.to_string()))?;
+            let module_bytes = module_file.bytes.clone();
+            let construction =
+                Digest::parse(module_file.sha256.clone()).expect("SHA-256 formatting is canonical");
             let mut coverage_limitations = entry.coverage_limitations;
             coverage_limitations.sort();
             coverage_limitations.dedup();
@@ -2809,6 +2824,12 @@ struct PrivateWorkspaceInputs<'a> {
     /// [`reproduce_artifact_cases`] admitted.
     interpreter_conditions: &'a [String],
     dependencies: &'a BTreeMap<String, AuthenticatedDependency<'a>>,
+    /// The claim ids of the sessions this batch will launch. Only their recipe
+    /// modules are copied into the private tree: the corpus is loaded and
+    /// identified whole, but a workspace that carried every module of a
+    /// 276-recipe corpus for a handful of sessions hashed all of them on every
+    /// census (`recipe-modules`, a quarter of census CPU on a large row).
+    scheduled_claims: &'a BTreeSet<String>,
 }
 
 impl PrivateProbeWorkspace {
@@ -2829,6 +2850,7 @@ impl PrivateProbeWorkspace {
             type_facts_pin,
             interpreter_conditions,
             dependencies,
+            scheduled_claims,
         } = *inputs;
         let directory = create_private_directory("harness")?;
         // Refuse before anything is copied: every location outside the private
@@ -2856,6 +2878,9 @@ impl PrivateProbeWorkspace {
 
         let mut recipes = BTreeMap::new();
         for recipe in &corpus.recipes {
+            if !scheduled_claims.contains(&recipe.claim_id) {
+                continue;
+            }
             let target = recipes_directory.join(&recipe.file_name);
             write_private_file(&target, &recipe.bytes)?;
             recipes.insert(
@@ -3022,7 +3047,7 @@ impl PrivateProbeWorkspace {
             // The whole private `node_modules`, not just the package copy: a
             // run that adds a sibling package would otherwise be unwatched.
             (
-                "private-node-modules".to_owned(),
+                PRIVATE_NODE_MODULES_LABEL.to_owned(),
                 WatchedInput::Contents(modules_directory),
             ),
             (
@@ -3044,13 +3069,17 @@ impl PrivateProbeWorkspace {
                 "home-node-libraries".to_owned(),
                 WatchedInput::Contents(directory.join(".node_libraries")),
             ),
+            // Pinned images outside the private tree: hashed once per process
+            // and re-asserted by fingerprint on every census. Re-hashing the
+            // 117 MB Node executable between every launch was over half of all
+            // census CPU on a large row.
             (
                 "node-executable".to_owned(),
-                WatchedInput::Contents(node_executable.to_path_buf()),
+                WatchedInput::PinnedImage(node_executable.to_path_buf()),
             ),
             (
                 "type-facts-image".to_owned(),
-                WatchedInput::Contents(type_facts_pin.path().to_path_buf()),
+                WatchedInput::PinnedImage(type_facts_pin.path().to_path_buf()),
             ),
         ];
         // One entry per dependency copy, on top of the whole-tree
@@ -3067,7 +3096,7 @@ impl PrivateProbeWorkspace {
                 .filter(|(_, root)| **root != package_directory)
                 .map(|(name, root)| {
                     (
-                        format!("private-dependency:{name}"),
+                        format!("{PRIVATE_DEPENDENCY_LABEL_PREFIX}{name}"),
                         WatchedInput::Contents(root.clone()),
                     )
                 }),
@@ -3094,7 +3123,7 @@ impl PrivateProbeWorkspace {
         if let Ok(verifier) = std::env::current_exe() {
             watched.push((
                 "verifier-image".to_owned(),
-                WatchedInput::Contents(verifier),
+                WatchedInput::PinnedImage(verifier),
             ));
         }
         // ADR 0039: computed from the authenticated snapshots, never from the
@@ -3166,20 +3195,56 @@ impl PrivateProbeWorkspace {
         let mut census = BTreeMap::new();
         let timings = std::env::var_os("SOLID_CHECKER_TIMINGS").is_some();
         let mut per_label = Vec::new();
+        // The dependency copies sit inside the private `node_modules`, whose
+        // whole-tree label already reads every one of their bytes. Their
+        // digests are therefore *derived* from that single walk (the digest
+        // of the same entries re-rooted at the copy is exactly `hash_tree` of
+        // the copy) rather than read a second time. The by-name refusal the
+        // separate labels exist for is unchanged.
+        let modules_root = self
+            .watched
+            .iter()
+            .find(|(label, _)| label == PRIVATE_NODE_MODULES_LABEL)
+            .and_then(|(_, input)| match input {
+                WatchedInput::Contents(path) => Some(path.as_path()),
+                _ => None,
+            });
+        let derived_from_modules = |label: &str, input: &WatchedInput| -> Option<String> {
+            let root = modules_root?;
+            let WatchedInput::Contents(path) = input else {
+                return None;
+            };
+            if !label.starts_with(PRIVATE_DEPENDENCY_LABEL_PREFIX) || path == root {
+                return None;
+            }
+            let relative = path.strip_prefix(root).ok()?;
+            Some(relative.to_string_lossy().replace('\\', "/"))
+        };
+        let direct: Vec<&(String, WatchedInput)> = self
+            .watched
+            .iter()
+            .filter(|(label, input)| derived_from_modules(label, input).is_none())
+            .collect();
         // Each label is a read of bytes nothing in this process writes, so the
         // labels are hashed side by side: the census then costs its largest
-        // input (the pinned Node executable) rather than the sum of all of
-        // them, without one byte fewer being hashed.
+        // input rather than the sum of all of them.
         let digests = super::parallel::run_each(
-            &self.watched,
-            super::parallel::workers_for(self.watched.len()),
-            |(_, path)| {
+            &direct,
+            super::parallel::workers_for(direct.len()),
+            |(label, input)| {
                 let started = Instant::now();
-                (watch_digest(path), elapsed_ns(started))
+                let result = if *label == PRIVATE_NODE_MODULES_LABEL
+                    && modules_root.is_some_and(|root| root.is_dir())
+                {
+                    tree_entries(input.path()).map(CensusRead::Tree)
+                } else {
+                    watch_digest(input).map(CensusRead::Digest)
+                };
+                (result, elapsed_ns(started))
             },
         );
-        for ((label, _), (digest, elapsed)) in self.watched.iter().zip(digests) {
-            let digest = digest?;
+        let mut modules_entries: Option<Vec<(String, String, u64)>> = None;
+        let mut record = |label: &String, digest: String, elapsed: u64| {
             if timings {
                 per_label.push((label.clone(), elapsed));
             }
@@ -3189,6 +3254,37 @@ impl PrivateProbeWorkspace {
                      unreadable"
                 )));
             }
+            Ok(())
+        };
+        for ((label, _), (read, elapsed)) in direct.iter().zip(digests) {
+            let digest = match read? {
+                CensusRead::Digest(digest) => digest,
+                CensusRead::Tree(entries) => {
+                    let digest = digest_tree_entries(&entries);
+                    modules_entries = Some(entries);
+                    digest
+                }
+            };
+            record(label, digest, elapsed)?;
+        }
+        for (label, input) in &self.watched {
+            let Some(relative) = derived_from_modules(label, input) else {
+                continue;
+            };
+            let digest = match &modules_entries {
+                Some(entries) => {
+                    let under = tree_entries_under(entries, &relative);
+                    if under.is_empty() && !input.path().is_dir() {
+                        watch_digest(input)?
+                    } else {
+                        digest_tree_entries(&under)
+                    }
+                }
+                // No walk to derive from (the modules tree is absent or was
+                // not a directory): read the copy directly, as before.
+                None => watch_digest(input)?,
+            };
+            record(label, digest, 0)?;
         }
         if timings {
             eprintln!(
@@ -3741,6 +3837,10 @@ fn spawn_stderr_reader(stderr: Option<ChildStderr>) -> mpsc::Receiver<String> {
 impl Drop for PrivateProbeWorkspace {
     fn drop(&mut self) {
         let _ = remove_private_tree(&self.directory);
+        // The per-file digest memo would otherwise keep one entry per private
+        // file for the life of the process; a wide graph row creates hundreds
+        // of workspaces.
+        super::pinned_bytes::forget_under(&self.directory);
     }
 }
 
@@ -4202,6 +4302,18 @@ fn hash_file(path: &Path) -> Result<String, std::io::Error> {
     Ok(format!("sha256:{:x}", hash.finalize()))
 }
 
+/// The census label of the whole private `node_modules` tree, whose single walk
+/// also yields every `private-dependency:*` digest.
+const PRIVATE_NODE_MODULES_LABEL: &str = "private-node-modules";
+const PRIVATE_DEPENDENCY_LABEL_PREFIX: &str = "private-dependency:";
+
+/// What one census read produced: a digest, or — for the private
+/// `node_modules` tree — the walked entries the dependency digests derive from.
+enum CensusRead {
+    Digest(String),
+    Tree(Vec<(String, String, u64)>),
+}
+
 /// What one watched census entry hashes.
 #[derive(Clone, Debug)]
 enum WatchedInput {
@@ -4216,12 +4328,18 @@ enum WatchedInput {
     /// entries. The cost is a refusal direction: a probe that writes a
     /// temporary file into `TMPDIR` refuses the gate.
     DirectoryEntries(PathBuf),
+    /// One regular file this build pinned and no probe can legitimately
+    /// change — the Node executable, the verifier image, the Type Facts image.
+    /// Its bytes are hashed once per process and re-asserted by inode
+    /// fingerprint afterwards (see [`super::pinned_bytes`]); a change to the
+    /// bytes still produces a fresh digest, and so a refusal.
+    PinnedImage(PathBuf),
 }
 
 impl WatchedInput {
     fn path(&self) -> &Path {
         match self {
-            Self::Contents(path) | Self::DirectoryEntries(path) => path,
+            Self::Contents(path) | Self::DirectoryEntries(path) | Self::PinnedImage(path) => path,
         }
     }
 }
@@ -4242,12 +4360,15 @@ fn watch_digest(input: &WatchedInput) -> Result<String, ProbeHarnessError> {
         }
         Err(error) => Err(error.into()),
         Ok(metadata) if metadata.is_dir() => match input {
-            WatchedInput::Contents(_) => hash_tree(path),
+            WatchedInput::Contents(_) | WatchedInput::PinnedImage(_) => hash_tree(path),
             WatchedInput::DirectoryEntries(_) => hash_directory_entries(path),
         },
-        Ok(metadata) if metadata.file_type().is_file() => {
-            hash_file(path).map_err(ProbeHarnessError::from)
-        }
+        Ok(metadata) if metadata.file_type().is_file() => match input {
+            WatchedInput::PinnedImage(_) => {
+                super::pinned_bytes::fingerprinted_digest(path).map_err(ProbeHarnessError::from)
+            }
+            _ => hash_file(path).map_err(ProbeHarnessError::from),
+        },
         Ok(_) => Err(ProbeHarnessError::IsolationViolation(format!(
             "watched probe input {} is neither a regular file nor a directory",
             path.display()
@@ -4642,9 +4763,23 @@ fn refuse_resolvable_bare_specifier_sources(
 /// or any other non-regular entry appearing where a copy was written refuses,
 /// so a run cannot swap a watched file for a link to elsewhere.
 fn hash_tree(directory: &Path) -> Result<String, ProbeHarnessError> {
+    Ok(digest_tree_entries(&tree_entries(directory)?))
+}
+
+/// One walk of a directory: every regular file as (root-relative path, file
+/// digest, length), sorted by path. [`digest_tree_entries`] over the whole list
+/// is [`hash_tree`]; over the entries under one subdirectory, re-rooted there,
+/// it is `hash_tree` of that subdirectory — which is how the census derives
+/// every `private-dependency:*` digest from the single `private-node-modules`
+/// walk instead of reading each dependency's bytes twice.
+fn tree_entries(directory: &Path) -> Result<Vec<(String, String, u64)>, ProbeHarnessError> {
     let mut entries = Vec::new();
     collect_tree(directory, directory, &mut entries)?;
     entries.sort();
+    Ok(entries)
+}
+
+fn digest_tree_entries(entries: &[(String, String, u64)]) -> String {
     let mut hash = Sha256::new();
     hash.update(b"solid-checker:probe-private-tree:v1\0");
     for (relative, digest, length) in entries {
@@ -4653,7 +4788,24 @@ fn hash_tree(directory: &Path) -> Result<String, ProbeHarnessError> {
         hash.update(length.to_be_bytes());
         hash.update(digest.as_bytes());
     }
-    Ok(format!("sha256:{:x}", hash.finalize()))
+    format!("sha256:{:x}", hash.finalize())
+}
+
+/// The entries of `entries` that sit under `prefix` (a root-relative directory
+/// path), re-rooted at that directory.
+fn tree_entries_under(
+    entries: &[(String, String, u64)],
+    prefix: &str,
+) -> Vec<(String, String, u64)> {
+    let prefix = format!("{}/", prefix.trim_end_matches('/'));
+    entries
+        .iter()
+        .filter_map(|(relative, digest, length)| {
+            relative
+                .strip_prefix(&prefix)
+                .map(|rest| (rest.to_owned(), digest.clone(), *length))
+        })
+        .collect()
 }
 
 fn collect_tree(
@@ -4677,7 +4829,17 @@ fn collect_tree(
                 })?
                 .to_string_lossy()
                 .replace('\\', "/");
-            entries.push((relative, hash_file(&path)?, metadata.len()));
+            // Per-file digest by fingerprint (ADR 0102, extended to the private
+            // trees): the worker can write here, but as this user it cannot
+            // rewrite a file without moving its ctime or replace it without a
+            // new inode, so a census between sessions is a stat walk that
+            // re-hashes only what moved. Additions and removals are still the
+            // walk's own business.
+            entries.push((
+                relative,
+                super::pinned_bytes::fingerprinted_digest_with_metadata(&path, &metadata)?,
+                metadata.len(),
+            ));
         } else {
             return Err(ProbeHarnessError::IsolationViolation(format!(
                 "watched probe input {} is no longer a regular file",
@@ -4688,6 +4850,9 @@ fn collect_tree(
     Ok(())
 }
 
+/// The unmemoized bounded read the corpus loader used before ADR 0102; the
+/// harness tests still build corpora through it.
+#[cfg(test)]
 fn read_bounded_regular_file(path: &Path, limit: usize) -> Result<Vec<u8>, ProbeHarnessError> {
     let metadata = fs::symlink_metadata(path).map_err(|error| {
         ProbeHarnessError::CorpusInvalid(format!("could not inspect {}: {error}", path.display()))

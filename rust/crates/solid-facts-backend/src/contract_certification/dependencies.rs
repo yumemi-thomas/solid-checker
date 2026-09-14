@@ -604,10 +604,13 @@ impl PublishedContractGraphPlan {
         base_corpus: Option<&Path>,
         already_withheld: &BTreeMap<String, Vec<super::WithheldClosure>>,
     ) -> Result<Self, PublishedGraphCertificationError> {
-        let nodes = self
-            .nodes
-            .iter()
-            .map(|node| {
+        // Nodes gate independently, and a wide graph re-gates every one of
+        // them on every pass (616 nodes × 12 passes on `corvu@0.7.2`), so the
+        // map runs on the bounded pool and is collected back in node order.
+        let nodes = super::parallel::run_each(
+            &self.nodes,
+            super::parallel::workers_for(self.nodes.len()),
+            |node| {
                 let digest = node.identity.digest();
                 let corpus = synthesized
                     .get(digest)
@@ -638,8 +641,10 @@ impl PublishedContractGraphPlan {
                     withheld,
                     accepted_candidate: node.accepted_candidate.clone(),
                 })
-            })
-            .collect::<Result<Vec<_>, PublishedGraphCertificationError>>()?;
+            },
+        )
+        .into_iter()
+        .collect::<Result<Vec<_>, PublishedGraphCertificationError>>()?;
         Ok(Self {
             nodes,
             root: self.root.clone(),

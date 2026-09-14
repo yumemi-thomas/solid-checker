@@ -29,7 +29,8 @@ import {
   recoveryGraphBudgetRefusal,
   selectRecoveryPreparation,
   retainedProposalGraphCases,
-  certifyRetainedProposalSelection
+  certifyRetainedProposalSelection,
+  selectBySubdivision
 } from "./retained-proposal-graphs.mjs";
 export { RECOVERY_GRAPH_CASE_BUDGET, recoveryGraphBudgetRefusal };
 
@@ -1670,6 +1671,10 @@ export function buildPublishedGraphExecutionRequest({
   };
 }
 
+// Sequence of native `--execute-contract-certification` launches in this
+// process, so concurrent transactions never share a request file.
+let nativeExecutionSequence = 0;
+
 async function executePreparedPublishedGraphs({
   options,
   cases,
@@ -1693,7 +1698,14 @@ async function executePreparedPublishedGraphs({
     trustConfigurationOutput,
     ...probeHarnessRequest(options)
   });
-  const requestPath = join(scratch, `published-graph-execution-${cases[0].root.index}.json`);
+  // Unique per execution, not per first case: every trial of a retained-floor
+  // selection starts with the same base case, and trials now run side by side.
+  // Two of them sharing one request file handed one verifier the other's
+  // planning, which refused a case for a graph node it did not depend on.
+  const requestPath = join(
+    scratch,
+    `published-graph-execution-${cases[0].root.index}-${++nativeExecutionSequence}.json`
+  );
   writeFileSync(requestPath, `${JSON.stringify(execution, null, 2)}\n`);
   const child = await runNativeAsync(
     "solid-checker",
@@ -2954,7 +2966,10 @@ async function executeNativeCertification({
   const catalogRoot = options.catalog.endsWith("accepted-contracts.json")
     ? dirname(options.catalog)
     : options.catalog;
-  const requestPath = join(scratch, "certification-execution.json");
+  // One request file per transaction: recovery trials of one scratch may now
+  // run side by side, and two of them writing the same path would hand one
+  // verifier the other's planning.
+  const requestPath = join(scratch, `certification-execution-${++nativeExecutionSequence}.json`);
   const sourceDependenciesByInput = await acquireRootCompilerSources({
     options,
     generated,
@@ -3201,39 +3216,17 @@ export async function certifyIndependentCaseSelection({ cases, recovery, existin
         owner: error.owner, demandId: error.demandId ?? null,
         family: error.family ?? null, reason: error.reason ?? error.message });
   };
-  if (cases.length > 32) {
-    // The document format bounds the complete census to 1024 cases. A binary
-    // subdivision makes at most 2*N-2 private transactions, instead of repeatedly
-    // verifying a growing prefix. Successful batches provide selection hints
-    // only: the complete union is independently verified before publication.
-    recovery.strategy = "binary-subdivision";
-    const visit = async (start, end) => {
-      try {
-        await certify(cases.slice(start, end), false);
-        selected.push(...cases.slice(start, end));
-        accepted.push(...coordinates.slice(start, end));
-      } catch (error) {
-        if (!isProofRefusal(error)) throw error;
-        if (end - start === 1) return refuse(start, error);
-        const middle = start + Math.floor((end - start) / 2);
-        await visit(start, middle);
-        await visit(middle, end);
-      }
-    };
-    const middle = Math.floor(cases.length / 2);
-    await visit(0, middle);
-    await visit(middle, cases.length);
-  } else {
-    for (let index = 0; index < cases.length; index++) {
-      try {
-        await certify([...selected, cases[index]], false);
-        selected.push(cases[index]);
-        accepted.push(coordinates[index]);
-      } catch (error) {
-        if (!isProofRefusal(error)) throw error;
-        refuse(index, error);
-      }
-    }
+  // Subdivision for every size (ADR 0059, amended 2026-09-14): the growing
+  // prefix that sets of 32 and under used spent one native transaction per
+  // case and re-certified every accepted case in each of them. Successful
+  // batches provide selection hints only: the complete union is independently
+  // verified before publication.
+  recovery.strategy = "binary-subdivision";
+  const subdivided = await selectBySubdivision({ cases, certify, isProofRefusal });
+  for (const { index, error } of subdivided.refusals) refuse(index, error);
+  for (const index of subdivided.accepted) {
+    selected.push(cases[index]);
+    accepted.push(coordinates[index]);
   }
   if (!selected.length) throw combinedFailure;
   const result = await certify(selected, true);
@@ -3317,28 +3310,19 @@ export async function certifyRecoverableCaseSelection({
     // transaction per case is the difference between finishing and hitting the
     // certification budget. A batch that proves is a selection *hint* only; the
     // complete union is certified again before anything is published.
-    const visit = async (start, end) => {
-      try {
-        await certify([...selected, ...cases.slice(start, end)], false);
-        selected.push(...cases.slice(start, end));
-        accepted.push(...recovery.cases.slice(start, end));
-      } catch (failure) {
-        if (!isProofRefusal(failure)) throw failure;
-        if (end - start === 1) {
-          recovery.caseRefusals.push({
-            ...recovery.cases[start],
-            stage: failure.stage, owner: failure.owner,
-            demandId: failure.demandId ?? null, family: failure.family ?? null,
-            reason: failure.reason ?? failure.message
-          });
-          return;
-        }
-        const middle = start + Math.floor((end - start) / 2);
-        await visit(start, middle);
-        await visit(middle, end);
-      }
-    };
-    await visit(0, cases.length);
+    const prepared = await selectBySubdivision({ cases, certify, isProofRefusal });
+    for (const { index, error: failure } of prepared.refusals) {
+      recovery.caseRefusals.push({
+        ...recovery.cases[index],
+        stage: failure.stage, owner: failure.owner,
+        demandId: failure.demandId ?? null, family: failure.family ?? null,
+        reason: failure.reason ?? failure.message
+      });
+    }
+    for (const index of prepared.accepted) {
+      selected.push(cases[index]);
+      accepted.push(recovery.cases[index]);
+    }
     // Nothing survived, so this lane has no answer at all. Rethrow the baseline
     // refusal and let the proposal fallback have its turn.
     if (!selected.length) throw error;
@@ -3347,20 +3331,18 @@ export async function certifyRecoverableCaseSelection({
     return result;
   }
   recovery.caseRefusals = [];
-  for (let index = retainedCount; index < cases.length; index++) {
-    try {
-      await certify([...selected, cases[index]], false);
-      selected.push(cases[index]);
-      accepted.push(recovery.cases[index]);
-    } catch (error) {
-      if (!isProofRefusal(error)) throw error;
-      recovery.caseRefusals.push({
-        ...recovery.cases[index],
-        stage: error.stage, owner: error.owner,
-        demandId: error.demandId ?? null, family: error.family ?? null,
-        reason: error.reason ?? error.message
-      });
-    }
+  const remaining = await selectBySubdivision({ cases: cases.slice(retainedCount), base: selected, certify, isProofRefusal });
+  for (const { index, error } of remaining.refusals) {
+    recovery.caseRefusals.push({
+      ...recovery.cases[retainedCount + index],
+      stage: error.stage, owner: error.owner,
+      demandId: error.demandId ?? null, family: error.family ?? null,
+      reason: error.reason ?? error.message
+    });
+  }
+  for (const index of remaining.accepted) {
+    selected.push(cases[retainedCount + index]);
+    accepted.push(recovery.cases[retainedCount + index]);
   }
   // Native duplicate/conflict checks and ordinary consumer verification still
   // gate the complete final selection, even when every private trial passed.

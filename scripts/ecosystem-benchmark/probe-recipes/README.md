@@ -423,6 +423,56 @@ detail rows 2,242 -> 2,090; visible `reads` census refusals unchanged at 225,
 so nothing moved from one withholding class to another; no row below the pin,
 no status move; wall 1,153 s -> 1,198 s.
 
+## Ten corvu `./create/*` `reads` recipes (2026-09-14)
+
+The first batch written from a pass-2 census rather than from a reading of the
+source (`../../../docs/package-contract-v2/phase21/2026-09-14-tier-a-pass-2-census.md`),
+and the batch that census ranked first: `@corvu/utils@0.4.2`'s
+`./create/keyedContext` (three exports, two artifact cases, 96 rows),
+`./create/once` and `./create/controllableSignal` (`default`, two cases each,
+68 rows).
+
+Three things had to be established before a line was written, because each
+could have produced a plausible wrong recipe:
+
+- **Which subpath each `default` case is.** The audit does not name a source
+  file for a candidate the census *decides* — only for one it refuses. The
+  `controllableSignal` pair was named by the `callbacks`-domain refusal text on
+  the same artifact cases; `once` was settled by a falsifiable test rather than
+  by choosing between `once` and `register` on the strength of a grep:
+  `@corvu/disclosure@0.2.2`'s closure imports `controllableSignal`,
+  `keyedContext` and `once` and nothing else, and all four `default` cases
+  appear in it, so none of them can be `register`.
+- **That the claim ids transfer.** A graph-lane certification of
+  `@corvu/disclosure` reproduces all six corpus artifact cases, and all ten
+  claim ids are byte-identical to the pinned report's.
+- **That the closures actually close.** The depth plan expected these to "wait
+  on a withheld `solid-js` claim" — the failure that made the five
+  `solid-primitives-utils-*-reads-2bf41ff6` recipes above close nothing. A full
+  certification against a scratch corpus carrying the finished modules closed
+  all ten and withheld none, before any of this was checked in.
+
+What the recipes assert: `createKeyedContext` is idempotent per key and ignores
+a second default; `getKeyedContext` reads back `undefined` then the registered
+context; `useKeyedContext` yields `undefined` for an unregistered key and the
+registered default outside a provider; `createOnce` returns a closure *without*
+invoking the supplied function, and the memo is built once; and
+`createControllableSignal` starts at `initialValue`, follows its setter, and
+defers to a supplied `value` accessor while still reporting `onChange`.
+
+The keyed-context registry is module state that outlives a call, so each
+module's keys carry its own artifact case. That is not cosmetic: an earlier
+draft shared keys between the two case variants, and `getKeyedContext`'s
+"unregistered key reads back `undefined`" assertion failed as soon as both ran
+in one realm. The harness isolates realms, so it would likely never have
+fired — which is exactly why the assertion should not depend on it.
+
+**Measured outcome: all 164 rows close.** Corpus effect (release binary, 418
+rows, `--timeout 1800`): certified closure entries 10,352 -> 10,420 (+68);
+`reads`-closed entries 6,192 -> 6,356 (+164); `no recipe in corpus` `reads`
+detail rows 2,090 -> 1,926; visible `reads` census refusals unchanged at 225;
+no row below the pin, no status move; wall 1,198 s -> 1,316 s.
+
 `scripts/ecosystem-probe-recipes.test.mjs` pins the manifest's shape, that every
 declared module exists and exports `runProbeSession`, and that no module names
 `session` or `harness` in a position that hands either to a package.

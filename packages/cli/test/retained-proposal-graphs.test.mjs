@@ -1,6 +1,6 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { selectRecoveryPreparation, retainedProposalGraphCases, certifyRetainedProposalSelection } from "../scripts/retained-proposal-graphs.mjs";
+import { selectRecoveryPreparation, retainedProposalGraphCases, certifyRetainedProposalSelection, selectBySubdivision, recoveryTrialConcurrency } from "../scripts/retained-proposal-graphs.mjs";
 
 const coordinate = index => ({ entrypoint: `./case-${index}`, conditions: ["import"] });
 const recovery = (retained, frontier) => {
@@ -184,4 +184,42 @@ test("verified floors require an exact positive/refused partition and never infe
     assert.equal(calls, 2);
     assert.equal(census.publishedCases, undefined);
   }
+});
+
+test("subdivision returns the same selection at any trial concurrency and never exceeds the bound", async () => {
+  const cases = Array.from({ length: 41 }, (_, index) => index);
+  const bad = new Set([3, 17, 40]);
+  for (const concurrency of [1, 4, 64]) {
+    let inFlight = 0, peak = 0;
+    const attempts = [];
+    const result = await selectBySubdivision({ cases, base: ["floor"], isProofRefusal, concurrency,
+      certify: async (selected, publish) => {
+        assert.equal(publish, false);
+        assert.equal(selected[0], "floor");
+        inFlight++; peak = Math.max(peak, inFlight);
+        await new Promise(resolve => setTimeout(resolve, 1));
+        inFlight--;
+        attempts.push(selected.slice(1));
+        if (selected.some(item => bad.has(item))) throw proofRefusal(`case ${selected.find(item => bad.has(item))}`);
+      }
+    });
+    assert.deepEqual(result.accepted, cases.filter(item => !bad.has(item)));
+    assert.deepEqual(result.refusals.map(x => x.index), [3, 17, 40]);
+    assert.deepEqual(result.refusals.map(x => x.error.message), ["case 3", "case 17", "case 40"]);
+    assert.ok(peak <= concurrency, `${peak} trials in flight under a bound of ${concurrency}`);
+    // The whole range is never retried: the caller just watched it refuse.
+    assert.ok(attempts.every(selected => selected.length < cases.length));
+    assert.ok(attempts.length <= 2 * cases.length);
+  }
+});
+
+test("subdivision propagates a non-proof failure and reads its concurrency from the environment", async () => {
+  const infrastructure = new Error("disk full");
+  await assert.rejects(selectBySubdivision({ cases: [1, 2, 3], isProofRefusal, concurrency: 2,
+    certify: async selected => { if (selected.includes(2)) throw infrastructure; throw proofRefusal("unproved"); }
+  }), error => error === infrastructure);
+  assert.equal(recoveryTrialConcurrency({}), 1);
+  assert.equal(recoveryTrialConcurrency({ SOLID_CHECKER_RECOVERY_TRIAL_CONCURRENCY: "0" }), 1);
+  assert.equal(recoveryTrialConcurrency({ SOLID_CHECKER_RECOVERY_TRIAL_CONCURRENCY: "three" }), 1);
+  assert.equal(recoveryTrialConcurrency({ SOLID_CHECKER_RECOVERY_TRIAL_CONCURRENCY: "3" }), 3);
 });

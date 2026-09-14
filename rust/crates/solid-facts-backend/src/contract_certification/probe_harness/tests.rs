@@ -573,7 +573,7 @@ fn watched_workspace(scratch: &Scratch) -> PrivateProbeWorkspace {
                 format!("ancestor-node-modules:{}", ancestor_modules.display()),
                 WatchedInput::Contents(ancestor_modules),
             ),
-            ("node-executable".into(), WatchedInput::Contents(node)),
+            ("node-executable".into(), WatchedInput::PinnedImage(node)),
         ],
         pinned: vec![("node-executable".into(), digest_of(NODE_STAND_IN))],
         before: BTreeMap::new(),

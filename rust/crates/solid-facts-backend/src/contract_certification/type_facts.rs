@@ -13286,7 +13286,13 @@ impl PrivateExecutionImage {
         };
         let directory = store.join("images").join(digest_hex);
         let path = directory.join("solid-typefacts");
-        if path.is_file() && hash_file(&path)? == pin.executable_sha256 {
+        // Re-asserted by fingerprint after the first hash (see `pinned_bytes`):
+        // every acquisition of a transaction launches the same shared image,
+        // and a growing-prefix recovery row launched it 292 times.
+        if path.is_file()
+            && super::pinned_bytes::fingerprinted_digest(&path)
+                .is_ok_and(|digest| digest == pin.executable_sha256.as_str())
+        {
             return Ok(Some(Self {
                 directory,
                 path,

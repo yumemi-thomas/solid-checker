@@ -43,6 +43,7 @@ mod export_bindings;
 mod finalization;
 mod module_closure;
 mod parallel;
+mod pinned_bytes;
 mod policy2_receipt;
 mod probe_gates;
 mod probe_harness;

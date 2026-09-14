@@ -161,6 +161,11 @@ export function certificationConcurrencyFromEnvironment(env = process.env) {
   return parsed;
 }
 
+// Recovery trials per certification child. Trials are child- and I/O-bound,
+// so the count is about overlap rather than cores; see
+// docs/package-contract-v2/phase21/2026-09-14-corpus-wall-levers.md.
+const RECOVERY_TRIAL_CONCURRENCY = 4;
+
 const DEFAULT_CERTIFICATION_CONCURRENCY =
   certificationConcurrencyFromEnvironment() ?? recommendedCertificationConcurrency();
 
@@ -1958,10 +1963,25 @@ function buildRealHooks({
   });
   const generationEnvironment = {
     SOLID_CHECKER_ARTIFACT_ANALYSIS_BATCH_CONCURRENCY: null,
+    SOLID_CHECKER_CERTIFICATION_PARALLELISM: null,
+    SOLID_CHECKER_RECOVERY_TRIAL_CONCURRENCY: null,
     SOLID_CHECKER_REGISTRY_CACHE: null
   };
   const certificationEnvironment = {
     SOLID_CHECKER_ARTIFACT_ANALYSIS_BATCH_CONCURRENCY: String(certificationInnerConcurrency),
+    // Deliberately *not* capped to this child's core share. The verifier's
+    // fan-out (graph-lane gate batches, census labels) is where the heaviest
+    // row spends its time, and that row runs alone at the tail after every
+    // other slot has drained: a cap of one (fourteen children on fourteen
+    // cores) serialized corvu@0.7.2's 343 gate batches to 165 s. Gate batches
+    // are child- and I/O-bound, so the scheduler absorbs the early
+    // oversubscription better than the tail absorbs the cap.
+    SOLID_CHECKER_CERTIFICATION_PARALLELISM: null,
+    // Entrypoint-recovery trials of one row run side by side. They are the
+    // corpus's serial tail -- the heaviest row runs its 30-odd transactions
+    // alone after every other slot has drained -- and a trial mostly waits on
+    // the producer and the probe workers rather than on a core.
+    SOLID_CHECKER_RECOVERY_TRIAL_CONCURRENCY: String(RECOVERY_TRIAL_CONCURRENCY),
     // Empty, not absent, when disabled: the child must not pick a cache up
     // from the inherited environment that this run decided against.
     SOLID_CHECKER_REGISTRY_CACHE: registryCache ?? ""

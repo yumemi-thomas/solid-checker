@@ -638,11 +638,13 @@ test("recovery publishes newly proved cases with every retained case and exact r
     if (selected.includes("bad")) throw new CertificationRefusal({ stage: "witness-acquisition", owner: "certifier", demandId: "exact-demand", family: "recursive-value-shape", reason: "unproved" });
     return { final: publish };
   }});
+  // Combined, retained baseline, then subdivision over the two remaining
+  // cases with the baseline in front of every trial, then the final union.
   assert.deepEqual(attempts, [
     { selected: cases, publish: true },
     { selected: ["retained"], publish: false },
     { selected: ["retained", "good"], publish: false },
-    { selected: cases, publish: false },
+    { selected: ["retained", "bad"], publish: false },
     { selected: ["retained", "good"], publish: true }
   ]);
   assert.deepEqual(result, { final: true });
@@ -660,13 +662,17 @@ test("independent recovery certifies fresh subsets and publishes exact accepted 
       stage: "witness-acquisition", owner: "certifier", demandId: "bad-demand", reason: "unproved"
     });
   }});
+  // Combined, then subdivision (no growing prefix: a trial never carries a
+  // case another trial already accepted), then the final union.
   assert.deepEqual(attempts, [
     { cases: [".", "./bad", "./good"], publish: true },
     { cases: ["."], publish: false },
-    { cases: [".", "./bad"], publish: false },
-    { cases: [".", "./good"], publish: false },
+    { cases: ["./bad", "./good"], publish: false },
+    { cases: ["./bad"], publish: false },
+    { cases: ["./good"], publish: false },
     { cases: [".", "./good"], publish: true }
   ]);
+  assert.equal(recovery.strategy, "binary-subdivision");
   assert.deepEqual(recovery.expectedCases, cases);
   assert.deepEqual(recovery.publishedCases, [cases[0], cases[2]]);
   assert.equal(recovery.caseRefusals[0].demandId, "bad-demand");
@@ -868,7 +874,7 @@ test("independent recovery propagates non-proof and final-publication failures",
   const recovery = {};
   await assert.rejects(certifyIndependentCaseSelection({ cases, recovery, existingPublication: false,
     certify: async (selected, publish) => {
-      if (selected.length === 2) throw failure;
+      if (selected.some(item => item.entrypoint === "./bad")) throw failure;
       if (publish) throw trust;
     }
   }), error => error === trust);

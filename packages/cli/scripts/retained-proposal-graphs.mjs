@@ -1,3 +1,4 @@
+import process from "node:process";
 import { createHash } from "node:crypto";
 
 export const RECOVERY_GRAPH_CASE_BUDGET = 32;
@@ -68,6 +69,66 @@ export function retainedProposalGraphCases({ plannings, sourceDependenciesByInpu
 // establishes their exact accepted/refused partition. Every accepted root is
 // then mandatory in graph context; a failure cannot turn into lost coverage.
 // Private successes select whole cases only. Publication rechecks their union.
+/// How many recovery trials may run side by side. Default 1: trial order is
+/// then deterministic, which the orchestration tests rely on. The ecosystem
+/// runner raises it for certification children, because a trial spends most of
+/// its wall time waiting on the producer and the probe workers rather than on a
+/// core, and the recovery rows are the corpus's serial tail.
+export function recoveryTrialConcurrency(env = process.env) {
+  const parsed = Number(env.SOLID_CHECKER_RECOVERY_TRIAL_CONCURRENCY);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
+// Binary subdivision over `cases`, every trial carrying `base` in front. The
+// whole range is not tried first: every caller has just watched the combined
+// set refuse, so the search starts at the two halves. A trial that proves is a
+// selection hint only; the caller's final publication re-certifies the union.
+// Returns accepted case indexes and per-index proof refusals, both sorted, so
+// the result does not depend on how trials were scheduled.
+//
+// This replaced the growing prefix (`certify([...selected, cases[index]])`
+// once per case) for sets of 32 and under. The prefix re-certified every case
+// already accepted in each trial: 31 retained solid-js cases cost 33 native
+// transactions and 292 Type Facts acquisitions, one row's 20-minute wall in the
+// ecosystem corpus. Subdivision spends O(refusals x log n) trials on O(n) case
+// work, and the final union still verifies duplicates and conflicts.
+export async function selectBySubdivision({
+  cases, base = [], certify, isProofRefusal, concurrency = recoveryTrialConcurrency()
+}) {
+  const accepted = [], refusals = [];
+  let slots = Math.max(1, concurrency | 0);
+  const waiters = [];
+  const acquire = () => (slots > 0 ? (slots--, Promise.resolve()) : new Promise(wake => waiters.push(wake)));
+  const release = () => { const next = waiters.shift(); if (next) next(); else slots++; };
+  const trial = async (start, end) => {
+    await acquire();
+    try { return await certify([...base, ...cases.slice(start, end)], false); } finally { release(); }
+  };
+  const visit = async (start, end) => {
+    try {
+      await trial(start, end);
+      for (let index = start; index < end; index++) accepted.push(index);
+      return;
+    } catch (error) {
+      if (!isProofRefusal(error)) throw error;
+      if (end - start === 1) { refusals.push({ index: start, error }); return; }
+    }
+    const middle = start + Math.floor((end - start) / 2);
+    await both(() => visit(start, middle), () => visit(middle, end));
+  };
+  const both = async (left, right) => {
+    if (concurrency <= 1) { await left(); await right(); return; }
+    const settled = await Promise.allSettled([left(), right()]);
+    const failure = settled.find(outcome => outcome.status === "rejected");
+    if (failure) throw failure.reason;
+  };
+  if (cases.length === 1) await visit(0, 1);
+  else if (cases.length > 1) { const middle = Math.floor(cases.length / 2); await both(() => visit(0, middle), () => visit(middle, cases.length)); }
+  accepted.sort((a, b) => a - b);
+  refusals.sort((a, b) => a.index - b.index);
+  return { accepted, refusals };
+}
+
 export async function certifyRetainedProposalSelection({ cases, recovery, certify, isProofRefusal, establishFloor = null }) {
   const retainedCount = recovery.retainedCases.length;
   if (!retainedCount || retainedCount >= cases.length ||
@@ -127,17 +188,15 @@ export async function certifyRetainedProposalSelection({ cases, recovery, certif
     }
     await certify(selected, false);
   }
-  for (let index = retainedCount; index < cases.length; index++) {
-    try {
-      await certify([...selected, cases[index]], false);
-      selected.push(cases[index]);
-      accepted.push(recovery.cases[index]);
-    } catch (error) {
-      if (!isProofRefusal(error)) throw error;
-      recovery.caseRefusals.push({ ...recovery.cases[index], stage: error.stage,
-        owner: error.owner, demandId: error.demandId ?? null,
-        family: error.family ?? null, reason: error.reason ?? error.message });
-    }
+  const remaining = await selectBySubdivision({ cases: cases.slice(retainedCount), base: selected, certify, isProofRefusal });
+  for (const { index, error } of remaining.refusals) {
+    recovery.caseRefusals.push({ ...recovery.cases[retainedCount + index], stage: error.stage,
+      owner: error.owner, demandId: error.demandId ?? null,
+      family: error.family ?? null, reason: error.reason ?? error.message });
+  }
+  for (const index of remaining.accepted) {
+    selected.push(cases[retainedCount + index]);
+    accepted.push(recovery.cases[retainedCount + index]);
   }
   const result = await certify(selected, true);
   recovery.publishedCases = accepted;
