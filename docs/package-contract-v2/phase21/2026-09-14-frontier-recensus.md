@@ -17,49 +17,82 @@ The two populations turn out to barely overlap, which is why reading a census
 summary as a work estimate — which the ranking before this did — inverts the
 answer.
 
+## Validity, checked before the numbers
+
+Two failure modes of this harness answer instead of erroring, and both were hit
+here, so every run below is validated before it is counted:
+
+- **A run whose cases are not the pin's cases.** `@solid-primitives/utils@7.0.0-next.4`
+  certified through `motion-solidjs@0.7.0-beta.4` with `status: certified` and
+  **zero** withheld closures — which reads as "nothing to do" and is in fact a
+  case set that never contained the closures. Zero overlap with the five
+  artifact cases the pin carries for it. **Discarded, not reported.**
+- **A verdict attributed across cases.** A pinned row is matched to a verdict
+  by `(artifactCase, export)` first; only where that case was not reproduced is
+  the export's verdict from another case used, and the count of each is given.
+
+| cluster | pin cases | reproduced | rows | case-exact | export-inferred |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `@tanstack/store@0.11.1` | 1 | 1 | 80 | 80 | 0 |
+| `@solid-primitives/utils@6.4.1` | 1 | 1 | 126 | 126 | 0 |
+| `@corvu/utils@0.4.2` | 13 | 6 | 98 | 87 | 11 |
+| `@floating-ui/utils@0.2.12` | 2 | 2 | 96 | 96 | 0 |
+| `@corvu-next/utils@0.1.4` | 14 | 6 | 88 | 46 | 42 |
+| | | | **488** | **435** | **53** |
+
 ## Measured
 
-| cluster | pinned rows | decidable | census refused |
-| --- | ---: | ---: | ---: |
-| `@tanstack/store@0.11.1` | 80 | 0 | 80 |
-| `@solid-primitives/utils@6.4.1` | 126 | 0 | 126 |
-| `@corvu/utils@0.4.2` | 98 | 6 | 92 |
-| `@floating-ui/utils@0.2.12` | 96 | 0 | 96 |
-| | **400** | **6** | **394** |
+| cluster | rows | decidable | refused | mixed |
+| --- | ---: | ---: | ---: | ---: |
+| `@tanstack/store@0.11.1` | 80 | 0 | 80 | 0 |
+| `@solid-primitives/utils@6.4.1` | 126 | 0 | 126 | 0 |
+| `@corvu/utils@0.4.2` | 98 | 6 | 87 | 5 |
+| `@floating-ui/utils@0.2.12` | 96 | 0 | 96 | 0 |
+| `@corvu-next/utils@0.1.4` | 88 | 56 | 14 | 18 |
+| | **488** | **62** | **403** | **23** |
 
-**Six of four hundred rows are recipe work.** The rest are census refusals
-wearing the `no recipe in corpus` label.
+**62 of 488 rows — 13% — are recipe work.** The first four clusters measured
+were 6 of 400, and reporting that as the shape of the frontier was premature:
+`@corvu-next/utils` is 64% decidable on its own and moved the figure by a
+factor of ten. Four clusters agreeing is not the population.
 
-### `@tanstack/store` — 80 rows
+The direction still holds — 83% of measured rows are census refusals wearing
+the `no recipe in corpus` label — but the recipe share is an order of magnitude
+larger than four clusters suggested, and no further cluster should be
+extrapolated from.
 
-`flush` (40) and `toObserver` (40), both refused on
-`property-access-unknown-accessor (PropertyAccessExpression)`. Eight further
-exports are decidable and carry no frontier row.
+### Where the decidable rows are
 
-### `@solid-primitives/utils@6.4.1` — 126 rows
+All of them are in the `@corvu-next` pair: `dataIf`, `isButton`, `isFunction`
+(10 each), `createKeyedContext`, `getKeyedContext`, `useKeyedContext` (8 each
+there, 2 each on `@corvu/utils`), and `default` (18, mixed with a
+`coercion (PostfixUnaryExpression)` refusal). These are ordinary hand recipes
+and the only measured recipe work in the frontier so far.
 
-`defaultEquals` (42) and `tryOnCleanup` (42) refused on
-`domain-exhaustiveness "implementationUnavailable"`; `defer` (42) on
-`property-access-unknown-accessor (ElementAccessExpression)`. Forty-one further
-exports — `access`, `chain`, `clamp`, `pipe`, `noop` and the rest — measure
-decidable and carry **no frontier row**. The census reports 394 decidable
-candidates on this case; their contribution to the 1,470 is zero.
+### Where the refusals are
 
-### `@corvu/utils@0.4.2` — 98 rows
+`@tanstack/store`: `flush` and `toObserver`, 40 each, on
+`property-access-unknown-accessor (PropertyAccessExpression)`.
 
-`combineStyle` (66) refused on `property-access-unknown-accessor
-(SpreadAssignment)` — the reason behind a refusal this phase had recorded
-twice without naming. `getScrollAtLocation` (16) on `iteration-protocol
-(ArrayBindingPattern)`; `default` (10) mixed with `jsx-element (JsxFragment)`.
-Only `createKeyedContext`, `getKeyedContext` and `useKeyedContext` — 6 rows —
-are decidable. Seventy-nine census candidates carry no frontier row.
+`@solid-primitives/utils@6.4.1`: `defaultEquals` and `tryOnCleanup`, 42 each,
+on `domain-exhaustiveness "implementationUnavailable"`; `defer`, 42, on
+`property-access-unknown-accessor (ElementAccessExpression)`.
 
-### `@floating-ui/utils@0.2.12` — 96 rows
+`@corvu/utils` and `@corvu-next/utils`: `combineStyle`, 80 across both, on
+`property-access-unknown-accessor (SpreadAssignment)` — the reason behind a
+refusal this phase had recorded twice without naming. `getScrollAtLocation`,
+18, on `iteration-protocol (ArrayBindingPattern)`.
 
-Entirely refused, across four shapes: `property-access-unknown-accessor` on
-`PropertyAccessExpression` (40) and `BindingElement` (8), `instanceof
-(BinaryExpression)` (32), and `coercion (BinaryExpression)` (16). Seventy-four
-census candidates carry no frontier row.
+`@floating-ui/utils`: entirely refused across four shapes —
+`property-access-unknown-accessor` on `PropertyAccessExpression` (40) and
+`BindingElement` (8), `instanceof (BinaryExpression)` (32), and
+`coercion (BinaryExpression)` (16).
+
+On every case the census also reports decidable candidates that carry **no
+frontier row at all** — 79 exports on `@corvu/utils`, 74 on `@floating-ui/utils`,
+41 on `@solid-primitives/utils` — because a decidable candidate gets closed and
+stops being a frontier row. That gap is what makes a raw decidable count
+useless as a work estimate.
 
 ## Why the frontier is mostly refusals
 
@@ -94,22 +127,22 @@ is two premises split differently than the export names suggest.
 | ---: | --- | --- |
 | 120 | `property-access-unknown-accessor` | `PropertyAccessExpression` |
 | 84 | `domain-exhaustiveness` | `"implementationUnavailable"` |
-| 66 | `property-access-unknown-accessor` | `SpreadAssignment` |
+| 80 | `property-access-unknown-accessor` | `SpreadAssignment` |
+| **62** | *(decidable — hand recipes)* | |
 | 42 | `property-access-unknown-accessor` | `ElementAccessExpression` |
 | 32 | `instanceof` | `BinaryExpression` |
-| 16 | `iteration-protocol` | `ArrayBindingPattern` |
+| 18 | `iteration-protocol` | `ArrayBindingPattern` |
+| 18 | `coercion` | `PostfixUnaryExpression` *(mixed with decidable)* |
 | 16 | `coercion` | `BinaryExpression` |
-| 10 | `jsx-element` | `JsxFragment` |
 | 8 | `property-access-unknown-accessor` | `BindingElement` |
-| 6 | *(decidable — recipe work)* | |
+| 8 | `jsx-element` | `JsxFragment` *(5 mixed)* |
 
-Grouped by form family, `property-access-unknown-accessor` is **236 of the 400
-rows measured, 59%**. It is one refusal — "states no reviewed subject root, so
-whose value it reads is undecided" — over four different AST shapes, and the
-subject-root machinery is per-shape: ADR 0104 added one arm for a dependency
-member, ADR 0106 another for a rest-parameter alias. So this is one family and
-probably four premises, not one, and the per-shape row counts above are what
-each is worth.
+Grouped by form family, `property-access-unknown-accessor` is **250 of 488,
+51%**. It is one refusal — "states no reviewed subject root, so whose value it
+reads is undecided" — over four AST shapes, and the subject-root machinery is
+per-shape: ADR 0104 added an arm for a dependency member, ADR 0106 another for
+a rest-parameter alias. So this is one family and probably four premises, and
+the per-shape counts are what each is worth.
 
 **Nothing here should be built from yet.** `implementationUnavailable` means
 the selected signature's implementation declaration has no available body; why
@@ -119,8 +152,9 @@ phase has already made twice. The fixture comes first, for each shape.
 
 ## Coverage
 
-400 of 1,470 rows (27%) re-censused, four clusters, four for four on "the
-frontier rows are refusals". `@solid-primitives/utils@7.0.0-next.4` (142) and
-the `@corvu-next` pair (140) are in progress and would take it past 46%.
-`motion-utils` (234) is settled independently by a focused producer fixture and
-needs no re-census; with it, 634 of the 1,470 have a measured cause.
+488 of 1,470 rows (33%) re-censused across five clusters.
+`@solid-primitives/utils@7.0.0-next.4` (142) is outstanding — the graph-lane
+attempt through `motion-solidjs` was invalid, and 34 of its rows are a
+`reused-proposal` root row that can be certified directly. `motion-utils` (234)
+is settled independently by a focused producer fixture and needs no re-census;
+with it, 722 of the 1,470 have a measured cause.
