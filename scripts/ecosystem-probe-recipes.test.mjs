@@ -557,6 +557,16 @@ describe("the checked-in fixture recipe corpora", () => {
       "solid-primitives-utils-create-callback-stack-reads-6cd714eb.mjs",
       "solid-primitives-utils-create-callback-stack-reads-9887e137.mjs",
       "solid-primitives-utils-create-callback-stack-reads-f81b5488.mjs",
+      "solid-primitives-utils-create-hydratable-signal-reads-1bea9ecd.mjs",
+      "solid-primitives-utils-create-hydratable-signal-reads-2bf41ff6.mjs",
+      "solid-primitives-utils-create-hydratable-signal-reads-6cd714eb.mjs",
+      "solid-primitives-utils-create-hydratable-signal-reads-9887e137.mjs",
+      "solid-primitives-utils-create-hydratable-signal-reads-f81b5488.mjs",
+      "solid-primitives-utils-create-hydrate-signal-reads-1bea9ecd.mjs",
+      "solid-primitives-utils-create-hydrate-signal-reads-2bf41ff6.mjs",
+      "solid-primitives-utils-create-hydrate-signal-reads-6cd714eb.mjs",
+      "solid-primitives-utils-create-hydrate-signal-reads-9887e137.mjs",
+      "solid-primitives-utils-create-hydrate-signal-reads-f81b5488.mjs",
       "solid-primitives-utils-create-id-generator-reads-1bea9ecd.mjs",
       "solid-primitives-utils-create-id-generator-reads-2bf41ff6.mjs",
       "solid-primitives-utils-create-id-generator-reads-6cd714eb.mjs",
@@ -636,7 +646,7 @@ describe("the checked-in fixture recipe corpora", () => {
       "tanstack-store-batch-reads-0bdfa1cb.mjs",
       "tanstack-store-create-async-atom-reads-0bdfa1cb.mjs",
       "tanstack-store-create-atom-reads-0bdfa1cb.mjs",
-      "tanstack-store-create-store-reads-0bdfa1cb.mjs"
+      "tanstack-store-create-store-reads-0bdfa1cb.mjs",
     ]);
     assert.equal(
       manifest.recipes.length - silent.length,

@@ -6263,6 +6263,236 @@
         "The harness realm resolves Solid's client condition, so `isServer` is false and these samples exercise the client branch only; the server branch is not covered",
         "NEVER EMITS: `read-operation`. The export invokes the scheduler its caller supplied and closes over one plain boolean; neither is a read of a source this package owns."
       ]
+    },
+    {
+      "claimId": "claim:v1:sha256:d6209d76e1ddbab89450e0656785f145b5ca1e2297e2e0ba13c04273601ea480",
+      "module": "solid-primitives-utils-create-hydratable-signal-reads-9887e137.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@6.4.1; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "Only the branch this realm takes is exercised: the samples assert which one ran, and the other branch's onMount deferral is covered by the implementation census alone",
+        "NEVER EMITS: the recipe's own equals getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:67ec11d0f1f8a1f196c1b9c2be12dbc2c6575d135dff876186e13cb93c80a337",
+      "module": "solid-primitives-utils-create-hydrate-signal-reads-9887e137.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@6.4.1; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "Only the branch this realm takes is exercised: the samples assert which one ran, and the other branch's onMount deferral is covered by the implementation census alone",
+        "NEVER EMITS: the recipe's own equals getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:7ef6b62d1954b74529d45fd438d275ef338acca016b18e7ccd56666f3db8ce01",
+      "module": "solid-primitives-utils-create-hydratable-signal-reads-2bf41ff6.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "Only the branch this realm takes is exercised: the samples assert which one ran, and the other branch's onSettled deferral is covered by the implementation census alone",
+        "NEVER EMITS: the recipe's own equals getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:748e5fddedef7a73590901767a8547003df58a73486272510e3e807d7a9f91eb",
+      "module": "solid-primitives-utils-create-hydrate-signal-reads-2bf41ff6.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "Only the branch this realm takes is exercised: the samples assert which one ran, and the other branch's onSettled deferral is covered by the implementation census alone",
+        "NEVER EMITS: the recipe's own equals getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:ce9bb5e1142bc4bf4c0ce2d28c5eca7024bcc80f449b98334638ff533d268642",
+      "module": "solid-primitives-utils-create-hydratable-signal-reads-6cd714eb.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "Only the branch this realm takes is exercised: the samples assert which one ran, and the other branch's onSettled deferral is covered by the implementation census alone",
+        "NEVER EMITS: the recipe's own equals getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:8b5891694bb031270de2f032040ba8aa0c755d300442ec47cd06bf27e938a50d",
+      "module": "solid-primitives-utils-create-hydrate-signal-reads-6cd714eb.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "Only the branch this realm takes is exercised: the samples assert which one ran, and the other branch's onSettled deferral is covered by the implementation census alone",
+        "NEVER EMITS: the recipe's own equals getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:f6aff92d8d256bbd31663d104c8e8163650631c7e78a7bffb0d182f43be3f28f",
+      "module": "solid-primitives-utils-create-hydratable-signal-reads-f81b5488.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "Only the branch this realm takes is exercised: the samples assert which one ran, and the other branch's onSettled deferral is covered by the implementation census alone",
+        "NEVER EMITS: the recipe's own equals getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:9556efc31be9664d80fd7d39e2ce83fc5d5c900198a8d57934dbc01a537949e4",
+      "module": "solid-primitives-utils-create-hydrate-signal-reads-f81b5488.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "Only the branch this realm takes is exercised: the samples assert which one ran, and the other branch's onSettled deferral is covered by the implementation census alone",
+        "NEVER EMITS: the recipe's own equals getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:dad54cce6950d0582d6e4603af0b97b005cab6f98738a0e6531e932d2684c144",
+      "module": "solid-primitives-utils-create-hydratable-signal-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "Only the branch this realm takes is exercised: the samples assert which one ran, and the other branch's onSettled deferral is covered by the implementation census alone",
+        "NEVER EMITS: the recipe's own equals getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
+    },
+    {
+      "claimId": "claim:v1:sha256:009aa9d907d2199ba9edd0a4d482d33aefc636a82319ce1d4c2a5d35cb6a830d",
+      "module": "solid-primitives-utils-create-hydrate-signal-reads-1bea9ecd.mjs",
+      "importKind": "esm",
+      "dependencySpecifiers": [],
+      "scenario": "operation",
+      "expectedEvent": {
+        "marker": "read-operation",
+        "class": "call"
+      },
+      "drain": [
+        {
+          "kind": "microtasks",
+          "maxTurns": 1
+        }
+      ],
+      "coverageLimitations": [
+        "Finite samples over one published artifact case of @solid-primitives/utils@7.0.0-next.4; they can contradict the reads closure but cannot establish it, and the authenticated implementation census remains the proof",
+        "Exact for this artifact case only: the case carries no runtime-accessor-installation hazard, so the census states syntactically that dist/index.js installs no accessor and there is no owned trap for this recipe to count",
+        "Only the branch this realm takes is exercised: the samples assert which one ran, and the other branch's onSettled deferral is covered by the implementation census alone",
+        "NEVER EMITS: the recipe's own equals getter proves the observation apparatus is live on every run; any read it counts is the caller's under ADR 0034 and is deliberately not emitted"
+      ]
     }
   ]
 }
