@@ -19,6 +19,7 @@ import {
   DOMAIN_SCAFFOLD,
   FORMAT,
   MANIFEST_NAME,
+  emptyCorpusManifest,
   RECIPE_GAP_REASON,
   SCHEMA_VERSION,
   UNFINISHED_MARKER,
@@ -404,3 +405,66 @@ describe("census-refused candidates", () => {
     assert.deepEqual(censusRefusedCandidates(null), []);
   });
 });
+
+describe("an empty corpus is a configuration, not an absence", () => {
+  // The distinction this pins is the one that produced a false census. A run
+  // given no corpus withholds every proposable candidate as
+  // `no recipe in corpus` without consulting the implementation census, and
+  // veto synthesis never runs, because Rust gates it behind a configured
+  // harness. A run given *this* manifest arms both and withholds only what
+  // the census actually left. The withheld sets are indistinguishable, so the
+  // harness has to be able to write an empty corpus rather than reach the
+  // same shape by passing none.
+  test("carries the format, the version, and no recipes", () => {
+    const manifest = emptyCorpusManifest();
+    assert.equal(manifest.format, FORMAT);
+    assert.equal(manifest.schemaVersion, SCHEMA_VERSION);
+    assert.deepEqual(manifest.recipes, []);
+    assert.equal(typeof manifest.policy.timeoutMillis, "number");
+    assert.equal(typeof manifest.policy.repeatRuns, "number");
+  });
+
+  test("is what an absent manifest reads as, so a scaffold can extend it", () => {
+    const { corpus } = scratch({});
+    mkdirSync(corpus, { recursive: true });
+    writeFileSync(
+      join(corpus, MANIFEST_NAME),
+      `${JSON.stringify(emptyCorpusManifest(), null, 2)}\n`
+    );
+    const gaps = [gap()];
+    main(
+      ["--audit", writeAuditWith(corpus, gaps), "--corpus", corpus, "--specifier", "p"],
+      silent
+    );
+    const written = JSON.parse(readFileSync(join(corpus, MANIFEST_NAME), "utf8"));
+    assert.equal(written.recipes.length, 1);
+    assert.equal(written.format, FORMAT);
+  });
+
+  test("an audit that records no corpus is refused, and an older audit is not", () => {
+    // The gaps in an unconfigured audit are every proposable candidate, not a
+    // census result. Scaffolding them makes candidates synthesis would have
+    // served ineligible for it, and the next pass reads the throwing scaffolds
+    // as decidable work. Refusing here is the last place that is catchable.
+    assert.throws(
+      () => recipeGaps({ withheldClosures: [gap()], probeCorpus: null }),
+      /probeCorpus: null/
+    );
+    // A configured corpus is fine, and so is an audit predating the field:
+    // absence is not evidence that no corpus was given.
+    assert.equal(recipeGaps({ withheldClosures: [gap()], probeCorpus: "/c" }).length, 1);
+    assert.equal(recipeGaps({ withheldClosures: [gap()] }).length, 1);
+  });
+
+  test("the policy is a copy, so one caller cannot widen another's budget", () => {
+    const first = emptyCorpusManifest();
+    first.policy.timeoutMillis = 1;
+    assert.notEqual(emptyCorpusManifest().policy.timeoutMillis, 1);
+  });
+});
+
+function writeAuditWith(corpus, withheldClosures) {
+  const path = join(corpus, "..", "audit.json");
+  writeFileSync(path, JSON.stringify({ withheldClosures }));
+  return path;
+}

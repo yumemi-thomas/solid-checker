@@ -106,6 +106,27 @@ const DEFAULT_POLICY = {
   maxEvents: 64
 };
 
+/// The manifest an empty corpus carries.
+///
+/// Exported because an *empty* corpus is a real configuration and not merely
+/// an absent one. A certification run handed this directory arms the probe
+/// machinery: synthesis runs, the census is consulted, and every candidate
+/// still withheld as `no recipe in corpus` was withheld on the merits. A run
+/// handed no corpus at all withholds every proposable candidate by
+/// construction -- `recipe_gated_with(None, ...)` has nothing to ask -- and
+/// synthesis never runs, because the Rust side gates it behind a configured
+/// harness. The two produce withheld sets an audit cannot tell apart, so a
+/// harness that means the first has to be able to write this file rather than
+/// approximate it by passing no corpus.
+export function emptyCorpusManifest() {
+  return {
+    format: FORMAT,
+    schemaVersion: SCHEMA_VERSION,
+    policy: { ...DEFAULT_POLICY },
+    recipes: []
+  };
+}
+
 /// Per-domain scaffolding, for the domains whose contradiction has a settled
 /// spelling in this repository — and for no others.
 ///
@@ -310,6 +331,23 @@ export function recipeGaps(material, { domains } = {}) {
       "the input carries no withheldClosures array; pass a certification plan or audit"
     );
   }
+  // An audit that states it was given no corpus withheld *every* proposable
+  // candidate as `no recipe in corpus` without consulting the implementation
+  // census, and veto synthesis never ran. Its gaps are a property of that
+  // invocation, so scaffolding them emits modules for candidates a synthesized
+  // veto would have closed -- and a scaffolded candidate is no longer eligible
+  // for synthesis, so the mistake survives into the next pass and is read
+  // there as "decidable, worth a hand recipe". Refuse instead.
+  //
+  // Only an explicit `null` refuses. The field is absent in audits written
+  // before it existed, and absence is not evidence either way.
+  if (material?.probeCorpus === null) {
+    throw new Error(
+      "this audit records probeCorpus: null, so its withheld set is an artifact of running " +
+        "without --probe-recipe-corpus rather than a census result; re-certify against a corpus " +
+        "(an empty one is enough -- see emptyCorpusManifest) and scaffold from that audit"
+    );
+  }
   return withheld
     .filter(entry => entry && typeof entry === "object")
     .filter(entry => entry.reason === RECIPE_GAP_REASON)
@@ -428,9 +466,7 @@ export function unservedDomainReport(material, domains, plan) {
 }
 
 function readManifest(path) {
-  if (!existsSync(path)) {
-    return { format: FORMAT, schemaVersion: SCHEMA_VERSION, policy: DEFAULT_POLICY, recipes: [] };
-  }
+  if (!existsSync(path)) return emptyCorpusManifest();
   const manifest = JSON.parse(readFileSync(path, "utf8"));
   if (manifest.format !== FORMAT || manifest.schemaVersion !== SCHEMA_VERSION) {
     throw new Error(

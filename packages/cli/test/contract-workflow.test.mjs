@@ -95,6 +95,7 @@ import {
   staticBindingDependencies,
   certificationImporterPathFor,
   parseCertifyArguments,
+  probeCorpusExpected,
   partialProposalHasDependencyFrontier,
   preparedGraphForPartialProposal,
   certifiedClosuresFromNativeOutput,
@@ -2092,6 +2093,48 @@ test("both graph execution shapes carry the configured pinned probe paths", () =
     const armed = buildPublishedGraphExecutionRequest({ ...inputs, ...configured });
     for (const [key, value] of Object.entries(configured)) assert.equal(armed[key], value);
     assert.equal("sandboxPolicy" in armed, false, "the adapter cannot declare isolation authority");
+  }
+});
+
+test("a run that must measure the frontier refuses to run without a corpus", () => {
+  // The failure this closes is a quiet one. Planning withholds a closure
+  // candidate as `no recipe in corpus` in two unrelated situations: a
+  // configured corpus that has no recipe for it -- a finding, reached after
+  // the implementation census ran and veto synthesis was offered -- and no
+  // configured corpus at all, where `recipe_gated_with(None, ...)` withholds
+  // every proposable candidate without consulting anything and Rust never
+  // reaches synthesis. The second answer is a property of the invocation, and
+  // in an audit it is shaped exactly like the first. A harness measuring the
+  // frontier sets this variable so the mistake is an argument error rather
+  // than a full withheld set that means nothing.
+  const base = ["--integrity", "sha512-aaaa", "--package-root", "/pkg"];
+  const previous = process.env.SOLID_CHECKER_EXPECT_PROBE_CORPUS;
+  try {
+    delete process.env.SOLID_CHECKER_EXPECT_PROBE_CORPUS;
+    assert.equal(probeCorpusExpected({}), false);
+    assert.equal(parseCertifyArguments(base).probeRecipeCorpus, "");
+
+    process.env.SOLID_CHECKER_EXPECT_PROBE_CORPUS = "1";
+    assert.equal(probeCorpusExpected(), true);
+    assert.throws(
+      () => parseCertifyArguments(base),
+      /SOLID_CHECKER_EXPECT_PROBE_CORPUS is set but no --probe-recipe-corpus/
+    );
+    // An *empty* corpus directory satisfies it: arming the harness is the
+    // point, and a corpus with no recipes still runs the census and offers
+    // synthesis. Only the absent configuration is refused.
+    assert.equal(
+      parseCertifyArguments([...base, "--probe-recipe-corpus", "/empty"]).probeRecipeCorpus,
+      "/empty"
+    );
+
+    // Only the exact opt-in arms it, so an unrelated truthy value in the
+    // environment cannot start failing ordinary certification runs.
+    assert.equal(probeCorpusExpected({ SOLID_CHECKER_EXPECT_PROBE_CORPUS: "true" }), false);
+    assert.equal(probeCorpusExpected({ SOLID_CHECKER_EXPECT_PROBE_CORPUS: "" }), false);
+  } finally {
+    if (previous === undefined) delete process.env.SOLID_CHECKER_EXPECT_PROBE_CORPUS;
+    else process.env.SOLID_CHECKER_EXPECT_PROBE_CORPUS = previous;
   }
 });
 

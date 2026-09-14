@@ -454,7 +454,28 @@ export function parseCertifyArguments(arguments_) {
   if (!/^https:\/\/[^/?#@]+$/.test(options.registryOrigin)) {
     throw new Error("--registry-origin must be a canonical HTTPS origin without a path");
   }
+  if (probeCorpusExpected() && !options.probeRecipeCorpus) {
+    throw new Error(
+      "SOLID_CHECKER_EXPECT_PROBE_CORPUS is set but no --probe-recipe-corpus was given: " +
+        "without a corpus every proposable closure is withheld as \"no recipe in corpus\" by " +
+        "construction and veto synthesis never runs, so no census result can be read from this run"
+    );
+  }
   return options;
+}
+
+/// Whether this run is required to be given a probe recipe corpus.
+///
+/// The twin of `SOLID_CHECKER_EXPECT_PROBE_PINS`, and for the same failure
+/// shape: a run that silently proved less than the reader believes. Planning
+/// withholds a closure candidate as `no recipe in corpus` both when a real
+/// corpus lacks a recipe for it -- a finding -- and when no corpus was
+/// configured at all, where it is a property of the invocation and the
+/// implementation census was never consulted. A measuring harness sets this
+/// so the second case fails loudly at argument time instead of returning a
+/// full withheld set that means nothing.
+export function probeCorpusExpected(env = process.env) {
+  return env.SOLID_CHECKER_EXPECT_PROBE_CORPUS === "1";
 }
 
 function exactRegistryPackageUrl(origin, packageName) {
@@ -3358,7 +3379,8 @@ function writeAudit(
   demandPlans,
   stageDurationsMs,
   graphPreparation = null,
-  withheldClosures = []
+  withheldClosures = [],
+  probeCorpus = null
 ) {
   if (!path) return;
   const output = resolve(path);
@@ -3384,6 +3406,15 @@ function writeAudit(
         graphPreparation,
         refusals: refusal.refusals ?? [],
         withheldClosures,
+        // The probe recipe corpus this run was given, or `null` when it was given
+        // none. It qualifies every `no recipe in corpus` record above: with a
+        // corpus, that reason is a finding about the closure, reached after the
+        // census ran and veto synthesis was offered. With `null`, planning
+        // withheld every proposable candidate by construction and neither ran --
+        // the reason is a property of this invocation. Without this field the two
+        // withheld sets are byte-identical in shape and a reader has no way to
+        // tell which one they are holding.
+        probeCorpus,
         demandPlans: demandPlans.map(plan => ({
           policyDigest: plan.policyDigest,
           candidateSemanticDigest: plan.candidateSemanticDigest,
@@ -3437,7 +3468,8 @@ function writeSuccessAudit(
   withheldClosures = [],
   plannedProposal = null,
   closureCandidates = null,
-  certifiedClosures = null
+  certifiedClosures = null,
+  probeCorpus = null
 ) {
   if (!path) return;
   const output = resolve(path);
@@ -3459,6 +3491,15 @@ function writeSuccessAudit(
     // had to carry, and the reason. The certified contract leaves those
     // domains open; this is the record of why.
     withheldClosures,
+    // The probe recipe corpus this run was given, or `null` when it was given
+    // none. It qualifies every `no recipe in corpus` record above: with a
+    // corpus, that reason is a finding about the closure, reached after the
+    // census ran and veto synthesis was offered. With `null`, planning
+    // withheld every proposable candidate by construction and neither ran --
+    // the reason is a property of this invocation. Without this field the two
+    // withheld sets are byte-identical in shape and a reader has no way to
+    // tell which one they are holding.
+    probeCorpus,
     // What the planned proposal offered, so a document that closes nothing
     // can be told apart from a proposal that offered nothing.
     plannedProposal,
@@ -3813,7 +3854,8 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       withheldClosures,
       plannedProposalPath ? plannedClosureSummary(plannedProposalPath) : null,
       closureCandidates,
-      certifiedClosures
+      certifiedClosures,
+      options.probeRecipeCorpus ? resolve(options.probeRecipeCorpus) : null
     );
     certified = true;
   } catch (error) {
@@ -3835,7 +3877,8 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       // fact about the attempt, and a refused attempt needs it attributed just
       // as much as a certified one.
       reusedProposal ? { ...(graphPreparation ?? {}), reusedProposal: true } : graphPreparation,
-      withheldClosures
+      withheldClosures,
+      options.probeRecipeCorpus ? resolve(options.probeRecipeCorpus) : null
     );
     throw refusal;
   } finally {
