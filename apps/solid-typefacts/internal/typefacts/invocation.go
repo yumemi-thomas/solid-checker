@@ -731,6 +731,17 @@ const (
 	// operator runs OrdinaryHasInstance alone. SubjectDeclaration names the
 	// class, and no SubjectParameter accompanies it.
 	SubjectRootOwnClass SubjectRootDerivation = "own-class"
+	// SubjectRootDependencyMember is ADR 0104's: the subject is a binding this
+	// module **imports by name from a bare module specifier**, never written
+	// here. SubjectImport names the specifier as written and the imported
+	// name, and nothing else about it is stated — whether that module's export
+	// is an object whose own properties are data properties is a reviewed
+	// question the consumer answers from its own table, exactly as ADR 0103
+	// leaves the reviewed default-library members to the certifier.
+	//
+	// No SubjectParameter accompanies it: the value is neither the caller's
+	// nor this program's, it is the named dependency's.
+	SubjectRootDependencyMember SubjectRootDerivation = "dependency-member"
 	// SubjectRootParameterDefaultLiteral is ADR 0090's: a parameter with a
 	// **data-only literal** default, never written in the body. It holds
 	// exactly one of two values, and an accessor read is excused on each for a
@@ -998,11 +1009,32 @@ type UncensusedInvokingForm struct {
 	// before reading any of them. Stated only beside that derivation, and never
 	// beside a refusal.
 	SubjectLocalLiteralResults []LocalLiteralResultPremise `cbor:"subjectLocalLiteralResults,omitempty" json:"subjectLocalLiteralResults,omitempty"`
+	// SubjectImport names the imported binding a SubjectRootDependencyMember
+	// subject is rooted at (ADR 0104, handshake protocol 58). Stated for that
+	// derivation and no other, and never beside a refusal.
+	SubjectImport *ImportedModuleMember `cbor:"subjectImport,omitempty" json:"subjectImport,omitempty"`
 	// LocalLiteralResult names a call whose every normal completion returns
 	// the same unwritten local data-only literal binding. This is a source
 	// identity fact, not a structural return-type assertion. Its callee must
 	// still receive a complete execution census before a consumer uses it.
 	LocalLiteralResult *LocalLiteralResultPremise `cbor:"localLiteralResult,omitempty" json:"localLiteralResult,omitempty"`
+}
+
+// ImportedModuleMember names a binding a module imports: the specifier
+// exactly as the import statement wrote it, and the name as the exporting
+// module spells it. Stated only beside SubjectRootDependencyMember.
+//
+// The specifier is **not** a package identity and must not be read as one. A
+// consumer decides for itself whether a specifier names a dependency it has
+// reviewed; a relative or absolute specifier names a file of this artifact,
+// which is a different question and one this fact does not answer.
+type ImportedModuleMember struct {
+	// Specifier is the module specifier as written -- "solid-js", "./util.js".
+	Specifier string `cbor:"specifier" json:"specifier"`
+	// Name is the exported name. For `import { a as b }` it is "a", because
+	// what the consumer reviews is the exporting module's own export, not the
+	// local alias this module happened to choose.
+	Name string `cbor:"name" json:"name"`
 }
 
 type LocalLiteralResultPremise struct {

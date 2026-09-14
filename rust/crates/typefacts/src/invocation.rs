@@ -670,6 +670,34 @@ impl DefaultLibraryAlias {
     }
 }
 
+/// An imported binding a `dependency-member` subject is rooted at (ADR 0104,
+/// handshake protocol 58): the module specifier exactly as the import wrote it
+/// and the exporting module's own name for the export.
+///
+/// **The specifier is not a package identity.** It is the text of a string
+/// literal in someone else's source, so a consumer decides for itself whether
+/// it names a dependency it has reviewed. The producer refuses a relative or
+/// absolute specifier, a namespace import, a default import and a locally
+/// assigned binding, which is what makes the pair meaningful at all — but it
+/// cannot tell a consumer that the named module is the one actually installed.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImportedModuleMember {
+    /// The module specifier as written: `solid-js`, `@scope/name`.
+    pub specifier: Arc<str>,
+    /// The exported name, not the local alias.
+    pub name: Arc<str>,
+}
+
+impl ImportedModuleMember {
+    /// The `specifier:name` spelling the reviewed table is keyed by, and the
+    /// spelling a receipt records.
+    #[must_use]
+    pub fn qualified_name(&self) -> String {
+        format!("{}:{}", self.specifier, self.name)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExportImplementationTranscript {
@@ -977,6 +1005,16 @@ pub struct UncensusedInvokingForm {
     /// rather than in a declaration file or a dependency.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subject_declaration: Option<Location>,
+    /// The imported binding a `dependency-member` subject is rooted at (ADR
+    /// 0104, handshake protocol 58), and stated for that derivation alone.
+    ///
+    /// What the producer states is that the name is imported, by that name,
+    /// from that bare specifier, and never assigned here. Whether that
+    /// module's export is an object whose own properties are data properties
+    /// — the premise a consumer needs before it may excuse a property read of
+    /// it — is a reviewed question the certifier answers from its own table.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject_import: Option<ImportedModuleMember>,
     /// Why no derivation was stated, for an accessor form that carries no
     /// [`Self::subject_root`] (handshake protocol 48).
     ///

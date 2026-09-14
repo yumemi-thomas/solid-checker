@@ -4085,6 +4085,38 @@ const REVIEWED_DEFAULT_LIBRARY_ALIASES: &[&str] = &[
 /// The reviewed alias at `index`, for the synthesized veto that has to name
 /// the member in generated source. `None` when the index is out of range,
 /// which is a construction bug and fails closed at the caller.
+/// The dependency exports whose property reads a census may excuse (ADR 0104),
+/// keyed `specifier:name` exactly as [`typefacts::ImportedModuleMember`]
+/// spells it.
+///
+/// A member earns an entry only when **all** of these answer yes, against the
+/// audited version of that dependency:
+///
+/// 1. Is the export an object this dependency's own module evaluation built,
+///    rather than one it received from elsewhere or built from caller input?
+/// 2. Are its own properties data properties throughout its lifetime -- no
+///    accessor installed at construction, none installed later by the
+///    dependency itself?
+/// 3. Is reading one of them free of reactive effect -- not a signal read, not
+///    a subscription, nothing a `reads` closure would have to enumerate?
+///
+/// `solid-js`'s `sharedConfig` is the hydration context object: a module-level
+/// object literal whose properties the runtime assigns and reads as plain
+/// data, and reading `context` subscribes to nothing.
+///
+/// **What an entry does not survive.** An application can reach the same
+/// module singleton and install an accessor on it -- `Object.defineProperty`
+/// on an imported object is not forbidden by anything -- and no fact here
+/// would see that. The same exposure ADR 0044 carries for a literal this
+/// artifact exports, and it is the reason the table is keyed by a reviewed
+/// pair rather than admitting imported objects as a class.
+const REVIEWED_DEPENDENCY_MEMBERS: &[&str] = &["solid-js:sharedConfig"];
+
+/// Whether `specifier:name` is one of the reviewed pairs.
+pub(super) fn reviewed_dependency_member(qualified: &str) -> bool {
+    REVIEWED_DEPENDENCY_MEMBERS.contains(&qualified)
+}
+
 pub(super) fn reviewed_default_library_alias(index: u16) -> Option<&'static str> {
     REVIEWED_DEFAULT_LIBRARY_ALIASES
         .get(usize::from(index))
@@ -8835,6 +8867,10 @@ enum CensusDisposition {
     ParameterDefaultLiteralAccessor,
     ParameterDefaultLiteralAccessorWrite,
     OwnLiteralAccessor,
+    /// ADR 0104: a property read whose receiver is a reviewed dependency's
+    /// data-only export. No accessor of this artifact's runs, and none the
+    /// caller installed either -- the object belongs to the named dependency.
+    ReviewedDependencyMemberAccessor,
     OwnLiteralAccessorWrite,
     LocalLiteralResultAccessor,
     LocalLiteralResultAccessorWrite,
@@ -8898,6 +8934,7 @@ impl CensusDisposition {
                 "parameter-default-literal-accessor-write"
             }
             Self::OwnLiteralAccessor => "own-literal-accessor",
+            Self::ReviewedDependencyMemberAccessor => "reviewed-dependency-member-accessor",
             Self::OwnLiteralAccessorWrite => "own-literal-accessor-write",
             Self::LocalLiteralResultAccessor => "local-literal-result-accessor",
             Self::LocalLiteralResultAccessorWrite => "local-literal-result-accessor-write",
@@ -9017,6 +9054,12 @@ const CENSUS_PRIMITIVE_COMPLETION_PROTOCOL: u64 = 29;
 const CENSUS_BOTTOM_TYPE_PROTOCOL: u64 = 35;
 
 const CENSUS_OWN_LITERAL_SUBJECT_PROTOCOL: u64 = 28;
+
+/// The handshake protocol at which a subject could be rooted at a dependency's
+/// named export (ADR 0104). Below it `subjectImport` is absent on every form,
+/// and the derivation cannot arrive at all -- the constant names the
+/// dependency rather than guarding a field that could be misread.
+const CENSUS_DEPENDENCY_MEMBER_SUBJECT_PROTOCOL: u64 = 58;
 
 const CENSUS_SUBJECT_ROOT_DERIVATION_PROTOCOL: u64 = 27;
 
@@ -9579,6 +9622,14 @@ fn census_creates_domain(
             "implementation-census premise required: a coercion's operand calls and a transcript's \
              primitive completion arrived at handshake protocol \
              {CENSUS_PRIMITIVE_COMPLETION_PROTOCOL} and this build speaks {}",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_DEPENDENCY_MEMBER_SUBJECT_PROTOCOL {
+        return Err(refuse(format!(
+            "implementation-census premise required: a subject rooted at a dependency's named \
+             export arrived at handshake protocol \
+             {CENSUS_DEPENDENCY_MEMBER_SUBJECT_PROTOCOL} and this build speaks {}",
             typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
         )));
     }
@@ -12879,6 +12930,32 @@ fn census_form_disposition(
                 (_, true) => CensusDisposition::OwnLiteralAccessorWrite,
                 (_, false) => CensusDisposition::OwnLiteralAccessor,
             })
+        }
+        // ADR 0104: the receiver is a name this module imports from a bare
+        // specifier the certifier has reviewed, and whose export is an object
+        // with data properties only. The producer proves the binding is an
+        // import and is never assigned here; this side decides that the named
+        // pair is one it has audited, which is the half a producer cannot
+        // know because it is looking at the importing module.
+        "dependency-member" => {
+            if form.subject_parameter.is_some() || form.subject_declaration.is_some() {
+                return None;
+            }
+            if !census_form_shape_reads_the_subject(form) {
+                return None;
+            }
+            // A write through the receiver is this artifact's own act on
+            // someone else's object, which is a different claim from reading
+            // a data property of it and one no ADR has reviewed.
+            if form.subject_write {
+                return None;
+            }
+            if form.kind != typefacts::UncensusedInvokingFormKind::PropertyAccessUnknownAccessor {
+                return None;
+            }
+            let imported = form.subject_import.as_ref()?;
+            reviewed_dependency_member(&imported.qualified_name())
+                .then_some(CensusDisposition::ReviewedDependencyMemberAccessor)
         }
         _ => None,
     }

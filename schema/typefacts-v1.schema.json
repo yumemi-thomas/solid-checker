@@ -687,6 +687,7 @@
         "coercionSubjectRootRefusal": { "type": "string", "enum": ["arguments-or-eval", "written-parameter", "nested-parameter", "module-binding", "module-binding-from-call", "module-binding-uninitialized", "module-binding-accessor-literal", "module-binding-written", "imported-binding", "ambient-declaration", "local-binding", "local-binding-from-call", "local-binding-uninitialized", "local-binding-accessor-literal", "local-binding-written", "call-result", "this-expression", "not-a-reference", "mixed-operand-roots", "unclassified-subject"] },
         "coercionSubjectParameters": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "minItems": 1 },
         "subjectDeclaration": { "$ref": "#/$defs/location" },
+        "subjectImport": { "$ref": "#/$defs/importedModuleMember" },
         "coercionPremise": { "$ref": "#/$defs/coercionPremise" },
         "localLiteralResult": { "$ref": "#/$defs/localLiteralResultPremise" }
       }
@@ -837,6 +838,16 @@
       "properties": {
         "kind": { "type": "string", "enum": ["primitive", "object"] },
         "type": { "type": "string" }
+      }
+    },
+    "importedModuleMember": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["specifier", "name"],
+      "description": "The module specifier exactly as an import statement wrote it, and the exported name the imported binding refers to (ADR 0104, handshake protocol 58). Stated beside subjectRoot \"dependency-member\" and never beside a refusal. The specifier is not a package identity: a consumer decides for itself whether it names a dependency it has reviewed, and the producer refuses a relative or absolute specifier, a namespace import, a default import, and a locally assigned binding.",
+      "properties": {
+        "specifier": { "type": "string" },
+        "name": { "type": "string" }
       }
     },
     "defaultLibraryAlias": {

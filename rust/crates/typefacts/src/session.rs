@@ -4295,6 +4295,7 @@ mod tests {
             subject_parameter: None,
             subject_write: false,
             subject_root: String::new(),
+            subject_import: None,
             subject_root_refusal: String::new(),
             coercion_subject_root: String::new(),
             coercion_subject_root_refusal: String::new(),

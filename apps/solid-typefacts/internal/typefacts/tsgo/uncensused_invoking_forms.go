@@ -327,6 +327,7 @@ func (p *project) uncensusedInvokingFormCensusLocked(
 				form.SubjectWrite = subject.write
 				form.SubjectRoot = subject.derivation
 				form.SubjectDeclaration = subject.declaration
+				form.SubjectImport = subject.imported
 				form.SubjectLocalLiteralResults = subject.literalResults
 			}
 			if form.SubjectRoot == "" && (kind == typefacts.UncensusedGetAccessor ||
@@ -960,6 +961,16 @@ func (p *project) subjectRootLocked(
 		}
 	}
 	if !rooted {
+		// ADR 0104: a name this module imports from a bare specifier. Last,
+		// so every caller-provenance leg above keeps its stronger reading --
+		// a consumer of ADR 0034 has reviewed those, and this one it must
+		// review separately.
+		if imported := p.dependencyMemberRootLocked(node); imported != nil {
+			return &resolvedSubject{
+				derivation: typefacts.SubjectRootDependencyMember,
+				imported:   imported,
+			}
+		}
 		return nil
 	}
 	index := root.index
@@ -1333,6 +1344,7 @@ type resolvedSubject struct {
 	parameter      *int
 	derivation     typefacts.SubjectRootDerivation
 	declaration    *typefacts.Location
+	imported       *typefacts.ImportedModuleMember
 	write          bool
 	literalResults []typefacts.LocalLiteralResultPremise
 }
