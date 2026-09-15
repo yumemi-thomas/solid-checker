@@ -4457,6 +4457,9 @@ enum AttributionMechanism {
     Reachability,
     /// A contract-generation obligation naming its exported function directly.
     ObligationIdentity,
+    /// The obligation sits on a **re-export specifier**, so it belongs to the
+    /// one public name that specifier publishes.
+    ReexportSpecifier,
     /// Nothing identified the obligation's function, so every export of the
     /// entrypoint is marked. This is the surviving fail-closed rung.
     FallbackAll,
@@ -4470,6 +4473,7 @@ impl AttributionMechanism {
             Self::IdentityWidening => "identity-widening",
             Self::Reachability => "reachability",
             Self::ObligationIdentity => "obligation-identity",
+            Self::ReexportSpecifier => "reexport-specifier",
             Self::FallbackAll => "fallback-all",
         }
     }
@@ -4790,10 +4794,72 @@ fn attribute_unresolved_obligation(
     {
         return (AttributionMechanism::Reachability, names);
     }
+    if let Some(names) = export_names_at_reexport_specifier(index, location, exports) {
+        return (AttributionMechanism::ReexportSpecifier, names);
+    }
     (
         AttributionMechanism::FallbackAll,
         exports.keys().cloned().collect(),
     )
+}
+
+/// The one public name a re-export specifier publishes, when the obligation was
+/// filed at that specifier.
+///
+/// `export { opaque } from "dependency"` binds one public name to one module's
+/// export. The binding is immutable and its target lives in the dependency's
+/// archive, so an obligation about what that dependency's contract leaves open
+/// is a fact about `opaque` and about nothing else — above all it is not
+/// evidence about the body of a sibling this package declares itself.
+///
+/// The ladder had no rung for it and could not have had one from its existing
+/// material: the specifier encloses no function, its symbol is referenced
+/// nowhere else in the package, and no call reaches it, so every such
+/// obligation fell through all three rungs to `FallbackAll` and marked every
+/// export of the entrypoint unknown. `@kobalte/utils` raises eighteen of them
+/// from nine cross-package re-exports, which is what left `mergeDefaultProps`
+/// and `callHandler` publishing `closed: ["creates"]` alone — measured as
+/// `closed: [callbacks, creates, reads, returns]` for a local export beside a
+/// *closed* re-export and `closed: [creates]` for the same function beside an
+/// open one (`scripts/contract-dependency-reexport.test.mjs`).
+///
+/// **Why narrowing is sound rather than merely narrower.** A local export that
+/// actually *calls* a re-exported dependency function does not depend on this
+/// rung at all: that call raises its own obligation, filed inside the calling
+/// function, which the enclosing-chain rung attributes to exactly the exports
+/// that contain it. What falls through to here is only the obligation about the
+/// re-export *binding* — a fact about which name is published, not about any
+/// body — so attributing it to that name loses nothing.
+///
+/// Matched on the specifier's exact `local` span, which is where
+/// `resolve_contract_imports` files it — not on a containing statement, so a
+/// second obligation inside the same `export { … } from` names only its own
+/// specifier.
+///
+/// **`export *` deliberately gets no rung.** It publishes no specifier, so
+/// there is no syntax to attribute to, and widening stays the right answer
+/// there. So does a specifier whose exported name is not in this entrypoint's
+/// map: the obligation was raised in a module whose name this entry does not
+/// republish under that spelling, and guessing which one it became would be
+/// exactly the widening this rung exists to avoid.
+fn export_names_at_reexport_specifier(
+    index: UnresolvedExportIndex<'_>,
+    location: &typefacts::Location,
+    exports: &BTreeMap<String, solid_reactive_ir::ContractExport>,
+) -> Option<Vec<String>> {
+    let file = index.files_by_path.get(location.path.as_ref())?;
+    file.ast
+        .exports
+        .iter()
+        .filter(|export| !export.type_only && export.module.is_some())
+        .flat_map(|export| export.specifiers.iter())
+        .filter(|specifier| !specifier.type_only)
+        .find(|specifier| {
+            u64::from(specifier.local.span.start) == location.start_byte
+                && u64::from(specifier.local.span.end) == location.end_byte
+                && exports.contains_key(specifier.exported.as_str())
+        })
+        .map(|specifier| vec![specifier.exported.to_string()])
 }
 
 /// Whether the published `parameter-member` reactive-read row already carries

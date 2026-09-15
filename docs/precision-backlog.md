@@ -21394,3 +21394,71 @@ bundles of the pinned 2.0 prerelease and writing the section. Until then every
 2.0 package that splits its props declines its `creates` closure for want of a
 row its 1.x counterpart has had all along — and `props-split-vocabulary` is the
 fixture that will show it closing.
+
+## 2026-09-15 — an open re-export no longer marks the package's own exports
+
+**Resolved.** The 2026-09-15 re-export entry above left this open: "`fallback-all`
+still reaches the importer's *own* exports … Narrowing the ladder is a separate
+change." This is that change, and measuring it first corrected which subsystem
+the `mergeDefaultProps` demand actually lives in.
+
+**The measurement.** `scripts/contract-dependency-reexport.test.mjs` builds the
+same `local` function in two packages that differ only in what they re-export:
+
+| package | `local`'s `closed` |
+| --- | --- |
+| `reexporter` — one re-export, fully closed | `callbacks`, `creates`, `reads`, `returns` |
+| `mixed` — the same, plus one *open* re-export | **`creates`** |
+
+`closed: ["creates"]` is exactly what the 2026-09-14 demand report § 18.1
+measured for the real `@kobalte/utils` `mergeDefaultProps`. So that export's
+open `reactiveReads` was never a limit of the contract model or of the
+`mergeProps` wrapper shape — a clean wrapper of the identical shape closes
+`callbacks`, `reads` and `creates` today
+(`fixtures/package-contracts/callback-slot-props-forwarding`'s `Stylesheet`).
+It was collateral from the nine cross-package re-exports, four of whose sources
+state nothing.
+
+**The rung.** `resolve_contract_imports` files the obligation at the re-export
+specifier's own `local` span. That location encloses no function, its symbol is
+referenced nowhere else in the package, and no call reaches it, so all three
+existing rungs missed and every such obligation fell to `FallbackAll`.
+`AttributionMechanism::ReexportSpecifier` attributes it to the one public name
+the specifier publishes. Narrowing is sound rather than merely narrower: a local
+export that actually *calls* a re-exported dependency function raises its own
+obligation inside the calling function, which the enclosing-chain rung already
+attributes exactly; what falls through here is only the obligation about the
+*binding*.
+
+`export *` deliberately gets no rung — it publishes no specifier, so there is no
+syntax to attribute to and widening stays correct.
+
+**Measured movement, and its honest limit.** The harness pin flips: `local` in
+`mixed` now closes all four domains, identical to `local` in `reexporter`, while
+`opaque` — the name the obligation is actually about — keeps every domain open.
+Coverage (550 findings) and the generator corpus are unmoved, because neither
+has a fixture with an open cross-package re-export beside a local export; the
+corpus runner has no dependency-catalog surface at all, which is why this pin
+lives in `scripts/`.
+
+**What it does and does not do to the 1037.** It restores whatever each local
+export's own analysis proves. For `mergeDefaultProps` that is `reads` (and
+`callbacks`, `creates`), so its 127 findings **narrow** rather than disappear:
+they also demand `returns`, and `returns` stays open for any function that
+returns a value — ADR 0035's census decides the empty completion and a single
+whole-parameter identity, nothing else. The same holds for `callHandler`'s 196,
+whose `callbacks` is open for the separate parameter-flow reason. A finding
+whose demanded domains are wholly within `{callbacks, reads, creates,
+ownerRequirements}` disappears; one that demands `returns` does not. Which of
+the 1037 fall on each side is not measurable here — it needs the kobalte corpus,
+the same external-artifact blocker recorded above.
+
+**And the four-step chain is off the table as described.** Closing
+`mergeDefaultProps`'s `returns` would need the contract to say "returns a props
+root derived from parameter N", and `validate_contract_return` forbids
+`parameter` on a `store-path` outright — a reactive leaf takes a label and no
+parameter. So that step is not a derivation change but a **new return kind**:
+the public `schema/solid-reactivity.schema.json`, the wire encoder and decoder,
+validation, both projections, plus a new `returns` census mode to discharge it.
+That is an ADR with a public schema change, not a four-step refactor, and it is
+not started.

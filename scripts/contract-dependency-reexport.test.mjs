@@ -281,12 +281,22 @@ describe("a contract describes what it re-exports from an accepted dependency", 
     expect(closure(dependency, "opaque")).toEqual({ closed: [], proposed: [] });
   });
 
-  test("the same obligation still reaches this package's own exports", () => {
-    // Not a happy outcome, and deliberately not fixed here: the obligation is
-    // raised about `opaque` and encloses no function, so the ladder's widest
-    // mechanism marks `local` unknown too. Narrowing that is a separate change
-    // to the attribution ladder itself; pin today's answer so it cannot move
-    // silently.
-    expect(invokedFirstArgument(consumers.mixed, "local")).toEqual([]);
+  test("an open re-export no longer reaches this package's own exports", () => {
+    // This *was* pinned as an unhappy answer: the obligation is raised at
+    // `opaque`'s re-export specifier, which encloses no function, so the
+    // attribution ladder fell through to its widest mechanism and marked
+    // `local` unknown too. An ESM re-export binding is immutable and its target
+    // lives in the dependency's archive, so an obligation about that
+    // dependency's open claims is a fact about `opaque` and no evidence at all
+    // about a sibling this package declares itself. The ladder now has a rung
+    // for the specifier (`reexport-specifier`).
+    expect(invokedFirstArgument(consumers.mixed, "local")).toEqual([
+      "invoke:same-stack:untracked"
+    ]);
+    // The whole point of the narrowing, and its falsifier: `local` is described
+    // exactly as it is in the package that re-exports nothing open.
+    expect(closure(consumers.mixed, "local")).toEqual(closure(consumers.reexporter, "local"));
+    // And the name the obligation is actually about keeps every domain open.
+    expect(closure(consumers.mixed, "opaque")).toEqual({ closed: [], proposed: [] });
   });
 });
