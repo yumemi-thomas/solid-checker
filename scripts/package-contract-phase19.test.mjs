@@ -136,7 +136,12 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // obsolete catalog, pinning ADR 0109's consumer arm (a `merged-props`
       // return is reactive exactly when the caller's argument at that index
       // is).
-      stableMainDocuments: 192,
+      // 193 adds package-tuple-return-consumer's main document, the second
+      // authorized fixture: an `argument` return, which is the only premise
+      // under which a consumer looks through a wrapper at the primitive its
+      // argument calls, and so the only way to reach
+      // `Dialect::returns_reactive_tuple` from a fixture.
+      stableMainDocuments: 193,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

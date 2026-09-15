@@ -21373,6 +21373,12 @@ accepted contract with a parameter-relative return — which is the same missing
 capability the `mergeDefaultProps` chain needs, and is the honest next step for
 both.
 
+**Both were done the same day.** The capability landed as
+`fixture_authorization`, and the behaviour pin as
+`fixtures/reactive-ir/package-tuple-return-consumer` — see "the tuple row has a
+behaviour pin" at the end of this file. The `mergeDefaultProps` half is *not*
+unblocked by it: that one needs the kobalte corpus, not a fixture surface.
+
 ### And a third asymmetry on the same primitive, in the audit table
 
 Writing the fixture surfaced one more, which is why it was worth writing.
@@ -21552,9 +21558,10 @@ than only in prose.
 
 **Still open.**
 
-- **The `returns_reactive_tuple` behaviour pin is now authorable and not
-  written.** It needs a contract stating an `argument` or `callback-result`
-  return, which this capability makes possible; nothing else blocks it.
+- ~~**The `returns_reactive_tuple` behaviour pin is now authorable and not
+  written.**~~ Written the same day, as
+  `fixtures/reactive-ir/package-tuple-return-consumer`. The `callback-result`
+  door into `effective_call_return` still has none.
 - **The `mergeDefaultProps` yield is not a fixture question.** It needs the
   kobalte corpus and a pass-2 harness, neither of which is in this repository.
   No fixture capability can substitute.
@@ -21567,3 +21574,53 @@ than only in prose.
 - **This is still a fixture, not a certification.** A hand-written document
   authorized by a test-scoped issuer says nothing about whether the certifier
   can produce such a contract. It cannot yet.
+
+## 2026-09-15 — the tuple row has a behaviour pin
+
+**Resolved.** The 2026-09-15 dialect-sweep entry above closed with
+`returns_reactive_tuple` "correct-by-construction rather than measured — the
+weaker of the two standards this repository holds itself to", and named the
+missing premise exactly: a contracted export whose own `returns` is `argument`
+or `callback-result`, which no fixture could supply. The accepted-contract
+capability landed the same day, and
+`fixtures/reactive-ir/package-tuple-return-consumer` is the pin.
+
+`identity`'s contract returns argument 0, so a read travels through the wrapper
+into whatever primitive the argument called. Six components; two of them move
+when the row is reverted to the pre-fix literal
+(`CreateSignal | CreateStore | CreateResource`), measured by doing exactly that:
+
+- **`const [, setOnly] = identity(createOptimistic(0))`.** An unstructured
+  reactive return is attributed to the binding's *first name*, and with the first
+  slot elided that name is the **setter**. Without the row, `setOnly(1)` is
+  reported `SC1001` — "reactive accessor … is read through setOnly" — a
+  violation invented on correct code `tsc` accepts.
+- **`const whole = identity(createOptimisticStore({count: 0}))`.** Not a
+  destructure, so a tuple has no slot to attribute and nothing is reported.
+  Without the row the *tuple* becomes the store and the message names
+  `whole.count`, a path that does not exist on it.
+
+**Why it survived the extraction, now stated in the fixture.** For the ordinary
+`const [a, set] = …` the two shapes **agree**: the tuple arm registers slot 0 and
+the bare-leaf arm registers `names.first()`, which is the same name. The wrong
+list was therefore invisible to every idiomatic use, and only an elided slot or
+an undestructured binding can tell them apart. `SignalSlot` and `StoreSlot` are
+in the fixture to pin that agreement rather than to pin the row.
+
+**The absence is pinned too.** `createProjection` returns `Refreshable<Store<T>>`
+— the store itself — so it is deliberately not in the list, and `projected.count`
+is a store-path read. Adding it to the tuple list would silence that finding,
+which makes the fixture a falsifier in both directions.
+
+**Still open.**
+
+- **1.x has no behaviour pin.** The 1.x row (`createSignal`, `createStore`,
+  `createResource`) was already correct, so reverting it is not what this fixture
+  falsifies; the sweep changed only the 2.0 side. A v1 twin would pin the
+  dialect *difference* rather than the row, and is not written.
+- **`callback-result` is the other door to `effective_call_return`** and has no
+  fixture reaching the tuple row through it. The `argument` path is pinned; the
+  callback-result path is reached only through a returned-function factory, and
+  nothing exercises it against a tuple-returning primitive.
+- **The `omit` negative-claim audit row for `Solid2`** is unchanged and still
+  missing; it is an audit, not a seam bug.

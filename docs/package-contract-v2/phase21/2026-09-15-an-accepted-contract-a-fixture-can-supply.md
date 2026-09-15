@@ -110,9 +110,10 @@ refactor a refactor.
   unchanged; this adds a road, it does not move them onto it. Whether they
   should now ship authorization requests instead is a separate, larger change:
   several exist precisely to pin refusal.
-- **Two of the three blocked claims are still blocked, for unrelated reasons.**
-  The `returns_reactive_tuple` row needs a contract stating an `argument` or
-  `callback-result` return, which is now authorable but not written; the
+- **One of the three blocked claims is still blocked, and not for want of a
+  fixture surface.** The `returns_reactive_tuple` row was written the same day
+  (`fixtures/reactive-ir/package-tuple-return-consumer`, an `argument` return
+  read through into `createOptimistic`/`createOptimisticStore`); the
   `mergeDefaultProps` yield needs the kobalte corpus, which this repository does
   not have and no fixture capability can supply.
 - **These are still fixtures.** A hand-written document authorized by a
