@@ -967,3 +967,87 @@ Not established here: whether eslint-plugin-solid 0.14.5 reports this. The
 parity case using it (`upstream/reactivity__valid__05`) is a *valid* case, so
 nothing currently pins the destructure-the-result behaviour in either direction.
 That should be checked against the upstream source before a row is added.
+
+## 19. What eslint-plugin-solid does with `mergeProps`, and why the § 18 flag retires
+
+Read at the pinned revision `6d3bc311` per `.claude/skills/upstream-parity`.
+
+### Upstream models it
+
+`packages/eslint-plugin-solid/src/rules/reactivity.ts:740`:
+
+```ts
+} else if (matchImport("mergeProps", callee.name)) {
+  const merged = id && getReturnedVar(id, context);
+  if (merged) {
+    scopeStack.pushProps(merged, currentScope().node);
+  } else {
+    warnShouldAssign(id ?? init);
+  }
+}
+```
+
+Two behaviours fall out. Assigned to a variable, the result becomes a
+**props-kind reactive variable**. Destructured inline, `getReturnedVar` returns
+`null` for an `ObjectPattern` and upstream reports `shouldAssign` — *"For proper
+analysis, a variable should be used to capture the result of this function
+call."*
+
+A props-kind variable referenced outside a tracked scope in its declaration
+scope reports `untrackedReactive`, and that mechanism **is** pinned upstream
+(`test/rules/reactivity.test.ts`, invalid section):
+
+```js
+const Component = props => {
+  const { value: valueProp } = props;   // untrackedReactive on `props`
+  const value = createMemo(() => valueProp || "default");
+  return <div>{value()}</div>;
+};
+```
+
+solid-checker has parity on exactly that case —
+`fixtures/ownership-cases/cases.json` pins it as
+`upstream/reactivity__invalid__03` expecting `v1/no-destructure`, and § 18's
+`Direct` measurement confirms SC1003 fires.
+
+### The divergence, and what pins it
+
+| shape | upstream 0.14.5 | solid-checker | pinned |
+| --- | --- | --- | --- |
+| `const { x } = props` | `untrackedReactive` | **SC1003** | both sides |
+| `const m = mergeProps(a,b); const { x } = m` | `untrackedReactive` (same path) | nothing | neither |
+| `const { x } = mergeProps(a,b)` | `shouldAssign` | nothing | neither |
+| `const m = mergeProps(a,b); <div>{m.x}</div>` | valid | valid | both sides |
+
+Upstream has exactly one `mergeProps` test and it is the **valid** one
+(`reactivity__valid__05` here), so the two divergent shapes are unpinned
+upstream as well as here. The divergence is real and derives from upstream
+source, not from a pinned upstream expectation.
+
+### Incidence in the corpus: zero
+
+Before treating that as a gap worth closing, it was counted across the four
+consumer repositories:
+
+| | |
+| --- | ---: |
+| files containing a `mergeProps`/`mergeDefaultProps` call | 161 |
+| calls | 167 |
+| merged results bound to a variable | 162 |
+| **inline destructures of a merge call** | **0** |
+| **destructures of a merged variable** | **0** |
+
+The detector is not vacuous: the same pattern finds 10 object-destructures of a
+bare variable elsewhere in the same corpus.
+
+### Conclusion
+
+`@kobalte/utils`' `mergeDefaultProps` wraps a primitive that solid-checker does
+not cover and upstream does. The divergence is genuine. It is also worth
+**nothing on this corpus** — not one of the 167 merge calls destructures its
+result, so adding the row would move no finding here.
+
+§ 18 flagged this as the one unexamined item that could still be large. It is
+not. The § 15 ceiling stands at 1.5% with no lever behind it, and the honest
+next question is the one § 15 already posed: whether the checker's
+contract-independent rules are where the value is.
