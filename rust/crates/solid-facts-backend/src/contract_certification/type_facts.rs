@@ -7730,35 +7730,42 @@ fn require_operation_recursive_signature(
         sites.push("recursive-operation-value:root".into());
         return Ok(());
     }
-    let fact = callable_paths
-        .iter()
-        .find(|fact| fact.alternative == alternative && fact.path == expected)
-        .ok_or_else(|| {
-            open(&format!(
-                "operation value path is absent from the signature census (alternative={alternative}, path={expected:?})"
-            ))
-        })?;
-    let callable_local_closure = callable.asserts_callable()
-        && fact.presence == PathPresence::Required
-        && fact.callability == Callability::Callable
-        && fact
-            .open_reasons
-            .iter()
-            .all(|reason| reason.as_ref() == "openType");
+    let candidates = demanded_callable_path_facts(callable_paths, alternative, &expected);
+    if candidates.is_empty() {
+        return Err(open(&format!(
+            "operation value path is absent from the signature census (alternative={alternative:?}, path={expected:?})"
+        )));
+    }
     if callable.asserts_callable()
-        && alternative == 0
+        && alternative.unwrap_or(0) == 0
         && require_return_callable_source(transcript, &expected, sites)
     {
         return Ok(());
     }
-    if !callable_path_is_present_and_locally_closed(fact) && !callable_local_closure {
+    let supplying = supplying_callable_path_facts(&candidates);
+    if supplying.is_empty() {
         return Err(open(&format!(
-            "operation value path is locally open (complete={}, presence={:?}, callability={:?}, reasons={:?})",
-            fact.complete, fact.presence, fact.callability, fact.open_reasons
+            "operation value path is proved absent on every alternative that could supply it (alternatives={:?}, path={expected:?})",
+            demanded_alternatives(&candidates)
         )));
     }
-    require_path_callability(callable, fact, "operation value path", open)?;
-    sites.push(callable_path_site(fact));
+    for fact in supplying {
+        let callable_local_closure = callable.asserts_callable()
+            && fact.presence == PathPresence::Required
+            && fact.callability == Callability::Callable
+            && fact
+                .open_reasons
+                .iter()
+                .all(|reason| reason.as_ref() == "openType");
+        if !callable_path_is_present_and_locally_closed(fact) && !callable_local_closure {
+            return Err(open(&format!(
+                "operation value path is locally open on alternative {} (complete={}, presence={:?}, callability={:?}, reasons={:?})",
+                fact.alternative, fact.complete, fact.presence, fact.callability, fact.open_reasons
+            )));
+        }
+        require_path_callability(callable, fact, "operation value path", open)?;
+        sites.push(callable_path_site(fact));
+    }
     Ok(())
 }
 
@@ -7988,16 +7995,30 @@ fn require_export_recursive_subject(
             reason: "Type Facts cannot address this exported-value path exactly".into(),
         }
     })?;
-    let fact = transcript
-        .callable_paths
-        .iter()
-        .find(|fact| fact.alternative == alternative && fact.path == expected_path)
-        .ok_or_else(|| open("exported-value path is absent from the exact producer census"))?;
-    if !callable_path_is_present_and_locally_closed(fact) {
-        return Err(open("exported-value path is locally open"));
+    let candidates =
+        demanded_callable_path_facts(&transcript.callable_paths, alternative, &expected_path);
+    if candidates.is_empty() {
+        return Err(open(
+            "exported-value path is absent from the exact producer census",
+        ));
     }
-    require_path_callability(*callable, fact, "exported-value path", open)?;
-    sites.push(callable_path_site(fact));
+    let supplying = supplying_callable_path_facts(&candidates);
+    if supplying.is_empty() {
+        return Err(open(&format!(
+            "exported-value path is proved absent on every alternative that could supply it (alternatives={:?})",
+            demanded_alternatives(&candidates)
+        )));
+    }
+    for fact in supplying {
+        if !callable_path_is_present_and_locally_closed(fact) {
+            return Err(open(&format!(
+                "exported-value path is locally open on alternative {}",
+                fact.alternative
+            )));
+        }
+        require_path_callability(*callable, fact, "exported-value path", open)?;
+        sites.push(callable_path_site(fact));
+    }
     Ok(())
 }
 
@@ -9029,29 +9050,98 @@ fn require_recursive_subject(
             reason: "Type Facts cannot address this recursive path exactly".into(),
         }
     })?;
-    let fact = callable_paths
-        .iter()
-        .find(|fact| fact.alternative == alternative && fact.path == expected_path)
-        .ok_or_else(|| open("recursive path is absent from the exact producer census"))?;
-    if !callable_path_is_present_and_locally_closed(fact) {
-        return Err(open("recursive path is locally open"));
-    }
-    if callable.asserts_callable() && fact.callability != Callability::Callable {
+    let candidates = demanded_callable_path_facts(callable_paths, alternative, &expected_path);
+    if candidates.is_empty() {
         return Err(open(
-            "recursive callable positive is not compiler-proved callable",
+            "recursive path is absent from the exact producer census",
         ));
     }
-    sites.push(callable_path_site(fact));
+    let supplying = supplying_callable_path_facts(&candidates);
+    if supplying.is_empty() {
+        return Err(open(&format!(
+            "recursive path is proved absent on every alternative that could supply it (alternatives={:?})",
+            demanded_alternatives(&candidates)
+        )));
+    }
+    for fact in supplying {
+        if !callable_path_is_present_and_locally_closed(fact) {
+            return Err(open(&format!(
+                "recursive path is locally open on alternative {}",
+                fact.alternative
+            )));
+        }
+        if callable.asserts_callable() && fact.callability != Callability::Callable {
+            return Err(open(
+                "recursive callable positive is not compiler-proved callable",
+            ));
+        }
+        sites.push(callable_path_site(fact));
+    }
     Ok(())
 }
 
-fn translate_value_path(path: &[ValuePathSegment]) -> Option<(usize, Vec<typefacts::PathSegment>)> {
-    let mut alternative = 0;
+/// The census facts a demanded value path is verified against.
+///
+/// With an explicit alternative this is the one fact at that index. Without
+/// one it is every alternative that carries the path, because the demand is a
+/// claim about the member and not about the producer's enumeration order.
+fn demanded_callable_path_facts<'a>(
+    facts: &'a [typefacts::CallablePathFact],
+    alternative: Option<usize>,
+    expected: &[typefacts::PathSegment],
+) -> Vec<&'a typefacts::CallablePathFact> {
+    facts
+        .iter()
+        .filter(|fact| {
+            fact.path == expected && alternative.is_none_or(|index| fact.alternative == index)
+        })
+        .collect()
+}
+
+/// Of those, the alternatives that can actually supply the member.
+///
+/// `Absent` is a positive claim that the member does not exist on that
+/// alternative — the producer refuses an absence fact that carries any other
+/// positive or open field — so a value of that alternative cannot be the one
+/// the operation read. Excluding it does not weaken the premise: every
+/// remaining alternative still has to carry the path closed and with the
+/// demanded callability, and a path absent on all of them refuses.
+fn supplying_callable_path_facts<'a>(
+    candidates: &[&'a typefacts::CallablePathFact],
+) -> Vec<&'a typefacts::CallablePathFact> {
+    candidates
+        .iter()
+        .copied()
+        .filter(|fact| fact.presence != PathPresence::Absent)
+        .collect()
+}
+
+/// How a refusal names the alternatives it looked at.
+fn demanded_alternatives(candidates: &[&typefacts::CallablePathFact]) -> Vec<usize> {
+    candidates.iter().map(|fact| fact.alternative).collect()
+}
+
+/// Translate an IR value path into the producer's addressing, keeping the
+/// alternative *optional*.
+///
+/// A demand names an alternative only when the IR's own recorded shape was a
+/// choice: `inventory_value_shape` then emits one demand per alternative, and
+/// index `i` of the proposal is checked against census alternative `i`. A
+/// demand that names no alternative is a claim about a member of the value
+/// itself, and the index is not its to choose — the producer may still have
+/// enumerated the *type* as a union, and which arm sits at index 0 is the
+/// producer's ordering, not a fact about the operation. Reading `None` as
+/// "alternative 0" made `undefined`, sitting at index 0 of `Node | undefined`,
+/// refute a member read the implementation performs on the `Node` arm.
+fn translate_value_path(
+    path: &[ValuePathSegment],
+) -> Option<(Option<usize>, Vec<typefacts::PathSegment>)> {
+    let mut alternative = None;
     let mut translated = Vec::new();
     for segment in path {
         match segment {
             ValuePathSegment::ChoiceAlternative(index) if translated.is_empty() => {
-                alternative = usize::try_from(*index).ok()?;
+                alternative = Some(usize::try_from(*index).ok()?);
             }
             ValuePathSegment::TupleItem(index) => translated.push(typefacts::PathSegment {
                 kind: PathSegmentKind::Tuple,
@@ -19067,6 +19157,103 @@ mod tests {
         assert!(
             check(&signature).is_err(),
             "an unknown member cannot inherit the prefix's closure"
+        );
+    }
+
+    /// `@kobalte/utils`'s `contains(parent: Node | undefined, child)` reads
+    /// `parent.contains`, and the producer enumerates that parameter as two
+    /// alternatives: `undefined` at index 0, carrying the member as a proved
+    /// absence, and `Node` at index 1, carrying it `Required` and `Callable`.
+    /// The demand names no alternative — the IR's recorded shape is a
+    /// parameter member, not a choice — so reading the missing index as 0
+    /// refused a member read the implementation performs on the `Node` arm,
+    /// and with it the whole `.` entrypoint 942 consumer call sites import.
+    #[test]
+    fn an_unnamed_alternative_reads_the_member_where_the_census_can_supply_it() {
+        let mut operation = operation("read", OperationKind::Read, per_call_cardinality(Some(0)));
+        operation.inputs.push(ValueShape::Parameter {
+            index: 0,
+            path: vec!["contains".into()],
+        });
+        let exported = export_semantics(Vec::new(), vec![operation]);
+        let root = ValueRoot::OperationInput {
+            operation: solid_reactive_ir::contract_semantics::OperationId("read".into()),
+            index: 0,
+        };
+        // The member sits on the *input*, and the demand's own path is empty:
+        // that is the shape the corpus produced, and it is why the demand
+        // names no alternative to check against.
+        let path = solid_reactive_ir::contract_semantics::ValuePath(Vec::new());
+        let proof = proof(
+            ProofFamily::RecursiveValueShape,
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+                artifact_case: "browser".into(),
+                export: "contains".into(),
+                root: root.clone(),
+                path: path.clone(),
+                callable: DemandedCallability::Unknown,
+            }),
+        );
+        let export_transcript = export_value_transcript(json!({}));
+        let mut signature = transcript().selected_signature.unwrap();
+        let member = typefacts::PathSegment {
+            kind: PathSegmentKind::Property,
+            property: "contains".into(),
+            index: None,
+        };
+        let template = signature.parameters[0].callable_paths[0].clone();
+        let mut undefined_arm = template.clone();
+        undefined_arm.alternative = 0;
+        undefined_arm.path = vec![member.clone()];
+        undefined_arm.presence = PathPresence::Absent;
+        undefined_arm.callability = Callability::Unknown;
+        undefined_arm.constructability = typefacts::InvocationConstructability::Unknown;
+        undefined_arm.complete = true;
+        undefined_arm.subtree_enumerated = true;
+        undefined_arm.open_reasons.clear();
+        let mut node_arm = undefined_arm.clone();
+        node_arm.alternative = 1;
+        node_arm.presence = PathPresence::Required;
+        node_arm.callability = Callability::Callable;
+        signature.parameters[0].callable_paths = vec![undefined_arm.clone(), node_arm.clone()];
+        let check = |signature: &typefacts::SelectedSignature| {
+            require_operation_recursive_signature(
+                &proof,
+                &export_transcript,
+                &exported,
+                &root,
+                &path,
+                DemandedCallability::Unknown,
+                signature,
+                &|reason| TypeFactsCertificationError::FamilyOpen {
+                    demand: proof.id.clone(),
+                    reason: reason.into(),
+                },
+                &mut Vec::new(),
+            )
+        };
+        assert!(
+            check(&signature).is_ok(),
+            "the alternative that proves the member absent cannot be the one the read observed"
+        );
+
+        // The absence is still exactly that: an alternative carrying the member
+        // *openly* is a gap the demand has to refuse, not one more arm to skip.
+        let mut open_arm = node_arm.clone();
+        open_arm.presence = PathPresence::Unknown;
+        signature.parameters[0].callable_paths = vec![undefined_arm.clone(), open_arm];
+        assert!(
+            matches!(check(&signature), Err(TypeFactsCertificationError::FamilyOpen { reason, .. })
+            if reason.contains("locally open on alternative 1")),
+            "an open alternative refuses and names itself"
+        );
+
+        // And a member absent everywhere has no supplier at all.
+        signature.parameters[0].callable_paths = vec![undefined_arm];
+        assert!(
+            matches!(check(&signature), Err(TypeFactsCertificationError::FamilyOpen { reason, .. })
+            if reason.contains("proved absent on every alternative")),
+            "a path absent on every alternative says so instead of calling itself open"
         );
     }
 
