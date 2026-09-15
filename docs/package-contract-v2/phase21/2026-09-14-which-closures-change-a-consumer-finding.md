@@ -407,3 +407,69 @@ second package was certified with its dependency composed, and the first was
 not. § 10's conclusion that usage-level feedback is "a Solid 2.0 capability" is
 not supported by this pair, and is withdrawn pending a comparison that holds the
 composition constant.
+
+## 12. Why nothing binds: the export's implementation is in another file
+
+§ 11 asked why the graph lane declined the dependency. It did not decline it.
+`composedArtifactCases: 1`, and the `declinedDependencyFrontier` object is trace
+metadata recorded in the **success** branch of the composition path
+(`certify-contract.mjs:2044`) — a record of what *triggered* composition, not a
+final state. § 11 read a historical record as an outcome, the same class of
+mistake as § 9 reading a dated measurement as current state.
+
+What the final document shows instead: **all eleven exports carry the identical
+summary** `{"call": {}, "shape": "callable"}` — including `preventDefault`,
+`stopPropagation` and `stopImmediatePropagation`, which call no Solid primitive
+and never touch `@solid-primitives/utils`. Those three would close under either
+of the earlier explanations. The emptiness is systemic to the case and upstream
+of any census.
+
+The certified artifact is a **pure re-export barrel**. `dist/index.js` is six
+`export *` lines and carries no implementation at all, which is also why it is
+byte-identical to `dist/index.d.ts` (`sha256:9ccef4b1…` for both). Every export
+it names is implemented in a sibling module — `makeEventListener` in
+`dist/eventListener.js`, the three wrappers in `dist/callbackWrappers.js` — and
+those siblings are *not* identical to their own declarations.
+
+A paired comparison across the packages certified this session:
+
+| package | `index.js` vs `index.d.ts` | implementations in the case's own artifact | claims |
+| --- | --- | --- | --- |
+| `@solid-primitives/utils@6.4.1` | differ | yes | 56 candidates |
+| `@solid-primitives/utils@7.0.0-next.4` | differ | yes | 64 closures, one owner requirement |
+| `@kobalte/utils@0.9.2` | differ | **partly** — bundled locals plus cross-package re-exports | 20 of 59 close; **35 are `{"call": {}, "shape": "callable"}`** |
+| `@solid-primitives/event-listener@2.4.5` | identical | **none** | 0 of 11 |
+
+`@kobalte/utils` is the row that separates the two candidate causes. It is not
+digest-identical, and it still leaves 35 exports empty — the ones it re-exports
+rather than implements. So the predictor is not the identical digest; it is
+**whether the export's implementation lives in the bytes of the case being
+certified**. The identical digest is a symptom of a barrel having no
+implementation, not the mechanism.
+
+### This is the `motion-utils` wall, again
+
+`2026-09-14-remaining-frontier-census.md` records the same shape for
+`motion-utils`: `easeIn` is *bound* in `ease.mjs` while the body it names is
+written in `cubic-bezier.mjs`, and `census_implementation_subject` requires the
+stated declaration's path to end with the snapshot's runtime binding path — so
+two different files of one package refuse. That measurement cost an ADR attempt
+(0108) that was built and reverted the same day.
+
+`makeEventListener` is that case with a barrel in front of it: the declaration
+binds at `dist/index.d.ts`, the implementation is in `dist/eventListener.js`,
+and those are different files. Nothing about the dialect, the dependency, or the
+census is reached.
+
+### What this settles, and what it does not
+
+Settled: the three explanations offered in §§ 9–11 — 1.x authority, dependency
+decline, lane decline — are all wrong, and the observation they were attached to
+has a much more ordinary cause that this repository already had written down.
+
+Not settled by direct test: no non-barrel entrypoint of this package exists to
+certify (its `exports` map has only `.`), so the argument above rests on the
+four-package comparison plus the recorded `motion-utils` precedent rather than
+on an isolated experiment. A package that publishes both a barrel and a deep
+entrypoint would isolate it in one run, and is worth finding before this is
+treated as established.
