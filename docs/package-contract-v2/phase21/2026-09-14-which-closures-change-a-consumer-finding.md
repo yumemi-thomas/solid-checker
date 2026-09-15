@@ -1329,3 +1329,62 @@ rejects the contract regardless of its content, and the four that remain need
 two shapes the format does not express. The one actionable defect found on the
 way — a creates decline erasing a proven callbacks claim — is real, reproducible
 in twelve lines, and resolves none of the 24.
+
+## 23. The open-claims gate, mapped — and § 22's "defect" corrected
+
+With artifact admission working (`3426ed5a`), `kobalte/packages/core` moves 471
+acceptance-gate findings to **1037 open-claims** findings. This is what they
+ask for.
+
+### Correction: § 22's callbacks-claim defect is not a defect
+
+§ 22 concluded that "a creates decline erases an independently-proven callbacks
+claim" and called it worth fixing. Two controlled runs falsify that.
+
+| export | body | creates decline | callbacks claim |
+| --- | --- | --- | --- |
+| `clean(handler)` | `handler()` | no | **stated** |
+| `unrelatedDecline(node, handler)` | `node.setAttribute(…)`; `handler()` | **yes** | **stated** |
+| `declineOnCallback(handler)` | `typeof` guard; `handler[0](handler[1])` | **yes** | **stated** |
+| `outerGuard(handler)` | `if (handler)` + the above | **yes** | **stated** |
+| `extraParam(event, handler)` | same, but `handler[0](handler[1], event)` | yes | **absent** |
+
+A creates decline does not erase the claim — three exports keep it while
+declining. The discriminator is narrower: the claim is dropped when **another
+parameter flows into the unresolved callee**. `outerGuard` and `extraParam` are
+structurally identical apart from `event` being passed to `handler[0](…)`.
+
+That is still an inconsistency worth recording — two functions of the same shape
+disagree on whether the provable "argument 1 is invoked" survives — but it is
+not the creates/callbacks bleed § 22 described, and the fix is a design choice
+rather than an obvious repair: stating it in both cases widens a branch-
+dependent claim, dropping it in both raises the open-claims count.
+
+### What the 1037 actually ask for
+
+| export | findings | domain(s) wanted | where a fix would live |
+| --- | ---: | --- | --- |
+| `mergeRefs` | 235 | callbacks; reactiveReads, returns, ownerRequirements | **re-export binding** — `@solid-primitives/refs`, and its contract is `closed` at source, so binding alone gains nothing |
+| `access` | 185 | callbacks; reactiveReads, returns, ownerRequirements | **re-export binding** — `@solid-primitives/utils`, which *does* state operations at source |
+| `callHandler` | 196 | callbacks; reactiveReads, ownerRequirements | the parameter-flow drop above |
+| `mergeDefaultProps` | 127 | reactiveReads, returns | § 18 — wraps `mergeProps`, itself degenerate in solid-js's own contract |
+| `createGenerateId` | 60 | callbacks; reactiveReads, returns | local |
+| `snapValueToStep`, `clamp`, `contains`, `composeEventHandlers`, `focusWithoutScrolling` | 104 | mixed | local |
+
+### There is no single fix
+
+The 1037 split across three subsystems with different owners, and **none is a
+majority**:
+
+- **re-export binding** — 420 findings (40%), but only `access`'s 185 would
+  actually gain claims, because `mergeRefs` states nothing at its source either.
+  Certification currently refuses the whole artifact case here
+  (`accepted dependency @solid-primitives/keyed has no exact runtime binding for
+  export Key`), so this is a certification blocker, not a claim gap.
+- **the parameter-flow drop** — 196 findings (19%), a design decision.
+- **the DOM-call census** (§ 16) — the local exports, where the refusals are
+  correct fail-closed behaviour on `node.contains(el)`-shaped calls.
+
+"Fix the open-claims gate" is therefore not one change. The gate itself is
+right: it says the contract does not state what the consumer needs, and it
+does not. What is missing is contract *content*, in three places at once.
