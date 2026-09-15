@@ -1239,3 +1239,93 @@ this is worth deciding rather than leaving.
 
 Against § 20's 100 contract-independent violations, a fix for the propagation
 asymmetry would remove about a quarter of them.
+
+## 22. Can the `@kobalte/utils` contract resolve SC1001's 24? No, and each link is measured
+
+§ 21 found 24 SC1001 false positives; `cef049db` fixed the shape reachable by
+execution-role classification and did not move the corpus, because the corpus
+binds its handlers through a component prop and through `addGlobalListener`.
+The remaining route is the package contract. It is blocked at four points.
+
+### 1. Only a minority of the 24 are contract-mediated at all
+
+| binding of the enclosing function | count | contract could help? |
+| --- | ---: | --- |
+| `addGlobalListener(...)` from `@kobalte/utils` | 4 | in principle |
+| `onPointerDown={…}` on `<Polymorphic>` — a `@kobalte/core` component prop | 4 | different package |
+| derived accessors called from JSX (`tabIndex`, `fill`, `stroke`, `borderWidth`, `strokeWidth`, `highlighted`, `half`, `open`) | 9 | **no external call involved** |
+| other named handlers | 7 | mixed |
+
+Nine of the 24 never cross a package boundary; no contract can reach them.
+
+### 2. Acceptance rejects the contract that exists
+
+`@kobalte/utils@0.9.2` was certified (§ 15) and the resulting case set fed back
+to `kobalte/packages/core` with `--accepted-contracts` and
+`--receipt-trust-configuration`. The result is **identical to the baseline**:
+
+| | baseline | with the accepted contract |
+| --- | ---: | ---: |
+| `SC9005` | 632 | 632 |
+| of which `"no receipt-accepted contract matches this exact import"` | — | 597 |
+| `SC1001` violations | 62 | 62 |
+
+The receipt's binding names `importer` = the synthetic certification project's
+shim module, and carries **no `artifactAcceptanceRoot`** — the B′ field added
+this session (`0da407d9`) that would admit by artifact identity instead of by
+importer path. The case set predates it.
+
+### 3. The contract states nothing for the exports that matter
+
+```
+createGlobalListeners : {"call": {}, "shape": "callable"}
+callHandler           : {"call": {}, "shape": "callable"}
+composeEventHandlers  : {"call": {}, "shape": "callable"}
+```
+
+### 4. Two of the three shapes are not expressible, and the third is a real defect
+
+A minimal package, certified through the generator directly:
+
+| shape | result |
+| --- | --- |
+| `callHandler(e, h) { h(e) }` | **states the claim** — `callbacks: [{from: {arg: 1}}]`, all four domains closed |
+| `addListener(target, type, listener) { target.addEventListener(type, listener) }` | closes reads/creates/returns, **no callbacks claim** — the listener goes to a parameter-rooted DOM method |
+| `createListeners() { … return { add } }` | **nothing about the returned object's method** |
+
+`addGlobalListener` is shape 2 reached through shape 3, so the four
+contract-mediated findings need both of the shapes that produce nothing.
+
+**And a genuine defect in shape 1.** Adding the real `callHandler`'s second
+branch removes the claim the same function otherwise carries:
+
+```js
+export function callHandler(event, handler) {
+  if (handler) {
+    if (isFunction(handler)) handler(event);      // resolvable invocation
+    else handler[0](handler[1], event);           // computed-member, declines
+  }
+}
+```
+
+| | `callbacks` claim | `closed` |
+| --- | --- | --- |
+| without the second branch | `[{from: {arg: 1}}]` | `callbacks, reads, creates, returns` |
+| with it | **none** | `reads, returns` |
+
+One `unresolved-callee` decline in the **creates** domain removes an
+independently-proven **callbacks** claim. `handler(event)` invokes parameter 1
+whatever the other branch does. This is worth fixing on its own — `callHandler`
+has 112 call sites in the corpus, the third-most-demanded export — but note the
+honest limit: the claim is a lower bound, so it should be *stated without
+closing the callbacks domain*, and closing it while a branch is unresolved
+would be unsound.
+
+### What this settles
+
+"Fix the `@kobalte/utils` contract so those 24 resolve" cannot be done. Nine of
+the 24 involve no package boundary, four belong to `@kobalte/core`, acceptance
+rejects the contract regardless of its content, and the four that remain need
+two shapes the format does not express. The one actionable defect found on the
+way — a creates decline erasing a proven callbacks claim — is real, reproducible
+in twelve lines, and resolves none of the 24.
