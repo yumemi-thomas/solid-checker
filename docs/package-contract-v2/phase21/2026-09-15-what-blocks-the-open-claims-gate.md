@@ -641,3 +641,53 @@ decision about where bundle selection lives, not a patch.
 integrity. Shipping them means the checker carries a table of (package, version)
 → contract that helps users on those versions and nobody else, with a refresh
 cadence to decide. That is a maintenance commitment, not a one-off.
+
+## 23. Correction to § 22: `first_party_bundles` is not where C goes
+
+§ 22 named `EMBEDDED_BUNDLES` and `load_receipt_issued_embedded_contract` as
+C's four blocking pieces. Three of the four are real; the *location* is wrong,
+and wiring that loader would have been a mistake.
+
+`bundled_first_party_contract_index` says so in its own doc comment:
+
+> Retired bundle-loader compatibility seam. Ordinary native, daemon and WASM
+> analysis no longer calls this function (ADR 0027). Both source lists are
+> empty; these historical checks must not be described as active runtime
+> authentication.
+
+`solid1_bundles_with_measurements` validates the Phase 14 authority documents
+and then returns `Ok(Vec::new())` unconditionally, and
+`policy1_checked_corpora_have_no_active_receipt_issued_bundles` pins both
+generators empty. The path is decommissioned, not unfinished.
+
+**ADR 0027 also says where third-party contracts belong.** Its subject is the
+built-in runtime foundation — `solid-js`, `@solidjs/signals`, `@solidjs/web` —
+which ordinary analysis takes from the *dialect*, never from a package
+contract. Its first paragraph draws the line the other way for everything else:
+"Package contracts describe external packages." So `@kobalte/utils` and
+`@solid-primitives/utils` are not first-party bundles and must not be delivered
+through a seam built for core.
+
+**The correct location is the one the local tier already uses**: a compiled-in
+source of accepted contracts feeding `AcceptedContractIndex` beside
+`discovered_catalog_paths`, with applicability decided by
+`admitted_project_artifacts` — which already recomputes
+`policy2_artifact_acceptance_root` from the *installed* identity and refuses
+when it does not reproduce the signed root. That is the importer-free match a
+bundle needs, and it is already written.
+
+So C's remaining work is:
+
+1. a compiled-in accepted-contract tier that feeds the same index the local
+   tier feeds, selected by `admitted_project_artifacts` (authentication is
+   `load_authenticated_policy2_embedded_contract`, which is complete and
+   tested);
+2. a generation pipeline that takes a corpus-certified contract, issues a
+   built-in receipt for the current verifier build, and compiles in the
+   document, receipt, bindings and an independently attested entry digest;
+3. the version/refresh policy, unchanged from § 22.
+
+Note for (2): the receipt is build-pinned — `authenticate_policy2_receipt`
+compares `entry.verifier_build_digest` to the receipt payload's — so bundles are
+re-issued per checker build. The legacy conformance corpus cannot supply them;
+it is policy-1-era material, which is what the pinning test's name records.
