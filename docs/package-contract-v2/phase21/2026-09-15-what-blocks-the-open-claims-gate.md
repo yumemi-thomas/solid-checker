@@ -369,3 +369,46 @@ This is the package carrying `mergeDefaultProps` (254 consumer sites),
 `callHandler` (112) and `createGenerateId` (60) — the top of § 5's worklist. Its
 `reads` and `creates` domains are blocked behind an interpreter restriction, not
 behind anything this repository decides.
+
+## 15. `property-access-unknown-accessor` has no single lever either
+
+The 1,150 records are not one gap. Each names the subject derivation the
+producer did not offer, and there are twelve:
+
+| records | claims | derivation not offered |
+| ---: | ---: | --- |
+| 260 | 30 | `local-binding` |
+| 148 | 19 | (reads-census premise: no reviewed subject root) |
+| 128 | 74 | `nested-parameter` |
+| 124 | 24 | `local-binding-from-call` |
+| 108 | 34 | `call-result` |
+| 105 | 23 | `written-parameter` |
+| 89 | 20 | `not-a-reference` |
+| 47 | 18 | `this-expression` |
+| 42 | 7 | `local-binding-written` |
+| 21 | 21 | `ambient-declaration` |
+| 20 | 1 | `module-binding` |
+
+Each is a Type Facts producer derivation plus its census arm — the shape of ADRs
+0090, 0093, 0094 and 0106, one at a time, each changing published contracts and
+needing its own fixtures. The largest is 30 claims.
+
+## 16. Conclusion
+
+Set against the 10,406 records there is no change that reduces them
+dramatically, and the number itself is two-thirds multiplicity. Set against the
+2,940 claims, the work decomposes into:
+
+- **691 claims** of hand-authored runtime observation, which the design
+  deliberately refuses to generate;
+- **~250 claims** across twelve producer subject derivations, ADR-sized each;
+- **150 claims** where the census is correctly refusing a false `callbacks: []`;
+- **568 claims** of inherited closure, concentrated in one package and needing
+  transitive dependency composition;
+- **593 claims** behind the probe harness, of which the largest remaining group
+  is an interpreter restriction (§ 14) no change here can lift.
+
+The measurable levers that are neither unsound nor human-authoring are small and
+numerous. A programme that closes them is a sequence of ADRs against the 2,940
+claims, ordered by the consumer demand in § 5 — `@kobalte/utils` and
+`@solid-primitives/utils` first — not a fix to this corpus number.
