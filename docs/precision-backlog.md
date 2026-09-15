@@ -21033,3 +21033,55 @@ call whose `@kobalte/utils` contract states nothing (§ 16 of the phase21 note).
 Classifying either would need the package contract, not the execution-role
 index; inferring from the `on*` name is what the precision contract forbids.
 So those 24 remain, and they are the same coverage hole as the contract census.
+
+## Artifact admission (B′) reached no analysis run, and `--runtime-condition` was discarded
+
+**2026-09-15, measured end to end against `@kobalte/utils@0.9.2` and
+`kobalte/packages/core`.** B′ — admitting an acceptance by *artifact identity*
+rather than by the importer path it was issued for (`0da407d9`) — had never been
+exercised outside its unit tests. Two defects kept it from ever applying.
+
+**1. The diagnostics path never called it.** `with_admitted_artifacts` was wired
+into the contract-emission loop in `main.rs` and not into the `if diagnostics`
+branch, which is what `--project` analysis uses. A receipt whose
+`artifactAcceptanceRoot` recomputes exactly from the consumer's installed
+integrity still left every finding at *"no receipt-accepted contract matches
+this exact import"*.
+
+**2. `--runtime-condition` was silently discarded.**
+
+```rust
+runtime: RuntimeEnvironment { conditions: export_conditions, ..runtime }
+```
+
+`--conditions` (comma-separated) overwrote `--runtime-condition` (one name at a
+time) rather than merging. Since an empty condition set admits nothing by
+design, and `packages/cli/eslint.cjs` emits `--runtime-condition` for every
+configured condition, **artifact admission was unreachable from the ESLint
+adapter entirely**. Both spellings now merge.
+
+**Result, `kobalte/packages/core` with the `@kobalte/utils` receipt:**
+
+| | baseline | admitted |
+| --- | ---: | ---: |
+| SC9005 at the acceptance gate | 597 | **126** |
+| SC9005 at the open-claims gate | 0 | **1037** |
+| SC1001 violations / uncertifiable | 62 / 14 | 61 / 10 |
+| SC9011 | 4 | 3 |
+
+The 126 that remain are packages with no catalog entry — only `@kobalte/utils`
+was supplied.
+
+**What it does not do.** Acceptance was never the last wall. The demand moves
+from the acceptance gate to the **open-claims** gate — 1037 findings reading
+`unknown-contract-claims:callbacks` (578),
+`unknown-contract-claims:reactiveReads,returns` (209) and
+`…,ownerRequirements` (171) — because the contract states nothing for the
+exports consumers call (§ 16). One SC1001 violation and four uncertifiables
+resolve; the 24 of § 21 do not.
+
+**Re-certification is required to benefit.** A receipt carries
+`artifactAcceptanceRoot` only when issued by a build containing `0da407d9`, and
+the identity binds the condition set, so certification and analysis must declare
+the same conditions. The case set certified earlier in this session carried no
+such field and admitted nothing.

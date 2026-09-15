@@ -3279,6 +3279,28 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             .transpose()?
             .unwrap_or_default()
             .with_fallback(requirements);
+        // Artifact admission, the same call the contract-emission loop above
+        // makes. It was wired there only, so an acceptance issued against one
+        // project's importer never applied to another project analysing the
+        // same installed artifact -- which is the whole point of the artifact
+        // identity. Measured against `@kobalte/utils@0.9.2`: a receipt whose
+        // `artifactAcceptanceRoot` recomputes exactly from the consumer's
+        // installed integrity still left all 471 of its SC9005 findings at
+        // "no receipt-accepted contract matches this exact import".
+        //
+        // An empty condition set still admits nothing; conditions select the
+        // artifact and the analyzer has no condition facts of its own.
+        let contracts = match discovered_catalog.as_deref() {
+            Some(path) => {
+                contracts.with_admitted_artifacts(solid_facts_backend::admitted_project_artifacts(
+                    path,
+                    trust.as_ref(),
+                    directory,
+                    &request.runtime.conditions,
+                )?)
+            }
+            None => contracts,
+        };
         let contracts = if request.proposal_dependency_catalog.is_empty() {
             contracts
         } else {
@@ -3871,8 +3893,18 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         contract_package_root,
         help,
         serve,
+        // Both spellings, merged. `--conditions` takes a comma-separated list
+        // and `--runtime-condition` one name at a time; overwriting here
+        // discarded the latter entirely, and `packages/cli/eslint.cjs` emits
+        // exactly that flag for every configured condition. Since conditions
+        // select the artifact, dropping them silently disabled artifact
+        // admission for every ESLint-driven run.
         runtime: RuntimeEnvironment {
-            conditions: export_conditions,
+            conditions: {
+                let mut conditions = runtime.conditions.clone();
+                conditions.extend(export_conditions);
+                conditions
+            },
             ..runtime
         },
     })
