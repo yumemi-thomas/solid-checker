@@ -6013,6 +6013,72 @@ mod tests {
         )
     }
 
+    /// The same root, with the dependency present as a plan node of this
+    /// transaction but **absent from the parent's replayed closure edges**.
+    ///
+    /// `test_package_resolution` supplies one accepted edge per dependency
+    /// plan, so every other test in this module has an edge by construction and
+    /// none of them can reach this shape. Production reaches it constantly: in
+    /// the graph lane the resolver records the specifier as an opaque frontier
+    /// (`record_opaque_frontier`) and the closure manifest carries no
+    /// `AcceptedDependencyEdge` at all, while the dependency is still a
+    /// certified node of the same transaction. The 2026-09-15 corpus run has
+    /// **zero** `DependencyArtifact` demands across all 31 demand plans of the
+    /// `motion-solidjs` row, and 1,140 `creates` closures withheld for exactly
+    /// the refusal this pins -- 1,128 of them certifying `motion` 12.43.0,
+    /// whose exports are re-exports of `motion-dom`.
+    ///
+    /// Split deliberately: `dependencies` reaches
+    /// `plan_certification_with_dependencies` (so the census still sees the
+    /// node) but not `test_package_resolution` (so the closure has no edge).
+    fn inherited_root_plan_without_accepted_edge(
+        archive: &PublishedArchive,
+        dependency: &CertificationPlan,
+        semantics: &dyn Fn(
+            &solid_reactive_ir::contract_semantics::ArtifactCase,
+            &str,
+        ) -> ExportSemantics,
+    ) -> CertificationPlan {
+        let manifest = br#"{"name":"root-package","version":"1.0.0","exports":{".":{"types":"./index.d.ts","import":"./index.js","default":"./index.js"}}}"#;
+        let exports: &[TestExportBinding<'_>] = &[(
+            "value",
+            ("index.js", b"export function value(run) {\n  run();\n}\n"),
+            (
+                "index.d.ts",
+                b"export declare function value(run: () => void): void;\n",
+            ),
+            "/project/node_modules/dependency-package",
+        )];
+        let (request, resolved) = test_package_resolution(
+            archive,
+            "root-package",
+            "1.0.0",
+            "/project/node_modules/root-package",
+            manifest,
+            &["import"],
+            exports,
+            // No accepted edge for the dependency: the opaque frontier.
+            &[],
+            "/project/src/app.ts",
+        );
+        let (package, mut artifact_case) =
+            crate::artifact_resolution::proposal_identity(&resolved).unwrap();
+        artifact_case.exports = exports
+            .iter()
+            .map(|(export, _, _, _)| ((*export).to_owned(), semantics(&artifact_case, export)))
+            .collect();
+        let candidate = ContractProposal::new(package, vec![artifact_case])
+            .normalize()
+            .unwrap();
+        super::plan_certification_with_dependencies(
+            &mut CertificationPlanningTransaction::new(),
+            CertificationRequest::new(candidate, request, resolved),
+            UntrustedArtifactEnvelope::Published(archive.clone()),
+            &[dependency],
+        )
+        .unwrap()
+    }
+
     /// What the generator publishes for the re-exported name: the projection of
     /// the dependency's certified export, normalized under the re-exporting
     /// package's own artifact case and public name.
@@ -6098,6 +6164,66 @@ mod tests {
                     .as_str()
                     .is_some_and(|id| !id.is_empty()),
                 "the obligation addresses the dependency's own claim: {claim}"
+            );
+        }
+    }
+
+    /// The shape the corpus is actually in, and why the refusal in it is
+    /// correct rather than a defect.
+    ///
+    /// Everything the positive test establishes still holds -- same bytes, same
+    /// span, same dependency plan, same projection -- and the arm withholds,
+    /// because the parent's replayed closure carries no accepted edge for the
+    /// dependency. On 2026-09-15 that was the corpus's largest single withheld
+    /// bucket: 1,140 `creates` closures, 11% of all 10,406, 1,128 of them
+    /// certifying `motion` 12.43.0, whose exports re-export `motion-dom`. The
+    /// `motion-solidjs` row has **zero** `DependencyArtifact` demands across
+    /// all 31 of its demand plans, so the arm cannot be reached there at all.
+    ///
+    /// It is invisible to every other test here because
+    /// `test_package_resolution` supplies one accepted edge per dependency
+    /// plan, which the graph lane's resolver does not: it records the specifier
+    /// as an opaque frontier (`record_opaque_frontier`) instead.
+    ///
+    /// **The edge is load-bearing, so this refusal must stay.**
+    /// `authenticate_dependency_receipt` discharges an inherited obligation by
+    /// iterating `DependencyCompositionRequirement`s, each of which *is* an
+    /// accepted edge, and matching on package, artifact case and accepted
+    /// contract digest. With no edge there is no requirement, so admitting the
+    /// closure here on the graph node's own identity would record an obligation
+    /// that nothing ever checks -- the unprovable propagation 59c957b6 removed.
+    /// Reducing this bucket means making the graph lane record the accepted
+    /// edge, in artifact resolution; it cannot be done in this arm.
+    #[test]
+    fn an_inherited_closure_withholds_when_the_graph_node_is_not_a_closure_edge() {
+        let (root_archive, dependency_archive) = inherited_reexport_archives();
+        let dependency = inherited_dependency_plan(&dependency_archive, false);
+        let root =
+            inherited_root_plan_without_accepted_edge(&root_archive, &dependency, &|case, name| {
+                inherited_projection(&dependency, case, name)
+            });
+
+        // Identical to the positive test's premise: the difference is the
+        // closure edge alone, not the evidence about the bytes.
+        assert_eq!(
+            root.verified_exports.runtime_binding("value"),
+            dependency.verified_exports.runtime_binding("value")
+        );
+        assert_ne!(root.snapshot_root(), dependency.snapshot_root());
+
+        for domain in [ClaimDomain::Callbacks, ClaimDomain::Creates] {
+            let error = super::type_facts::inherited_dependency_closure_for_test(
+                &root,
+                &[&dependency],
+                "value",
+                domain,
+            )
+            .expect_err("no accepted edge means no obligation could ever be discharged");
+            assert!(
+                error
+                    .to_string()
+                    .contains("not one exact replayed dependency artifact edge"),
+                "{domain:?} withholds for the edge, not for something else: {error}"
             );
         }
     }
