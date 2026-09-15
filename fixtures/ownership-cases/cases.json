@@ -9220,6 +9220,115 @@
     ],
     "absent": []
    }
+  },
+  {
+   "id": "invalid-affects-target/typescript-owned/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { affects, createSignal } from \"solid-js\";\n\nconst [count] = createSignal(0);\naffects(() => count(), \"value\");\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "invalid-affects-target",
+      "code": "SC7003",
+      "span": {
+       "marker": "() => count()"
+      },
+      "typescript": {
+       "ownership": "typescript-owned",
+       "diagnostics": [
+        {
+         "code": "TS2345",
+         "span": {
+          "marker": "() => count()"
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "absent": []
+   }
+  },
+  {
+   "id": "affects-target-unresolved/typescript-owned/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { affects } from \"solid-js\";\n\ndeclare const box: unknown;\naffects(box, \"value\");\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "affects-target-unresolved",
+      "code": "SC9003",
+      "span": {
+       "marker": "box",
+       "occurrence": 2
+      },
+      "typescript": {
+       "ownership": "typescript-owned",
+       "diagnostics": [
+        {
+         "code": "TS2345",
+         "span": {
+          "marker": "box",
+          "occurrence": 2
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "absent": []
+   }
+  },
+  {
+   "id": "refresh-target-unresolved/typescript-owned/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".ts",
+    "prelude": "",
+    "text": "import { refresh } from \"solid-js\";\n\ndeclare const box: unknown;\nrefresh(box);\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "refresh-target-unresolved",
+      "code": "SC9003",
+      "span": {
+       "marker": "box",
+       "occurrence": 2
+      },
+      "typescript": {
+       "ownership": "typescript-owned",
+       "diagnostics": [
+        {
+         "code": "TS2345",
+         "span": {
+          "marker": "box",
+          "occurrence": 2
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "absent": []
+   }
   }
  ]
 }
