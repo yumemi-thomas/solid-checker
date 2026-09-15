@@ -343,3 +343,67 @@ above.
 What remains to see `SC4001` printed is making the acceptance bind the right
 case, which is the same delivery work as B′ rather than anything about whether
 the feedback exists.
+
+## 11. Re-measured: the reason in § 9 was wrong
+
+§ 9 explained `@solid-primitives/event-listener`'s empty summaries by the Solid
+1.x dialect having no admissible `creates` authority, citing § 8.1 of
+`2026-09-12-consumer-demand-measurement.md`. **Both halves of that are wrong,
+and the audit it was read from says so on its face.**
+
+**The 1.x `creates` audit exists.** `123e8d31` (2026-09-13, the day after the
+measurement quoted) landed sixteen hand-audited `NEGATIVE_ROWS` in
+`solid-dialect/src/solid_1x.rs` for `solid-js@1.9.14`, each citing exact bytes
+of `dist/solid.js` by offset and slice digest, across six export-condition
+bundles — `createSignal`, `createMemo`, `createEffect`, `batch`, `onCleanup`,
+`mergeProps` and ten more. § 8.1 was true when written and stale by the next
+day; § 9 read a dated measurement as current state.
+
+(The ADR citation was also wrong. ADR 0005 is about a Solid **2.0** dialect
+axiom for `@solidjs/signals`, is `deferred`, and its objection 5 is settled
+*against* the premise. What it names inadmissible is the `creates: []` the
+schema-1→v2 migration manufactured into the bundled 1.x JSON — which is
+precisely why `solid_1x.rs` cites archive bytes instead, and why its derivation
+test asserts the JSON-derivable set contributes nothing.)
+
+**What actually happened.** Read from the same audit rather than from the
+earlier doc:
+
+| | |
+| --- | ---: |
+| closure candidates from `@solid-primitives/utils` | 56 |
+| candidates from `solid-js` | 8 |
+| candidates from **event-listener itself** | **0** |
+| `declinedDependencyRecords` | 176 |
+| `declinedDependencySpecifiers` | 4 |
+| `partialProposalFrontier` | true |
+
+The four specifiers are exactly this package's own modules reaching its
+dependency — `./dist/eventListener.js:@solid-primitives/utils` and three
+siblings. `declinedDependencyFrontier` (`certify-contract.mjs:1956`) builds that
+object only from records whose `kind` is **`unaccepted-external-dependency`**,
+so all 176 are that.
+
+So `makeEventListener` publishes `{"call": {}, "shape": "callable"}` because
+every closure on its modules **declined on an unaccepted external dependency**,
+never reaching a census at all. No `dialect-silent` appears anywhere in the
+audit, and the dialect's negative authority is never consulted. The audit's own
+refusal strings are all census refusals belonging to `utils` exports, not to
+this package.
+
+`unaccepted-external-dependency` is a known wall — `docs/precision-backlog.md`
+records it as one of "the next walls" behind the 1.x authority work, with the
+graph lane as the intended answer. This run *was* the graph lane
+(`--dependency-graph-lane --recover-entrypoints`) and it still declined, with
+`retainedProposalCases: 0`. Why the lane did not compose the dependency it had
+already certified as a node is the open question, and it is a composition
+question rather than a dialect one.
+
+**What survives from § 9 and § 10.** The observations do; the explanation does
+not. `makeEventListener` really does state nothing, and
+`@solid-primitives/utils@7.0.0-next.4` really does state an owner requirement on
+`createMicrotask`. But the difference between them is not 1.x versus 2.0 — the
+second package was certified with its dependency composed, and the first was
+not. § 10's conclusion that usage-level feedback is "a Solid 2.0 capability" is
+not supported by this pair, and is withdrawn pending a comparison that holds the
+composition constant.
