@@ -20932,3 +20932,51 @@ gate wall 165 s → 95 s, summed census 901 s → 401 s under fourteen walkers,
 same 1,342 certified closures and 964 withheld. Full corpus: 829 s → 647 s,
 all 418 rows identical to the pin. What remains of that row is metadata churn
 from writing and removing a private tree per batch.
+
+## `no-direct-mutation` (SC2003) no longer reports a write through a called accessor
+
+**2026-09-15, measured against the consumer corpus.** A census of every
+`tsconfig.json` in `corvu`, `kobalte` and `solid-docs` (31 projects, 861 source
+files) produced nine `SC2003` violations, all in `@kobalte/core`, and all nine
+were wrong:
+
+```tsx
+ref()!.style.transitionDuration = "0s";   // collapsible-content.tsx:107
+inputRef()!.value = formattedValue;       // number-field-root.tsx:291
+```
+
+`ref` is a signal accessor holding an `HTMLElement`. Writing to the element's
+own property is ordinary, correct Solid — kobalte does it deliberately, with a
+comment explaining why — and the emitted message claimed *"Solid hands out a
+readonly proxy, so the write is dropped"*, which is false: the write lands on a
+DOM node. These were `kind: "violation"`, i.e. unhedged defect claims.
+
+**The cause.** `member_root` resolves the assignment target to the root of its
+member chain, and for `ref()!.style.x` that root is the *call* `ref()!`, whose
+symbol still resolves to the accessor. The rule then treated a write to the
+call's **return value** as a write through the reactive **container**.
+
+**The fix** skips the case where the member root peels to a call.
+`peel_ts_sugar_span` removes `!` and `as` but never a call or a member, so the
+deliberate `(state as { count: number }).count = 1` case keeps its branch.
+
+**What left with it.** `user().name = "Grace"` on a signal holding a plain
+object was documented as incorrect code on both rule pages and is no longer
+reported. It is structurally identical to the DOM case, so no rule can report
+one without the other; nothing is dropped there either (the object is mutated),
+and "this mutation notifies no subscriber" is a different claim than this rule
+makes and is not proven by the write alone. Upstream does not report it:
+`reactivity.ts`'s `noWrite` fires only on `reference.isWrite()` — reassigning
+the binding — so the member-write branches are a product extension here, not
+audited parity, and retiring part of one is not an upstream divergence.
+
+**Verified.** Corpus re-run after the fix: `SC2003` 9 violations → 0, and every
+other rule byte-identical (`SC1001` 71v/104u, `SC2001` 18v, `SC4001` 90u,
+`SC7001` 42u, `SC8015` 9v, `SC9005` 465u, `SC9011` 6u, `SC9012` 149u, `SC1007`
+2v — all unchanged). Ownership gate 306/306; coverage shows only the span shift
+from the two new negative fixtures.
+
+**Still open.** The remaining 100 contract-independent violations on that corpus
+are unassessed. A suspected second false-positive class in `SC1001` did not
+survive a minimal test — signals read in event handlers and in `createEffect`
+correctly do not fire — so they are unassessed rather than suspect.

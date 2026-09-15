@@ -48,9 +48,9 @@ the value.
 Examples of **incorrect** code for this rule:
 
 ```tsx
-const [user, setUser] = createSignal({ name: "Ada" });
-// Mutates the held object without notifying anyone.
-user().name = "Grace";
+const [count, setCount] = createSignal(0);
+// Reassigns the accessor binding itself.
+count = 2;
 
 function Title(props) {
   // Writes through the readonly props proxy; the write is dropped.
@@ -71,6 +71,10 @@ Examples of **correct** code for this rule:
 ```tsx
 const [user, setUser] = createSignal({ name: "Ada" });
 setUser({ ...user(), name: "Grace" });
+
+// A write through a *called* accessor is not this rule's claim: the call hands
+// back the value, so nothing is dropped. `el()!.style.color = "red"` is the
+// same shape and is how imperative DOM work is written in Solid.
 
 // Or use a store and mutate the draft in its own setter:
 const [profile, setProfile] = createStore({ name: "Ada" });

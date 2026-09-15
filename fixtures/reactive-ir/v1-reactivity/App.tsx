@@ -45,6 +45,31 @@ export function MutatesInPlace() {
   return <button onClick={bump}>{String(store.count)}</button>;
 }
 
+// Negative: calling an accessor yields its *value*, and a write to a property
+// of that value reaches an ordinary object. `el()` returns a DOM node, so the
+// write lands and re-rendering has nothing to do with it; this rule's claim --
+// a readonly proxy dropped the write -- is simply false here. Measured against
+// @kobalte/core, where this shape produced nine wrong findings.
+export function WritesThroughACalledAccessor() {
+  const [el, setEl] = createSignal<HTMLElement>();
+  const paint = () => {
+    el()!.style.color = "red";
+  };
+  return <div ref={setEl} onClick={paint} />;
+}
+
+// Negative, same cause with a plain object: the signal hands back the object it
+// holds, the write lands on it, and nothing was dropped. A mutation that fails
+// to notify is a different claim than this rule makes, and proving it needs the
+// store machinery rather than this branch.
+export function WritesThroughACalledSignal() {
+  const [held] = createSignal({ a: 1 });
+  const bump = () => {
+    held().a = 2;
+  };
+  return <button onClick={bump}>{held().a}</button>;
+}
+
 // v1/no-async-tracked-scope: tracking stops at the first await, so theme() is
 // never a dependency and the effect stops responding to it.
 export function AsyncEffect() {

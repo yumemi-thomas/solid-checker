@@ -37,10 +37,39 @@ updates may clobber the change.
 Examples of **incorrect** code for this rule:
 
 ```tsx
-const [user, setUser] = createSignal({ name: "Ada" });
-// Mutates the held object without notifying anyone.
-user().name = "Grace";
+const [count, setCount] = createSignal(0);
+// Reassigns the accessor binding itself.
+count = 2;
+
+function Title(props) {
+  // Writes through the readonly props proxy; the write is dropped.
+  props.text = "untitled";
+  return <h1>{props.text}</h1>;
+}
+
+const [profile] = createStore({ name: "Ada" });
+// A store is a readonly proxy in 1.x too; the write is dropped.
+profile.name = "Grace";
 ```
+
+A write through a **called** accessor is not this rule's:
+
+```tsx
+const [user] = createSignal({ name: "Ada" });
+user().name = "Grace";      // not reported
+
+const [el, setEl] = createSignal<HTMLElement>();
+el()!.style.color = "red";  // not reported — and correct Solid
+```
+
+Calling an accessor yields the value it holds, and a write to a property of
+that value reaches an ordinary object: nothing is dropped, and this rule's
+claim is about the reactive container rather than its contents. The two
+spellings are structurally identical, so a rule that reported the first would
+have to report the second — and imperative DOM work through a `ref` signal is
+exactly how Solid expects that to be written. See
+[docs/precision-backlog.md](../../precision-backlog.md) for the measurement
+that retired it.
 
 Examples of **correct** code for this rule:
 
