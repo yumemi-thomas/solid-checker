@@ -77,8 +77,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 5192,
-      "end": 5201,
+      "start": 5543,
+      "end": 5552,
       "fixes": 0
     },
     {
@@ -87,8 +87,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 5218,
-      "end": 5228,
+      "start": 5569,
+      "end": 5579,
       "fixes": 0
     }
   ]

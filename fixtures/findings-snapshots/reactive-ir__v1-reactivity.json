@@ -67,8 +67,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 2990,
-      "end": 3002,
+      "start": 3924,
+      "end": 3936,
       "fixes": 0
     },
     {
@@ -77,8 +77,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 3045,
-      "end": 3050,
+      "start": 3979,
+      "end": 3984,
       "fixes": 0
     },
     {
@@ -87,8 +87,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 3367,
-      "end": 3379,
+      "start": 4301,
+      "end": 4313,
       "fixes": 0
     },
     {
@@ -97,8 +97,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 3669,
-      "end": 3676,
+      "start": 4603,
+      "end": 4610,
       "fixes": 0
     },
     {
@@ -107,8 +107,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 4352,
-      "end": 4365,
+      "start": 5286,
+      "end": 5299,
       "fixes": 0
     },
     {
@@ -117,8 +117,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 4408,
-      "end": 4429,
+      "start": 5342,
+      "end": 5363,
       "fixes": 0
     },
     {
@@ -127,8 +127,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 4898,
-      "end": 4903,
+      "start": 5832,
+      "end": 5837,
       "fixes": 0
     },
     {
@@ -137,8 +137,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 4916,
-      "end": 4921,
+      "start": 5850,
+      "end": 5855,
       "fixes": 0
     },
     {
@@ -147,8 +147,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 5205,
-      "end": 5214,
+      "start": 6139,
+      "end": 6148,
       "fixes": 0
     },
     {
@@ -157,8 +157,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 6097,
-      "end": 6109,
+      "start": 7031,
+      "end": 7043,
       "fixes": 0
     },
     {
@@ -167,8 +167,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 7435,
-      "end": 7442,
+      "start": 8369,
+      "end": 8376,
       "fixes": 0
     },
     {
@@ -177,8 +177,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 7568,
-      "end": 7606,
+      "start": 8502,
+      "end": 8540,
       "fixes": 0
     }
   ]

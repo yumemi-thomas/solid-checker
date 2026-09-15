@@ -1150,6 +1150,46 @@ pub(super) fn named_callback_roles(
             }
         }
     }
+    // A *named* function bound to a JSX event handler -- `onPointerDown={onPointerDown}`
+    // with the handler declared in the component body.
+    //
+    // The compiler censuses the attribute, so `callback_roles` carries an
+    // `EventHandler` span covering the attribute value; an *inline* arrow gets
+    // its role from that span directly, because the arrow's body lies inside
+    // it. A named handler's body does not, so nothing classified it and its
+    // reads took the enclosing component's `UntrackedRendering` role. A read
+    // written in such a body was then silent only because `local_access` gates
+    // reads inside an unproven helper, while the same read propagated through
+    // one call was reported as a proven untracked read -- 24 of SC1001's 71
+    // violations on the consumer corpus, including `ref()` read inside a
+    // handler two lines below a silent direct read of the same accessor.
+    //
+    // `deferred`, which is what an event handler is: it runs after setup,
+    // outside the tracking phase, and reads current values when it fires.
+    // Identity-exact, like the tracked/deferred arms above -- the attribute
+    // value must *be* the function, so `onClick={() => handler()}` keeps
+    // classifying the arrow rather than `handler`.
+    for callback in &file.compiler.callback_roles {
+        if callback.role != solid_facts::compiler::CallbackRoleKind::EventHandler {
+            continue;
+        }
+        // The attribute value must be a bare identifier reference.
+        // `entities.at` answers a *call* span with the callee's symbol, so
+        // without this `onClick={makeHandler()}` would admit `makeHandler`
+        // itself and silence the setup-time writes in its body -- which is a
+        // pinned positive in `fixtures/reactive-ir/directive-phases`.
+        if !file.ast.identifiers.iter().any(|identifier| {
+            identifier.span == callback.span
+                && identifier.role == solid_facts::ast::IdentifierRole::Reference
+        }) {
+            continue;
+        }
+        for candidate in index.identity_at(file, entities, callback.span) {
+            let entry = roles.entry(index.functions[*candidate]);
+            entry.admitted = true;
+            entry.deferred = true;
+        }
+    }
     for (element_index, element) in file.ast.jsx_elements.iter().enumerate() {
         if !known_primitive(&primitives.jsx[element_index])
             .is_some_and(|primitive| dialect.renders_children_through_callback(primitive))

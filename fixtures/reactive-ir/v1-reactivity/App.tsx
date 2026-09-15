@@ -70,6 +70,26 @@ export function WritesThroughACalledSignal() {
   return <button onClick={bump}>{held().a}</button>;
 }
 
+// Negative: a read reached through a helper, inside a *named* event handler.
+// The compiler censuses the JSX attribute, not the handler body declared here,
+// so nothing classified this body until `named_callback_roles` learned to admit
+// it. Before that the direct read below was silent (gated as an unproven
+// helper) while the propagated one was a proven untracked read -- one level of
+// indirection turning correct code into a violation.
+//
+// The sibling shape, a derived accessor called from a JSX attribute, is not
+// fixed and still reports; see docs/precision-backlog.md.
+export function ReadsThroughAHelperInAHandler() {
+  const [el, setEl] = createSignal<HTMLElement>();
+  const widthOf = () => el()?.clientWidth;
+  const onPointerDown = () => {
+    const direct = el();
+    const viaHelper = widthOf();
+    apply(`${direct?.tagName} ${viaHelper}`);
+  };
+  return <div ref={setEl} onPointerDown={onPointerDown} />;
+}
+
 // v1/no-async-tracked-scope: tracking stops at the first await, so theme() is
 // never a dependency and the effect stops responding to it.
 export function AsyncEffect() {

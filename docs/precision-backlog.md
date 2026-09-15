@@ -20980,3 +20980,56 @@ from the two new negative fixtures.
 are unassessed. A suspected second false-positive class in `SC1001` did not
 survive a minimal test — signals read in event handlers and in `createEffect`
 correctly do not fire — so they are unassessed rather than suspect.
+
+## `strict-read-untracked` (SC1001): a named JSX event handler is now a classified callback
+
+**2026-09-15.** A read propagated through one call into an event handler was
+reported as a proven untracked read while the *same* read written directly in
+that handler stayed silent:
+
+```tsx
+const widthOf = () => ref()?.clientWidth;
+const onPointerDown = () => {
+  const direct = ref();          // silent
+  const viaHelper = widthOf();   // SC1001 violation
+};
+return <div ref={setRef} onPointerDown={onPointerDown} />;
+```
+
+**Cause.** The compiler censuses the JSX *attribute*, so `callback_roles`
+carries an `EventHandler` span over the attribute value. An inline arrow gets
+its role from that span because its body lies inside it; a **named** handler's
+body does not, so nothing classified it and its reads inherited the component's
+`UntrackedRendering`. The direct read was then silent only because
+`local_access` gates reads inside an unproven helper, while the interprocedural
+path applies no such gate — the asymmetry.
+
+**Fix.** `named_callback_roles` admits a named function bound to an
+`EventHandler` attribute and marks it `deferred`, which is what an event handler
+is. Identity-exact and restricted to a bare identifier reference:
+`entities.at` answers a *call* span with the callee's symbol, so without that
+guard `onClick={makeHandler()}` admits `makeHandler` itself and silences the
+setup-time write in its body — a pinned positive in
+`fixtures/reactive-ir/directive-phases`, which caught it.
+
+**A first attempt was wrong and the gate caught it.** Mirroring
+`local_access`'s `inside_non_component_function` guard in the interprocedural
+path suppressed three upstream parity cases
+(`upstream/reactivity__invalid__10/11/12`), where a helper *is* reached from the
+component body and the finding belongs on the inner call.
+
+**Known narrowing.** The role is per function, not per call site, as everywhere
+else in this index. A handler bound to JSX *and* also called during setup now
+takes the deferred role at both. The direct read in that body was already
+silent before this change, so what narrows is one accidental reporting path.
+
+**It does not move the consumer corpus.** SC1001 stays at 71 violations /
+104 uncertifiable, and every other rule is byte-identical. The corpus's 24
+via-helper findings bind their handlers in two shapes this cannot reach:
+`onPointerDown={onPointerDown}` on `<Polymorphic>` — a *component* prop, which
+the compiler does not census as an event handler — and
+`addGlobalListener(document, "pointermove", onHoverOutside, true)`, an external
+call whose `@kobalte/utils` contract states nothing (§ 16 of the phase21 note).
+Classifying either would need the package contract, not the execution-role
+index; inferring from the `on*` name is what the precision contract forbids.
+So those 24 remain, and they are the same coverage hole as the contract census.
