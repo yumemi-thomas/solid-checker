@@ -9070,6 +9070,106 @@
     ],
     "absent": []
    }
+  },
+  {
+   "id": "async-outside-loading-boundary/positive/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createMemo } from \"solid-js\";\n\nconst feed = createMemo(async () => ({ name: \"Dorothy\" }));\n\nexport function Bare() {\n  return <div>{feed().name}</div>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "feed()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   }
+  },
+  {
+   "id": "reactive-source-uncaptured/positive/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal } from \"solid-js\";\n\ndeclare function observe(value: unknown): void;\n\nconst [count] = createSignal(0);\n\nexport function Uncaptured() {\n  observe(count);\n  return <div />;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "reactive-source-uncaptured",
+      "code": "SC9011",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "count",
+       "occurrence": 2
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   }
+  },
+  {
+   "id": "reactive-handler-frozen/v2/positive/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal } from \"solid-js\";\n\nfunction ReactiveCard(props: { onSave: () => void }) {\n  return <button onClick={props.onSave}>save</button>;\n}\n\nconst [handler] = createSignal(() => {});\n\nexport function Host() {\n  return <ReactiveCard onSave={handler()} />;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "reactive-handler-frozen",
+      "code": "SC1007",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "props.onSave"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   }
   }
  ]
 }
