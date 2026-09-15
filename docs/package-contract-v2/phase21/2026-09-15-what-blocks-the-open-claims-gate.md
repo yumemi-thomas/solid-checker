@@ -1215,3 +1215,94 @@ either — it fails loudly.
 **Estimate: a day for the mechanism plus measurement, not a week.** The
 expensive part — projecting a document and re-certifying it independently —
 already exists and is already trusted.
+
+## 31. Shipped: the operation is withdrawn, not the artifact case
+
+§ 30 confirmed the mechanism was a day's work. This is what it turned out to be,
+and what it bought.
+
+### The rung
+
+ADR 0036 gave the transaction a loop: acquire, and if the census refuses,
+withdraw the candidate it names *by name*, re-plan, and try again. That loop
+only knew about **closure candidates**. An operation whose own stated positive
+fact could not be verified had nothing smaller to give up, so
+`census_refusal_withholding` returned nothing and the whole artifact case
+refused — taking every other export in it.
+
+`positive_fact_refusal_withholding` is the same conversion for the positive
+half, and `ExportSemantics::withhold_operations` is the weakening it feeds:
+
+- the operation is removed, and **the domain that listed it is opened**,
+  because a shorter list still marked closed asserts an absence the census never
+  established — a *stronger* claim than the one being withdrawn;
+- the withdrawal is transitive within the export: an operation triggered by a
+  withdrawn one, an edge touching one, a callback invocation naming one or
+  sourced from its output, and `composed_from` provenance pointing at one;
+- a domain emptied by the withdrawal becomes `Unknown`, never an empty
+  `Partial`.
+
+That last rule was not foresight. The first implementation left an emptied
+domain as `Partial([])` and two existing tests failed with *"partial knowledge
+must contain positive evidence"* — the wire format refusing it exactly as § 30
+predicted it would. The machine caught the error, which is the whole argument
+for putting the rule in the format rather than in the author's head.
+
+### What cannot change
+
+**No document that certified before certifies differently.** The new withholding
+is consulted only after `census_refusal_withholding` yields nothing *and* the
+transaction was already returning an error. There is no path where it makes a
+certified contract weaker; it only turns a refusal into a narrower contract.
+
+**Every withdrawal is reported**: `solid-checker:withheld-operation=` on the
+native stdout, `withheldOperations` in the CLI audit, beside `withheldClosures`.
+A certified contract weaker than the proposal it came from has to say so, or the
+weakening is indistinguishable from a generator that never made the claim.
+
+### Two pins moved, and what they still pin
+
+`unwritten_parameter_read_certification_binds_published_source` and
+`duplicate_installation_graph_contexts_preserve_exact_parameter_reads` asserted
+that a reassigned parameter *refuses*. It no longer does. What they were
+protecting — that an unprovable parameter-rooted read is never published as a
+proven fact — is unchanged, and is now asserted against the published document
+and the withheld record instead of against a refusal message. That is a stronger
+assertion than the old one: it reads what was published rather than what was
+printed.
+
+### The measurement
+
+`@kobalte/utils@0.9.2|solid1|only`, through certification with the graph lane
+and entrypoint recovery:
+
+| | before | after |
+| --- | --- | --- |
+| cases published | 21 of 24 | **24 of 24** |
+| `rootCertified` | false | **true** |
+| case refusals | 3 | **0** |
+| `.` exports published | — | **59** |
+| demanded exports stating an operation | 0 of 41 | **11 of 41** |
+| call sites with a stated operation | 0 / 942 | **312 / 942 (33.1%)** |
+| call sites with an owner requirement | 0 | **2** (`createGlobalListeners`) |
+
+`scrollIntoViewport` publishes with an empty operation list and an *open* reads
+domain — the export is there, stating one claim fewer, which is what a consumer
+needs and what a refusal denied them.
+
+Against § 28's denominator of 1,890 measured call sites, the corpus moves from
+**270 (14.3%)** to **582 (30.8%)**, and owner requirements from 29 to 31. The
+second figure is honest but partial: kobalte's half is measured against its
+*certified catalog*, while the other packages' 270 was measured against emitted
+proposals. A full re-census against certified catalogs is the next measurement,
+and it can only move the number up, since certification is where `.` entrypoints
+like this one appear.
+
+### What is unchanged
+
+Both model limits from § 29 are still exactly where they were. A parameter the
+body reassigns still cannot carry a proved read, and a path below a nested union
+still cannot be addressed. What changed is the *consequence*: those claims are
+now withdrawn from the document instead of destroying it. That is the right
+outcome, and it is not a proof — the contract says less, and says that it says
+less.
