@@ -220,3 +220,77 @@ closure from its dependency's receipt"), which is precisely about what a
 cross-package re-export contributes to an emitted document, and both affected
 roots are barrel-heavy; `fdfeb30b` is the other candidate. This is a hypothesis
 from the commit range, not a bisect.
+
+## 9. Triage of the 10,406 withheld closures
+
+Every bucket over 1,000 records, read at its source rather than by its count.
+
+| records | claims | bucket | what it is |
+| ---: | ---: | --- | --- |
+| 1,817 | 223 | `inherited closure` / domain-exhaustiveness | **blocked, correctly.** § 8 below |
+| 1,058 | 150 | `callbacks` enumerates no invocation, census found parameter-rooted calls | **a correct refusal.** The generator proposed `callbacks: []` — "invokes no caller-supplied code" — and the implementation census found the export *does* invoke caller-supplied callables (`parameter-rooted`, `parameter-rooted-accessor`, `-element`, `-iterable`). Publishing the proposal would publish a false negative claim. Moving it means widening the generator's `callbacks` walk to enumerate those forms, which changes published contracts |
+| 1,002 | 279 | `uncensused invoking form: property-access-unknown-accessor` | a `creates` census gap: a call through `obj.prop(...)` whose accessor the census cannot decide |
+| 3,265 | 691 | `no recipe in corpus` | hand-authored runtime observations. The scaffold emits a module per gap that **throws until an author deletes its `UNFINISHED` guard**, because `evaluate_runtime_probes` reads a recipe that runs without emitting its marker as `CleanNonObservation` — the veto passing. 691 distinct semantic claim ids, so 691 observations, not 3,265 |
+| 770 | — | `veto did not complete` | operational. 408 of them were one refused condition name; see § 10 |
+
+**No single safe change dramatically reduces this number.** Three of the five
+buckets are the system working: a correct refusal of a false claim, a deliberate
+refusal to manufacture observations, and a premise that cannot be discharged.
+The two that are genuinely reducible are the `property-access-unknown-accessor`
+census gap (1,002) and the graph-lane edge (1,817, plus a large share of the
+476,700 declines) — both real work, neither a patch.
+
+## 10. Fixed here: a scoped export condition refused the whole probe
+
+`plain_condition_name` admitted only `[A-Za-z0-9._-]`, so
+`@tanstack/custom-condition` — a real condition of `@tanstack/solid-query` and
+`@tanstack/solid-query-persist-client` — refused the probe before it ran: 408
+withheld closures, 3.9% of the corpus, 108 of them `returns`, on one name.
+
+The charset was protecting the observation package's *directory path and npm
+package name*, which interpolated the condition. Those now use the candidate's
+index, the observer is asked and answers in indices, and the condition appears
+once as a JSON string serde escapes. `,` stays refused because the gate
+identity's `reproduction-conditions:` component joins on it.
+
+Measured on the larger row, `@tanstack/solid-query-persist-client`:
+
+| | withheld | `harness configuration is invalid` | `returns` open |
+| --- | ---: | ---: | ---: |
+| before | 720 | 246 | 89 |
+| after | 710 | 0 | 79 |
+
+Ten `returns` closures closed. The other 236 did not become closures: 211 became
+`Stripping types is currently unsupported for files under node_modules`, the
+pinned interpreter's own limitation and the next wall. **This removed a false
+blocker and revealed a true one; it is not itself a reduction.** Reporting it as
+one would be reporting the reclassification as progress.
+
+## 11. Why the largest bucket cannot be fixed where it fails
+
+`census_inherited_dependency_closure` refuses a re-exported name whose
+dependency is not "one exact replayed dependency artifact edge of this plan".
+1,140 `creates` closures die there, 1,128 certifying `motion` 12.43.0. The
+`motion-solidjs` row has zero `DependencyArtifact` demands across all 31 of its
+demand plans, and both of its kept closures carry zero accepted edges beside
+five `unaccepted-external-dependency` hazards — so in the graph lane the arm is
+unreachable.
+
+Admitting the closure on the matched graph node's own certified identity looks
+sound at that arm: premise 2 has already proved from replayed bytes that the
+module, export name and span are that node's, and the node is certified in the
+same transaction. It was implemented and reverted. `authenticate_dependency_receipt`
+discharges an inherited obligation by iterating `DependencyCompositionRequirement`s,
+each of which **is** an accepted edge, matching on package, artifact case and
+accepted contract digest. With no edge there is no requirement, the obligation
+is recorded and never checked, and the parent publishes exactly the unprovable
+propagation `59c957b6` removed.
+
+The edge is recorded by the generator only when
+`acceptedDependencies[specifier]` has the import's exact specifier text
+(`packages/cli/scripts/artifact-resolution.mjs`), and in the graph lane it does
+not. That is where this bucket is fixed, and it is the same root cause as the
+476,700 `unaccepted-external-dependency` declines.
+`an_inherited_closure_withholds_when_the_graph_node_is_not_a_closure_edge` pins
+the refusal so the next attempt starts from the measurement rather than from the
+arm.
