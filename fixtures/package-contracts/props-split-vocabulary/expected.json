@@ -1,0 +1,56 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "26f53f52623aaabb36697faa985de9b2caa93ab31e94212c633f2297e9dc1a75",
+            "path": "./index.js",
+            "sha256": "89557715fe7c44155523be0799825032224568f136deeb568acbded481646b81"
+          },
+          "declarations": {
+            "path": "./index.js",
+            "sha256": "89557715fe7c44155523be0799825032224568f136deeb568acbded481646b81"
+          },
+          "exports": {
+            "withoutKeys": "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:a31ec7766f733ba7c1a2023944f7457d19f1a472fbeb8798204c6a1993d5d8f9",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "a31ec7766f733ba7c1a2023944f7457d19f1a472fbeb8798204c6a1993d5d8f9"
+    },
+    "name": "props-split-vocabulary",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    }
+  }
+}

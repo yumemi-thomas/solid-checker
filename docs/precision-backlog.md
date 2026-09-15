@@ -21340,3 +21340,57 @@ is where the vocabulary claim lives; the behaviour pins belong in
 `fixtures/package-contracts/` and are not written. Until they are, these two are
 correct-by-construction rather than measured — the weaker of the two standards
 this repository holds itself to.
+
+### Addendum, same day: one of the two fixtures is not authorable
+
+`fixtures/package-contracts/props-split-vocabulary{,-v1}` now pin the split row,
+and they are a real falsifier: with the row the 2.0 half publishes
+`closed: ["callbacks", "reads"]` with `callbacks: []`, and without it
+`closed: ["reads"]` alone. An open `callbacks` domain is precisely what a
+consumer's open-claims gate reports, so every 2.0 package that split its props
+was publishing a domain it had no reason to leave open.
+
+**The tuple row's fixture cannot be written here, and the reason is structural
+rather than an omission.** `effective_inner_call_return` — the only reader of
+`returns_reactive_tuple` — is reached only from `effective_call_return`, which
+does work only when a **contracted** export's own `returns` is `argument` or
+`callback-result`. That premise is not available to a fixture:
+
+- no bundled contract states either kind (`pkg/contracts/bundled/**` contains no
+  `argument` return at all), and a bundled contract is an audited artifact that
+  may not be edited to create one;
+- every fixture-supplied catalog under `fixtures/reactive-ir/**/.solid-checker/`
+  carries `status: "obsolete-policy1"` — they exist to pin *refusal* — and an
+  accepted catalog needs an authenticated receipt, which a fixture cannot forge
+  and should not be able to.
+
+So the tuple row stays correct-by-construction, pinned at the vocabulary level
+by `each_dialect_names_its_own_props_split_and_tuple_returns` and by the audited
+declarations quoted in its doc comment (`Signal<T> = [get, set]`,
+`createOptimisticStore(...): [get: Store<T>, set: StoreSetter<T>]`), with no
+behaviour pin. Writing one means first giving the corpus a way to supply an
+accepted contract with a parameter-relative return — which is the same missing
+capability the `mergeDefaultProps` chain needs, and is the honest next step for
+both.
+
+### And a third asymmetry on the same primitive, in the audit table
+
+Writing the fixture surfaced one more, which is why it was worth writing.
+`props-split-vocabulary`'s 2.0 half declines its `creates` closure with
+`kind: "dialect-silent"`, `callee: "omit"`: `Solid1x`'s
+`DialectNegativeAuthority` carries an audited `splitProps` row — exact byte
+ranges and slice hashes across `solid-js@1.9.14`'s six bundles, cited to
+`SOLID1_CORE_PRIMITIVES_AUDIT § 3` — and `Solid2`'s table, which does carry
+`createMemo`, `createSignal`, `createStore`, `createOptimistic`,
+`createOptimisticStore`, `createProjection`, `createRoot`,
+`createTrackedEffect`, `flush`, `getOwner`, `onCleanup`, `onSettled` and
+`action`, has **no `omit`**.
+
+Unlike the two rows fixed today this is not a seam bug and cannot be repaired
+by routing through the dialect: a negative-claim row is an audit citing a file
+digest, a byte range and a slice hash against a written audit section for the
+exact archive. Adding one means auditing `omit` in the `@solidjs/signals`
+bundles of the pinned 2.0 prerelease and writing the section. Until then every
+2.0 package that splits its props declines its `creates` closure for want of a
+row its 1.x counterpart has had all along — and `props-split-vocabulary` is the
+fixture that will show it closing.

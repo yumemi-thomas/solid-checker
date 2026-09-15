@@ -126,7 +126,12 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // 189 adds the value-exports fixture's main document, ADR 0099's tracer
       // (a value export that cannot be invoked closes its empty call domains),
       // which landed as 8c386960 without moving this pin.
-      stableMainDocuments: 189,
+      // 191 adds the props-split-vocabulary pair's main documents: the same
+      // untyped props split under each dialect's spelling of the primitive
+      // (1.x `splitProps`, 2.0 `omit`), pinning that the callback inventory's
+      // split suppression is a dialect row and not a comparison against one
+      // vocabulary's constant.
+      stableMainDocuments: 191,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

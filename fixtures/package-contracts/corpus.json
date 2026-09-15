@@ -71,6 +71,8 @@
     "parameter-member-read",
     "parameter-member-read-path",
     "plain-js-string",
+    "props-split-vocabulary",
+    "props-split-vocabulary-v1",
     "published-export-entity",
     "reexport-value-sibling-callback",
     "retained-callback-parameter",
