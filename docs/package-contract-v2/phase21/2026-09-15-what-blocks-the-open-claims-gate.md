@@ -412,3 +412,40 @@ The measurable levers that are neither unsound nor human-authoring are small and
 numerous. A programme that closes them is a sequence of ADRs against the 2,940
 claims, ordered by the consumer demand in § 5 — `@kobalte/utils` and
 `@solid-primitives/utils` first — not a fix to this corpus number.
+
+## 17. Withheld is a counter of candidacy, not of failure
+
+The one measurement that explains every number above, and the reason a target
+set against the withheld count cannot be met by improving anything:
+
+| | closure candidates | certified closures | withheld |
+| --- | ---: | ---: | ---: |
+| pinned 2026-09-14 | 25,464 | 10,881 | 7,114 |
+| fresh 2026-09-15 | 28,476 | 10,838 | 10,406 |
+| delta | **+3,012** | −43 | **+3,292** |
+
+This branch made **3,012 more closures proposable** — ADR 0109's returns census,
+`fdfeb30b` no longer letting an open re-export withdraw a package's own exports,
+`59c957b6`'s inherited composition — and withheld rose by almost exactly that
+number. Certified is flat.
+
+Withheld therefore counts *proposable closures the gates have not caught up
+with*. It rises when the generator gets better and falls when a census, a
+recipe or a producer derivation lands — or when the generator proposes less. It
+is a backlog, and at this point in the work a **growing backlog is the signature
+of progress**, not of regression.
+
+Two consequences:
+
+- **Reducing the withheld count is not a goal that can be served by improving
+  the checker in the short term.** Every improvement to proposal coverage raises
+  it. The only fast way down is to propose less, which is the one change that
+  would be a genuine regression.
+- **The metric to steer by is `certified / candidates`** — 10,881/25,464 = 42.7%
+  before, 10,838/28,476 = 38.1% after. That ratio fell because candidacy grew
+  while the gates stood still, which is exactly the backlog this document
+  itemizes: 691 observations, ~250 producer derivations, 150 correct refusals,
+  568 in one package, 593 behind the harness.
+
+The −43 certified closures are worth their own look; they are consistent with
+the four lost receipts in § 8 and are not explained here.
