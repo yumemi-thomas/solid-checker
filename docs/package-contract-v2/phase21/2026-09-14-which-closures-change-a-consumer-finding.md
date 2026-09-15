@@ -726,3 +726,108 @@ of the fifteen measured packages state nothing about the exports their consumers
 actually call. Debugging one of them was answering a question nobody needed
 answered; the generator's coverage across packages is the problem, and it is
 visible without any mechanism hunt.
+
+## 16. Why `@kobalte/utils` states nothing
+
+§ 15 named this the lever: one package, 942 call sites, 48% of all consumer
+demand, and zero of its 41 demanded exports state anything. This section answers
+why, from the machinery's own census rather than from reading source.
+
+First, the scale of the silence. The certification builds a **78-node** graph and
+certifies 632 closures in it — and only three artifact cases produce a single
+closure candidate between them (`@solid-primitives/utils`, `solid-js`,
+`solid-js/web`). `@kobalte/utils`' own two artifact cases produce **zero**
+candidates. Everything certified in that run belongs to something else.
+
+Its 59 exports split: **0** with operations, 24 closed (determined to state
+nothing), 35 degenerate. Every one of the 35 has an explicit recorded reason, and
+they partition cleanly with no overlap:
+
+| cause | exports | where recorded |
+| --- | ---: | --- |
+| cross-package re-export | 9 | artifact-case refusal |
+| declined at generation | 13 | `declinedClosures`, closure-proposal stage |
+| withheld at certification | 12 | `withheldClosures` |
+| non-callable (`EventKey`, a `var` object) | 1 | — |
+
+### 1. Re-exported names do not bind (9 exports)
+
+`dist/index.js` opens with eight `export … from` lines pulling `access`,
+`accessWith`, `chain`, `mergeRefs`, `combineProps`, `createEventListener`,
+`createMediaQuery`, `Key` and `ReactiveMap` out of five other packages. All nine
+are degenerate, and the artifact case says why:
+
+```
+accepted dependency @solid-primitives/keyed has no exact runtime binding
+for export Key
+```
+
+This is the binding wall already recorded for core-runtime re-exports, reached
+here through an ordinary package.
+
+### 2. The `creates` census cannot resolve a call whose receiver is a parameter (13)
+
+41 decline records, **every one in the `creates` domain**: 22 `unresolved-callee`
+and 19 `refusing-callee-fixpoint`. The `unresolved-callee` rows carry the shape
+that defeated them — 13 `member-property-unresolved`, 7 `parameter-rooted`, 2
+`computed-member` — and the source at those offsets is the point:
+
+```js
+node.contains(element)                    // parameter-rooted
+node.matches(selector)                    // parameter-rooted
+eventTarget.addEventListener(type, ...)   // parameter-rooted
+handler[0](handler[1], event)             // computed-member
+polygon.map(point => point.join(","))     // member-property-unresolved
+```
+
+`@kobalte/utils` is a **DOM utility library**. Its functions take a DOM node as a
+parameter and call a method on it. The concrete receiver exists only at the
+consumer's call site, so there is no declaration inside the package to resolve,
+and the census fails closed — which is what the precision contract requires it to
+do.
+
+The 19 `refusing-callee-fixpoint` rows are that refusal *propagating*:
+`callHandler` refuses on `handler[0](handler[1], event)`, and then
+`composeEventHandlers` refuses at its call to `callHandler`. Refusal is
+transitive through the local call graph, which is why a purely syntactic
+predictor ("calls another local function") matches 43 of 50 local exports without
+being the mechanism.
+
+### 3. The same wall at certification, in different words (12)
+
+The remaining twelve are withheld later, again entirely in `creates`:
+
+| reason | rows |
+| --- | ---: |
+| `creates census refuses an uncensused invoking form: property-access-unknown-accessor` | 16 |
+| `creates census finds no function-like declaration node for "getComputedStyle"` | 6 |
+| `creates census refuses an uncensused invoking form: coercion (BinaryExpression)` | 2 |
+
+`getComputedStyle`, `navigator`, `window` — DOM globals with no body to analyse.
+`isMac`, `isIOS`, `isWebKit`, `isFocusable`, `isTabbable` and friends are all
+here.
+
+### What this means
+
+`@kobalte/utils` does not state nothing because of a barrel, a dependency, a
+lane, or a bug. It states nothing because **almost everything it does is call a
+method on a DOM value it was handed**, and the `creates` census is required to
+fail closed on exactly that. The package is close to a worst case for this
+analysis, and it happens to be the most-imported package in the corpus.
+
+That generalises the § 15 result rather than explaining it away: a contract
+pipeline whose census cannot see through parameter-rooted DOM calls will state
+nothing about most of a UI component library's utility layer, and UI component
+libraries are what Solid consumers import.
+
+### One thing worth a second look
+
+`mergeDefaultProps` is the single most-called export in the whole corpus — 254
+sites — and it is *closed*, not degenerate: the analysis looked at it and
+determined it states nothing. Its body is `return mergeProps(defaultProps, props)`.
+`mergeProps` returns a reactive proxy, and destructuring that proxy is a
+reactivity defect of precisely the kind this checker exists to prove. Whether
+"returns a reactive proxy whose properties must not be destructured" is
+expressible in the current operations model is not settled here, and is worth
+establishing before anyone concludes the 24 closed exports are all correctly
+closed.
