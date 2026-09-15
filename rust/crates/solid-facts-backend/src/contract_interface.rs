@@ -879,17 +879,24 @@ pub type ResolvedTargetIdentity<'a> = dyn Fn(&str) -> Option<String> + 'a;
 /// go through [`catalog_member_path`], so a case cannot name `../` out of the
 /// case-set directory.
 ///
-/// A plain `accepted-contracts.json` still wins outright when present. It is
-/// the older spelling and the one a user may have hand-assembled; a case set is
-/// only consulted when discovery would otherwise have found nothing at all.
+/// Both spellings are read, not one or the other, and a plain
+/// `accepted-contracts.json` only takes *precedence* — it is first in the
+/// returned order, so it wins a conflict over the same import. Treating it as
+/// exclusive was a defect with an immediate symptom: certifying a second
+/// package writes the plain catalog, which then hid the first package's case
+/// set entirely. Measured — `debounce: missing`, `scheduled: certified`, in a
+/// project where both had just been certified. A real project has many
+/// dependencies, so the exclusive reading loses a contract per certification
+/// after the first.
 pub fn discovered_catalog_paths(directory: &Path) -> Result<Vec<PathBuf>, ContractFailure> {
+    let mut paths = Vec::new();
     let catalog = directory.join(".solid-checker/accepted-contracts.json");
     if catalog.is_file() {
-        return Ok(vec![catalog]);
+        paths.push(catalog);
     }
     let pointer_path = directory.join(".solid-checker/accepted-contract-case-set.json");
     if !pointer_path.is_file() {
-        return Ok(Vec::new());
+        return Ok(paths);
     }
     let pointer_bytes = read_boundary_file(
         &pointer_path,
@@ -931,7 +938,7 @@ pub fn discovered_catalog_paths(directory: &Path) -> Result<Vec<PathBuf>, Contra
     let base = document_path
         .parent()
         .ok_or_else(|| catalog_field("accepted contract case set has no directory"))?;
-    let mut paths = Vec::with_capacity(document.cases.len());
+    paths.reserve(document.cases.len());
     for case in &document.cases {
         let path = catalog_member_path(base, &case.catalog)?;
         let bytes =
@@ -1598,15 +1605,23 @@ mod tests {
         assert_eq!(selected(&[], &["import"]), None);
     }
 
-    /// The older spelling still wins outright: it is the one a user may have
-    /// hand-assembled, and a case set is consulted only when it is absent.
+    /// Both spellings are read. The older one only takes *precedence*.
+    ///
+    /// Exclusivity was a defect with an immediate symptom: `contract certify`
+    /// writes the plain catalog for a single-case package and a case set for a
+    /// multi-case one, so certifying a second dependency hid the first.
     #[test]
-    fn a_plain_catalog_wins_over_a_case_set() {
+    fn a_plain_catalog_takes_precedence_without_hiding_a_case_set() {
         let project = published_case_set("precedence", 2);
         let plain = project.join(".solid-checker/accepted-contracts.json");
         fs::write(&plain, b"{\"contracts\":[]}").unwrap();
         let found = discovered_catalog_paths(&project).unwrap();
-        assert_eq!(found, vec![plain]);
+        assert_eq!(
+            found.len(),
+            3,
+            "the plain catalog and both cases: {found:?}"
+        );
+        assert_eq!(found[0], plain, "the plain catalog is consulted first");
         let _ = fs::remove_dir_all(&project);
     }
 

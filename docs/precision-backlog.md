@@ -21841,3 +21841,59 @@ runtime file, so its environment selection is unobservable. The SSR-split shape
 is pinned at the selection rule, not against a real installed package; a package
 with genuinely divergent server and browser bundles has not been run through
 this.
+
+## 2026-09-15 — two dependencies, and only one of them was delivered
+
+**Resolved. Found by asking whether the checker is ready to raise issues against
+real packages, not by review.** A project with *two* certified dependencies is
+the first realistic shape, and it exposed two defects that a single-dependency
+test could not:
+
+- **`contract certify` publishes a plain catalog for a single-case package and a
+  case set for a multi-case one.** `discovered_catalog_paths` treated the two
+  spellings as exclusive — a plain catalog "won outright" — so certifying a
+  second dependency *hid the first*. Measured: `debounce: missing`,
+  `scheduled: certified`, in a project where both had just been certified. They
+  are now both read, with the plain catalog first so it still wins a conflict
+  over the same import.
+- **`AcceptedContractIndex::with_fallback` unioned `imports` but not
+  `by_artifact`.** Folding several catalogs therefore kept only the last one's
+  artifact index, and `with_admitted_artifacts` silently found nothing for every
+  other catalog's acceptance. With both spellings read and this unfixed, *both*
+  packages reported `missing`.
+
+Neither is visible with one dependency, which is all the earlier measurements
+had. Together they meant delivery worked for exactly one package per project.
+
+## 2026-09-15 — a false-positive measurement on correct usage
+
+**The first one this repository has.** Two certified packages
+(`@solid-primitives/debounce@1.3.0`, `@solid-primitives/scheduled@1.5.3`,
+offline from the local cache at their exact lockfile integrities), delivered
+into a project, against **idiomatic correct** usage written from each package's
+own documented example and placed under an owner as its docs require:
+
+~~~
+status uncertifiable, 2 findings
+  SC9005 package-contract-incomplete (uncertifiable)  createDebounce
+  SC9005 package-contract-incomplete (uncertifiable)  debounce
+~~~
+
+**No violations. No false positives.** The ownership and reactivity rules stayed
+silent on correct code; the only findings are the honest open-claims kind.
+
+**One thing that looked like a false positive and was not.** An earlier version
+of the same file exported four components that nothing rendered, and the checker
+raised five `SC4001` — *"the containing function **may be** a Solid component or
+an ordinary helper"*, `kind: uncertifiable`. Rewriting them as a component
+actually rendered in JSX, plus one explicit `createRoot`, produced **zero**
+findings. The rule is right; the test file was not a program. Worth recording
+because it is exactly the shape that would be mistaken for noise: `severity:
+error` on correct-looking code, resolved by making the code a real program.
+
+**What this does and does not establish.** One project, two packages, correct
+usage only. It says the rules do not fire on idiomatic code for these two
+contracts. It says nothing about the other 26 actionable Solid Primitives
+packages, nothing about true-positive precision on code the author did not
+write, and nothing about the 86 of 114 packages whose contracts carry no
+actionable row at all.

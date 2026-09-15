@@ -250,6 +250,17 @@ impl AcceptedContractIndex {
         for (key, contracts) in fallback.imports {
             self.imports.entry(key).or_insert(contracts);
         }
+        // The artifact index is unioned for the same reason the import index
+        // is. Leaving it out made folding several catalogs keep only the last
+        // one's artifacts, and `with_admitted_artifacts` then silently found
+        // nothing for every other catalog's acceptance -- which is what a
+        // project with two certified dependencies has, because `contract
+        // certify` publishes a plain catalog for a single-case package and a
+        // case set for a multi-case one. Measured: two certified packages, both
+        // reported `missing`.
+        for (identity, contracts) in fallback.by_artifact {
+            self.by_artifact.entry(identity).or_insert(contracts);
+        }
         self.identity = self
             .imports
             .iter()
