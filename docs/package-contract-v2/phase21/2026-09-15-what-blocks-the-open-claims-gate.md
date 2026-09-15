@@ -1145,3 +1145,73 @@ options are a design decision, not a fix:
 The prize is unchanged and now sits behind exactly one export: 136 sites — 132
 without `scrollIntoViewport`'s own 4 — taking the corpus from 14.3% to about
 21.5%.
+
+## 30. Confirmed: operation-granularity withholding needs no regeneration
+
+§ 29 left one question before any of its three options could be sized: can a
+weakened document be re-emitted from the existing proposal, or does dropping an
+operation force a regeneration pass? **It needs no regeneration**, and the
+evidence is three facts already in the tree.
+
+**1. The native planner is handed the document and nothing else.**
+`executeNativeCertification` writes one request whose planning carries
+`proposal: generated.output` — no `.proposal.json` plan sidecar, no claim list.
+Demands are scheduled from the document's own summaries. Drop an operation
+there and its demand is never scheduled.
+
+**2. Subset publication is already a JavaScript projection of that document.**
+`certifyIndependentCaseSelection`'s trial does exactly this:
+
+```js
+output = join(trial, "proposal.json");
+writeFileSync(output, JSON.stringify(projectProposalCases(
+  JSON.parse(readFileSync(generated.output, "utf8")), inputs)));
+…
+generated: { ...generated, output, certificationInputs: inputs }
+```
+
+`projectProposalCases` filters `entrypoints` and keeps only the referenced
+`summaries`. Nothing is re-analyzed; the trial path becomes the planning's
+`proposal`. Operation granularity is the same move one level finer.
+
+**3. Summary contents are editable — ids are opaque keys.** The emitter names a
+summary `summary-<sha256 of its bytes>`, but the *decoder* never re-verifies
+that: its own fixtures key summaries `"plain"`, `"fn"`, `"signal-pair"`. The
+only structural rule is that every summary must be referenced — an unused one is
+refused.
+
+### The soundness rule is enforced by the format, not by discipline
+
+§ 29 argued that dropping an operation must *open* its claim domain, or the
+contract would assert "this export performs no reads". The wire format already
+decides this, in `knowledge(items, closed)`:
+
+| items | closed | meaning |
+| --- | --- | --- |
+| absent | false | **Unknown** — the domain says nothing |
+| present | false | Partial — these are known, more may exist |
+| present | true | Complete — the enumeration is exhaustive |
+| **empty** | **false** | refused: "open domain has an empty collection" |
+| **absent** | **true** | refused: "closed domain omits its collection" |
+
+So "drop the operation and open the domain" is the representable transition, and
+a drop that carelessly left the domain in `closed` is refused by the decoder.
+`require_operation` in the IR validator refuses a dangling id from a domain
+list, an edge or a trigger, so a partial projection cannot corrupt a document
+either — it fails loudly.
+
+### What remains before writing it
+
+- The boundary being crossed is deliberate, not an oversight: *"Select whole
+  unaccepted artifact cases, never individual claims."* Crossing it is an
+  ADR-level decision.
+- The projection needs a reference-integrity pass — remove the operation from
+  its domain list, its edges, and anything triggering on it — which the
+  validator checks rather than trusts.
+- Each weakened attempt costs a fresh native transaction, as case subdivision
+  already does, and per-operation fan-out may want a budget like
+  `RECOVERY_GRAPH_CASE_BUDGET`'s 1,024 cases.
+
+**Estimate: a day for the mechanism plus measurement, not a week.** The
+expensive part — projecting a document and re-certifying it independently —
+already exists and is already trusted.
