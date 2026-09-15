@@ -21627,8 +21627,7 @@ which makes the fixture a falsifier in both directions.
 
 ## 2026-09-15 — the local tier's producer and consumer disagreed on the filename
 
-**Half-resolved, and the half that is resolved was a prerequisite rather than a
-delivery.** "Open: contracts have no distribution mechanism beyond four local
+**Resolved. The local tier delivers.** "Open: contracts have no distribution mechanism beyond four local
 tiers" above describes four channels. Measured end to end, the **local** one was
 not working at all, and the reason was not a design gap:
 
@@ -21654,29 +21653,51 @@ through `catalog_member_path` so a case cannot name its way out of the case-set
 directory. The pointer itself is deliberately not digest-bound: nothing above it
 could name its digest, and its authority is the receipt each catalog carries.
 
-**It does not deliver a finding, and that is the honest headline.** With the fix
-the case set is read — proven by corrupting the pointer, which now refuses with
-`caseSetDocumentDigest` — and `contract check` still reports `missing`. A second
-gap sits behind this one: the receipt binds `importer` to the synthetic
-certification module the certifier created
-(`node_modules/@solid-primitives/.solid-checker-certification-<hash>.mjs`), and
-the consumer's importer is its own `App.tsx`.
+**It delivers a finding. The first sentence here said it did not, and that was
+wrong — corrected the same day.** The reason the first measurement read as a
+failure is that it was taken with `contract check`, which is the one path that
+never performed artifact admission; the analysis path already did. With a
+condition set supplied, the same project moves from `certified` with **0**
+findings to `violation` with **2**:
 
-**The machinery to bridge that already exists**, and its doc comment says it was
-built for exactly this: `policy2_artifact_acceptance_root` is "the canonical
-identity of the *artifact* a contract was proven about, with no importer and no
-absolute path in it … so an acceptance can be matched by a consumer that
-resolved the same artifact from one of its own files", and
-`admitted_project_artifacts` recomputes it against the *installed* identity.
-Two things stop it short, and both are measured rather than inferred:
+~~~
+SC4001 missing-owner   onCleanup is called without a reactive owner; no scope's
+                       disposal can trigger it, so this cleanup will never run
+SC9005 unknown-contract-claims:reactiveReads,returns,ownerRequirements
+~~~
 
-- **Admission answers nothing without a condition set.** It returns early when
-  `conditions.is_empty()`, and ordinary analysis has no condition facts of its
-  own. Supplying `--runtime-condition import` or `solid` by hand did not change
-  the verdict either, so this is necessary and not sufficient.
-- **The status path matches on the importer, not on the acceptance root.**
-  `accepted_package_contract_statuses` is what prints `missing`, and handing it
-  a case catalog directly with `--accepted-contracts` still prints `missing`.
+The first is a proven third-party reactive defect, derived from the accepted
+contract's `creates: owner-requirement-0` — the first finding in this
+repository's history that a *delivered* package contract has produced on real
+installed bytes. The discovery fix is load-bearing for it: hiding the case-set
+pointer returns the project to `certified` with 0 findings, restoring it returns
+the 2.
+
+**And the second finding is the whole earlier diagnosis flipping.** Its
+`analysisContext` is `unknown-contract-claims:…`, the **open-claims** gate — not
+`no receipt-accepted contract matches this exact import`. The 2026-09-14 census
+found 2,585 of 2,585 real consumer findings stopped at the *acceptance* gate,
+with zero reaching closure. This project now reaches closure. That is exactly
+the progression to expect: delivery moves findings from the acceptance gate to
+the closure gate, and only then does closure work — ADR 0035, ADR 0109, the
+implementation censuses — change what a user sees.
+
+**The importer was never the gap.** `admitted_project_artifacts` and
+`with_admitted_artifacts` already bridge a certification importer to a
+consumer's own file, exactly as their doc comments claim. What was missing was
+only the **condition set**: admission returns early on `conditions.is_empty()`,
+by deliberate design (conditions select the artifact, and the analyzer has no
+condition facts of its own), so the user must pass `--runtime-condition import`.
+That is fail-closed and correct, and nothing currently tells them.
+
+**`contract check` was reporting against a different rule than the analyzer, and
+now does not.** It built its index from the catalogs and never applied artifact
+admission, so it answered `missing` — "run `contract generate`", telling the user
+to redo work already done — about a contract the analyzer was about to accept and
+diagnose with. It now performs the same admission and answers
+`@solid-primitives/debounce: certified (receipt-issued stable-v1 index)`. A
+report that disagrees with the analyzer about whether a contract applies is worse
+than no report, and this one was actively sending users backwards.
 
 **Corrected while measuring this.** Certification is not slow. The 492 s figure
 for `@kobalte/utils` in `benchmarks/ecosystem/report.json` is contention in a
