@@ -21245,3 +21245,55 @@ asserted non-empty so the comparison is not two silences agreeing.
   gains one per (export, domain). Without a recipe they are withheld unrun; with
   synthesized vetoes they execute. Not measured against the pinned corpus for
   the same reason the census diff is not.
+
+## 2026-09-15 — the props merge was a Solid 2.0 literal, not a dialect row
+
+**Resolved.** `mergeProps({ title: "Untitled" }, props)` produced a props root
+in Solid 2.0 and nothing in Solid 1.x, so every read through a merged props
+object went unreported on 1.x. Two fixtures already named the case and only the
+2.0 half was diagnosed: `fixtures/reactive-ir/eslint-plugin-corpus/` and
+`…-v1/props-extended-invalid.tsx` are the same ported upstream case in the two
+spellings, and `fixtures/engine/eslint-reactivity-v1/component-props-merge-alias.tsx`
+is a purpose-built fixture that was silent.
+
+**Cause, from the history.** `discover_sources` asked
+`primitive.as_deref() != Some("merge")` — a literal 2.0 name — and `ecf6e0d8`
+("Source every reactive-IR table from the dialect", "Verified identical")
+translated the string to `Primitive::Merge` rather than to a row. 1.x spells the
+same primitive `mergeProps`, so the propagation kept answering for one dialect's
+vocabulary from shared code, which is exactly the seam AGENTS.md forbids. The
+fix is `Dialect::merges_props_reactivity` — `MergeProps` in 1.x, `Merge` in 2.0 —
+and a cross-dialect test that each vocabulary names exactly one.
+
+**Not a `returns_store` row, and this matters.** The 2026-09-14 demand report
+§ 18 diagnosed this as "a missing audited dialect row" in `returns_store`. That
+would have been **false as an unconditional claim**: 1.9.14's `dist/solid.js`
+returns a `$PROXY` only when a source is itself a proxy or a function (memoised
+on the way in), and otherwise rebuilds the object preserving each source's own
+descriptors. `mergeProps({ a: 1 }, { b: 2 })` is therefore plain, and
+destructuring it loses nothing — a `returns_store` row would have manufactured a
+finding there. The existing propagation already has the right shape: it walks
+the call's arguments and propagates the root only when one of *them* is a props
+root, so the row is a permission to look at the arguments, never a claim about
+the result. `fixtures/engine/eslint-reactivity-v1/component-props-merge-plain.tsx`
+pins the plain-sources case clean, and `component-props-local-merge.tsx` already
+pinned a locally declared `mergeProps` clean.
+
+**Measured.** +2 findings across 94 fixture projects (548 → 550), both
+`SC1001` on a member read of a merged props object, both in files that already
+named the shape. The tsc oracle gate holds on all 161 cases, so neither
+duplicates a TypeScript diagnostic; the ownership gate's 306 upstream cases are
+unmoved.
+
+**Still open.** This moves **none** of the 127 `mergeDefaultProps` open-claims
+findings the demand report attributes to that export, and it was never going to:
+those ask for *contract content* — `reactiveReads` and `returns` closed for
+`@kobalte/utils`'s wrapper — and the consumer rule that would consume it
+(`binding_initializes_reactive_store`) reads `returned.kind == "store-path"`
+**unconditionally**. The honest claim for a wrapper is parameter-relative
+("returns a props root derived from parameter 1", which `ContractReturn` can
+already spell through its `parameter` field), and nothing reads it that way. So
+the chain for those 127 is four local changes, not one: the dialect row (done),
+a parameter-relative return derivation in the generator, a consumer rule that
+conditions on the caller's argument, and then a `returns` closure the census can
+decide. Recorded here rather than attempted.

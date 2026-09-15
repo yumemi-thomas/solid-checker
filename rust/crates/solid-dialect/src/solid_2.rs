@@ -1807,6 +1807,14 @@ impl Dialect for Solid2 {
     }
 
     /// Source: `solid-reactive-ir/src/directives.rs` `is_created_primitive`.
+    /// 2.0 renamed `mergeProps` to `merge`. `omit` and `pick`, the
+    /// `splitProps` replacements, are deliberately absent for the same reason
+    /// 1.x leaves `splitProps` out: their result is a tuple, not the merged
+    /// object.
+    fn merges_props_reactivity(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::Merge
+    }
+
     fn creates_directive_owner(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,

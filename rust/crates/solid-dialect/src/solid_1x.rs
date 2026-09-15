@@ -1917,6 +1917,14 @@ impl Dialect for Solid1x {
         )
     }
 
+    /// 1.x spells it `mergeProps`, exported from `solid-js`. `splitProps`
+    /// is deliberately absent: it returns a *tuple* of proxies, so the root
+    /// travels through array destructuring rather than through the call's own
+    /// value, and claiming it here would name the tuple reactive.
+    fn merges_props_reactivity(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::MergeProps
+    }
+
     fn creates_directive_owner(&self, _primitive: Primitive) -> bool {
         // Solid 1.x applies directives and refs through untrack(), which
         // clears Listener but preserves Owner. Nothing created there enters

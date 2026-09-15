@@ -1321,6 +1321,34 @@ pub trait Dialect: Sync {
     /// Whether creating this primitive registers a directive-applied owner.
     fn creates_directive_owner(&self, primitive: Primitive) -> bool;
 
+    /// Whether a call of `primitive` returns a props object that **carries the
+    /// reactivity of the props objects it was given**.
+    ///
+    /// Not a source factory, which is why it is not a
+    /// [`Dialect::creates_reactive_source`] row: the merge creates nothing. It
+    /// hands back an object whose property reads reach through to its
+    /// arguments, so the result is a props root exactly when one of the
+    /// arguments already is — `mergeProps({ name: "Anonymous" }, props)` is
+    /// reactive because `props` is, and `mergeProps({ a: 1 }, { b: 2 })` is a
+    /// plain object whose destructuring loses nothing. The engine propagates
+    /// the root only under that condition, so this row is a *permission to
+    /// look at the arguments*, never a claim about the result on its own.
+    ///
+    /// Audited against the runtime, because the declaration cannot say it:
+    /// 1.9.14's `mergeProps` declares `(...sources: T): MergeProps<T>`, while
+    /// `dist/solid.js` returns a `$PROXY` when any source is a proxy or a
+    /// function (memoised on the way in), and otherwise rebuilds the object
+    /// *preserving each source's getters* — both shapes read through.
+    ///
+    /// This is a dialect question because the two dialects spell it
+    /// differently and nothing else does: 1.x's `mergeProps` is 2.0's `merge`.
+    /// The engine asked for the literal `"merge"` until this existed, so the
+    /// whole propagation was silently 2.0-only — `fixtures/reactive-ir/
+    /// eslint-plugin-corpus{,-v1}/props-extended-invalid.tsx` are the same
+    /// ported upstream case in the two spellings, and only the 2.0 one was
+    /// reported.
+    fn merges_props_reactivity(&self, primitive: Primitive) -> bool;
+
     /// Whether the runtime serializes a literal `false` JSX attribute value
     /// by *removing* the attribute on intrinsic elements.
     ///
@@ -2805,6 +2833,44 @@ mod tests {
     /// Source discovery is where every read-tracing rule starts, and the two
     /// dialects create sources with different primitives. One list served both
     /// until this was a dialect question, and it was 2.0's.
+    #[test]
+    /// The props-merging primitive is one behaviour under two spellings, and
+    /// the engine used to ask for 2.0's. Nothing else in the vocabulary merges
+    /// props, so a second `true` here would be a claim about a primitive whose
+    /// result is not a props root.
+    fn each_dialect_names_its_own_props_merge() {
+        let one = Version::V1.dialect();
+        let two = Version::V2.dialect();
+
+        assert!(one.merges_props_reactivity(Primitive::MergeProps));
+        assert!(two.merges_props_reactivity(Primitive::Merge));
+        // The other dialect's spelling is not a second answer: each dialect
+        // answers for its own vocabulary and is silent about the other's.
+        assert!(!one.merges_props_reactivity(Primitive::Merge));
+        assert!(!two.merges_props_reactivity(Primitive::MergeProps));
+
+        for dialect in [one, two] {
+            let merging = dialect_names(dialect)
+                .iter()
+                .filter_map(|name| dialect.primitive(name))
+                .filter(|primitive| dialect.merges_props_reactivity(*primitive))
+                .map(|primitive| format!("{primitive:?}"))
+                .collect::<std::collections::BTreeSet<_>>();
+            assert_eq!(
+                merging.len(),
+                1,
+                "exactly one name in each vocabulary returns a props object carrying its \
+                 arguments' reactivity, got {merging:?}"
+            );
+            // A splitting primitive returns a *tuple* of proxies, so the root
+            // travels through array destructuring and not through the call's
+            // own value.
+            for primitive in [Primitive::SplitProps, Primitive::Omit] {
+                assert!(!dialect.merges_props_reactivity(primitive));
+            }
+        }
+    }
+
     #[test]
     fn each_dialect_knows_its_own_reactive_source_factories() {
         let one = Version::V1.dialect();

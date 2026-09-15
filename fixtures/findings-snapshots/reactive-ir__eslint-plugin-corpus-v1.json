@@ -317,6 +317,16 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/props-extended-invalid.tsx",
+      "start": 351,
+      "end": 362,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/props-extended-invalid.tsx",
       "start": 508,
       "end": 518,
       "fixes": 0

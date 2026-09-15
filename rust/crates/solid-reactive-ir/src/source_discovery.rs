@@ -2006,7 +2006,16 @@ pub(crate) fn discover_sources(
                             symbol_names,
                             semantic_lookup.dialect,
                         );
-                        if known_primitive(&primitive) != Some(Primitive::Merge) {
+                        // The dialect names its own merge. This was a
+                        // literal `"merge"` before the dialect seam existed,
+                        // and the extraction translated the string to
+                        // `Primitive::Merge` rather than to a row -- so the
+                        // propagation answered for 2.0's spelling and was
+                        // silent for 1.x's `mergeProps`, which is the same
+                        // primitive under the other dialect's vocabulary.
+                        if !known_primitive(&primitive).is_some_and(|primitive| {
+                            semantic_lookup.dialect.merges_props_reactivity(primitive)
+                        }) {
                             return None;
                         }
                         call.arguments.iter().find_map(|argument| {

@@ -112,6 +112,16 @@
       "fixes": 0
     },
     {
+      "rule": "v1/strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v1/component-props-merge-alias.tsx",
+      "start": 158,
+      "end": 170,
+      "fixes": 0
+    },
+    {
       "rule": "v1/no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",

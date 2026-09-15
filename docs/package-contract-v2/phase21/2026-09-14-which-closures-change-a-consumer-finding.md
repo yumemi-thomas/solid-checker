@@ -956,6 +956,18 @@ contract for `mergeDefaultProps` changes nothing while `mergeProps` itself is
 uncovered, and covering `mergeProps` is a **dialect** row plus its 2.0
 counterpart — not a certification problem.
 
+> **Corrected 2026-09-15.** Item 4 above is wrong about *which* row, and the
+> difference is not cosmetic. It is not a `returns_store` row: 1.9.14's runtime
+> returns a `$PROXY` only when a source is already a proxy or a function, and
+> otherwise copies each source's descriptors, so `mergeProps({a: 1}, {b: 2})` is
+> plain and an unconditional row would manufacture a finding on it. The actual
+> defect was narrower — `discover_sources` asked for the literal `"merge"`, 2.0's
+> spelling, so the props-root propagation that *already* had the right
+> argument-conditional shape never answered for 1.x's `mergeProps`. Fixed as
+> `Dialect::merges_props_reactivity`; see the 2026-09-15 entry in
+> `docs/precision-backlog.md`. It moves none of `mergeDefaultProps`'s 127, for
+> the reason item 2 gives.
+
 Worth noting for whoever picks this up: SC1003's own hint reads "To split or
 default props, use `splitProps(props, ...keys)` and `mergeProps(defaults, props)`
 instead of destructuring." The advice is sound — reading `merged.label` in JSX
