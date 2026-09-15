@@ -568,3 +568,76 @@ degenerate, this hypothesis dies with the other four. That test needs the
 artifact-identity admission path (B′, landed `d7f7c56e`) to carry an acceptance
 across two certification work directories, which is itself new and unproven — so
 it is a piece of work, not a spot check.
+
+## 14. The decisive test, run: accepting the dependency changes nothing
+
+§ 13 named the test and declined to run it. It has now been run, and it kills
+§ 13's hypothesis.
+
+### How the treatment was applied
+
+`certifyContract` deletes its scratch directory in an unconditional `finally`
+(`certify-contract.mjs:3928`), so the per-node generations it performs are
+invisible after the fact. They were observed by pointing `TMPDIR` at a
+scratchpad directory and running an `rsync` poller against
+`solid-checker-certify-*` for the duration of the run, copying out every
+`*.refusals.json`, `*.certification-inputs.json` and `proposal-dependencies.json`.
+No source was modified; the run is the ordinary graph lane.
+
+The graph lane builds each node with its dependencies' contracts in a private
+proposal catalog, dependency-first. The captured catalogs show exactly that:
+
+| graph node | catalog entries | specifiers accepted |
+| --- | --- | --- |
+| node 0 — `@solid-primitives/event-listener` | 11 | `@solid-primitives/utils`, `solid-js`, `solid-js/web` |
+| node 1 — `@solid-primitives/utils` | 2 | `solid-js`, `solid-js/web` |
+| node 3, node 6 — `solid-js`, `solid-js/web` | 1 | `solid-js` |
+
+So the root **is** regenerated with an accepted `@solid-primitives/utils`. That
+is the treatment § 13 asked for, and the graph lane already performs it.
+
+### The result
+
+| root generation | `unaccepted-external-dependency` records | refusals | exports with operations |
+| --- | --- | --- | --- |
+| partial proposal, no dependency contract | **176** | 0 | 0 of 11 |
+| graph node 0, `@solid-primitives/utils` accepted | **0** | 0 | **0 of 11** |
+
+Accepting the dependency clears **every** decline — 176 to 0, in both passes of
+the run — and moves nothing. The certified root document carries exactly **one**
+summary object, `{"call": {}, "shape": "callable"}`, shared by all eleven
+exports.
+
+The same graph, the same transaction, the same binary:
+
+| node | exports | degenerate | closed-empty | with operations |
+| --- | --- | --- | --- | --- |
+| `@solid-primitives/utils@6.4.1` `.` | 40 | 5 | 21 | **14** |
+| `solid-js@1.9.14` `.` | 54 | 40 | 0 | **14** |
+| `solid-js@1.9.14` `./web` | 72 | 68 | 0 | **4** |
+| `@solid-primitives/event-listener@2.4.6` `.` (root) | 11 | **11** | 0 | **0** |
+
+**The decline is a symptom, not the cause.** § 13's hypothesis — that a decline
+degenerates the whole composed case — is dead. It was the fifth explanation, and
+it is the fifth to fail.
+
+### What is left standing
+
+Measured, not inferred:
+
+- A pure `export *` barrel resolves through to its siblings: `@solid-primitives/
+  utils ./immutable` is six `export *` lines over six sibling files and
+  certifies 35 exports, 3 carrying operations (§ 13).
+- An unaccepted external dependency is not the cause: accepting it clears 176
+  decline records and produces the identical document (this section).
+- `@solid-primitives/event-listener`'s own module yields *no semantic content
+  whatsoever* — one summary object for eleven exports — while every other node
+  in the same graph yields plenty.
+
+No sixth explanation is offered here. The four candidate causes proposed across
+§§ 9–13 — 1.x authority, dependency decline, lane decline, implementation in
+another file — have each been tested and each has failed, and the honest state
+of this observation is that its cause is not known. Anything further should
+start from the generator's own analysis of `dist/eventListener.js`, which is
+where the content is missing, rather than from the certification machinery
+downstream of it.
