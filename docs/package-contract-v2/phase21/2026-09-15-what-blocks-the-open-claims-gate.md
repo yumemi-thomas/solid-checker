@@ -918,3 +918,101 @@ package's 942 consumer call sites and a contract.
 the case set publish what certified; it already does, and the 21-case
 publication is the proof. Writing a fix would have meant changing behaviour that
 is correct to chase a symptom whose cause is three layers away.
+
+## 28. Re-measured: how much feedback a consumer gets today
+
+The question the day opened with, asked again at the end of it. § 15 of
+`2026-09-14-which-closures-change-a-consumer-finding.md` answered it at
+**14.3%** of call sites with any stated operation and **1.5%** with an owner
+requirement. This section repeats that census against today's binary.
+
+### Method, and one correction to § 15's
+
+Demand is the pinned recensus (`2026-09-14-consumer-demand-recensus.json`):
+1,958 in-corpus call sites over 159 (package, export) pairs. Supply is a fresh
+certification of each demanded package through the ordinary benchmark lane with
+the freshly built debug checker, classifying every demanded export against the
+emitted document as `operations`, `closed-empty`, `degenerate` or `absent`.
+
+One rule differs from § 15, and it matters. `@kobalte/utils` declares two
+entrypoints **and a wildcard**, so its certification emits twenty documents
+named `./src/array.ts`, `./src/dom.ts` and so on. § 15 credited those summaries
+to consumers who wrote `import { contains } from "@kobalte/utils"`. They cannot
+be: `policy2_artifact_acceptance_root` binds the **entrypoint**, so a summary
+published at `./src/dom.ts` does not answer an import of `.`. This census counts
+an export only at an entrypoint a consumer can actually name — the root and the
+package's declared subpaths, never a wildcard-reached source path.
+
+The correction does not move § 15's headline, because those entrypoints stated
+nothing then. It moves the shape of the silence: `@kobalte/utils`' 942 sites
+were scored `closed-empty`/`degenerate` and are really `absent`.
+
+### The result
+
+| package | version | sites | stated operation | owner requirement |
+| --- | --- | ---: | --- | ---: |
+| `@kobalte/utils` | 0.9.2 | 942 | 0 (0.0%) — `.` refuses | 0 |
+| `@solid-primitives/utils` | 6.4.1 | 820 | **257 (31.3%)** | 20 |
+| `@kobalte/solidbase` | 0.6.13 | 60 | 0 | 0 |
+| `@solid-primitives/rootless` | 1.5.4 | 39 | 0 | 0 |
+| `@solidjs/start` | 2.0.3 | 24 | 0 | 0 |
+| `@solid-primitives/platform` | 0.2.1 | 18 | 0 | 0 |
+| `@kobalte/core` | 0.13.13 | 16 | 0 | 0 |
+| `@solid-primitives/trigger` | 1.2.4 | 9 | 0 | 0 |
+| `@solid-primitives/marker` | 0.2.2 | 8 | **8 (100%)** | 4 |
+| `@solid-primitives/scheduled` | 1.5.3 | 5 | **5 (100%)** | 5 |
+| `@solid-primitives/memo`, `keyed`, `storage`, `@solidjs/meta` | — | 9 | 0 | 0 |
+| `permission`, `tween`, `timer`, `context` | — | 10 | not measurable | — |
+
+**270 of 1,890 call sites — 14.3%. Twenty-nine — 1.5% — carry an owner
+requirement.** Both numbers are *identical* to § 15, to the site.
+
+By state, what a consumer's import meets today:
+
+| state | sites | share |
+| --- | ---: | ---: |
+| an operation is stated | 270 | 14.3% |
+| determined: the export states nothing | 556 | 29.4% |
+| degenerate: nothing was determined | 118 | 6.2% |
+| absent: the entrypoint refused, so no statement exists | 1,006 | 53.2% |
+
+### What today's work did move, and why it is not in this number
+
+Three things moved, none of them into the coverage column:
+
+- **`@solid-primitives/utils`' `.` case stopped refusing** (§ 25). In the
+  composed lane it went from refused to emitting 39 exports; its demanded
+  exports went from 19 `degenerate` to 2. That is the same 31.3%, with 17
+  exports moving from *nothing determined* to *determined to state nothing* —
+  an honesty gain, not a coverage gain.
+- **`@kobalte/utils` now produces operations for 9 of its 41 demanded
+  exports** — `createGenerateId` (60 sites), `focusWithoutScrolling` (34),
+  `contains` (24), `snapValueToStep`, `scrollIntoViewport`,
+  `createGlobalListeners`, `addItemToArray`, `getAllTabbableIn`, `isFocusable`:
+  **136 sites, one of them an owner requirement**. Every one of those summaries
+  is published at a `./src/*.ts` entrypoint that no consumer imports. The `.`
+  case that would carry them refuses.
+- **Consumer-facing noise fell 37%** (§ 21's collapse), with no information
+  lost. That is feedback quality at the sites that already get a finding, and
+  the census cannot see it.
+
+### The size of the one remaining blocker
+
+If `@kobalte/utils`' `.` case certified, those 136 sites would move — the corpus
+goes **14.3% → 21.5%** and owner requirements **1.5% → 1.6%**, from a single
+package. The content already exists; only the entrypoint that consumers name is
+missing.
+
+That case refuses for two reasons, both recorded: `Key` has no exact runtime
+binding from the accepted `@solid-primitives/keyed` (§ 26 — the refusal is
+pass 1's, and the published `keyed` document does carry `Key`), and `contains`
+holds an operation value path locally open with `reasons=[]` (§ 27). One
+entrypoint, two named causes, 942 call sites — 48% of all demand in the corpus.
+
+### The honest headline
+
+**No. Coverage has not moved: 14.3% of call sites get a statement and 1.5% can
+raise a finding, exactly as yesterday** — and that is still only reachable after
+the acceptance gate of § 4, which no consumer passes at all today. What moved is
+that the silence is better-determined, the noise is smaller, and the largest
+single blocker is now sized, named, and one entrypoint wide.
