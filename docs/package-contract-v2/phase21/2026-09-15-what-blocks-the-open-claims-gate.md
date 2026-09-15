@@ -294,3 +294,78 @@ not. That is where this bucket is fixed, and it is the same root cause as the
 `an_inherited_closure_withholds_when_the_graph_node_is_not_a_closure_edge` pins
 the refusal so the next attempt starts from the measurement rather than from the
 arm.
+
+## 12. Correction to § 11: the graph lane does record accepted edges
+
+§ 11 said the edge "is recorded by the generator only when
+`acceptedDependencies[specifier]` has the import's exact specifier text, and in
+the graph lane it does not", and called it the same root cause as the 476,700
+declines. Measuring the spread rather than the count refutes that:
+
+| | probes |
+| --- | ---: |
+| reach `census_inherited_dependency_closure` at all | 23 |
+| get **past** the edge lookup for at least one export | **23** |
+| refuse at the edge lookup for at least one export | 5 |
+
+Every probe that reaches the arm finds an edge for some export. The lane records
+edges; `mergeProposalDependencies` keys `proposalDependencies` by
+`viaSpecifier` and carries `artifactCase` and `acceptedContractDigest`, and 23
+probes prove it works. The refusal is per export, not per lane, and it is
+concentrated to the point of being one package: **1,128 of the 1,140 refusals
+are `motion-solidjs`, across its three rows.**
+
+The real mechanism is a **two-deep re-export chain**. `motion-solidjs` imports
+`motion`; `motion` re-exports from `motion-dom` and `motion-utils`. The arm
+resolves the re-exported name's bytes to `motion-dom`'s archive — correctly,
+that is where they live, and `motion-dom` is a graph node — but
+`motion-solidjs`'s own closure has an edge for `motion`, its direct import, and
+none for `motion-dom`. `edges.filter(package == motion-dom)` is therefore empty.
+
+So the obligation machinery is **direct-edge only** while composition is
+transitive, and that is the gap. It is still not fixable at the arm: with no
+edge there is no `DependencyCompositionRequirement` to discharge against, so
+admitting the closure would record an obligation nothing checks (§ 11's revert
+stands). Closing it means giving a transitive composition its own requirement —
+a design change in dependency composition, not a plumbing fix, and worth ~1,128
+records in one package rather than the architectural win § 11 implied.
+
+## 13. The honest unit is claims, not records
+
+Records multiply twice over: once per export of a wide package, and once per row
+of the same package (`solid1|only`, `solid2|floor`, `solid2|head` are three
+rows). `motion-solidjs` alone is 3,312 of the 10,406 records — 32% — from 532
+claims across three rows.
+
+| records | claims | packages | bucket |
+| ---: | ---: | ---: | --- |
+| 3,265 | 691 | 61 | `no recipe in corpus` |
+| 2,388 | 649 | 52 | `census refused` (other forms) |
+| 1,775 | 568 | 15 | `inherited closure` |
+| 1,150 | 298 | 49 | `property-access-unknown-accessor` |
+| 1,058 | 150 | 27 | `callbacks` enumerates none |
+| 770 | 593 | 13 | `veto did not complete` |
+| **10,406** | **2,940** | **76** | |
+
+Two thirds of the headline is multiplicity. Any target set against the record
+count is a target against package width and row structure; set it against the
+2,940 claims.
+
+## 14. What blocks `@kobalte/utils`, the top of the demand list
+
+All 124 of its withheld closures are one wall, and it is not a census gap:
+
+```
+the worker threw: Error: Stripping types is currently unsupported for files
+under node_modules, for "file://<workspace>/node_modules/@kobalte/utils/src/array.ts"
+```
+
+The artifact case resolves to the package's **`src/*.ts`**, not its `dist`, and
+the pinned Node refuses to strip types under `node_modules` — a deliberate
+restriction with no flag to lift. The probe cannot transpile its way out either:
+the witness read those exact bytes, and transpiled bytes are not them.
+
+This is the package carrying `mergeDefaultProps` (254 consumer sites),
+`callHandler` (112) and `createGenerateId` (60) — the top of § 5's worklist. Its
+`reads` and `creates` domains are blocked behind an interpreter restriction, not
+behind anything this repository decides.
