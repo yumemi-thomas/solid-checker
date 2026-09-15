@@ -874,3 +874,96 @@ So the silence is not one defect with one fix. It distributes across three
 populations — correctly closed pure helpers, structurally unresolvable
 parameter-rooted DOM calls, and a binding defect worth 7% — and no single lever
 moves the § 15 number much.
+
+## 18. `mergeDefaultProps`: the contract is not the constraint
+
+§ 16 flagged the corpus's most-called export — 254 sites, `closed` rather than
+degenerate, body `return mergeProps(defaultProps, props)` — and asked whether
+"returns a reactive proxy" is expressible. Four things were measured.
+
+### 1. It is not "determined to state nothing"
+
+```json
+{"call": {"closed": ["creates"], "creates": [], "proposedClosures": ["creates"]}}
+```
+
+It closed **`creates` only**. It is silent on `reads`, `callbacks` and
+`returns`. Checking this across both censused packages: **no export in either
+closes all four domains.**
+
+| package | closed-empty exports | domains actually closed |
+| --- | ---: | --- |
+| `@kobalte/utils` | 24 | 21 × `creates`; 3 × `callbacks`+`reads` |
+| `@solid-primitives/utils` | 21 | 9 × `callbacks`+`creates`; 6 × `callbacks`+`reads`; 4 × `creates`; 2 × `reads` |
+
+So § 15's "closed-empty = determined to state nothing" is too generous, and the
+census's `closed` column should be read as *partially* closed. Nothing in this
+corpus is fully determined.
+
+### 2. It would not matter if the contract were perfect
+
+`solid-js`'s own generated contract states nothing about `mergeProps`. Of its 54
+root exports, 14 carry operations and **40 are degenerate** — including
+`createSignal`, `createEffect`, `createMemo`, `createComputed`, `createRoot`,
+`createRenderEffect`, `createSelector`, `batch`, `untrack`, `splitProps` and
+`mergeProps`. The 14 that speak are mostly JSX components (`For`, `Index`,
+`Show`, `Switch`, `Match`, `ErrorBoundary`) plus `children`, `createContext`,
+`createResource`, `lazy`, `onCleanup`, `useTransition`, `from`, `createDeferred`.
+
+### 3. The defect is not reported even with no wrapper at all
+
+A project with solid-js 1.9.14 and nothing else:
+
+```tsx
+export function Direct(props: P) {
+  const { label } = props;                            // SC1003 ✓
+}
+export function ViaMergeProps(props: P) {
+  const merged = mergeProps({ x: 1 }, props);
+  const { label } = merged;                           // nothing
+}
+export function ViaMergePropsInline(props: P) {
+  const { label } = mergeProps({ x: 1 }, props);      // nothing
+}
+```
+
+One finding, `analysisContext: "Direct"`. Destructuring a `mergeProps` result is
+not reported in either spelling. **The `@kobalte/utils` wrapper hides nothing,
+because the un-wrapped call is not covered either.**
+
+### 4. It *is* expressible; the row is simply absent
+
+`static_rules.rs:231` accepts three ways for a destructured object to be
+reactive: the initializer's symbol is a known prop source; **a contract whose
+`summary.returns` has `kind == "store-path"`**; or a dialect primitive for which
+`returns_store` holds. And:
+
+```rust
+fn returns_store(&self, primitive: Primitive) -> bool {
+    matches!(primitive, Primitive::CreateStore | Primitive::CreateMutable)
+}
+```
+
+Two rows. `mergeProps` is not one of them. So this is not a limit of the
+operations model — the model has `store-path` and the rule already reads it.
+It is a missing audited dialect row, and the contract path would work the moment
+a contract said `store-path`.
+
+### What this changes
+
+The lever § 15 was looking for is not in the contract pipeline at all. A perfect
+contract for `mergeDefaultProps` changes nothing while `mergeProps` itself is
+uncovered, and covering `mergeProps` is a **dialect** row plus its 2.0
+counterpart — not a certification problem.
+
+Worth noting for whoever picks this up: SC1003's own hint reads "To split or
+default props, use `splitProps(props, ...keys)` and `mergeProps(defaults, props)`
+instead of destructuring." The advice is sound — reading `merged.label` in JSX
+tracks correctly, and the `Clean` case above stays clean. But a consumer who
+follows it and then destructures the merged object gets no warning.
+
+Not established here: whether eslint-plugin-solid 0.14.5 reports this. The
+`upstream_compat` port carries no `mergeProps` row, and the single upstream
+parity case using it (`upstream/reactivity__valid__05`) is a *valid* case, so
+nothing currently pins the destructure-the-result behaviour in either direction.
+That should be checked against the upstream source before a row is added.
