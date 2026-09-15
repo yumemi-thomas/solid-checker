@@ -623,13 +623,11 @@ impl CertificationPlan {
             let evidence = match type_facts::acquire_and_verify_export_values(plan, pin) {
                 Ok(evidence) => evidence,
                 Err(error) => {
+                    // Both kinds in one pass. One `CensusRefused` carries every
+                    // refusal the census recorded, and withdrawing only the
+                    // closures here would spend a whole producer acquisition
+                    // to rediscover the operations on the next one.
                     let records = census_refusal_withholding(plan, &error);
-                    if !records.is_empty() {
-                        already_withheld.extend(records);
-                        continue;
-                    }
-                    // No closure candidate to withdraw, so try the smaller
-                    // claim: the operation whose own stated fact was refused.
                     // A record already held is not progress — the same refusal
                     // twice means the weakening did not reach it — so the
                     // transaction refuses rather than looping.
@@ -643,9 +641,10 @@ impl CertificationPlan {
                             })
                         })
                         .collect::<Vec<_>>();
-                    if operations.is_empty() {
+                    if records.is_empty() && operations.is_empty() {
                         return Err(error.into());
                     }
+                    already_withheld.extend(records);
                     withheld_operations.extend(operations);
                     continue;
                 }

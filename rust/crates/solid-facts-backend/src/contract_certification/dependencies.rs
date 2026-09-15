@@ -1400,12 +1400,13 @@ fn certify_graphs_with_recipe_gating(
                             .entry(digest.to_owned())
                             .or_default()
                             .extend(records);
-                        continue;
                     }
-                    // No closure candidate at this node: withdraw the
-                    // operation whose own stated fact the census refused. A
-                    // record already held is not progress, so it does not
-                    // count and the graph refuses instead of looping.
+                    // Both kinds in the same pass: one `CensusRefused` carries
+                    // every refusal this node recorded, and leaving the
+                    // operations for the next pass would spend a whole
+                    // producer acquisition rediscovering them. A record
+                    // already held is not progress, so it does not count and
+                    // the graph refuses instead of looping.
                     let held = withheld_operations
                         .get(digest)
                         .map_or(&[][..], Vec::as_slice);

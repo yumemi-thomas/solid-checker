@@ -3254,7 +3254,9 @@ fn verify_live_export_value_answer_with_project_census(
                 // caller withholds every recorded candidate at once and
                 // re-plans, and the evidence of this answer is not returned.
                 Err(error) => {
-                    if let Some(refusal) = proposable_census_refusal(proof, &error) {
+                    if let Some(refusal) = proposable_census_refusal(proof, &error)
+                        .or_else(|| positive_fact_census_refusal(proof, &error))
+                    {
                         census_refusals.push(refusal);
                         continue;
                     }
@@ -3305,6 +3307,42 @@ fn verify_live_export_value_answer_with_project_census(
 /// domain-exhaustiveness demand on a proposable call domain and the error is
 /// the census saying it cannot decide it -- the pair ADR 0036 withholds on.
 /// Anything else is `None` and refuses as before.
+/// The same recording for the *positive* half: a demand naming an operation
+/// whose stated fact the census refused.
+///
+/// Recording rather than returning is what makes one pass enough. The caller
+/// withdraws every operation named here at once and re-plans, where returning
+/// the first error cost one full producer acquisition *per withdrawn
+/// operation* — measured on the 2026-09-16 corpus as
+/// `@tanstack/solid-table@9.1.2` alone exceeding a 1,800 s budget it used to
+/// finish inside, and the whole run going 10.5 min to 30.1 min.
+///
+/// A demand that names no operation is not recorded: there is no smaller claim
+/// to withdraw, so the artifact case still has to refuse, and refusing early is
+/// exactly right for it.
+fn positive_fact_census_refusal(
+    proof: &ScheduledProofDemand,
+    error: &TypeFactsCertificationError,
+) -> Option<CensusRefusal> {
+    let ProofDemandSubject::PositiveFact(subject) = &proof.subject else {
+        return None;
+    };
+    super::positive_fact_operation(subject)?;
+    let (demand, reason) = match error {
+        TypeFactsCertificationError::UnsupportedDemand { demand, reason }
+        | TypeFactsCertificationError::FamilyOpen { demand, reason } => (demand, reason),
+        _ => return None,
+    };
+    if demand != &proof.id {
+        return None;
+    }
+    Some(CensusRefusal {
+        demand: demand.clone(),
+        reason: reason.clone(),
+        rendered: error.to_string(),
+    })
+}
+
 fn proposable_census_refusal(
     proof: &ScheduledProofDemand,
     error: &TypeFactsCertificationError,
