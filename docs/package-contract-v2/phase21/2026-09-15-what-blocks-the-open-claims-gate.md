@@ -1016,3 +1016,132 @@ raise a finding, exactly as yesterday** — and that is still only reachable aft
 the acceptance gate of § 4, which no consumer passes at all today. What moved is
 that the silence is better-determined, the noise is smaller, and the largest
 single blocker is now sized, named, and one entrypoint wide.
+
+## 29. `contains` is unblocked; the wall behind it is the census's own model
+
+§ 28 sized the last blocker: certify `@kobalte/utils`' `.` case and the corpus
+goes 14.3% → 21.5% on content that already exists. This section takes it apart.
+
+### The reproduction
+
+The benchmark's 24-case run is not needed. One entrypoint reproduces it in about
+a minute, and the certification refuses at the same demand:
+
+```
+contract certify --package-root <installed @kobalte/utils> --integrity <pinned>
+  --entrypoint '.' --dependency-graph-lane --issuer-configuration <local>
+```
+
+Without an issuer configuration the pipeline refuses at `receipt-issuance`
+*before* witness acquisition ever runs — `stageDurationsMs` carries only
+`artifactAcquisition` and `proposalGeneration` — so three earlier runs of mine
+that "passed" had proved nothing at all. A scoped certification harness needs
+the issuer, or it is measuring the absence of one.
+
+### Blocker 1: an unnamed alternative is not alternative 0 — fixed
+
+`contains(parent: Node | undefined, child: Node | null)` reads
+`parent.contains`. Instrumenting the refusal prints the census the verifier
+actually had:
+
+```
+value = "Node | undefined", alternatives = [0, 1]
+  alt=0 path=[contains] presence=Absent   callability=Unknown  complete=true subtree=true
+  alt=1 path=[contains] presence=Required callability=Callable complete=true subtree=true
+```
+
+**Alternative 0 is `undefined`.** The demand names no alternative — the IR's
+recorded shape is a parameter member, not a choice — and `translate_value_path`
+initialised `alternative = 0` for both cases, so `undefined` refuted a member
+read the implementation performs on the `Node` arm, and with it the entrypoint
+942 consumer call sites import.
+
+The alternative is now `Option<usize>`. Named, it selects that fact as before.
+Unnamed, every alternative carrying the path is verified, and one that proves
+the member *absent* is not a counterexample: a value of that alternative cannot
+be the one the operation read. Every remaining alternative still has to carry
+the path closed and with the demanded callability, and a path absent on all of
+them refuses — saying so, rather than reporting a proved absence as
+`locally open (… reasons=[])`. That was § 27's complaint, and the answer is that
+`reasons=[]` was never missing: the producer *refuses* an absence fact carrying
+any positive or open field, so an empty reason list is what absence is required
+to look like. The message was reading an absence as an opening.
+
+Applied to all three sites that shared the conflation — operation value,
+exported value, selected-call recursive — not only the one the corpus hit
+(`e41d8dbc`). 534 backend lib tests, the three process suites, coverage (96
+projects, 555 findings) and the contract corpus (100 fixtures) are unmoved.
+
+### Blocker 2: a read through a reassigned parameter
+
+With `contains` cleared, `.` refuses on `scrollIntoViewport`:
+
+> `parameter-rooted read lacks positive original-input identity`
+
+That refusal is **correct, and no message fix helps it**. The export reassigns
+its own parameter:
+
+```ts
+while (targetElement && scrollParent && …) {
+  scrollIntoView(scrollParent, targetElement);
+  targetElement = scrollParent;          // the parameter, rewritten
+  scrollParent = getScrollParent(targetElement);
+}
+```
+
+`unwritten_parameter_binding` reads the producer's `unwrittenParameters`, a
+whole-function fact: this parameter is written, so there is no binding to stand
+on. The read that actually fails is on the *other* branch, where no
+reassignment happens — but Type Facts publishes no write/read ordering, so the
+verifier cannot distinguish "written somewhere in the body" from "written before
+this read". Closing this needs a producer fact that does not exist today.
+
+### Blocker 3: a path below a nested union cannot be addressed at all
+
+Bypassing blocker 2 as an experiment (never committed) exposes the third, on the
+same export:
+
+> `operation value path is absent from the signature census (alternative=None,
+> path=[containingElement, scrollIntoView])`
+
+from `opts?.containingElement?.scrollIntoView?.({ block: "center" })`. The
+census for `opts: ScrollIntoViewportOpts | undefined`:
+
+```
+  alt=0 path=[containingElement] presence=Absent   complete=true subtree=true
+  alt=1 path=[containingElement] presence=Optional complete=true subtree=true
+```
+
+and **nothing below it**. `containingElement?: Element` is itself
+`Element | undefined` — a union — and a `CallablePathFact` carries exactly one
+`alternative`, the *root's*. There is no way to address a member below a nested
+union, so the producer stops there and reports the subtree enumerated.
+
+This is a limit of the census model, not of this package: **any export whose
+analysis records an access path crossing a second union can never certify that
+path**, however complete the evidence below it is. It is the first time this
+has been written down, and it is worth more than this one package.
+
+### What this leaves
+
+`@kobalte/utils`' `.` needs `scrollIntoViewport`, and `scrollIntoViewport`
+carries two claims the evidence cannot reach. Neither is a defect in the
+verifier: both are the proposal claiming more than the model can carry. The
+options are a design decision, not a fix:
+
+- **Weaken the proposal.** A read whose path the census cannot address should be
+  proposed with the shorter path, or with none — the ladder already exists
+  (`path: (paths.len() == 1).then(…)` publishes "read through this parameter"
+  when the accesses disagree). Smallest change, and it makes the contract say
+  less rather than nothing.
+- **Withhold at operation granularity.** Certification already withholds
+  *closure candidates* and already re-certifies a subset of *cases*; the missing
+  rung is dropping one unprovable operation and re-emitting the export. That
+  changes the document bytes, so it needs the same independent re-certification
+  the case subdivision does.
+- **Extend the producer** with write/read ordering (blocker 2 only). Largest,
+  and it is a Type Facts protocol change.
+
+The prize is unchanged and now sits behind exactly one export: 136 sites — 132
+without `scrollIntoViewport`'s own 4 — taking the corpus from 14.3% to about
+21.5%.
