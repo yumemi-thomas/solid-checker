@@ -295,6 +295,16 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         {
             "the imported package contract explicitly marks a required effect claim as unknown"
         }
+        // The acceptance gate and the missing-summary case shared this arm, and
+        // its wording is only true of the second: at the acceptance gate there
+        // is no contract to have a summary in. Split, because a reader acts on
+        // the difference — one is `contract certify`, the other is an audit of
+        // a contract that already exists.
+        StaticDefectKind::PackageContractExportMissing { .. }
+            if defect.analysis_context == crate::contracts::UNACCEPTED_IMPORT_CONTEXT =>
+        {
+            "this project accepted no contract for the imported package"
+        }
         StaticDefectKind::PackageContractExportMissing { .. } => {
             "the imported package has a contract, but this export has no effect summary"
         }
@@ -535,12 +545,10 @@ pub fn project_findings(
                 .map(|operation| project_finding(FindingSeed::LeafOperation(operation), catalog)),
         );
     }
-    findings.extend(
-        program
-            .static_defects
-            .iter()
-            .map(|defect| project_finding(FindingSeed::StaticDefect(defect), catalog)),
-    );
+    findings.extend(collapse_unaccepted_contract_defects(
+        &program.static_defects,
+        catalog,
+    ));
     findings.extend(
         program
             .static_violations
@@ -692,6 +700,111 @@ pub fn suppress_findings_owned_by_enabled_rules(
 /// Projects one seed. Used by the backend for package-contract issues that
 /// are discovered after the reactive [`Program`] has been built.
 #[must_use]
+/// The acceptance gate says one thing — "this project has no accepted contract
+/// for that package" — and it used to say it once per import site.
+///
+/// Measured on `solid-primitives-next/site`: 88 of the project's 191 findings
+/// were this, and they named **17 packages**. Sixty-four of them were the same
+/// sentence about `@solid-primitives/utils`. The per-site repetition carried no
+/// information a reader could act on separately: the fix is one `contract
+/// certify` per package, not per import, and nothing distinguishes the sites.
+///
+/// So they collapse to one finding per package, anchored at the first site and
+/// carrying every other site in `related_locations` — visible in JSON output
+/// and counted in the default renderer's help line. **Nothing is dropped**; the
+/// same locations reach the same consumers, grouped by the thing that would fix
+/// them.
+///
+/// Only the acceptance gate collapses. `unknown-contract-claims:`,
+/// `unbound-contract-claims:` and `obsolete-policy1-receipt:` each say
+/// something specific about *that* export, so they stay per site, and a package
+/// with a single unaccepted site keeps its exact original wording.
+fn collapse_unaccepted_contract_defects(
+    defects: &[StaticDefect],
+    catalog: &impl CatalogWording,
+) -> Vec<Finding> {
+    /// The gate whose defects are interchangeable within one package: the
+    /// import matched no accepted contract at all, so no export-specific claim
+    /// has been read yet.
+    fn is_acceptance_gate(defect: &StaticDefect) -> Option<&str> {
+        let StaticDefectKind::PackageContractExportMissing { module, .. } = &defect.kind else {
+            return None;
+        };
+        // The exact context, not "not one of the specific prefixes": a defect
+        // raised because an *accepted* contract has no summary for this export
+        // is about that export, and collapsing it under the package would say
+        // the package has no contract when it does.
+        (defect.analysis_context == crate::contracts::UNACCEPTED_IMPORT_CONTEXT)
+            .then_some(module.as_str())
+    }
+
+    // First-seen order, so the anchor of each group is the first site the
+    // analysis reached and the output order does not depend on a hash.
+    let mut order: Vec<&str> = Vec::new();
+    let mut grouped: std::collections::HashMap<&str, Vec<&StaticDefect>> =
+        std::collections::HashMap::new();
+    let mut findings = Vec::new();
+    for defect in defects {
+        match is_acceptance_gate(defect) {
+            Some(module) => {
+                let group = grouped.entry(module).or_insert_with(|| {
+                    order.push(module);
+                    Vec::new()
+                });
+                group.push(defect);
+            }
+            // Everything else keeps its own finding, in place.
+            None => findings.push(project_finding(FindingSeed::StaticDefect(defect), catalog)),
+        }
+    }
+    for module in order {
+        let group = &grouped[module];
+        let mut finding = project_finding(FindingSeed::StaticDefect(group[0]), catalog);
+        if group.len() > 1 {
+            let mut exports = group
+                .iter()
+                .filter_map(|defect| match &defect.kind {
+                    StaticDefectKind::PackageContractExportMissing { export, .. } => {
+                        Some(export.as_str())
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            exports.sort_unstable();
+            exports.dedup();
+            let named = exports.len().min(6);
+            let listed = exports[..named].join(", ");
+            let remainder = exports.len() - named;
+            finding.message = format!(
+                "this project has no accepted reactivity contract for {module}; solid-checker \
+                 cannot tell whether its exports read reactive values, take tracked callbacks, or \
+                 return accessors, so code flowing through them cannot be certified. {} export{} \
+                 used across {} import site{}: {listed}{}",
+                exports.len(),
+                if exports.len() == 1 { "" } else { "s" },
+                group.len(),
+                if group.len() == 1 { "" } else { "s" },
+                if remainder == 0 {
+                    String::new()
+                } else {
+                    format!(", and {remainder} more")
+                }
+            );
+            finding.hint = format!(
+                "Accept one contract for {module} and every site above is answered at once: \
+                 generate a stable-v1 proposal for the exact installed artifact, certify it, and \
+                 register the document/receipt pair under .solid-checker/. See \
+                 docs/package-contracts.md for the workflow."
+            );
+            finding
+                .related_locations
+                .extend(group[1..].iter().map(|defect| defect.location.clone()));
+        }
+        findings.push(finding);
+    }
+    findings
+}
+
 pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> Finding {
     let wording = catalog.wording(seed);
     let location = primary_location(seed);

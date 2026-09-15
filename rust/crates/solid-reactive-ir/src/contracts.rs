@@ -1456,6 +1456,18 @@ fn push_missing_accepted_import(
     }
 }
 
+/// The analysis context of the **acceptance** gate: this project accepted no
+/// contract for the import at all, so nothing export-specific has been read
+/// yet.
+///
+/// Named rather than spelled twice because three places have to agree on it —
+/// the producer below, the evidence wording, and the per-package collapse in
+/// `projection` — and two of them are deciding whether a finding is about the
+/// package or about one of its exports. A drift between them would silently
+/// re-scatter the collapse or mislabel the evidence.
+pub(crate) const UNACCEPTED_IMPORT_CONTEXT: &str =
+    "no receipt-accepted contract matches this exact import";
+
 fn push_missing_accepted_export(
     missing: &mut Vec<StaticDefect>,
     module: &str,
@@ -1471,9 +1483,7 @@ fn push_missing_accepted_export(
         },
         location,
         analysis_context: match reason {
-            UncertifiableImportReason::Unspecified => {
-                "no receipt-accepted contract matches this exact import"
-            }
+            UncertifiableImportReason::Unspecified => UNACCEPTED_IMPORT_CONTEXT,
             UncertifiableImportReason::ObsoletePolicy1 => {
                 "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
             }
