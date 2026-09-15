@@ -9170,6 +9170,56 @@
     ],
     "absent": []
    }
+  },
+  {
+   "id": "primitive-in-directive-application/v2/positive/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createMemo, createSignal } from \"solid-js\";\n\nconst [count, setCount] = createSignal(0);\n\nfunction directive() {\n  setCount(1);\n  return (element: HTMLElement) => {\n    void element;\n    createMemo(() => count() + 1);\n  };\n}\n\nexport function App() {\n  return <button ref={[directive()]}>{count()}</button>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "setCount(1)"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "primitive-in-directive-application",
+      "code": "SC6001",
+      "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "createMemo",
+       "occurrence": 2
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   }
   }
  ]
 }
