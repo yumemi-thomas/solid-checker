@@ -746,3 +746,73 @@ closure depth, nor recipes, nor the interpreter: **the public entrypoint never
 produces a contract**, because one re-exported name in it cannot be bound. Every
 closure measurement in this document is downstream of that, and the `./src/*`
 cases those measurements describe are entrypoints nobody imports.
+
+## 25. The `Key` refusal, diagnosed: a core-runtime asymmetry across three censuses
+
+§ 24 read `accepted dependency @solid-primitives/keyed has no exact runtime
+binding for export Key` as a binding failure. It is not one, and the message
+overstates on both halves: `bindExport` fails whenever
+`acceptedDependencies[specifier]?.exports?.[name]?.[axis]` is falsy, which
+includes **the dependency not being supplied at all**, and then reports that an
+"accepted dependency" lacks a binding.
+
+Resolving `@solid-primitives/keyed@1.5.3` on its own answers `Key` with a valid
+runtime binding, so the second half is false. Supplying `keyed` by hand moves
+the refusal to `@solid-primitives/map`'s `ReactiveMap`, then to
+`@solid-primitives/utils`'s `access` — `@kobalte/utils`'s `.` re-exports from
+seven packages and needs all seven. The chain terminates at:
+
+```
+@kobalte/utils  ->  @solid-primitives/utils  ->  solid-js/web   (isServer)
+```
+
+**`solid-js/web` has no package contract by design** (ADR 0027), so a binding
+demand on it can never be satisfied. `canonicalClosure` already exempts core
+specifiers — "the built-in runtime foundation is not an unknown dependency" —
+and `bindExport` does not. That asymmetry is the root, and it is what refused
+`@solid-primitives/utils@6.4.1|solid1|only`'s `.` in the corpus, verbatim:
+`accepted dependency solid-js/web has no exact runtime binding for export
+isServer`.
+
+**Exempting core in `bindExport` is necessary and not sufficient.** With it,
+resolved in isolation with all seven dependencies supplied:
+
+| | before | after |
+| --- | --- | --- |
+| `@solid-primitives/utils` | refused | resolves, 39 exports |
+| `@kobalte/utils` `.` | refused | resolves, **59 exports** |
+| `mergeDefaultProps`, `callHandler`, `createGenerateId`, `Key` | — | present |
+| `isServer` | — | absent, core-owned |
+
+An unbound name is already the handled path — `if (!runtimeTarget ||
+!declarationTarget) continue` drops it and keeps every other export — which is
+ADR 0027's "missing native behavior stays unknown".
+
+But the A/B on the real row shows why that change cannot ship alone.
+`@solid-primitives/utils@6.4.1|solid1|only`, same probe, fix stashed and
+restored:
+
+| | `.` refusal |
+| --- | --- |
+| without | `accepted dependency solid-js/web has no exact runtime binding for export isServer` (class `dependency-composition`) |
+| with | `contract identity does not match the resolved import: resolved artifact has no exact runtime/declaration binding for export "isServer"` (class `published-artifact`) |
+
+The refusal moves from unsatisfiable to a **disagreement between censuses**:
+the JS resolver now omits `isServer`, while Rust's `bind_exports`
+(`artifact_resolution.rs:989`) still requires every name in the emitted
+document's export map to bind, and the emitter still puts `isServer` there.
+`coreRuntimeSpecifier`'s own comment says these censuses "must agree byte for
+byte", so half the change is worse than none. It was implemented, measured both
+ways, and reverted.
+
+**The complete fix is symmetric across three places**: exempt core specifiers in
+`bindExport`, mirror it in Rust's `bind_exports`, and stop the emitter naming a
+core-owned re-export in the document at all — because under ADR 0027 the package
+has no standing to claim anything about it. The third is a change to what a
+published contract *contains*, so it needs corpus verification rather than a
+patch.
+
+Worth noting what this does not explain: `@kobalte/utils` end-to-end still
+refuses at `keyed`/`Key` even with the graph lane on, because the lane does not
+supply `@solid-primitives/keyed` as an accepted dependency for the root's `.`
+case. That is a second, independent gap on the same entrypoint.
