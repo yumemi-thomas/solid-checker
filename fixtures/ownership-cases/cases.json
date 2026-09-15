@@ -9329,6 +9329,39 @@
     ],
     "absent": []
    }
+  },
+  {
+   "id": "reactive-dispatch-unresolved/v2/positive/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "import { createSignal } from \"solid-js\";\n\nconst [count] = createSignal(0);\n\nconst objectReader = {\n  read<T>(_value: T) {\n    return count();\n  },\n};\n\nconst quietReader = {\n  read<T>(_value: T) {\n    return 0;\n  },\n};\n\nfunction invoke<T>(reader: { read(value: T): number }, value: T) {\n  return reader.read(value);\n}\n\nexport function AmbiguousCall() {\n  const value = invoke(\n    Math.random() > 0.5 ? objectReader : quietReader,\n    \"ambiguous\",\n  );\n  return <div>{value}</div>;\n}\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "Math.random() > 0.5 ? objectReader : quietReader"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   }
   }
  ]
 }
