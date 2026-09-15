@@ -576,3 +576,68 @@ candidate.
 Nothing from this experiment is committed to `probe-recipes/`: two of the three
 address claims no recipe can serve, and the third addresses an id that no longer
 exists.
+
+## 21. Delivered: the acceptance gate reports once per package (B)
+
+Measured on `solid-primitives-next/site`, default settings, no accepted
+contracts:
+
+| | findings | violations | uncertifiable | acceptance-gate | sites covered |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| before | 191 | 15 | 176 | 88 | 88 |
+| after | 120 | 15 | 105 | **17** | **88** |
+
+Eighty-eight acceptance-gate findings named 17 packages; 64 of them were the
+same sentence about `@solid-primitives/utils`. They now collapse to one finding
+per package, anchored at the first site with every other site in
+`related_locations` — 88 sites before, 88 after, in 17 findings. Total output
+falls 37%; the 15 proven defects are untouched. No fixture snapshot moves,
+because a package with a single unaccepted site keeps its original wording.
+
+## 22. Scoped, not delivered: bundling the certified contracts (C)
+
+Every top-demand package **certifies today** — `@kobalte/utils`,
+`@solid-primitives/utils`, `@solidjs/meta`, `@solidjs/router`, `@corvu/utils`
+are all `certified` in the 2026-09-15 corpus run. Users never see those
+contracts, and this is why.
+
+**Bundling is admissible.** `policy2_artifact_acceptance_root` binds package
+name, version, integrity, requested entrypoint and the sorted export conditions
+— and **no importer and no path**. One bundle therefore matches every project
+that installs that exact artifact, which is the property a bundle needs.
+
+**The authentication half is complete.** `issue_builtin_policy2_receipt` issues
+a `ReceiptIssuerKind::BuiltIn` receipt, `BuiltInReceiptEntry` is the compiled-in
+authority (a digest over the whole canonical receipt), and
+`load_authenticated_policy2_embedded_contract` canonicalizes, authenticates,
+normalizes, requires one artifact case and accepts.
+
+**The delivery half is absent**, in four linked places:
+
+- `first_party_bundles.rs`: `const EMBEDDED_BUNDLES: &[EmbeddedBundle] = &[]`;
+- `contract_interface.rs`: `load_receipt_issued_embedded_contract` decodes the
+  document, checks the receipt version, and then returns
+  `Err(ReceiptAuthenticationRequired)` unconditionally — it never reaches the
+  authenticated loader beside it;
+- `pkg/contracts/bundled/{solid-v1,solid-v2}/bundle-index.json` both carry
+  `"contracts": []`, which is what `solid-contract-bundles` regenerates from the
+  empty `EMBEDDED_BUNDLES`;
+- the contract documents already sitting in `pkg/contracts/bundled/solid-v1/`
+  for `debounce`, `rootless` and `scheduled` are **orphans**: no index names
+  them and nothing loads them. `dialect.rs`'s use of the index is a consistency
+  assertion, not a delivery path.
+
+**One design question blocks the wiring.**
+`load_authenticated_policy2_embedded_contract` takes
+`expected: &Policy2ReceiptBindings`, which carries `importer`, `specifier` and
+`resolved_import_root` — project-specific values a compiled-in bundle cannot
+know, and must not assert. So the expected bindings have to be built from the
+*consumer's* own resolution and the bundle selected by matching
+`artifact_acceptance_root`, which puts the lookup in the admission path
+(`admitted_project_artifacts`) rather than in the bundle loader. That is a
+decision about where bundle selection lives, not a patch.
+
+**One product question follows.** A bundle is pinned to an exact version *and*
+integrity. Shipping them means the checker carries a table of (package, version)
+→ contract that helps users on those versions and nobody else, with a refresh
+cadence to decide. That is a maintenance commitment, not a one-off.
