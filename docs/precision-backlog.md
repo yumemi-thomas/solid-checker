@@ -21121,11 +21121,20 @@ degenerate because their *source* contracts state nothing — which is what
 
 **Still open.** Three things this does not do.
 
-- The inherited claim is not *closed*: `access` publishes the operation with no
-  `closed` array, so a consumer demanding `reactiveReads`, `returns` or
-  `ownerRequirements` still meets the open-claims gate. Whether the 185
-  `access` findings on `kobalte/packages/core` resolve was **not measured** —
-  the isolated harness's catalog does not bind that consumer's importer.
+- **The consumer census moves zero findings, and this is measured.**
+  `kobalte/packages/core` against the new catalog (one release binary, the
+  catalog the only variable, `--runtime-condition import` so the artifact case
+  matches): 1455 findings, 1198 SC9005, **1037 open-claims**, `access` **185** —
+  every count identical, and *zero finding rows differ*. Only the
+  `contractHash` and `functionsAnalyzed` (2646 → 2648) changed. The gate asks
+  for a **closed** domain, and the contract publishes `access`'s callbacks
+  operation with no `closed` array: `@solid-primitives/utils@6.4.1` states
+  `closed: ["creates"]` and leaves callbacks open at the source too. The
+  projection is in fact narrower than its input — it republishes claim items
+  but not the dependency's closures, so even that `creates` closure is lost.
+  Two follow-ups, in order: carry an accepted dependency's closures through
+  `project_accepted_export`, and close `callbacks` at
+  `@solid-primitives/utils`.
 - `fallback-all` still reaches the importer's *own* exports. `mixed`'s `local`
   in `scripts/contract-dependency-reexport.test.mjs` is marked unknown by an
   obligation raised about `opaque`, and the test pins that as today's answer

@@ -1449,12 +1449,54 @@ only `access`'s 185 had a source contract stating anything. `mergeRefs` (235)
 is `closed` and empty at `@solid-primitives/refs`, so binding it correctly
 publishes nothing, correctly.
 
-### What is still not known
+### The census: zero findings move
 
-Whether those 185 consumer findings resolve. The inherited claim is an
-*operation*, not a *closure*: `access` publishes no `closed` array, so a
-consumer demanding `reactiveReads`, `returns` or `ownerRequirements` still meets
-the open-claims gate with a narrower list. Measuring that needs the
-`kobalte/packages/core` census re-run against a catalog that binds its
-importers; the isolated harness used here does not. **The 1037 has not been
-re-measured.**
+Measured rather than estimated. `kobalte/packages/core`, one release binary for
+both runs, the only variable the catalog:
+
+```
+solid-checker-rust --project consumers/kobalte/packages/core/tsconfig.json \
+  --accepted-contracts <catalog> --receipt-trust-configuration <trust> \
+  --runtime-condition import --format json
+```
+
+`--runtime-condition import` is load-bearing: certification selects
+`/exports/./import/default`, and without the flag the consumer resolves a
+different branch, no artifact case matches, and all 597 findings sit at the
+acceptance gate instead. With it, the old catalog reproduces the 1037 exactly.
+
+| | before | after |
+| --- | ---: | ---: |
+| findings | 1455 | 1455 |
+| SC9005 | 1198 | 1198 |
+| open-claims | **1037** | **1037** |
+| acceptance gate | 126 | 126 |
+| `access` | 185 | 185 |
+| finding rows differing | — | **0** |
+
+The catalog is bound — `packageSummaries` carries the new `contractHash` with
+`evidence: accepted` — and exactly two things changed in the whole report:
+that hash, and `functionsAnalyzed` 2646 → 2648.
+
+### Why: the gate wants the closure, not the claim
+
+`access`'s 185 split 152 `unknown-contract-claims:callbacks` and 33
+`…:reactiveReads,returns,ownerRequirements`, identically before and after, and
+the callbacks message is unchanged: *"leaves callbacks unknown for imported
+export access"*. `project_callbacks` opens the domain whenever the ingested
+knowledge is not **closed**, and the contract now publishes `access`'s callbacks
+*operation* with no `closed` array at all.
+
+It cannot publish one. `@solid-primitives/utils@6.4.1` states `access` as
+`closed: ["creates"]` — its callbacks domain is open at the source too. The
+projection is in fact strictly narrower than its input: the inherited summary
+loses even that `creates` closure, because `project_accepted_export` republishes
+claim content and not the importer's right to the dependency's closures.
+
+So § 23's 185 was never reachable by this lever. It assumed "states operations"
+meant "satisfies the demand"; the gate asks for closed domains, and neither
+`@kobalte/utils` nor `@solid-primitives/utils` closes this one. **The lever is
+exhausted at zero.** What it bought is a correct contract — the claim is now
+published where it was silently dropped — and a precise next question: closing
+`callbacks` at `@solid-primitives/utils`, and carrying an accepted dependency's
+closures through the projection rather than only its items.
