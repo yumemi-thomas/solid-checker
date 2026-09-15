@@ -816,3 +816,61 @@ Worth noting what this does not explain: `@kobalte/utils` end-to-end still
 refuses at `keyed`/`Key` even with the graph lane on, because the lane does not
 supply `@solid-primitives/keyed` as an accepted dependency for the root's `.`
 case. That is a second, independent gap on the same entrypoint.
+
+## 26. There is no keyed graph-lane gap; the refusal that named it is stale
+
+§ 25 closed by recording a "second, independent gap": `@kobalte/utils`'s `.`
+still refusing at `@solid-primitives/keyed`/`Key` with the graph lane on,
+because the lane did not supply that dependency. Instrumenting
+`mergeProposalDependencies` says otherwise. For the `.` case the lane supplies
+all seven of the entrypoint's re-export dependencies, and `keyed` arrives with
+its exports and with `Key` among them:
+
+```
+MERGE n=7 [["@solid-primitives/event-listener",11,false],
+           ["@solid-primitives/keyed",6,true],
+           ["@solid-primitives/map",4,false], ["@solid-primitives/media",6,false],
+           ["@solid-primitives/props",6,false], ["@solid-primitives/refs",8,false],
+           ["@solid-primitives/utils",40,false]]
+```
+
+(count of resolution exports, then whether `Key` is one of them.)
+`@solid-primitives/keyed@1.5.3` also generates cleanly on its own — one `.`
+entrypoint, `Key` among six exports, zero refusals — so nothing about it is
+missing anywhere.
+
+**The `Key` message is a pass-1 artifact.** `refusals.json` is written by the
+initial generation, before any dependency is supplied; the graph lane's own
+outcome is recorded separately, in `graphPreparation.entrypointRecovery`. Read
+there, `.` is requested — `cases` carries it under both condition sets — and is
+absent from `expectedCases` and `publishedCases`. What the recovery actually
+refused is a different case entirely:
+
+```
+caseRefusals: ./src/scroll-into-view.ts, stage witness-acquisition,
+family recursive-value-shape — "parameter-rooted read lacks positive
+original-input identity"
+
+combinedRefusal: published graph case-set finalization failed: Type Facts
+certification failed for graph node @kobalte/utils@0.9.2
+(./src/scroll-into-view.ts)
+```
+
+So one `./src/*` case failing Type Facts certification aborts the **whole**
+case-set finalization, and `.` never publishes — while the refusal census the
+operator reads still names `keyed`/`Key` from a pass that had no dependencies at
+all.
+
+This is the third refusal message today that named the wrong subject: "accepted
+dependency X has no exact runtime binding" when X was never supplied (§ 25),
+"the re-exported name's dependency is not one exact replayed edge" for a
+transitive chain (§ 12), and now a stale pass-1 census surviving into the
+published refusals. Each cost hours. The pattern is worth fixing on its own
+terms: **a refusal census that a later pass has superseded should say so**, and
+`this is what pass 1 saw` is different information from `this is why the
+transaction failed`.
+
+The real remaining question for `@kobalte/utils` is therefore whether one case's
+`recursive-value-shape` refusal should abort the case set, or whether the set
+should publish the cases that did certify. That is a different investigation
+from the one § 25 pointed at, and nothing about `keyed` is part of it.
