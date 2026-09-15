@@ -3027,7 +3027,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                                 std::slice::from_ref(&path.to_path_buf()),
                                 trust.as_ref(),
                                 &package_root,
-                                &request.runtime.conditions,
+                                &request.runtime.selected_conditions(),
                                 &facts,
                             )?,
                         ),
@@ -3200,7 +3200,15 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             &catalogs,
             trust.as_ref(),
             directory,
-            &request.runtime.conditions,
+            // The *selected* set, not the raw `--runtime-condition` list:
+            // `selected_conditions` folds in `--runtime-target`,
+            // `--runtime-build` and `--rendering`, which is what a Solid app
+            // with SSR actually knows about itself. An app resolves different
+            // runtime files on the server and in the browser, and the thing its
+            // author can state is the environment, not the export-condition
+            // names the package happens to use. Declaring nothing still yields
+            // nothing, so the zero-configuration path is unchanged.
+            &request.runtime.selected_conditions(),
             &facts,
         )?;
         let contracts = if admitted.is_empty() {
@@ -3324,7 +3332,15 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             &discovered_catalogs,
             trust.as_ref(),
             directory,
-            &request.runtime.conditions,
+            // The *selected* set, not the raw `--runtime-condition` list:
+            // `selected_conditions` folds in `--runtime-target`,
+            // `--runtime-build` and `--rendering`, which is what a Solid app
+            // with SSR actually knows about itself. An app resolves different
+            // runtime files on the server and in the browser, and the thing its
+            // author can state is the environment, not the export-condition
+            // names the package happens to use. Declaring nothing still yields
+            // nothing, so the zero-configuration path is unchanged.
+            &request.runtime.selected_conditions(),
             &facts,
         )?;
         let contracts = if admitted.is_empty() {

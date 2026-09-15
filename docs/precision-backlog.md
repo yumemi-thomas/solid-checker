@@ -21785,3 +21785,59 @@ so every already-published catalog keeps the `["import"]` fallback until it is
 re-certified; nothing re-certifies them. And the **bundled** tier is untouched:
 `EMBEDDED_BUNDLES` and `EMBEDDED_SOLID1_BUNDLES` are still `&[]` with a stub
 loader, which is now zero-configuration convenience rather than the only road.
+
+## 2026-09-15 — an SSR app has two artifacts, and both are real
+
+**Resolved, and it corrected a design mistake made an hour earlier.** The entry
+above selected among certified cases by raw export conditions. Asked whether
+that is workable for a Solid app with SSR — where the same source resolves to a
+*server* bundle and a *browser* bundle, and **both execute** — the answer was
+no, and the reason was that the selection was parallel to a model this
+repository already had rather than built on it.
+
+- `ProgramBoundary` does **not** split server from client. It answers whether
+  callers outside the analyzed files may exist, and nothing else. SSR is
+  therefore one analysis run *per environment*, which is also how the
+  first-party bundled tier has always worked: `environment_selects` picks by
+  `RuntimeTarget` and `RuntimeRendering`, and the audited v1 documents are named
+  `solid-root-node`, `solid-root-browser-development` and so on.
+- `RuntimeEnvironment::selected_conditions()` already folds `--runtime-target`,
+  `--runtime-build`, `--rendering` and the framework transforms into one
+  condition set, adding only what was *explicitly* selected. Admission was
+  passing the raw `--runtime-condition` list instead. That was the whole bug:
+  the mechanism existed and was not wired.
+
+**One measurement changed the design.** Switching to `selected_conditions()`
+alone made things *worse* — `--runtime-target browser` derived `{browser}`, no
+case's `["import"]` was a subset of it, and declaring the environment refused
+where declaring nothing had succeeded. A runtime target describes an
+environment; it says nothing about `import` versus `require`, and every export
+map splits on that first. The resolved module format is added for that reason,
+and only when the host named neither format itself — a project explicitly
+declaring `require` is describing a resolution this analyzer did not perform,
+and overriding it would be inventing a fact.
+
+~~~
+[nothing declared]          certified   <- zero configuration, the linter path
+[--runtime-target browser]  certified
+[--runtime-target node]     certified
+[node + string-ssr]         certified   <- the SSR server pass
+[--runtime-condition require] missing   <- correctly refused
+~~~
+
+**What a consumer must still say, and why it is the right thing to ask.** A
+project whose package resolves to *different* runtime files per environment
+gets nothing until it declares one, because there is genuinely no single answer
+and guessing would apply a contract proven about `dist/server.js` to code
+running `dist/index.js`. The thing being asked for is the environment — which a
+Solid developer knows — and not export-condition names, which they generally do
+not. `an_ssr_package_is_selected_by_the_declared_environment` pins both halves:
+the declared environment selects the matching artifact, and an absent
+declaration refuses rather than picking.
+
+**Not demonstrated end to end.** `@solid-primitives/debounce@1.3.0`, the only
+package certified into a real project here, has two cases that name the *same*
+runtime file, so its environment selection is unobservable. The SSR-split shape
+is pinned at the selection rule, not against a real installed package; a package
+with genuinely divergent server and browser bundles has not been run through
+this.

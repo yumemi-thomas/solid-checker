@@ -659,7 +659,21 @@ pub fn admitted_project_artifacts(
     resolved_target: &ResolvedTargetIdentity,
 ) -> Result<Vec<(String, String)>, ContractFailure> {
     let _ = (project_directory, trust);
-    let declared = conditions.iter().cloned().collect::<Vec<_>>();
+    // The host's set, plus the module format the analyzer actually resolved
+    // with. `--runtime-target browser` describes an *environment*; it says
+    // nothing about `import` versus `require`, and every export map splits on
+    // that first. Without this an SSR app declaring its target derived
+    // `{browser}`, no case's `["import"]` was a subset of it, and declaring the
+    // environment made things *worse* than declaring nothing — measured.
+    //
+    // Added only when the host named neither format itself: a project that
+    // explicitly declares `require` is describing a build whose resolution this
+    // analyzer did not perform, and overriding that would be inventing a fact.
+    let mut declared = conditions.iter().cloned().collect::<Vec<_>>();
+    if !declared.is_empty() && !declared.iter().any(|it| it == "import" || it == "require") {
+        declared.push("import".to_owned());
+    }
+    declared.sort();
     // Every authentic case, across every catalog. A case set publishes one
     // catalog *per case*, so a per-catalog decision would never see two cases
     // of the same package together and could not tell an unambiguous artifact
@@ -1541,6 +1555,39 @@ mod tests {
         assert_eq!(
             selected(&differing, &["require"]).as_deref(),
             Some("root-require")
+        );
+    }
+
+    /// The shape a Solid app with SSR actually has: one `.d.ts`, two runtime
+    /// files, and *both* of them real — the server bundle runs one and the
+    /// browser bundle the other. There is no single answer for such a project,
+    /// which is why the environment is declared per analysis run rather than
+    /// derived, and why declaring nothing has to refuse instead of picking.
+    #[test]
+    fn an_ssr_package_is_selected_by_the_declared_environment() {
+        let cases = [
+            case("server", "dist/server.js", &["node", "import"]),
+            case("client", "dist/index.js", &["browser", "import"]),
+        ];
+        assert_eq!(
+            selected(&cases, &["import", "node"]).as_deref(),
+            Some("server"),
+            "the server pass selects the artifact the server actually runs"
+        );
+        assert_eq!(
+            selected(&cases, &["browser", "import"]).as_deref(),
+            Some("client")
+        );
+        // `--runtime-target node --rendering string-ssr` folds to this.
+        assert_eq!(
+            selected(&cases, &["import", "node", "string-ssr"]).as_deref(),
+            Some("server"),
+            "a host declaring more than the case needs still matches it"
+        );
+        assert_eq!(
+            selected(&cases, &[]),
+            None,
+            "two real artifacts and no declaration is not something to guess at"
         );
     }
 
