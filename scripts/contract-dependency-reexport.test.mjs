@@ -73,6 +73,20 @@ function manifest(name, dependencies) {
   })}\n`;
 }
 
+/// What a document *claims closed* about one export, and what it merely
+/// proposes closed. A re-exported name is described by its dependency's
+/// contract, so both lists must match the dependency's for the same name: the
+/// parent has no implementation of its own to say anything further.
+function closure(document, exportName) {
+  const artifactCase = document.entrypoints?.["."]?.cases?.[0];
+  const summary = document.summaries?.[artifactCase?.exports?.[exportName]];
+  assert.ok(summary, `${exportName} must keep an exact export identity`);
+  return {
+    closed: [...(summary.call?.closed ?? [])].sort(),
+    proposed: [...(summary.call?.proposedClosures ?? [])].sort()
+  };
+}
+
 /// The one claim both packages must make about the same function value:
 /// argument 0 is invoked, on the caller's own stack, untracked.
 function invokedFirstArgument(document, exportName) {
@@ -236,6 +250,35 @@ describe("a contract describes what it re-exports from an accepted dependency", 
     expect(invokedFirstArgument(consumers.mixed, "clean")).toEqual([
       "invoke:same-stack:untracked"
     ]);
+  });
+
+  test("a re-exported name publishes the dependency's closure, not a silence", () => {
+    // The generator's own walks are all silent about `clean` here: there is no
+    // local symbol for them to reach, so `creates_walk_clean`,
+    // `returns_walk_clean` and `direct_callback_parameters` are the fail-closed
+    // defaults. Running the local proposal filters against that silence used to
+    // discard the dependency's certified closure for every domain
+    // (`phase21/2026-09-15-closure-gap-plan.md` § 1). The inherited premise
+    // replaces those filters; what it must publish is exactly the dependency's
+    // answer, name for name.
+    //
+    // Compared against the dependency's own answer rather than a literal, so
+    // the pin survives a census gaining a domain. The non-vacuity assertion
+    // below is what makes that comparison mean anything: two empty lists agree
+    // just as well as two full ones.
+    const stated = closure(dependency, "clean");
+    expect(stated.proposed).not.toEqual([]);
+    expect(closure(consumers.reexporter, "clean")).toEqual(stated);
+    expect(closure(consumers.mixed, "clean")).toEqual(stated);
+  });
+
+  test("an open re-export inherits no closure", () => {
+    // `opaque`'s value comes from an unresolved global, so its dependency
+    // contract closes nothing. An inherited premise closes exactly what the
+    // dependency closed, so this is the falsifier for the test above: a closure
+    // appearing here would be one no contract states.
+    expect(closure(consumers.mixed, "opaque")).toEqual({ closed: [], proposed: [] });
+    expect(closure(dependency, "opaque")).toEqual({ closed: [], proposed: [] });
   });
 
   test("the same obligation still reaches this package's own exports", () => {

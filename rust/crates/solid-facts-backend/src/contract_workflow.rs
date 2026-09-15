@@ -49,6 +49,12 @@ pub struct ProposalArtifacts {
     /// in either encoded artifact records an *unmade* proposal — and is
     /// measurement, never evidence.
     pub declined: Vec<crate::inferred_contract::DeclinedClosureRecord>,
+    /// Which proposed closures came from an accepted dependency's contract
+    /// rather than from a walk of this archive. Travels beside the bytes for
+    /// the same reason the two above do: neither encoded artifact distinguishes
+    /// an inherited proposal from a walked one, and the certifier does not read
+    /// this — it rebinds the re-export itself.
+    pub inherited: Vec<crate::inferred_contract::InheritedClosureRecord>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -92,6 +98,7 @@ pub(crate) fn encode_proposal_artifacts(
     closure_candidates: impl IntoIterator<Item = SemanticClaimSubject>,
     withheld: Vec<crate::inferred_contract::WithheldOwnerRequirementRecord>,
     declined: Vec<crate::inferred_contract::DeclinedClosureRecord>,
+    inherited: Vec<crate::inferred_contract::InheritedClosureRecord>,
     pretty: bool,
 ) -> Result<ProposalArtifacts, ContractWorkflowError> {
     let canonical = canonicalize_proposal(contract, closure_candidates, pretty)?;
@@ -100,6 +107,7 @@ pub(crate) fn encode_proposal_artifacts(
         document: canonical.document,
         withheld,
         declined,
+        inherited,
     })
 }
 

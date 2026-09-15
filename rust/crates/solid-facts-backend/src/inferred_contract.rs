@@ -38,6 +38,9 @@ pub(crate) struct NormalizedInference {
     pub(crate) withheld: Vec<WithheldOwnerRequirementRecord>,
     /// Why no `creates` closure was proposed, per export. Measurement only.
     pub(crate) declined: Vec<DeclinedClosureRecord>,
+    /// Which proposed closures rest on a dependency's contract rather than on
+    /// a walk of this archive. Measurement only.
+    pub(crate) inherited: Vec<InheritedClosureRecord>,
 }
 
 pub(crate) fn normalize_inferred_contract(
@@ -69,8 +72,31 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
     let package = selected.package().clone();
     let mut cases = selected.artifact_cases().to_vec();
     let mut candidates = Vec::new();
+    let mut inherited_records = Vec::new();
     for artifact_case in &mut cases {
         for (name, export) in &mut artifact_case.exports {
+            // The summary this export was normalized from, when the entrypoint
+            // under generation declares it. Two questions are asked of it and
+            // they are not the same question: `direct_callback_parameters` is a
+            // *local* walk's output, and `inherited_from` says the summary is
+            // not a local walk's output at all.
+            let summary = inferred
+                .entrypoints
+                .get(&artifact_case.entrypoint)
+                .and_then(|entrypoint| entrypoint.exports.get(name));
+            // A projected re-export. Its closure is the dependency's, proved
+            // by the dependency's own certification, and none of the local
+            // confirmability filters below can say anything about it: they all
+            // read walks over an implementation this archive does not contain,
+            // and all of them therefore answer "do not propose". Running them
+            // is what dropped `@solid-primitives/utils`'s certified `access`
+            // and `mergeRefs` closures on the floor
+            // (`phase21/2026-09-15-closure-gap-plan.md` § 1).
+            //
+            // The *hazard* filters below are a different kind and still apply:
+            // a hazard is a fact about this package's own module closure, which
+            // an inherited claim does not answer.
+            let inherited = summary.is_some_and(|summary| summary.inherited_from.is_some());
             let paths = export.open_proposed_closure();
             // The weakening alone *loses* the candidate. The certifier rebuilds
             // its candidate universe by weakening the emitted document's own
@@ -120,13 +146,10 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                 // enumeration stays partial.
                 .filter(|domain| {
                     *domain != ClaimDomain::Callbacks
+                        || inherited
                         || callbacks_enumeration_is_confirmable(
                             export,
-                            inferred
-                                .entrypoints
-                                .get(&artifact_case.entrypoint)
-                                .and_then(|entrypoint| entrypoint.exports.get(name))
-                                .map(|summary| &summary.direct_callback_parameters),
+                            summary.map(|summary| &summary.direct_callback_parameters),
                         )
                 })
                 // ADR 0101: a described `reads` enumeration is proposable when
@@ -139,10 +162,13 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                 // proposing it would publish a closure the census must refuse;
                 // such an enumeration stays partial.
                 .filter(|domain| {
-                    *domain != ClaimDomain::Reads || reads_enumeration_is_confirmable(export)
+                    *domain != ClaimDomain::Reads
+                        || inherited
+                        || reads_enumeration_is_confirmable(export)
                 })
                 .filter(|domain| {
                     *domain != ClaimDomain::Returns
+                        || inherited
                         || export
                             .operation_claim(
                                 ClaimDomain::Returns,
@@ -156,6 +182,13 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                             })
                 })
                 .collect::<Vec<_>>();
+            if let Some(origin) = summary.and_then(|summary| summary.inherited_from.as_ref()) {
+                inherited_records.extend(proposable.iter().map(|domain| InheritedClosureRecord {
+                    export: name.clone(),
+                    domain: domain.wire_name(),
+                    origin: origin.clone(),
+                }));
+            }
             export.propose_closures(proposable);
             candidates.extend(paths.into_iter().map(|path| SemanticClaimSubject {
                 artifact_case: artifact_case.id.clone(),
@@ -172,6 +205,7 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
         closure_candidates: candidates,
         withheld,
         declined,
+        inherited: inherited_records,
     })
 }
 
@@ -381,6 +415,43 @@ fn callbacks_enumeration_is_confirmable(
     })
 }
 
+/// Re-derives what generation would have produced for one **inherited**
+/// export: the projection of a dependency's certified export
+/// ([`solid_reactive_ir::project_export_semantics`]), normalized under *this*
+/// package's artifact case and public name.
+///
+/// The certifier's half of the inherited-closure premise. A parent's closure on
+/// a re-exported name is admissible exactly when its items *are* the projection
+/// of the dependency's, and the only way to answer that without inventing a
+/// second notion of "the projection" is to run the generator's own derivation
+/// again and compare. A comparison written independently would be a second
+/// answer, and the certifier's is the one that silently admits a claim the
+/// generator never made.
+///
+/// The two sinks are discarded on purpose: a withheld owner requirement and a
+/// declined `creates` walk are *generation* records, and this is not a
+/// generation. Nothing here reaches a document.
+pub(crate) fn inherited_export_projection(
+    artifact_case: &ArtifactCase,
+    name: &str,
+    dependency_export: &ExportSemantics,
+    origin: solid_reactive_ir::InheritedExportOrigin,
+    scope: GenerationScope,
+) -> Result<ExportSemantics, ContractFailure> {
+    let summary = ContractExport {
+        inherited_from: Some(origin),
+        ..solid_reactive_ir::project_export_semantics(dependency_export)
+    };
+    normalize_export(
+        artifact_case,
+        name,
+        &summary,
+        scope,
+        &mut Vec::new(),
+        &mut Vec::new(),
+    )
+}
+
 fn normalize_export(
     artifact_case: &ArtifactCase,
     name: &str,
@@ -491,9 +562,15 @@ fn normalize_export(
     let returns = match &summary.returns {
         ContractClaim::Open => KnowledgeSet::Unknown,
         ContractClaim::Known(None) => {
+            // A projected summary has no local implementation, so
+            // `returns_walk_clean` is `false` for every re-export and this arm
+            // used to discard the dependency's certified `returns: []`. The
+            // inherited premise replaces the walk rather than joining it: the
+            // dependency closed the domain, and the certifier discharges that
+            // by composition from the dependency's receipt.
             if scope.publishes_bootstrapped_reactive_domains()
-                && summary.kind == "function"
-                && summary.returns_walk_clean
+                && (summary.inherited_closure(ClaimDomain::Returns)
+                    || (summary.kind == "function" && summary.returns_walk_clean))
             {
                 KnowledgeSet::Complete(Vec::new())
             } else {
@@ -573,9 +650,17 @@ fn normalize_export(
     //   [`solid_reactive_ir::CreatesProposalWalk`] actually walked this export's
     //   implementation and found no call that a `creates: []` claim would
     //   contradict. Silence is "do not propose".
+    //
+    // * an **inherited** closure, which is none of the three. A cross-package
+    //   re-export has no local symbol, so `creates_walk_clean` is `false` for
+    //   it whatever the dependency certified, and the `function` gate answers
+    //   about a body this archive does not contain. What closes the domain is
+    //   the accepted dependency contract this summary was projected from, and
+    //   the certifier discharges it against that dependency's receipt instead
+    //   of a census of bytes that are not here.
     let creates = if scope.publishes_bootstrapped_reactive_domains()
-        && summary.kind == "function"
-        && summary.creates_walk_clean
+        && (summary.inherited_closure(ClaimDomain::Creates)
+            || (summary.kind == "function" && summary.creates_walk_clean))
     {
         KnowledgeSet::Complete(Vec::new())
     } else {
@@ -861,6 +946,31 @@ pub struct DeclinedClosureRecord {
     pub domain: &'static str,
     /// Why the domain stayed open.
     pub decline: ClosureDecline,
+}
+
+/// One closure this generation proposed on an **inherited** premise: the name
+/// is a cross-package re-export, and the domain is closed because the accepted
+/// dependency contract it was projected from closes it.
+///
+/// Measurement and attribution, like [`DeclinedClosureRecord`] beside it. It
+/// travels to the emit boundary's machine-readable record rather than into the
+/// plan sidecar, and deliberately: the certifier does **not** read this
+/// provenance. It rebinds the re-export from the parent's own
+/// snapshot-verified runtime binding and the dependency node's plan, because a
+/// provenance string a document carries about itself is the kind of
+/// self-report the precision contract refuses to read as proof. What this
+/// record answers is the auditor's question — which of a package's proposed
+/// closures rest on a dependency's receipt rather than on a census of its own
+/// bytes — which nothing else in either artifact can distinguish.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InheritedClosureRecord {
+    /// The public name this package re-exports.
+    pub export: String,
+    /// The domain proposed closed, by its
+    /// [`solid_reactive_ir::contract_semantics::ClaimDomain::wire_name`].
+    pub domain: &'static str,
+    /// The accepted dependency export the closure came from.
+    pub origin: solid_reactive_ir::InheritedExportOrigin,
 }
 
 /// The two reasons a proposable domain does not reach a closure candidate.

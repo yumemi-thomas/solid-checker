@@ -3554,9 +3554,11 @@ mod tests {
     use flate2::{Compression, write::GzEncoder};
     use sha2::{Digest as _, Sha256, Sha512};
     use solid_reactive_ir::contract_semantics::{
-        CallClaims, CallSemantics, ClaimDomain, ClaimPath, ContractProposal, ExportIdentity,
-        ExportSemantics, ExportTargetIdentity, GuardPartition, KnowledgeSet, SemanticClaimPath,
-        SemanticClaimSubject, StabilityKnowledge, ValueShape,
+        CallClaims, CallSemantics, CallbackInvocation, Cardinality, CardinalityScope, ClaimDomain,
+        ClaimPath, ContractProposal, Event, ExportIdentity, ExportSemantics, ExportTargetIdentity,
+        GuardPartition, KnowledgeSet, Operation, OperationId, OperationKind, OwnerRelation,
+        OwnerSource, Schedule, SemanticClaimPath, SemanticClaimSubject, StabilityKnowledge,
+        Tracking, Trigger, UpperBound, ValueShape, ValueSource,
     };
     use std::collections::{BTreeMap, BTreeSet};
 
@@ -5820,6 +5822,369 @@ mod tests {
         );
     }
 
+    /// The two archives an inherited closure is about: a dependency that
+    /// implements `value` and states what it does, and a package whose whole
+    /// entrypoint is `export { value } from "dependency-package"`.
+    ///
+    /// The re-exporting package contains no implementation of `value`, which is
+    /// the entire point: its implementation census refuses the name by design
+    /// ("not in this artifact's own runtime source"), so the only admissible
+    /// premise for a closure on it is the dependency's own certification.
+    fn inherited_reexport_archives() -> (PublishedArchive, PublishedArchive) {
+        let dependency_manifest = br#"{"name":"dependency-package","version":"2.0.0","exports":{".":{"types":"./index.d.ts","import":"./index.js","default":"./index.js"}}}"#;
+        let dependency = published_archive_for(
+            "dependency-package",
+            "2.0.0",
+            &[
+                ("package/package.json", dependency_manifest),
+                (
+                    "package/index.js",
+                    b"export function value(run) {\n  run();\n}\n",
+                ),
+                (
+                    "package/index.d.ts",
+                    b"export declare function value(run: () => void): void;\n",
+                ),
+            ],
+        );
+        let root_manifest = br#"{"name":"root-package","version":"1.0.0","exports":{".":{"types":"./index.d.ts","import":"./index.js","default":"./index.js"}}}"#;
+        let root = published_archive_for(
+            "root-package",
+            "1.0.0",
+            &[
+                ("package/package.json", root_manifest),
+                (
+                    "package/index.js",
+                    b"export { value } from \"dependency-package\";\n",
+                ),
+                (
+                    "package/index.d.ts",
+                    b"export { value } from \"dependency-package\";\n",
+                ),
+            ],
+        );
+        (root, dependency)
+    }
+
+    /// The dependency's plan, with `value` described the way its own generation
+    /// would: argument 0 invoked on the caller's stack, untracked, and no
+    /// `create`. `open` withholds the callbacks enumeration instead, which is a
+    /// dependency that certified nothing about it.
+    fn inherited_dependency_plan(archive: &PublishedArchive, open: bool) -> CertificationPlan {
+        let manifest = br#"{"name":"dependency-package","version":"2.0.0","exports":{".":{"types":"./index.d.ts","import":"./index.js","default":"./index.js"}}}"#;
+        plan_with_export_semantics(
+            archive,
+            "dependency-package",
+            "2.0.0",
+            "/project/node_modules/dependency-package",
+            manifest,
+            &[(
+                "value",
+                ("index.js", b"export function value(run) {\n  run();\n}\n"),
+                (
+                    "index.d.ts",
+                    b"export declare function value(run: () => void): void;\n",
+                ),
+                "/project/node_modules/dependency-package",
+            )],
+            &[],
+            "/project/node_modules/root-package/index.js",
+            &|case, name| {
+                let invoke = OperationId(format!("{}:{name}:operation:invoke-0", case.id));
+                ExportSemantics {
+                    identity: test_export_identity(case, name),
+                    shape: ValueShape::Callable,
+                    stability: StabilityKnowledge::Unknown,
+                    call: CallSemantics::new(
+                        CallClaims {
+                            // `Unknown` withdraws the operation with the
+                            // enumeration: an operation node the claims do not
+                            // reference is a contradiction in the model, which
+                            // is the right shape here — a dependency that
+                            // states nothing states no operation either.
+                            callbacks: if open {
+                                KnowledgeSet::Unknown
+                            } else {
+                                KnowledgeSet::complete(vec![CallbackInvocation {
+                                    from: ValueSource::Parameter {
+                                        index: 0,
+                                        path: Vec::new(),
+                                    },
+                                    operation: invoke.clone(),
+                                }])
+                            },
+                            creates: KnowledgeSet::complete(vec![]),
+                            ..CallClaims::default()
+                        },
+                        if open {
+                            Vec::new()
+                        } else {
+                            vec![test_invoke_operation(invoke)]
+                        },
+                        Vec::new(),
+                        Vec::new(),
+                        GuardPartition::default(),
+                    ),
+                }
+            },
+        )
+    }
+
+    fn test_export_identity(
+        case: &solid_reactive_ir::contract_semantics::ArtifactCase,
+        name: &str,
+    ) -> ExportIdentity {
+        ExportIdentity {
+            entrypoint: case.entrypoint.clone(),
+            public_name: name.to_owned(),
+            runtime: ExportTargetIdentity {
+                module: case.runtime.clone(),
+                export_name: name.to_owned(),
+            },
+            declarations: ExportTargetIdentity {
+                module: case.declarations.clone(),
+                export_name: name.to_owned(),
+            },
+        }
+    }
+
+    /// `run()` written in `value`'s own body: the one invoking form ADR 0100
+    /// describes, and the shape `project_callbacks` round-trips.
+    fn test_invoke_operation(id: OperationId) -> Operation {
+        Operation {
+            id,
+            kind: OperationKind::Invoke,
+            guard: None,
+            trigger: Some(Trigger::Event(Event::Call)),
+            at: Some(Event::Call),
+            schedule: Some(Schedule::SameStack),
+            tracking: Tracking::Untracked,
+            owner: OwnerRelation {
+                source: OwnerSource::AmbientAtExecution,
+                productions: KnowledgeSet::complete(vec![]),
+                ..OwnerRelation::default()
+            },
+            cardinality: Cardinality {
+                scope: Some(CardinalityScope::Call),
+                min: Some(0),
+                max: Some(UpperBound::Many),
+            },
+            inputs: Vec::new(),
+            output: None,
+            resources: BTreeSet::new(),
+            composed_from: None,
+        }
+    }
+
+    /// The re-exporting package's plan, with `value`'s claims supplied by the
+    /// caller so a test can publish the projection, a perturbation of it, or
+    /// something else entirely.
+    fn inherited_root_plan(
+        archive: &PublishedArchive,
+        dependency: &CertificationPlan,
+        semantics: &dyn Fn(
+            &solid_reactive_ir::contract_semantics::ArtifactCase,
+            &str,
+        ) -> ExportSemantics,
+    ) -> CertificationPlan {
+        let manifest = br#"{"name":"root-package","version":"1.0.0","exports":{".":{"types":"./index.d.ts","import":"./index.js","default":"./index.js"}}}"#;
+        plan_with_export_semantics(
+            archive,
+            "root-package",
+            "1.0.0",
+            "/project/node_modules/root-package",
+            manifest,
+            // The binding is the dependency's file, in the dependency's
+            // installed root: that is what a cross-package re-export resolves
+            // to, and what makes this an inherited closure at all.
+            &[(
+                "value",
+                ("index.js", b"export function value(run) {\n  run();\n}\n"),
+                (
+                    "index.d.ts",
+                    b"export declare function value(run: () => void): void;\n",
+                ),
+                "/project/node_modules/dependency-package",
+            )],
+            &[dependency],
+            "/project/src/app.ts",
+            semantics,
+        )
+    }
+
+    /// What the generator publishes for the re-exported name: the projection of
+    /// the dependency's certified export, normalized under the re-exporting
+    /// package's own artifact case and public name.
+    fn inherited_projection(
+        dependency: &CertificationPlan,
+        case: &solid_reactive_ir::contract_semantics::ArtifactCase,
+        name: &str,
+    ) -> ExportSemantics {
+        let source = dependency
+            .selected_candidate
+            .artifact_case(dependency.selected_artifact_case_id())
+            .unwrap()
+            .exports
+            .get(name)
+            .unwrap();
+        crate::inferred_contract::inherited_export_projection(
+            case,
+            name,
+            source,
+            solid_reactive_ir::InheritedExportOrigin {
+                package_name: "dependency-package".into(),
+                package_version: "2.0.0".into(),
+                artifact_case: dependency.selected_artifact_case_id().into(),
+                semantic_digest: dependency
+                    .selected_candidate
+                    .semantic_digest()
+                    .as_str()
+                    .into(),
+                entrypoint: ".".into(),
+                export: name.into(),
+            },
+            crate::inferred_contract::GenerationScope::for_package("root-package"),
+        )
+        .unwrap()
+    }
+
+    /// The positive: a re-exported name whose published closure *is* the
+    /// projection of the dependency's is discharged by composition, and the
+    /// recorded obligation names the dependency claim the parent's receipt must
+    /// then bind.
+    #[test]
+    fn an_inherited_closure_is_discharged_from_the_dependency_that_owns_the_name() {
+        let (root_archive, dependency_archive) = inherited_reexport_archives();
+        let dependency = inherited_dependency_plan(&dependency_archive, false);
+        let root = inherited_root_plan(&root_archive, &dependency, &|case, name| {
+            inherited_projection(&dependency, case, name)
+        });
+
+        // The premise the whole arm rests on, asserted rather than assumed: the
+        // parent's replayed runtime binding *is* the dependency's, bytes and
+        // span, in the dependency's snapshot.
+        assert_eq!(
+            root.verified_exports.runtime_binding("value"),
+            dependency.verified_exports.runtime_binding("value")
+        );
+        assert_ne!(root.snapshot_root(), dependency.snapshot_root());
+
+        for domain in [ClaimDomain::Callbacks, ClaimDomain::Creates] {
+            let sites = super::type_facts::inherited_dependency_closure_for_test(
+                &root,
+                &[&dependency],
+                "value",
+                domain,
+            )
+            .unwrap_or_else(|error| panic!("{domain:?} must discharge: {error}"))
+            .unwrap_or_else(|| panic!("{domain:?} must be recognized as inherited"));
+            assert!(
+                sites
+                    .iter()
+                    .any(|site| site.starts_with("inherited-closure:dependency-package:value:")),
+                "the witness names the dependency export it composed from: {sites:?}"
+            );
+            let claim = sites
+                .iter()
+                .find_map(|site| site.strip_prefix("inherited-closure-dependency:"))
+                .expect("an inherited closure records its dependency obligation");
+            let claim: serde_json::Value = serde_json::from_str(claim).unwrap();
+            assert_eq!(claim["package"], "dependency-package");
+            assert_eq!(claim["export"], "value");
+            assert_eq!(claim["domain"], domain.wire_name());
+            assert!(
+                claim["semantic_claim_id"]
+                    .as_str()
+                    .is_some_and(|id| !id.is_empty()),
+                "the obligation addresses the dependency's own claim: {claim}"
+            );
+        }
+    }
+
+    /// The falsifier for the projection test: one item removed from the
+    /// enumeration and everything else identical. A closure that merely
+    /// resembles the dependency's is not the dependency's.
+    #[test]
+    fn a_reexport_claiming_less_than_its_dependency_is_not_inherited() {
+        let (root_archive, dependency_archive) = inherited_reexport_archives();
+        let dependency = inherited_dependency_plan(&dependency_archive, false);
+        let root = inherited_root_plan(&root_archive, &dependency, &|case, name| {
+            // Closed over *nothing*: the export invokes no caller-supplied
+            // code. That is the dangerous direction — a weaker enumeration is
+            // a stronger negative claim — and it is exactly what a consumer
+            // would act on.
+            let mut export = inherited_projection(&dependency, case, name);
+            export.call = CallSemantics::new(
+                CallClaims {
+                    callbacks: KnowledgeSet::complete(vec![]),
+                    creates: KnowledgeSet::complete(vec![]),
+                    ..CallClaims::default()
+                },
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                GuardPartition::default(),
+            );
+            export
+        });
+        let error = super::type_facts::inherited_dependency_closure_for_test(
+            &root,
+            &[&dependency],
+            "value",
+            ClaimDomain::Callbacks,
+        )
+        .expect_err("an enumeration the dependency does not state cannot be inherited");
+        assert!(
+            error.to_string().contains("is not the projection"),
+            "the refusal names what failed: {error}"
+        );
+    }
+
+    /// A dependency that states nothing about the domain lends nothing. The
+    /// re-exporting package's own bytes contain no implementation of `value`,
+    /// so there is no second premise to fall back to — the domain stays open.
+    #[test]
+    fn a_reexport_inherits_nothing_from_a_dependency_that_closed_nothing() {
+        let (root_archive, dependency_archive) = inherited_reexport_archives();
+        let closed = inherited_dependency_plan(&dependency_archive, false);
+        let open = inherited_dependency_plan(&dependency_archive, true);
+        // The published claim is the same one the closed dependency justifies;
+        // only the dependency changed.
+        let root = inherited_root_plan(&root_archive, &open, &|case, name| {
+            inherited_projection(&closed, case, name)
+        });
+        let error = super::type_facts::inherited_dependency_closure_for_test(
+            &root,
+            &[&open],
+            "value",
+            ClaimDomain::Callbacks,
+        )
+        .expect_err("an open dependency domain closes nothing at the re-exporting package");
+        assert!(
+            error.to_string().contains("is not the projection"),
+            "the refusal names what failed: {error}"
+        );
+    }
+
+    /// A name this package implements is not inherited, whatever else is in the
+    /// graph: its binding is inside its own snapshot, so the implementation
+    /// census answers it and this premise never applies.
+    #[test]
+    fn a_locally_implemented_export_is_never_inherited() {
+        let (_, dependency_archive) = inherited_reexport_archives();
+        let dependency = inherited_dependency_plan(&dependency_archive, false);
+        assert_eq!(
+            super::type_facts::inherited_dependency_closure_for_test(
+                &dependency,
+                &[&dependency],
+                "value",
+                ClaimDomain::Creates,
+            )
+            .unwrap(),
+            None
+        );
+    }
+
     /// A dependency package whose entrypoint re-exports `VALUE` from
     /// `lib/value.d.ts`, with `marker` distinguishing otherwise identical
     /// copies so each gets its own snapshot root.
@@ -7225,6 +7590,57 @@ mod tests {
             UntrustedArtifactEnvelope::Published(archive.clone()),
             &[],
         )
+    }
+
+    /// As `try_plan_closing_for_test_package_from_importer`, but the caller
+    /// supplies each export's whole [`ExportSemantics`] instead of a list of
+    /// domains to close empty.
+    ///
+    /// An inherited closure is a claim *with items* — the dependency's
+    /// enumeration, republished — so the closed-and-empty shape the other
+    /// builders produce cannot express the case at all.
+    #[expect(clippy::too_many_arguments, reason = "exact resolution inputs")]
+    fn plan_with_export_semantics(
+        archive: &PublishedArchive,
+        name: &str,
+        version: &str,
+        root: &str,
+        manifest: &[u8],
+        exports: &[TestExportBinding<'_>],
+        dependencies: &[&CertificationPlan],
+        importer: &str,
+        semantics: &dyn Fn(
+            &solid_reactive_ir::contract_semantics::ArtifactCase,
+            &str,
+        ) -> ExportSemantics,
+    ) -> CertificationPlan {
+        let (request, resolved) = test_package_resolution(
+            archive,
+            name,
+            version,
+            root,
+            manifest,
+            &["import"],
+            exports,
+            dependencies,
+            importer,
+        );
+        let (package, mut artifact_case) =
+            crate::artifact_resolution::proposal_identity(&resolved).unwrap();
+        artifact_case.exports = exports
+            .iter()
+            .map(|(export, _, _, _)| ((*export).to_owned(), semantics(&artifact_case, export)))
+            .collect();
+        let candidate = ContractProposal::new(package, vec![artifact_case])
+            .normalize()
+            .unwrap();
+        super::plan_certification_with_dependencies(
+            &mut CertificationPlanningTransaction::new(),
+            CertificationRequest::new(candidate, request, resolved),
+            UntrustedArtifactEnvelope::Published(archive.clone()),
+            dependencies,
+        )
+        .unwrap()
     }
 
     #[expect(clippy::too_many_arguments, reason = "exact resolution inputs")]

@@ -10,9 +10,9 @@
 use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
 use solid_reactive_ir::contract_semantics::{
-    CardinalityScope, ClaimDomain, ClaimPath, OperationKind, ReactiveRole, Requirement,
-    SemanticClaimPath, UpperBound, ValueClaimDomain, ValuePathSegment, ValueRoot, ValueShape,
-    ValueSource,
+    CardinalityScope, ClaimDomain, ClaimPath, ExportSemantics, KnowledgeSet, Operation,
+    OperationId, OperationKind, OwnerSource, ReactiveRole, Requirement, SemanticClaimPath,
+    UpperBound, ValueClaimDomain, ValuePathSegment, ValueRoot, ValueShape, ValueSource,
     certification::{
         DemandedCallability, PositiveFactSubject, ProofDemand, ProofDemandGraph,
         ProofDemandSubject, ProofFamily, ProofWitnessVariant, WitnessBinding,
@@ -483,8 +483,43 @@ impl VerifiedTypeFactsEvidence {
             .collect()
     }
 
+    /// The inherited-closure obligations recorded for one parent closure
+    /// claim: the dependency claims a re-exported name's closure rests on.
+    ///
+    /// The same shape as [`Self::dependency_creates_claims`] beside it, and
+    /// deliberately a separate list: a `creates` census claim is always the
+    /// empty enumeration of one domain, while an inherited claim names *which*
+    /// domain and can carry items. The caller's discharge differs accordingly.
+    pub(super) fn inherited_closure_claims(
+        &self,
+        plan: &CertificationPlan,
+        claim_id: &str,
+    ) -> Vec<InheritedClosureDependencyClaim> {
+        let Some(demand) = plan.demand_graph().demands().iter().find(|demand| {
+            demand.family() == ProofFamily::DomainExhaustiveness
+                && matches!(demand.subject(), ProofDemandSubject::DomainClosure {
+                    semantic_claim_id, ..
+                } if semantic_claim_id == claim_id)
+        }) else {
+            return Vec::new();
+        };
+        self.bindings
+            .iter()
+            .filter(|binding| binding.demand_id() == demand.id().as_str())
+            .flat_map(|binding| binding.site_ids())
+            .filter_map(|site| site.strip_prefix(INHERITED_CLOSURE_CLAIM_PREFIX))
+            .map(|json| serde_json::from_str(json).expect("native inherited closure encoding"))
+            .collect()
+    }
+
     /// A finalizer using conditional census evidence must bind the same
     /// dependency requirements that its receipt authenticator discharged.
+    ///
+    /// Both obligation kinds fold into one root: an inherited closure is a
+    /// dependency requirement in exactly the sense this root exists to pin, and
+    /// a finalizer that bound only half of them would let the other half be
+    /// substituted. A plan with neither keeps `None`, so no existing receipt
+    /// moves.
     pub(super) fn dependency_census_root(&self) -> Option<String> {
         let rows = self
             .bindings
@@ -493,7 +528,10 @@ impl VerifiedTypeFactsEvidence {
                 binding
                     .site_ids()
                     .iter()
-                    .filter(|site| site.starts_with(CENSUS_DEPENDENCY_CLAIM_PREFIX))
+                    .filter(|site| {
+                        site.starts_with(CENSUS_DEPENDENCY_CLAIM_PREFIX)
+                            || site.starts_with(INHERITED_CLOSURE_CLAIM_PREFIX)
+                    })
                     .map(|site| format!("{}:{site}", binding.demand_id()))
             })
             .collect::<Vec<_>>();
@@ -3759,6 +3797,15 @@ fn verify_export_value_family(
                 // producer's stated fact alone. The identity and emptiness
                 // checks live in the helper; nothing is walked.
                 sites.extend(vacuous);
+            } else if let Some(inherited) =
+                census_inherited_dependency_closure(plan, proof, &subject.path, census, &open)?
+            {
+                // The name is a cross-package re-export, so this artifact has
+                // no implementation for the census arms below to walk -- they
+                // refuse it by name, correctly, because a census must never
+                // walk another archive's bytes. The closure is the
+                // dependency's, discharged by composition from its receipt.
+                sites.extend(inherited);
             } else if matches!(
                 &subject.path,
                 SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates))
@@ -4284,6 +4331,390 @@ fn census_default_library_alias_export(
     Ok(Some(vec![format!(
         "typefacts-value-export:default-library-alias:{qualified}"
     )]))
+}
+
+/// One inherited-closure obligation: the dependency claim a parent's closure on
+/// a re-exported name rests on. Never receipt authority on its own — the
+/// composition authenticator discharges each one against that dependency's own
+/// certified contract and receipt.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub(super) struct InheritedClosureDependencyClaim {
+    pub package: String,
+    pub artifact_case: String,
+    pub accepted_contract_digest: String,
+    pub export: String,
+    /// The domain, by `ClaimDomain::wire_name`.
+    pub domain: String,
+    pub semantic_claim_id: String,
+}
+
+/// Discharge a proposed closure on a **re-exported** name by composition from
+/// the dependency that owns it, instead of by a census of bytes this artifact
+/// does not contain.
+///
+/// `export { access } from "@solid-primitives/utils"` publishes that package's
+/// exact runtime binding under this package's identity. This package declares
+/// nothing about `access`, and its implementation census says so outright: the
+/// declaration "is not in this artifact's own runtime source: the census walks
+/// authenticated runtime bytes and nothing else". That refusal is correct — a
+/// parent must never walk another archive's bytes — and it is also the reason
+/// no proof mode for such a closure existed. The premise that does hold is
+/// composition, and it is stronger than a census: the dependency certified the
+/// claim about its own bytes, under its own receipt.
+///
+/// `Ok(None)` when this demand is not such a case, so the census arms run
+/// unchanged. Four conditions, each fail-closed:
+///
+/// 1. the parent's **snapshot-verified** runtime binding for the public name
+///    lands outside this artifact's own snapshot. Replayed from archive bytes
+///    by `export_bindings`, not read out of the document;
+/// 2. exactly one dependency node in this graph owns those bytes, and exactly
+///    one of *its* exports replays to the identical runtime module, export name
+///    and span. Two matches refuse rather than choose;
+/// 3. the parent's published claim for the domain **is** the projection of that
+///    dependency export's — re-derived here by running the generator's own
+///    derivation again ([`crate::inferred_contract::inherited_export_projection`]),
+///    so "equal" cannot drift into "resembles". A domain the dependency leaves
+///    open projects as unknown and therefore never matches a closed parent
+///    claim;
+/// 4. the dependency's own claim is addressable: it is closed in the
+///    dependency's gated candidate, or is a closure candidate of it, and has a
+///    semantic claim id.
+///
+/// What this function does **not** establish is that the dependency's receipt
+/// certified that claim — gating may withhold it after this runs. That is the
+/// recorded obligation's job: the site carries the dependency claim, and
+/// `authenticate_dependency_receipt`'s caller refuses with `MissingClosedClaim`
+/// unless the dependency's *certified* contract closes it and its receipt
+/// contains the claim id. A dependency that withholds therefore opens the
+/// domain at the parent too, through the existing
+/// `composed_from_withheld_dependency` withholding.
+fn census_inherited_dependency_closure(
+    plan: &CertificationPlan,
+    proof: &ScheduledProofDemand,
+    path: &SemanticClaimPath,
+    census: CensusEvidence<'_>,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+) -> Result<Option<Vec<String>>, TypeFactsCertificationError> {
+    let SemanticClaimPath::Domain(ClaimPath::Call(domain)) = path else {
+        return Ok(None);
+    };
+    if !domain.is_proposable() {
+        return Ok(None);
+    }
+    let (artifact_case, export_name) = proof_artifact_export(&proof.subject);
+    let Some(binding) = plan.verified_exports.runtime_binding(export_name) else {
+        return Ok(None);
+    };
+    let (runtime_module, _, _, owner_snapshot_root) = binding;
+    // A name this package implements binds inside its own snapshot. Only a
+    // cross-package re-export binds into another archive, and only that is what
+    // this premise is about.
+    if owner_snapshot_root == plan.snapshot.root() {
+        return Ok(None);
+    }
+    let mut matches = Vec::new();
+    for child in census.dependencies {
+        if child.snapshot.root() != owner_snapshot_root {
+            continue;
+        }
+        let Some(case) = child
+            .selected_candidate
+            .artifact_case(child.selected_artifact_case_id())
+        else {
+            continue;
+        };
+        for (name, export) in &case.exports {
+            // `external_binding` copies the dependency's own verified binding
+            // verbatim into the parent's, so this is an equality of replayed
+            // evidence -- module, export name, span and owning snapshot -- and
+            // not a spelling that happens to agree.
+            if child.verified_exports.runtime_binding(name) == Some(binding) {
+                matches.push((child, case, name.as_str(), export));
+            }
+        }
+    }
+    let Some((child, child_case, child_export_name, child_export)) = matches.first().copied()
+    else {
+        return Ok(None);
+    };
+    // One installed copy per resolution is the ordinary shape, but a hoisted
+    // and a nested copy of the same dependency share a snapshot root (identical
+    // bytes), so both appear here. They name the same claim exactly when their
+    // *proposals* agree, because the claim id is content-addressed over the
+    // proposal -- so agreement collapses them and disagreement withholds.
+    //
+    // Withheld rather than refused: ambiguous evidence about a candidate is a
+    // candidate this pass cannot decide, and the loop reopens the domain by
+    // name instead of failing the whole node.
+    if matches.iter().any(|(_, case, name, export)| {
+        case.id != child_case.id || *name != child_export_name || *export != child_export
+    }) {
+        return Err(open(&format!(
+            "inherited closure: re-exported {export_name:?} replays to {} dependency exports that \
+             do not agree, and an inherited closure names exactly one",
+            matches.len()
+        )));
+    }
+    let parent_case = plan
+        .selected_candidate
+        .artifact_case(artifact_case)
+        .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason: "demanded artifact case is absent from the certified candidate".into(),
+        })?;
+    let parent_export = parent_case.exports.get(export_name).ok_or_else(|| {
+        TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason: "demanded export is absent from the certified candidate".into(),
+        }
+    })?;
+    // The parent's demand is about one exact dependency edge, and the edge is
+    // the parent's own replayed dependency artifact demand — not the child
+    // plan's self-description.
+    //
+    // Collected as a set over the edge's whole identity rather than as a list:
+    // one accepted dependency reached by two importers is one edge, and two
+    // *different* accepted digests for one package and case is the ambiguity
+    // this must refuse.
+    let edges = plan
+        .demand_graph()
+        .demands()
+        .iter()
+        .filter_map(|demand| match demand.subject() {
+            ProofDemandSubject::DependencyArtifact { dependency } => Some(dependency),
+            _ => None,
+        })
+        .filter(|dependency| {
+            dependency.package == child.snapshot.package_name()
+                && dependency.artifact_case == child_case.id
+        })
+        .map(|dependency| {
+            (
+                dependency.package.as_str(),
+                dependency.artifact_case.as_str(),
+                dependency.accepted_contract_digest.as_str(),
+            )
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    let [(edge_package, edge_case, edge_digest)] = edges.iter().copied().collect::<Vec<_>>()[..]
+    else {
+        return Err(open(
+            "inherited closure: the re-exported name's dependency is not one exact replayed \
+             dependency artifact edge of this plan",
+        ));
+    };
+    let projected = crate::inferred_contract::inherited_export_projection(
+        parent_case,
+        export_name,
+        child_export,
+        solid_reactive_ir::InheritedExportOrigin {
+            package_name: child.snapshot.package_name().to_owned(),
+            package_version: child.snapshot.package_version().to_owned(),
+            artifact_case: child_case.id.clone(),
+            semantic_digest: edge_digest.to_owned(),
+            entrypoint: child_export.identity.entrypoint.clone(),
+            export: child_export_name.to_owned(),
+        },
+        crate::inferred_contract::GenerationScope::for_package(plan.snapshot.package_name()),
+    )
+    .map_err(|error| open(&format!("inherited closure cannot be re-derived: {error}")))?;
+    if !same_domain_claim(parent_export, &projected, *domain) {
+        return Err(open(&format!(
+            "inherited closure: this package's {} claim for {export_name:?} is not the projection \
+             of {}'s {child_export_name:?}",
+            call_claim_domain_name(*domain),
+            edge_package
+        )));
+    }
+    let subject = solid_reactive_ir::contract_semantics::SemanticClaimSubject {
+        artifact_case: child_case.id.clone(),
+        export: child_export_name.to_owned(),
+        path: SemanticClaimPath::Domain(ClaimPath::Call(*domain)),
+    };
+    let dependency_closes = child_export.operation_claim(*domain).map_or_else(
+        || child_export.callbacks().is_closed(),
+        KnowledgeSet::is_closed,
+    );
+    if !dependency_closes && !child.candidates.closure_candidates().contains(&subject) {
+        return Err(open(
+            "inherited closure: the dependency's own contract neither closes this domain nor \
+             proposes closing it",
+        ));
+    }
+    let claim_id = child
+        .candidates
+        .proposal()
+        .claim_id(&subject)
+        .map_err(|_| open("inherited closure: the dependency's claim has no semantic claim id"))?;
+    let claim = InheritedClosureDependencyClaim {
+        package: edge_package.to_owned(),
+        artifact_case: edge_case.to_owned(),
+        accepted_contract_digest: edge_digest.to_owned(),
+        export: child_export_name.to_owned(),
+        domain: domain.wire_name().to_owned(),
+        semantic_claim_id: claim_id.as_str().to_owned(),
+    };
+    // The domain gate, not the premise: this says only that the demand names a
+    // call domain a closure may be proposed for at all. The premise is the
+    // composition above, and `ClosureCensus::Implementation` is the argument
+    // the two sibling identity arms pass for the same reason -- none of the
+    // three reaches an implementation census either.
+    require_census_decides_closure(proof, path, ClosureCensus::Implementation)?;
+    Ok(Some(vec![
+        format!(
+            "inherited-closure:{edge_package}:{child_export_name}:{}:{runtime_module}",
+            domain.wire_name(),
+        ),
+        format!(
+            "{INHERITED_CLOSURE_CLAIM_PREFIX}{}",
+            serde_json::to_string(&claim).expect("native inherited closure claim encoding")
+        ),
+    ]))
+}
+
+/// The inherited-closure decision for one export and domain, without a Type
+/// Facts session.
+///
+/// The arm consults no transcript — a re-exported name's closure is decided by
+/// the parent's replayed export binding, the dependency node's own plan and the
+/// projection, none of which a producer answer contributes to — so the decision
+/// is exactly reproducible from two plans. `Ok(None)` is "this is not an
+/// inherited closure", which is what makes the census arms run.
+#[cfg(test)]
+pub(super) fn inherited_dependency_closure_for_test(
+    plan: &CertificationPlan,
+    dependencies: &[&CertificationPlan],
+    export: &str,
+    domain: ClaimDomain,
+) -> Result<Option<Vec<String>>, TypeFactsCertificationError> {
+    let path = SemanticClaimPath::Domain(ClaimPath::Call(domain));
+    let subject = solid_reactive_ir::contract_semantics::SemanticClaimSubject {
+        artifact_case: plan.selected_artifact_case_id().to_owned(),
+        export: export.to_owned(),
+        path: path.clone(),
+    };
+    // The plan's own demand where it has one, so the test exercises the real
+    // identity; a synthetic id otherwise, for the cases where no candidate was
+    // planned and the question is still "would this have been inherited".
+    let proof = plan
+        .demand_graph()
+        .demands()
+        .iter()
+        .find(|demand| {
+            demand.family() == ProofFamily::DomainExhaustiveness
+                && matches!(demand.subject(), ProofDemandSubject::DomainClosure { subject: planned, .. } if *planned == subject)
+        })
+        .map_or_else(
+            || ScheduledProofDemand {
+                id: "test-inherited-closure".into(),
+                family: ProofFamily::DomainExhaustiveness,
+                subject: ProofDemandSubject::DomainClosure {
+                    subject: subject.clone(),
+                    semantic_claim_id: String::new(),
+                },
+            },
+            |demand| ScheduledProofDemand {
+                id: demand.id().as_str().to_owned(),
+                family: demand.family(),
+                subject: demand.subject().clone(),
+            },
+        );
+    let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+        demand: proof.id.clone(),
+        reason: reason.to_owned(),
+    };
+    census_inherited_dependency_closure(
+        plan,
+        &proof,
+        &path,
+        CensusEvidence {
+            roots: &[],
+            locals: &[],
+            dependencies,
+        },
+        &open,
+    )
+}
+
+/// Whether two normalized exports make the *same* claim about one call domain:
+/// the same closure state, the same items in the same order, and the same
+/// operations and resources behind them.
+///
+/// Both sides are named under the same artifact case and public name — the
+/// re-derivation runs `normalize_export` with the parent's case and name — so
+/// operation and resource identifiers are comparable directly rather than up to
+/// some renaming, and a renaming is exactly where an "equal enough" comparison
+/// would let a different claim through.
+fn same_domain_claim(left: &ExportSemantics, right: &ExportSemantics, domain: ClaimDomain) -> bool {
+    let operations = |export: &ExportSemantics, ids: &[OperationId]| {
+        ids.iter()
+            .map(|id| export.operation(&id.0).cloned())
+            .collect::<Option<Vec<_>>>()
+    };
+    let resources = |export: &ExportSemantics, operations: &[Operation]| {
+        let mut named = operations
+            .iter()
+            .flat_map(|operation| {
+                operation
+                    .resources
+                    .iter()
+                    .cloned()
+                    .chain(match &operation.owner.source {
+                        OwnerSource::Created(resource) => Some(resource.clone()),
+                        _ => None,
+                    })
+            })
+            .collect::<Vec<_>>();
+        named.sort();
+        named.dedup();
+        named
+            .into_iter()
+            .map(|id| {
+                export
+                    .call
+                    .resources
+                    .iter()
+                    .find(|resource| resource.id == id)
+                    .cloned()
+            })
+            .collect::<Option<Vec<_>>>()
+    };
+    let (left_ids, right_ids) = if domain == ClaimDomain::Callbacks {
+        if left.callbacks().is_closed() != right.callbacks().is_closed()
+            || left.callbacks().items() != right.callbacks().items()
+        {
+            return false;
+        }
+        let ids = |export: &ExportSemantics| {
+            export
+                .callbacks()
+                .items()
+                .iter()
+                .map(|item| item.operation.clone())
+                .collect::<Vec<_>>()
+        };
+        (ids(left), ids(right))
+    } else {
+        let (Some(left_claim), Some(right_claim)) =
+            (left.operation_claim(domain), right.operation_claim(domain))
+        else {
+            return false;
+        };
+        if left_claim.is_closed() != right_claim.is_closed()
+            || left_claim.items() != right_claim.items()
+        {
+            return false;
+        }
+        (left_claim.items().to_vec(), right_claim.items().to_vec())
+    };
+    let (Some(left_operations), Some(right_operations)) =
+        (operations(left, &left_ids), operations(right, &right_ids))
+    else {
+        return false;
+    };
+    left_operations == right_operations
+        && resources(left, &left_operations) == resources(right, &right_operations)
 }
 
 /// ADR 0099: close a proposable call domain vacuously for an export whose value
@@ -11898,6 +12329,10 @@ fn census_call_disposition(
 }
 
 const CENSUS_DEPENDENCY_CLAIM_PREFIX: &str = "census-dependency-creates:";
+
+/// The site prefix an inherited-closure obligation travels under, beside
+/// [`CENSUS_DEPENDENCY_CLAIM_PREFIX`] and discharged the same way.
+const INHERITED_CLOSURE_CLAIM_PREFIX: &str = "inherited-closure-dependency:";
 
 /// A conditional census obligation, never receipt authority on its own.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]

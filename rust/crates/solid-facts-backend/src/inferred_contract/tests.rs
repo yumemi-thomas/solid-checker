@@ -848,3 +848,114 @@ fn parameter_indexes_outside_the_normalized_limit_are_refused_not_clamped() {
             .contains("exceeds the normalized model limit")
     );
 }
+
+/// The exact projection shape `project_accepted_export` writes for a
+/// cross-package re-export whose dependency contract closes `creates`,
+/// `returns` and a described `callbacks`, with every local walk flag left at
+/// its fail-closed default — which is what a re-export always has, because
+/// there is no local symbol for a walk to reach.
+fn inherited_summary() -> ContractExport {
+    ContractExport {
+        kind: "function".into(),
+        reactive_reads: ContractClaim::Open,
+        returns: ContractClaim::Known(None),
+        callbacks: ContractClaim::Known(vec![solid_reactive_ir::ContractCallback {
+            parameter: 0,
+            execution: "inline".into(),
+            schedule: None,
+            arguments: Vec::new(),
+            owner: Some("inherited".into()),
+        }]),
+        owner_requirements: ContractClaim::Known(Vec::new()),
+        async_behavior: ContractClaim::Known(String::new()),
+        // `reads` alone stayed open at the dependency, so it must stay open
+        // here: an inherited premise closes exactly what the dependency closed.
+        open_claims: BTreeMap::from([(ClaimDomain::Reads, ())])
+            .into_keys()
+            .collect(),
+        creates_closed_empty: true,
+        // Silence, and deliberately: no walk reached this export, because this
+        // package contains nothing to walk.
+        creates_walk_clean: false,
+        returns_walk_clean: false,
+        direct_callback_parameters: std::collections::BTreeSet::new(),
+        inherited_from: Some(solid_reactive_ir::InheritedExportOrigin {
+            package_name: "dependency".into(),
+            package_version: "1.2.3".into(),
+            artifact_case: "case".into(),
+            semantic_digest: sha('d'),
+            entrypoint: ".".into(),
+            export: "read".into(),
+        }),
+        ..ContractExport::default()
+    }
+}
+
+#[test]
+fn an_inherited_summary_proposes_the_dependencys_closure_despite_silent_local_walks() {
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(inherited_summary()),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+
+    // Every domain the dependency closed is proposed, and no other.
+    assert_eq!(
+        export.call.proposed_closures(),
+        &BTreeSet::from([
+            ClaimDomain::Callbacks,
+            ClaimDomain::Creates,
+            ClaimDomain::Returns
+        ]),
+        "the local walks are silent, so nothing here could have been proposed by them"
+    );
+    assert_eq!(
+        export.claim_state(ClaimDomain::Reads),
+        KnowledgeState::Unknown
+    );
+
+    // The record the emit boundary prints, so an auditor can tell an inherited
+    // proposal from a walked one.
+    let mut inherited = normalized
+        .inherited
+        .iter()
+        .map(|record| (record.export.as_str(), record.domain))
+        .collect::<Vec<_>>();
+    inherited.sort_unstable();
+    assert_eq!(
+        inherited,
+        vec![
+            ("read", "callbacks"),
+            ("read", "creates"),
+            ("read", "returns")
+        ]
+    );
+    assert!(
+        normalized
+            .inherited
+            .iter()
+            .all(|record| record.origin.package_name == "dependency"
+                && record.origin.export == "read"),
+        "every record names the accepted dependency export it came from"
+    );
+}
+
+#[test]
+fn a_local_summary_with_the_same_silent_walks_proposes_nothing() {
+    // The falsifier for the test above: the *only* difference is the absent
+    // `inherited_from`. If this one also proposed, the inherited premise would
+    // not be what admitted those closures.
+    let summary = ContractExport {
+        inherited_from: None,
+        ..inherited_summary()
+    };
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(summary),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    assert!(export.call.proposed_closures().is_empty());
+    assert!(normalized.inherited.is_empty());
+}

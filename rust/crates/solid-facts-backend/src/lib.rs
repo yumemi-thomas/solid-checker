@@ -298,6 +298,7 @@ pub fn encode_inferred_contract_workflow(
         normalized.closure_candidates,
         normalized.withheld,
         normalized.declined,
+        normalized.inherited,
         pretty,
     )
 }
@@ -373,6 +374,7 @@ pub fn encode_inferred_entrypoint_workflow_with_external_targets(
         normalized.closure_candidates,
         normalized.withheld,
         normalized.declined,
+        normalized.inherited,
         pretty,
     )
 }
@@ -404,7 +406,7 @@ pub fn encode_inert_entrypoint_workflow(
             .map_err(|error| ContractFailure::InvalidSemanticModel {
                 reason: error.to_string(),
             })?;
-    contract_workflow::encode_proposal_artifacts(&contract, vec![], vec![], vec![], pretty)
+    contract_workflow::encode_proposal_artifacts(&contract, vec![], vec![], vec![], vec![], pretty)
 }
 
 /// Merges independently analyzed exact artifact cases without exposing compact

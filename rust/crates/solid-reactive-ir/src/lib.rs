@@ -61,7 +61,7 @@ use contracts::{
 };
 pub use contracts::{
     ExportKindProof, export_kind_proof, export_kind_proof_from_entity, project_accepted_export,
-    raised_function_export,
+    project_export_semantics, raised_function_export,
 };
 use execution_role::{
     NamedCallbackRoles, allowed_callback_spans, assigned_member_function_contains, execution_role,
@@ -1062,6 +1062,47 @@ pub struct ContractExport {
     /// can confirm site for site. A proposal input, never evidence: empty is
     /// "do not propose", and a summary no pass reached is empty.
     pub direct_callback_parameters: BTreeSet<usize>,
+    /// The accepted dependency export this summary was *projected from*, when
+    /// the public name is a cross-package re-export and nothing in this
+    /// package declares it.
+    ///
+    /// Only [`crate::project_accepted_export`] sets it, from the exact
+    /// accepted contract and export identity the projection resolved. `None`
+    /// is the fail-closed default every locally inferred summary keeps, and it
+    /// is never decoded from or encoded into a package-contract document.
+    ///
+    /// Re-emission reads it to decide *which* proposal filters apply. A
+    /// projected summary has no local implementation, so the generator's own
+    /// walks (`creates_walk_clean`, `returns_walk_clean`,
+    /// `direct_callback_parameters`) are all silent about it — and silence is
+    /// "do not propose". Applying them to an inherited summary therefore
+    /// discards the dependency's certified closure for every domain, which is
+    /// the defect `phase21/2026-09-15-closure-gap-plan.md` § 1 records. What
+    /// replaces them is not a weaker filter but a different premise: the
+    /// closure is the dependency's, and the certifier discharges it by
+    /// composition from the dependency's receipt rather than by a census of
+    /// bytes this artifact does not contain.
+    pub inherited_from: Option<InheritedExportOrigin>,
+}
+
+/// The accepted dependency export a re-exported public name was projected
+/// from: enough identity to name the claim in a plan sidecar and to attribute
+/// a proposal to the contract that owns it.
+///
+/// **Measurement and attribution, never authority.** Nothing downstream
+/// discharges a closure from these strings: the certifier rebinds the
+/// re-export independently, from the parent's snapshot-verified runtime
+/// binding and the dependency node's own plan, because a provenance field
+/// travelling through a document is exactly the kind of self-report the
+/// precision contract refuses to read as proof.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InheritedExportOrigin {
+    pub package_name: String,
+    pub package_version: String,
+    pub artifact_case: String,
+    pub semantic_digest: String,
+    pub entrypoint: String,
+    pub export: String,
 }
 
 impl ContractExport {
@@ -1077,6 +1118,39 @@ impl ContractExport {
             owner_requirements: ContractClaim::Open,
             async_behavior: ContractClaim::Open,
             ..Self::default()
+        }
+    }
+
+    /// Whether this summary is a projection of an accepted dependency export
+    /// whose `domain` that dependency's contract **closes**.
+    ///
+    /// The consumer-side spelling of "closed" is the one
+    /// [`crate::project_accepted_export`] writes: a `Known` claim whose domain
+    /// is absent from `open_claims`, and for `creates` the domain's own
+    /// closed-and-empty flag, because `project_owner_requirements` keeps only
+    /// the obligation-imposing operations and a `creates` the dependency
+    /// publishes need not survive it.
+    ///
+    /// `false` for every locally inferred summary, and for every domain a
+    /// projection left open. It is the premise re-emission substitutes for the
+    /// local proposal walks, never an addition to them: a summary that is both
+    /// inherited and walked cannot exist, since a cross-package re-export has
+    /// no local symbol for a walk to reach.
+    #[must_use]
+    pub fn inherited_closure(&self, domain: contract_semantics::ClaimDomain) -> bool {
+        use contract_semantics::ClaimDomain;
+        if self.inherited_from.is_none() {
+            return false;
+        }
+        let closed = |claim_is_known: bool, domain: ClaimDomain| {
+            claim_is_known && !self.open_claims.contains(&domain)
+        };
+        match domain {
+            ClaimDomain::Creates => self.creates_closed_empty,
+            ClaimDomain::Returns => closed(!self.returns.is_open(), domain),
+            ClaimDomain::Reads => closed(!self.reactive_reads.is_open(), domain),
+            ClaimDomain::Callbacks => closed(!self.callbacks.is_open(), domain),
+            _ => false,
         }
     }
 

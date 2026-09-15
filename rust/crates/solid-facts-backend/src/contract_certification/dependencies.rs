@@ -3263,6 +3263,60 @@ impl VerifiedDependencyComposition {
                     receipt.receipt_digest()
                 ));
             }
+            // The inherited-closure half. The parent's closure on a
+            // re-exported name is the dependency's claim republished under this
+            // package's identity, and the Type Facts arm that admitted it
+            // proved only that it *is* the projection of the dependency's —
+            // against the dependency's **gated** candidate, before the
+            // dependency's own census and vetoes had their say. What certifies
+            // it is the dependency's receipt, and that is this check: the
+            // domain closed in the contract the receipt actually certifies, and
+            // the claim id among the receipt's closed claims. A dependency that
+            // withheld the domain therefore refuses here by name, and
+            // `composed_from_withheld_dependency` turns that refusal into the
+            // parent's own withholding, which opens the domain at the parent —
+            // exactly what is known.
+            let inherited = requirement
+                .semantic_claim_id()
+                .and_then(|claim| {
+                    type_facts.map(|facts| facts.inherited_closure_claims(parent, claim))
+                })
+                .unwrap_or_default();
+            for claim in inherited.iter().filter(|claim| {
+                claim.package == requirement.dependency().package
+                    && claim.artifact_case == requirement.dependency().artifact_case
+                    && claim.accepted_contract_digest
+                        == requirement.dependency().accepted_contract_digest
+            }) {
+                let closed = solid_reactive_ir::contract_semantics::ClaimDomain::ALL
+                    .into_iter()
+                    .find(|domain| domain.wire_name() == claim.domain)
+                    .and_then(|domain| {
+                        let export = dependency_gating
+                            .certified_candidate
+                            .artifact_case(&claim.artifact_case)?
+                            .exports
+                            .get(&claim.export)?;
+                        Some(export.operation_claim(domain).map_or_else(
+                            || export.callbacks().is_closed(),
+                            |claim| claim.is_closed(),
+                        ))
+                    })
+                    .unwrap_or(false);
+                if !closed || !receipt.contains_closed_claim_id(&claim.semantic_claim_id) {
+                    return Err(DependencyReceiptCompositionError::MissingClosedClaim {
+                        demand_id: requirement.demand_id().into(),
+                        semantic_claim_id: claim.semantic_claim_id.clone(),
+                    });
+                }
+                census_sites.push(format!(
+                    "inherited-closure-dependency:{}:{}:{}:{}",
+                    claim.export,
+                    claim.domain,
+                    claim.semantic_claim_id,
+                    receipt.receipt_digest()
+                ));
+            }
             match &verifier_build_digest {
                 Some(expected) if expected != receipt.verifier_build_digest().as_str() => {
                     return Err(DependencyReceiptCompositionError::VerifierBuildDisagreement);

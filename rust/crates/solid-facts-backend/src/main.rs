@@ -5687,6 +5687,24 @@ fn emit_package_contract(
             declined.decline.shape_spelling()
         );
     }
+    for inherited in &proposal.inherited {
+        // `<document>\t<export>\t<domain>\t<package>\t<version>\t
+        // <artifactCase>\t<semanticDigest>\t<entrypoint>\t<dependencyExport>`.
+        // A package name, a version, a domain, an entrypoint, an export name, a
+        // case id and a digest carry no tab or newline.
+        println!(
+            "{INHERITED_CLOSURE_MARKER}{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            output.display(),
+            inherited.export,
+            inherited.domain,
+            inherited.origin.package_name,
+            inherited.origin.package_version,
+            inherited.origin.artifact_case,
+            inherited.origin.semantic_digest,
+            inherited.origin.entrypoint,
+            inherited.origin.export
+        );
+    }
     Ok(())
 }
 
@@ -5765,6 +5783,22 @@ const WITHHELD_OWNER_REQUIREMENT_MARKER: &str = "solid-checker:withheld-owner-re
 ///
 /// It certifies nothing and is not part of either encoded artifact.
 const DECLINED_CLOSURE_MARKER: &str = "solid-checker:declined-closure=";
+
+/// The machine-readable half of an *inherited closure proposal*, beside the
+/// two markers above and under the same discipline.
+///
+/// One line per (export, domain) this generation proposed closed because the
+/// accepted dependency contract the name was projected from closes it — a
+/// cross-package re-export, where this package has no implementation and
+/// therefore no walk. Nothing in the emitted document or plan distinguishes
+/// such a proposal from one a local walk produced, and the two rest on
+/// completely different premises: a census of this archive's own bytes versus
+/// composition from a dependency's receipt. An auditor asking "how much of
+/// this contract is actually this package's claim" has no other way to tell.
+///
+/// It certifies nothing, is read by no certifier, and is not part of either
+/// encoded artifact.
+const INHERITED_CLOSURE_MARKER: &str = "solid-checker:inherited-closure=";
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

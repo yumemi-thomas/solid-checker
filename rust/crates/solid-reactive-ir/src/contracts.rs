@@ -52,6 +52,42 @@ fn shape_may_be_callable(shape: &ValueShape) -> bool {
 /// ID, condition label, evidence spelling, or closure-array mechanic is inspected.
 pub fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractExport {
     let export = accepted.export();
+    ContractExport {
+        // The exact contract and export this projection came from. Re-emission
+        // reads the *presence* of this to know the summary is inherited rather
+        // than inferred; the strings themselves are attribution for the emit
+        // boundary's record. The certifier rebinds the re-export from its own
+        // snapshot-verified evidence and never reads them.
+        inherited_from: Some(crate::InheritedExportOrigin {
+            package_name: accepted.contract().package().name.clone(),
+            package_version: accepted.contract().package().version.clone(),
+            artifact_case: accepted.contract().artifact_case().id.clone(),
+            semantic_digest: accepted
+                .contract()
+                .receipt()
+                .semantic_digest
+                .as_str()
+                .to_owned(),
+            entrypoint: export.identity.entrypoint.clone(),
+            export: export.identity.public_name.clone(),
+        }),
+        ..project_export_semantics(export)
+    }
+}
+
+/// [`project_accepted_export`] without the acceptance identity: the projection
+/// itself, over one normalized export's semantics.
+///
+/// Split out because the certifier has to re-derive exactly this, from the
+/// dependency node's own certified export, to decide whether a parent's
+/// inherited closure *is* the projection of the dependency's or merely
+/// resembles it. Two derivations of "the projection" would be two answers, and
+/// the certifier's is the one that would silently admit a claim the generator
+/// never made.
+#[must_use]
+pub fn project_export_semantics(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> ContractExport {
     let mut open_claims = BTreeSet::new();
     let kind = match export.shape {
         ValueShape::Callable | ValueShape::Component => "function",
@@ -128,6 +164,9 @@ pub fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractEx
         creates_walk_declines: Vec::new(),
         returns_walk_clean: false,
         direct_callback_parameters: BTreeSet::new(),
+        // The projection alone states no acceptance identity;
+        // `project_accepted_export` attaches it.
+        inherited_from: None,
     }
 }
 
@@ -1634,6 +1673,8 @@ fn contract_export_function(
         // `Program::creates_proposal_walk`. Both defaults refuse.
         creates_closed_empty: false,
         creates_walk_clean: false,
+        // This summary *is* the local inference, so it is never inherited.
+        inherited_from: None,
         creates_walk_declines: Vec::new(),
         returns_walk_clean: false,
         // ADR 0100: a proposal input read beside the rows. Kept whether or not

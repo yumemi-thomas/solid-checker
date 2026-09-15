@@ -21144,3 +21144,104 @@ degenerate because their *source* contracts state nothing — which is what
   all seven re-export fixtures there refuse at the binding wall instead. The new
   pin lives in `scripts/` for that reason, and runs under `make verify`'s
   `scripts/*.test.mjs` step.
+
+## 2026-09-15 — an inherited closure is proved from the dependency's receipt
+
+**Resolved for the graph lane; the consumer movement is unmeasured here.** The
+follow-up the entry above names first — "carry an accepted dependency's closures
+through `project_accepted_export`" — was not a projection defect. The projection
+never dropped a closure: it publishes a closed domain as `Known(items)` with the
+domain absent from `open_claims`, which is the consumer-side spelling of closed,
+and `creates` a second time as `creates_closed_empty`. **Re-emission dropped
+them**, and for a reason worth naming: a projected summary was normalized as if
+it were a local inference.
+
+`normalize_export` and the proposal filters beside it all read the generator's
+own walks — `creates_walk_clean`, `returns_walk_clean`,
+`direct_callback_parameters` — and `attach_generated_owner_requirements` sets
+those from the export's **local symbol**. A cross-package re-export has no local
+symbol, so every one of them is `false`/empty, and silence is "do not propose".
+The dependency's certified `creates: []` therefore reached the document as
+nothing at all, while the *empty* `callbacks` and `reads` enumerations passed
+their filters vacuously — so what shipped was propagation that was accidental
+where it happened and absent where it mattered. Worse, the vacuous proposals
+were unprovable: the parent's implementation census refuses a transcript whose
+declaration "is not in this artifact's own runtime source", correctly, because a
+census must never walk another archive's bytes.
+
+**What replaces the walks is a different premise, not a weaker filter.**
+`ContractExport::inherited_from` records the accepted export a summary was
+projected from, and re-emission proposes exactly the domains that projection
+closed. The certifier then discharges such a candidate by **composition**
+(`census_inherited_dependency_closure`), before the census arms run, on four
+conditions: the parent's snapshot-replayed runtime binding lands outside its own
+snapshot; exactly one dependency node in the graph replays the identical module,
+export and span (`external_binding` copies the dependency's binding verbatim, so
+this is an equality, not a resemblance); the parent's published claim **is** the
+projection of that dependency export's, re-derived by running the generator's own
+derivation again (`inherited_export_projection`) rather than by a second,
+independently written notion of "the projection"; and the dependency's own claim
+is addressable. The witness then records the dependency claim, and
+`authenticate_dependency_receipt`'s caller refuses with `MissingClosedClaim`
+unless the dependency's *certified* contract closes it and its receipt carries
+the claim id — so a dependency that withholds opens the domain at the parent
+too, through the existing `composed_from_withheld_dependency` withholding.
+
+**Measured, in the harness.** `scripts/contract-dependency-reexport.test.mjs`
+pins `reexporter`'s `clean` publishing the same `closed` and `proposedClosures`
+as `depkg`'s own. Against the pre-change binary the re-export published
+`["reads"]` — the vacuous one — where the dependency published
+`["callbacks","creates","reads","returns"]`; the dependency's own list is
+asserted non-empty so the comparison is not two silences agreeing.
+
+**Still open, and this is the honest part.**
+
+- **The consumer census diff is not reproduced here.** The 2026-09-15 plan
+  predicts steps 1-2 move **exactly 1** finding (`accessWith` callbacks) and
+  change the message on ~118 rows (33 `access`, 82 `mergeRefs`, `Key`,
+  `accessWith`, `createMediaQuery` losing `ownerRequirements` from their claim
+  list). Confirming it needs the `kobalte/packages/core` consumer corpus, the
+  two pass-2 catalogs, and the `pass2.mjs` scratch harness — none of which are
+  in this repository, and all of which need network installs. **External-artifact
+  blocker**; the prediction stands unverified, including its falsifier (any
+  `callbacks` row on `access` or `mergeRefs` moving would mean a closure was
+  published that the source does not certify).
+- **The standalone lane has no composition premise.** A contract generated
+  against a receipt-accepted catalog and certified without dependency plans
+  reaches `census.dependencies` empty, so the arm returns `Ok(None)`, the census
+  arm refuses, and the candidate is withheld by name. That is fail-closed and
+  the same open domain as before the change, at the cost of one withholding
+  pass; it is not the receipt-accepted discharge the plan's § 1 describes.
+- **`access`'s 152 are blocked on the described-accessor ADR** (the plan's step
+  3). `@solid-primitives/utils@6.4.1`'s `access` is `(v) => typeof v ===
+  "function" && !v.length ? v() : v`, and `v.length` is a
+  `property-access-unknown-accessor` rooted at parameter 0 — dispositioned
+  `parameter-rooted-accessor`, which ADR 0100 rule 2 refuses. The census verdict
+  is a **correct negative** under the semantic model: a caller can install a
+  getter on `length`, and an untracked read inside a caller's getter is what the
+  `callbacks` domain exists to reveal. Closing it needs a described accessor
+  item — `from` parameter 0 through path `["length"]`, an accessor read `at:
+  call`, `same-stack`, `untracked` — across four owners with a producer protocol
+  bump (`UncensusedInvokingForm` carries no member path), plus a consumer
+  decision about what "the argument's getter runs untracked at call" means.
+  Elsewhere the 2026-09-13 corpus pin counts 62 refused `access` candidates and
+  93 in the accessor-beside-direct-call class. Do not narrow the model to reach
+  them.
+- **`mergeRefs`'s 235 need a different ADR again**: a described *element* item
+  for `for (const ref of refs) ref(el)` (`parameter-rooted-element` /
+  `-iterable`). Untouched here.
+- **The plan's own hazard is answered only for `creates`, and is pre-existing.**
+  With a *proposal* dependency, `project_accepted_export` reads `is_closed()` on
+  a document whose closure is merely proposed, so the parent's own exports that
+  call the dependency take that closure as knowledge at generation time.
+  `census_dependency_claim` records the obligation and
+  `authenticate_dependency_receipt`'s caller reopens the parent's claim when the
+  dependency withholds — but it is hardcoded to `ClaimDomain::Creates`, and no
+  other domain has a census that composes across the edge, so no other domain
+  has that route. Unchanged by this work, and not confirmed end to end here for
+  the same corpus reason as above.
+- **A new candidate is new work.** Every inherited closure now schedules a
+  mandatory probe veto like any other candidate, and a re-export-heavy package
+  gains one per (export, domain). Without a recipe they are withheld unrun; with
+  synthesized vetoes they execute. Not measured against the pinned corpus for
+  the same reason the census diff is not.
