@@ -21453,12 +21453,23 @@ ownerRequirements}` disappears; one that demands `returns` does not. Which of
 the 1037 fall on each side is not measurable here — it needs the kobalte corpus,
 the same external-artifact blocker recorded above.
 
-**And the four-step chain is off the table as described.** Closing
-`mergeDefaultProps`'s `returns` would need the contract to say "returns a props
-root derived from parameter N", and `validate_contract_return` forbids
-`parameter` on a `store-path` outright — a reactive leaf takes a label and no
-parameter. So that step is not a derivation change but a **new return kind**:
-the public `schema/solid-reactivity.schema.json`, the wire encoder and decoder,
-validation, both projections, plus a new `returns` census mode to discharge it.
-That is an ADR with a public schema change, not a four-step refactor, and it is
-not started.
+**And the four-step chain is off the table as described** — now written up as
+`docs/adr/0109-a-returns-census-for-a-merged-props-root.md` (proposed, not
+implemented). Closing `mergeDefaultProps`'s `returns` needs the contract to say
+"returns a props root derived from parameter N", and `validate_contract_return`
+forbids `parameter` on a reactive leaf while the wire's `ValueShape::Store`
+carries no root at all. So that step is a **new value shape**, not a derivation
+change, and it is the ADR's one real cost: the wire enum is externally tagged
+with `deny_unknown_fields`, so a new variant is a deliberate compatibility break
+for older verifiers. The alternative — an optional root on the existing `Store`
+shape — is worse and for the reason this whole thread keeps circling: a decoder
+that ignores the root reads an *unconditional* store, which is stronger than the
+truth on exactly the `mergeProps({a: 1}, {b: 2})` case.
+
+One estimate in the entry above was wrong and the ADR corrects it: **the
+producer needs no change and no protocol bump.** `ReturnSite.sources` already
+carries a `CallResult` with `targetName`/`targetModule` (and its own doc tells a
+consumer to ask the dialect), `ImplementationCall.argument_parameters` already
+gives the parameter root of each argument slot, and the certifier already reads
+that exact shape for the factory-return premise. What is missing is a spelling
+and a census arm, not a fact.
