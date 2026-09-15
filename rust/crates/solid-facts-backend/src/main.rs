@@ -3169,23 +3169,28 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             project.parent().unwrap_or_else(|| Path::new("."))
         };
         let requirements = external_package_contract_requirements(dialect.id, directory, &facts);
-        let catalog = if request.accepted_contract_catalog.is_empty() {
-            let candidate = directory.join(".solid-checker/accepted-contracts.json");
-            candidate.is_file().then_some(candidate)
+        // Every catalog the local tier holds, not just `accepted-contracts.json`:
+        // certification publishes a case set for a package with more than one
+        // artifact case, and opening only the older spelling is what left a
+        // freshly certified contract unread. See `discovered_catalog_paths`.
+        let catalogs = if request.accepted_contract_catalog.is_empty() {
+            solid_facts_backend::discovered_catalog_paths(directory)?
         } else {
-            Some(PathBuf::from(&request.accepted_contract_catalog))
+            vec![PathBuf::from(&request.accepted_contract_catalog)]
         };
+        let catalog = catalogs.first().cloned();
         let trust = (!request.receipt_trust_configuration.is_empty())
             .then(|| {
                 read_policy2_trust_configuration(Path::new(&request.receipt_trust_configuration))
             })
             .transpose()?;
-        let contracts = catalog
-            .as_deref()
-            .map(|path| read_external_contract_catalog_with_trust(path, trust.as_ref()))
-            .transpose()?
-            .unwrap_or_default()
-            .with_fallback(requirements);
+        let mut contracts = solid_reactive_ir::contract_semantics::AcceptedContractIndex::default();
+        for path in &catalogs {
+            contracts = read_external_contract_catalog_with_trust(path, trust.as_ref())?
+                .with_fallback(contracts);
+        }
+        let contracts = contracts.with_fallback(requirements);
+        let _ = &catalog;
         let statuses = accepted_package_contract_statuses(dialect, project, &facts, &contracts)?;
         let actionable = statuses
             .iter()
@@ -3249,17 +3254,21 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         return Ok(i32::from(!actionable.is_empty()));
     }
     if diagnostics {
-        let discovered_catalog = if request.accepted_contract_catalog.is_empty() {
+        // Every catalog the local tier holds. `contract certify` publishes a
+        // *case set* whenever a package resolves to more than one artifact case,
+        // and discovery used to open only `accepted-contracts.json` — so a
+        // certified, signed, trusted contract was written and never read. See
+        // `discovered_catalog_paths`.
+        let discovered_catalogs = if request.accepted_contract_catalog.is_empty() {
             let project = Path::new(&facts.project_id);
             let directory = if project.is_dir() {
                 project
             } else {
                 project.parent().unwrap_or_else(|| Path::new("."))
             };
-            let candidate = directory.join(".solid-checker/accepted-contracts.json");
-            candidate.is_file().then_some(candidate)
+            solid_facts_backend::discovered_catalog_paths(directory)?
         } else {
-            Some(PathBuf::from(&request.accepted_contract_catalog))
+            vec![PathBuf::from(&request.accepted_contract_catalog)]
         };
         let project = Path::new(&facts.project_id);
         let directory = if project.is_dir() {
@@ -3273,12 +3282,12 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 read_policy2_trust_configuration(Path::new(&request.receipt_trust_configuration))
             })
             .transpose()?;
-        let contracts = discovered_catalog
-            .as_deref()
-            .map(|path| read_external_contract_catalog_with_trust(path, trust.as_ref()))
-            .transpose()?
-            .unwrap_or_default()
-            .with_fallback(requirements);
+        let mut contracts = solid_reactive_ir::contract_semantics::AcceptedContractIndex::default();
+        for path in &discovered_catalogs {
+            contracts = read_external_contract_catalog_with_trust(path, trust.as_ref())?
+                .with_fallback(contracts);
+        }
+        let contracts = contracts.with_fallback(requirements);
         // Artifact admission, the same call the contract-emission loop above
         // makes. It was wired there only, so an acceptance issued against one
         // project's importer never applied to another project analysing the
@@ -3290,16 +3299,22 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         //
         // An empty condition set still admits nothing; conditions select the
         // artifact and the analyzer has no condition facts of its own.
-        let contracts = match discovered_catalog.as_deref() {
-            Some(path) => {
-                contracts.with_admitted_artifacts(solid_facts_backend::admitted_project_artifacts(
-                    path,
-                    trust.as_ref(),
-                    directory,
-                    &request.runtime.conditions,
-                )?)
-            }
-            None => contracts,
+        // Admission is per catalog, and a case set holds one per artifact case:
+        // the case that matches this project's installed artifact is the one
+        // whose acceptance root recomputes, and the others simply admit nothing.
+        let mut admitted = Vec::new();
+        for path in &discovered_catalogs {
+            admitted.extend(solid_facts_backend::admitted_project_artifacts(
+                path,
+                trust.as_ref(),
+                directory,
+                &request.runtime.conditions,
+            )?);
+        }
+        let contracts = if admitted.is_empty() {
+            contracts
+        } else {
+            contracts.with_admitted_artifacts(admitted)
         };
         let contracts = if request.proposal_dependency_catalog.is_empty() {
             contracts
@@ -3307,7 +3322,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             if request.emit_contract.is_empty() && request.emit_contract_batch.is_empty() {
                 return Err("--proposal-dependencies is private to contract emission".into());
             }
-            if discovered_catalog.is_some() || trust.is_some() {
+            if !discovered_catalogs.is_empty() || trust.is_some() {
                 return Err(
                     "--proposal-dependencies cannot be combined with accepted-contract receipt authority"
                         .into(),

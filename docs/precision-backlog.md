@@ -21624,3 +21624,72 @@ which makes the fixture a falsifier in both directions.
   nothing exercises it against a tuple-returning primitive.
 - **The `omit` negative-claim audit row for `Solid2`** is unchanged and still
   missing; it is an audit, not a seam bug.
+
+## 2026-09-15 — the local tier's producer and consumer disagreed on the filename
+
+**Half-resolved, and the half that is resolved was a prerequisite rather than a
+delivery.** "Open: contracts have no distribution mechanism beyond four local
+tiers" above describes four channels. Measured end to end, the **local** one was
+not working at all, and the reason was not a design gap:
+
+- `solid-checker contract certify` publishes a **case set** whenever a package
+  resolves to more than one artifact case — `.solid-checker/accepted-contract-case-set.json`,
+  a content-addressed case-set document, and one ordinary single-contract
+  catalog per case. `@solid-primitives/debounce@1.3.0` already does this, on its
+  two export conditions.
+- Ordinary analysis (`main.rs`) and `contract check` opened exactly one path:
+  `.solid-checker/accepted-contracts.json`.
+
+So a correctly signed, correctly trusted contract was written to disk and
+nothing ever opened it. Reproduced on a lockfile-pinned project importing
+`createDebounce`, with the exact audited integrity: certification succeeded and
+published, and `contract check` still answered *"none of the 1 exact imported
+artifact case(s) has a matching receipt"* and told the user to start over with
+`contract generate`.
+
+`discovered_catalog_paths` now resolves the local tier to every catalog it
+holds, digest-verifying each hop the tier names — the pointer names the
+document's digest, the document names each catalog's — and routing member paths
+through `catalog_member_path` so a case cannot name its way out of the case-set
+directory. The pointer itself is deliberately not digest-bound: nothing above it
+could name its digest, and its authority is the receipt each catalog carries.
+
+**It does not deliver a finding, and that is the honest headline.** With the fix
+the case set is read — proven by corrupting the pointer, which now refuses with
+`caseSetDocumentDigest` — and `contract check` still reports `missing`. A second
+gap sits behind this one: the receipt binds `importer` to the synthetic
+certification module the certifier created
+(`node_modules/@solid-primitives/.solid-checker-certification-<hash>.mjs`), and
+the consumer's importer is its own `App.tsx`.
+
+**The machinery to bridge that already exists**, and its doc comment says it was
+built for exactly this: `policy2_artifact_acceptance_root` is "the canonical
+identity of the *artifact* a contract was proven about, with no importer and no
+absolute path in it … so an acceptance can be matched by a consumer that
+resolved the same artifact from one of its own files", and
+`admitted_project_artifacts` recomputes it against the *installed* identity.
+Two things stop it short, and both are measured rather than inferred:
+
+- **Admission answers nothing without a condition set.** It returns early when
+  `conditions.is_empty()`, and ordinary analysis has no condition facts of its
+  own. Supplying `--runtime-condition import` or `solid` by hand did not change
+  the verdict either, so this is necessary and not sufficient.
+- **The status path matches on the importer, not on the acceptance root.**
+  `accepted_package_contract_statuses` is what prints `missing`, and handing it
+  a case catalog directly with `--accepted-contracts` still prints `missing`.
+
+**Corrected while measuring this.** Certification is not slow. The 492 s figure
+for `@kobalte/utils` in `benchmarks/ecosystem/report.json` is contention in a
+214-package parallel run, not a per-package cost. Isolated, with
+`SOLID_CHECKER_TIMINGS=1`: `@kobalte/utils` **14.2 s**,
+`@solid-primitives/debounce` **0.3 s**, `scheduled` **0.25 s**, `rootless`
+**1.5 s** — all certified. Any plan that treats certification cost as the
+obstacle is working from the wrong number.
+
+**Still untouched.** The **bundled** tier is a separate gap of the same family:
+`EMBEDDED_BUNDLES` and `EMBEDDED_SOLID1_BUNDLES` are both `&[]`, and
+`load_receipt_issued_embedded_contract` is a stub that returns
+`ReceiptAuthenticationRequired` unconditionally — while
+`load_authenticated_policy2_embedded_contract`, the real loader, is fully
+implemented and needs two inputs (`Policy2ReceiptBindings`, `BuiltInReceiptEntry`)
+that `EmbeddedBundle` does not carry.

@@ -683,6 +683,133 @@ pub fn admitted_project_artifacts(
     Ok(admitted)
 }
 
+/// The project's local accepted-contract tier: every catalog it holds.
+///
+/// Discovery has always opened exactly one path,
+/// `.solid-checker/accepted-contracts.json`. Certification does not always
+/// write that path. When a package resolves to more than one artifact case —
+/// which `@solid-primitives/debounce@1.3.0` already does, on its two export
+/// conditions — `contract certify` publishes a **case set** instead: a pointer
+/// at `.solid-checker/accepted-contract-case-set.json`, a content-addressed
+/// case-set document, and one ordinary single-contract catalog per case.
+///
+/// The producer and the consumer of the same tier therefore disagreed on the
+/// filename, and the whole delivery path ended there: a correctly signed,
+/// correctly trusted contract sat on disk and nothing ever opened it. Measured
+/// on a lockfile-pinned project importing `createDebounce` — certification
+/// succeeded, published, and `contract check` still answered "none of the 1
+/// exact imported artifact case(s) has a matching receipt" and told the user to
+/// start over with `contract generate`.
+///
+/// Every hop is digest-verified, because a case set is three files rather than
+/// one and each is a place to substitute bytes: the pointer names the case-set
+/// document's digest, and the document names each case catalog's. Member paths
+/// go through [`catalog_member_path`], so a case cannot name `../` out of the
+/// case-set directory.
+///
+/// A plain `accepted-contracts.json` still wins outright when present. It is
+/// the older spelling and the one a user may have hand-assembled; a case set is
+/// only consulted when discovery would otherwise have found nothing at all.
+pub fn discovered_catalog_paths(directory: &Path) -> Result<Vec<PathBuf>, ContractFailure> {
+    let catalog = directory.join(".solid-checker/accepted-contracts.json");
+    if catalog.is_file() {
+        return Ok(vec![catalog]);
+    }
+    let pointer_path = directory.join(".solid-checker/accepted-contract-case-set.json");
+    if !pointer_path.is_file() {
+        return Ok(Vec::new());
+    }
+    let pointer_bytes = read_boundary_file(
+        &pointer_path,
+        MAX_CATALOG_BYTES,
+        "accepted contract case-set pointer",
+        false,
+    )?;
+    let pointer: CaseSetPointerDocument = decode_case_set_json(&pointer_bytes)?;
+    if pointer.format != "solid-checker-accepted-contract-case-set-pointer"
+        || pointer.case_set_version != 1
+    {
+        return Err(catalog_field(
+            "accepted contract case-set pointer has an unsupported format",
+        ));
+    }
+    let pointer_base = pointer_path
+        .parent()
+        .ok_or_else(|| catalog_field("accepted contract case-set pointer has no directory"))?;
+    let document_path = catalog_member_path(pointer_base, &pointer.document)?;
+    let document_bytes = read_boundary_file(
+        &document_path,
+        MAX_CATALOG_BYTES,
+        "accepted contract case set",
+        false,
+    )?;
+    verify_catalog_digest(
+        &document_bytes,
+        Some(pointer.document_digest.as_str()),
+        "caseSetDocumentDigest",
+    )?;
+    let document: CaseSetDocument = decode_case_set_json(&document_bytes)?;
+    if document.format != "solid-checker-accepted-contract-case-set"
+        || document.case_set_version != 1
+    {
+        return Err(catalog_field(
+            "accepted contract case set has an unsupported format",
+        ));
+    }
+    let base = document_path
+        .parent()
+        .ok_or_else(|| catalog_field("accepted contract case set has no directory"))?;
+    let mut paths = Vec::with_capacity(document.cases.len());
+    for case in &document.cases {
+        let path = catalog_member_path(base, &case.catalog)?;
+        let bytes =
+            read_boundary_file(&path, MAX_CATALOG_BYTES, "accepted contract catalog", false)?;
+        verify_catalog_digest(&bytes, Some(case.catalog_digest.as_str()), "catalogDigest")?;
+        paths.push(path);
+    }
+    Ok(paths)
+}
+
+fn decode_case_set_json<T: serde::de::DeserializeOwned>(
+    bytes: &[u8],
+) -> Result<T, ContractFailure> {
+    crate::bounded_json::decode(
+        bytes,
+        crate::bounded_json::Limits {
+            bytes: MAX_CATALOG_BYTES,
+            depth: MAX_BOUNDARY_DEPTH,
+            nodes: MAX_CATALOG_NODES,
+            string_bytes: MAX_BOUNDARY_STRING_BYTES,
+        },
+    )
+    .map_err(|message| ContractFailure::DocumentDecode { message })
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CaseSetPointerDocument {
+    format: String,
+    case_set_version: u16,
+    document: String,
+    document_digest: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CaseSetDocument {
+    format: String,
+    case_set_version: u16,
+    #[serde(default)]
+    cases: Vec<CaseSetCase>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CaseSetCase {
+    catalog: String,
+    catalog_digest: String,
+}
+
 fn catalog_field(message: impl Into<String>) -> ContractFailure {
     ContractFailure::DocumentDecode {
         message: message.into(),
@@ -1076,6 +1203,182 @@ pub(crate) fn invalid_identity(reason: impl Into<String>) -> ContractFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Builds the three files `contract certify` publishes for a package with
+    /// more than one artifact case, and returns the project directory.
+    fn published_case_set(label: &str, cases: usize) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-case-set-{label}-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let catalog_root = root.join(".solid-checker");
+        let mut entries = Vec::new();
+        let mut case_dirs = Vec::new();
+        for index in 0..cases {
+            let catalog = serde_json::json!({
+                "format": "solid-checker-accepted-contract-catalog",
+                "catalogVersion": 2,
+                "contracts": [],
+                "case": index,
+            });
+            let bytes = serde_json::to_vec(&catalog).unwrap();
+            let digest = sha256_digest(&bytes);
+            let name = digest.trim_start_matches("sha256:").to_owned();
+            case_dirs.push((name.clone(), bytes.clone()));
+            entries.push(serde_json::json!({
+                "catalog": format!("cases/{name}/accepted-contracts.json"),
+                "catalogDigest": digest,
+            }));
+        }
+        let document = serde_json::to_vec(&serde_json::json!({
+            "format": "solid-checker-accepted-contract-case-set",
+            "caseSetVersion": 1,
+            "cases": entries,
+        }))
+        .unwrap();
+        let document_digest = sha256_digest(&document);
+        let key = document_digest.trim_start_matches("sha256:").to_owned();
+        let case_set_dir = catalog_root.join("case-sets").join(&key);
+        for (name, bytes) in case_dirs {
+            let dir = case_set_dir.join("cases").join(name);
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("accepted-contracts.json"), bytes).unwrap();
+        }
+        fs::create_dir_all(&case_set_dir).unwrap();
+        fs::write(
+            case_set_dir.join("accepted-contract-case-set.json"),
+            &document,
+        )
+        .unwrap();
+        fs::write(
+            catalog_root.join("accepted-contract-case-set.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "format": "solid-checker-accepted-contract-case-set-pointer",
+                "caseSetVersion": 1,
+                "document": format!("case-sets/{key}/accepted-contract-case-set.json"),
+                "documentDigest": document_digest,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        root
+    }
+
+    /// The gap this closes: certification publishes a case set, discovery only
+    /// ever opened `accepted-contracts.json`, and a correctly signed contract
+    /// was therefore written and never read.
+    #[test]
+    fn discovery_opens_the_case_set_certification_actually_publishes() {
+        let project = published_case_set("published", 2);
+        let found = discovered_catalog_paths(&project).expect("the case set resolves");
+        assert_eq!(
+            found.len(),
+            2,
+            "both case catalogs are discovered: {found:?}"
+        );
+        for path in &found {
+            assert!(path.is_file(), "{path:?} is a real catalog");
+        }
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    /// A project with neither spelling discovers nothing, rather than erroring.
+    #[test]
+    fn discovery_of_a_project_with_no_local_tier_is_empty() {
+        let project = std::env::temp_dir().join(format!(
+            "solid-checker-case-set-absent-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&project);
+        fs::create_dir_all(&project).unwrap();
+        assert!(
+            discovered_catalog_paths(&project).unwrap().is_empty(),
+            "no local tier discovers nothing"
+        );
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    /// The older spelling still wins outright: it is the one a user may have
+    /// hand-assembled, and a case set is consulted only when it is absent.
+    #[test]
+    fn a_plain_catalog_wins_over_a_case_set() {
+        let project = published_case_set("precedence", 2);
+        let plain = project.join(".solid-checker/accepted-contracts.json");
+        fs::write(&plain, b"{\"contracts\":[]}").unwrap();
+        let found = discovered_catalog_paths(&project).unwrap();
+        assert_eq!(found, vec![plain]);
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    /// Both digest-verified hops refuse a substitution, and neither refusal is
+    /// silent.
+    ///
+    /// The pointer itself is deliberately *not* on this list: nothing above it
+    /// names its digest, because it is the root of the local tier. Its
+    /// authority comes from the receipt each catalog carries, not from a hash
+    /// chain that would have to terminate in the same directory an attacker
+    /// already wrote to.
+    #[test]
+    fn every_digest_bound_case_set_hop_refuses_a_substitution() {
+        // The case-set document, named by the pointer's `documentDigest`.
+        let project = published_case_set("tamper-document", 1);
+        let pointer: serde_json::Value = serde_json::from_slice(
+            &fs::read(project.join(".solid-checker/accepted-contract-case-set.json")).unwrap(),
+        )
+        .unwrap();
+        let document = project
+            .join(".solid-checker")
+            .join(pointer["document"].as_str().unwrap());
+        let mut body: serde_json::Value =
+            serde_json::from_slice(&fs::read(&document).unwrap()).unwrap();
+        body["tampered"] = serde_json::json!(true);
+        fs::write(&document, serde_json::to_vec(&body).unwrap()).unwrap();
+        assert!(
+            matches!(
+                discovered_catalog_paths(&project),
+                Err(ContractFailure::ReceiptMismatch {
+                    field: "caseSetDocumentDigest"
+                })
+            ),
+            "a substituted case-set document must refuse"
+        );
+        let _ = fs::remove_dir_all(&project);
+
+        // A case catalog, named by the document's `catalogDigest`.
+        let project = published_case_set("tamper-catalog", 1);
+        let catalog = discovered_catalog_paths(&project).unwrap()[0].clone();
+        let mut body: serde_json::Value =
+            serde_json::from_slice(&fs::read(&catalog).unwrap()).unwrap();
+        body["tampered"] = serde_json::json!(true);
+        fs::write(&catalog, serde_json::to_vec(&body).unwrap()).unwrap();
+        assert!(
+            matches!(
+                discovered_catalog_paths(&project),
+                Err(ContractFailure::ReceiptMismatch {
+                    field: "catalogDigest"
+                })
+            ),
+            "a substituted case catalog must refuse"
+        );
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    /// A case may not name its way out of the case-set directory.
+    #[test]
+    fn a_case_cannot_escape_the_case_set_directory() {
+        let project = published_case_set("escape", 1);
+        let pointer = project.join(".solid-checker/accepted-contract-case-set.json");
+        let mut document: serde_json::Value =
+            serde_json::from_slice(&fs::read(&pointer).unwrap()).unwrap();
+        document["document"] = serde_json::json!("../../../etc/passwd");
+        fs::write(&pointer, serde_json::to_vec(&document).unwrap()).unwrap();
+        assert!(
+            discovered_catalog_paths(&project).is_err(),
+            "a traversing member path must refuse"
+        );
+        let _ = fs::remove_dir_all(&project);
+    }
 
     #[test]
     fn host_core_contract_payloads_are_withheld_without_decoding() {

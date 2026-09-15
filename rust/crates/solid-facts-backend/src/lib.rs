@@ -147,11 +147,11 @@ pub use contract_interface::{
     ImportRequest, LocalEvidenceStore, ReceiptStore, ResolutionAuthority, ResolutionTrace,
     ResolutionTraceStep, ResolvedExportBinding, ResolvedExportTarget, ResolvedFile, ResolvedImport,
     StandaloneResolutionAdapter, TypeFactsResolutionAdapter, accepted_contract_catalog_members,
-    load_accepted_contract, load_accepted_contract_index, load_authenticated_policy2_contract,
-    load_authenticated_policy2_embedded_contract, load_external_contract_index,
-    read_accepted_contract_catalog, read_accepted_contract_catalog_with_trust,
-    read_external_contract_catalog_with_trust, read_policy2_trust_configuration,
-    read_proposal_dependency_catalog_for_generation,
+    discovered_catalog_paths, load_accepted_contract, load_accepted_contract_index,
+    load_authenticated_policy2_contract, load_authenticated_policy2_embedded_contract,
+    load_external_contract_index, read_accepted_contract_catalog,
+    read_accepted_contract_catalog_with_trust, read_external_contract_catalog_with_trust,
+    read_policy2_trust_configuration, read_proposal_dependency_catalog_for_generation,
 };
 pub use contract_workflow::{
     ContractWorkflowError, ProposalArtifacts, merge_plans, review as review_contract_document,
