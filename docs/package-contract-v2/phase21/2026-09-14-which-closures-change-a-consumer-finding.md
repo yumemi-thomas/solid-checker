@@ -831,3 +831,46 @@ reactivity defect of precisely the kind this checker exists to prove. Whether
 expressible in the current operations model is not settled here, and is worth
 establishing before anyone concludes the 24 closed exports are all correctly
 closed.
+
+## 17. Two tests of § 16's implication, both against it
+
+§ 16 read as though a `creates` refusal explains a silent package, and as though
+the re-export binding wall were a lever. Both were checked.
+
+**A `creates` decline does not silence a package.** Declines are ubiquitous —
+every package in the graph carries them, `solid-js` most of all:
+
+| package | declines | domains | still states |
+| --- | ---: | --- | --- |
+| `solid-js` | 288–378 | `reads` (`runtime-accessor-installation`) | 14 exports with operations |
+| `@solid-primitives/utils` | 4 | `creates` (`unresolved-callee`) | 20 operations, 4 kinds |
+| `@solid-primitives/media` | 23 | `creates` + `reads` | — |
+| `@kobalte/utils` | 41 | `creates` only | **nothing** |
+
+`@solid-primitives/utils` carries the *same* decline kind in the *same* domain as
+`@kobalte/utils` and still states 10 `invoke`, 7 `read`, 2 `return` and 1
+`cleanup`. So "the census refused" is not an explanation on its own; the
+difference is density and what is left over, not the presence of refusals.
+
+**Binding the re-exports would recover 68 call sites, not 942.** The nine names
+`@kobalte/utils` re-exports were traced to their source packages and certified
+there:
+
+| name | source | at source | sites |
+| --- | --- | --- | ---: |
+| `mergeRefs` | `@solid-primitives/refs` | **closed** | 164 |
+| `access` | `@solid-primitives/utils` | ops | 66 |
+| `accessWith` | `@solid-primitives/utils` | ops | 2 |
+| `createEventListener` | `@solid-primitives/event-listener` | **degenerate** | 2 |
+| `createMediaQuery` | `@solid-primitives/media` | **degenerate** | 2 |
+| `Key` | `@solid-primitives/keyed` | **degenerate** | 2 |
+| `chain`, `combineProps`, `ReactiveMap` | — | closed / degenerate | 0 |
+
+Only `access` and `accessWith` state anything at their source. Fixing the
+binding wall recovers **68 of 942 sites — 7%**. The reactive content
+`@kobalte/utils` re-exports is mostly absent at the source too.
+
+So the silence is not one defect with one fix. It distributes across three
+populations — correctly closed pure helpers, structurally unresolvable
+parameter-rooted DOM calls, and a binding defect worth 7% — and no single lever
+moves the § 15 number much.
