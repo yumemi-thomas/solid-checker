@@ -473,3 +473,98 @@ four-package comparison plus the recorded `motion-utils` precedent rather than
 on an isolated experiment. A package that publishes both a barrel and a deep
 entrypoint would isolate it in one run, and is worth finding before this is
 treated as established.
+
+## 13. Falsified: a barrel resolves through to its siblings
+
+§ 12 closed by asking for "a package that publishes both a barrel and a deep
+entrypoint" to isolate its claim in one run. `@solid-primitives/utils@6.4.1` is
+that package, and the run falsifies § 12.
+
+Its `exports` map has two entries. `.` resolves to `dist/index.js`, which
+carries 46 local declarations. `./immutable` resolves to
+`dist/immutable/index.js`, which is **six `export *` lines and nothing else** —
+a pure re-export barrel with no implementation of its own, the exact shape § 12
+said cannot produce claims. Its six siblings import only relative paths: the
+whole `./immutable` subtree names **no external specifier at all**.
+
+Four runs, release binary, plain root lane except where stated:
+
+| run | package | entrypoint | artifact shape | external specifiers reachable | exports | with operations |
+| --- | --- | --- | --- | --- | --- | --- |
+| `bar-root` | `@solid-primitives/utils@6.4.1` | `.` | 46 local declarations | `solid-js`, `solid-js/web` | 40 | 14 |
+| `bar-imm` | `@solid-primitives/utils@6.4.1` | `./immutable` | **pure `export *` barrel** | **none** | 35 | **3** |
+| `el-plain` | `@solid-primitives/event-listener@2.4.6` | `.` | pure `export *` barrel | `@solid-primitives/utils` | 11 | 0 |
+| `el-graph` | same, `--dependency-graph-lane --recover-entrypoints` | `.` | pure `export *` barrel | `@solid-primitives/utils` | 11 | 0 |
+
+`withArrayCopy`, `withCopy` and `withObjectCopy` each carry an `invoke`
+operation on their callback argument. All three are written in
+`dist/immutable/copy.js` — a *sibling* file, reached through the barrel.
+
+**A barrel resolves through to its siblings.** § 12's predictor — "whether the
+export's implementation lives in the bytes of the case being certified" — is
+false, and the `motion-utils` precedent it leaned on does not transfer.
+
+### The § 12 argument against the dependency was also invalid
+
+§ 12 dismissed § 11's dependency explanation on the grounds that
+`preventDefault`, `stopPropagation` and `stopImmediatePropagation` "call no
+Solid primitive and never touch `@solid-primitives/utils`", so they would close
+under it. Two facts undercut that.
+
+First, an empty summary is not one thing. `./immutable`'s 35 exports split three
+ways:
+
+| summary | count | example |
+| --- | --- | --- |
+| `{"call": {}}` — degenerate, nothing determined | 20 | `add`, `push`, `sort` |
+| `closed: ["callbacks", "creates"]`, no operations — determined to state nothing | 12 | `clamp`, `filter`, `merge` |
+| operations recorded | 3 | `withCopy` |
+
+All **eleven** of `event-listener`'s are degenerate `{"call": {}}`. That is not
+"a correct contract for a function with nothing to say" — `clamp` shows what
+that looks like, and it is a different value.
+
+Second, the comparison § 12 needed is available and points the other way.
+`preventDefault` is `callback => e => { e.preventDefault(); callback(e) }`;
+`withCopy` is the same shape — take a callback at an argument position, invoke
+it. `withCopy` closed with `callback-0`. `preventDefault` is degenerate. Same
+lane, same binary, same structural idiom, opposite outcome.
+
+### One hypothesis now fits every row, and it is not tested
+
+`callbackWrappers.js` is **not** in `declinedDependencySpecifiers`; the four
+that are are `components.js`, `eventListener.js`, `eventListenerMap.js` and
+`eventListenerStack.js`. So if the decline were per *module*, `preventDefault`
+would have to close, and § 12's objection would stand.
+
+But the audit records `composedArtifactCases: 1`. The unit certified for
+`./dist/index.js` is one composed case built from all six siblings, not six
+units. If a decline degenerates the **case**, every export the barrel names goes
+degenerate regardless of which sibling declined — `preventDefault` included.
+That fits all four rows above, and all of §§ 9–12's observations, including the
+one used to reject it.
+
+The graph lane does not clear the decline: `el-graph` records the same four
+specifiers, the same 176 `declinedDependencyRecords`, and the same 11 degenerate
+exports. So `--dependency-graph-lane --recover-entrypoints` is not the remedy,
+whatever the mechanism is.
+
+### Status, plainly
+
+This is the fifth explanation offered for one observation, and four of the
+previous ones were asserted from the first evidence that fit. The
+case-versus-module reading is stated here as a hypothesis that survives every
+row currently measured, not as a finding.
+
+What is established by direct experiment: a barrel resolves through to its
+siblings (`bar-imm`), degenerate and closed-empty are distinct outcomes, and the
+graph lane does not clear a declined dependency.
+
+The decisive test, not run: supply `@solid-primitives/event-listener` with an
+**accepted** `@solid-primitives/utils` contract so that nothing in its subtree
+declines, and read the eleven exports again. If they populate, the decline
+causes the degeneracy and the unit is the composed case. If they stay
+degenerate, this hypothesis dies with the other four. That test needs the
+artifact-identity admission path (B′, landed `d7f7c56e`) to carry an acceptance
+across two certification work directories, which is itself new and unproven — so
+it is a piece of work, not a spot check.
