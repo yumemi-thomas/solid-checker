@@ -1388,3 +1388,73 @@ majority**:
 "Fix the open-claims gate" is therefore not one change. The gate itself is
 right: it says the contract does not state what the consumer needs, and it
 does not. What is missing is contract *content*, in three places at once.
+
+## 24. Re-export binding: the wall was not where § 16 put it
+
+§ 23 named re-export binding the largest single lever (420 of 1037) and recorded
+the blocker as a **certification refusal** — `accepted dependency
+@solid-primitives/keyed has no exact runtime binding for export Key`. That is
+wrong for the configuration the measurement actually used, and the correction
+matters because it moves the work from certification into generation.
+
+### The binding is not the wall
+
+Calling `resolvePackageArtifacts` directly settles it in one run. With no
+accepted dependencies, `@kobalte/utils` refuses exactly as § 16 quoted. Supply
+`@solid-primitives/keyed`'s own resolution as an accepted dependency and the
+refusal moves to the next specifier; supply all seven and the package resolves
+with `Key`, `access` and `mergeRefs` bound to their exact dependency modules.
+The 2-pass graph-lane run already does this — its 78-node graph has one node per
+`(importer, specifier)` edge, and the `@kobalte/utils` contract it produced on
+2026-09-14 **contains** all nine cross-package re-exports in its export map.
+
+They are bound. They state nothing. Those are different facts, and § 16
+conflated them because the refusal text was the only evidence in view.
+
+### Two mechanics, both in emission
+
+**Named re-exports never consulted the dependency's contract.**
+`contract_exports_for_entry_file` asked `Program::contract_exports` first. The
+project analysis emits a fragment for every export specifier, and an external
+`export { Key } from "@solid-primitives/keyed"` has no local declaration to
+walk, so the fragment degrades to `{"call":{}}`. That degenerate entry always
+exists, so `accepted_reexport_summary_for_name` — written for exactly this
+case — was reachable only for `export *`. Asking the accepted identity first
+fixes it.
+
+**An open sibling then erased what survived.** With the order flipped, the
+projection for `access` arrives as `cb=Known([parameter 0, inline])`,
+`open={Returns}` — and the emitted contract was still byte-identical. The step
+between is unresolved-claim attribution: re-exporting a name whose dependency
+contract leaves domains open raises `PackageContractExportMissing` *at the
+re-export statement*, which encloses no function, so the ladder falls through to
+`fallback-all` and marks every export unknown. `@kobalte/utils` raises 18 of
+these from its nine re-exports. The claims it inherits are restored after every
+attribution channel has run, because an ESM re-export binding is immutable and
+its target lives in the dependency's archive.
+
+### What changed, exactly
+
+Re-certifying `@kobalte/utils@0.9.2` with the same inputs:
+
+| | before | after |
+| --- | ---: | ---: |
+| exports stating something | 24 / 59 | **26 / 59** |
+| exports changed | — | 2 |
+
+`access` and `accessWith`, both gaining `callbacks: [{arg 0}]` with an
+`invoke` / `same-stack` / `untracked` operation. Nothing else moved — and that
+is § 23's own prediction holding: of the 420 findings attributed to this lever,
+only `access`'s 185 had a source contract stating anything. `mergeRefs` (235)
+is `closed` and empty at `@solid-primitives/refs`, so binding it correctly
+publishes nothing, correctly.
+
+### What is still not known
+
+Whether those 185 consumer findings resolve. The inherited claim is an
+*operation*, not a *closure*: `access` publishes no `closed` array, so a
+consumer demanding `reactiveReads`, `returns` or `ownerRequirements` still meets
+the open-claims gate with a narrower list. Measuring that needs the
+`kobalte/packages/core` census re-run against a catalog that binds its
+importers; the isolated harness used here does not. **The 1037 has not been
+re-measured.**

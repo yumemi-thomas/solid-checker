@@ -21085,3 +21085,53 @@ resolve; the 24 of § 21 do not.
 the identity binds the condition set, so certification and analysis must declare
 the same conditions. The case set certified earlier in this session carried no
 such field and admitted nothing.
+
+## 2026-09-15 — a re-exported dependency name now carries its dependency's claim
+
+**Resolved, and measured.** Two independent mechanics erased what an accepted
+dependency's contract already stated about a name its importer re-exports.
+
+1. **The analysis shadowed the projection.** `contract_exports_for_entry_file`
+   consulted `Program::contract_exports` first and
+   `accepted_reexport_summary_for_name` only as a fallback. Project analysis
+   emits an export fragment for *every* specifier, and an external
+   `export { name } from "dependency"` has no local declaration to walk
+   (`resolve_local_reexport` joins the module to the source directory and
+   canonicalizes, so it answers only for relative targets), so that fragment
+   degrades to `value_contract_export` — the degenerate `{"call":{}}`. The
+   degenerate entry always existed, so the projection was reachable only for
+   `export *`, never for a named re-export.
+
+2. **An open sibling erased the rest.** Re-exporting a dependency name whose own
+   contract leaves domains open raises `PackageContractExportMissing`
+   (`unknown-contract-claims:…`) *at the re-export statement*, which encloses no
+   function. The attribution ladder falls through to `fallback-all` and marks
+   every export in the map unknown. `@kobalte/utils` raises 18 of these from its
+   nine cross-package re-exports, which is what reopened `access`'s callbacks
+   claim after mechanic 1 was fixed.
+
+**Measurement.** Re-certifying `@kobalte/utils@0.9.2` (78-node graph, same
+inputs as the 2026-09-14 run) changes exactly two exports: `access` and
+`accessWith` gain `callbacks: [{arg 0}]` with an `invoke`/`same-stack`/
+`untracked` operation, inherited from `@solid-primitives/utils@6.4.1`. Exports
+stating something goes 24 → 26 of 59. `Key`, `mergeRefs`, `ReactiveMap`,
+`chain`, `combineProps`, `createEventListener` and `createMediaQuery` stay
+degenerate because their *source* contracts state nothing — which is what
+§ 23 of the phase-21 demand report predicted.
+
+**Still open.** Three things this does not do.
+
+- The inherited claim is not *closed*: `access` publishes the operation with no
+  `closed` array, so a consumer demanding `reactiveReads`, `returns` or
+  `ownerRequirements` still meets the open-claims gate. Whether the 185
+  `access` findings on `kobalte/packages/core` resolve was **not measured** —
+  the isolated harness's catalog does not bind that consumer's importer.
+- `fallback-all` still reaches the importer's *own* exports. `mixed`'s `local`
+  in `scripts/contract-dependency-reexport.test.mjs` is marked unknown by an
+  obligation raised about `opaque`, and the test pins that as today's answer
+  rather than a desired one. Narrowing the ladder is a separate change.
+- Nothing in `fixtures/package-contracts/` exercises generation against an
+  accepted dependency — the corpus runner has no dependency-catalog surface, so
+  all seven re-export fixtures there refuse at the binding wall instead. The new
+  pin lives in `scripts/` for that reason, and runs under `make verify`'s
+  `scripts/*.test.mjs` step.

@@ -5375,6 +5375,42 @@ fn emit_package_contract(
             declaration_export_names,
         )?
     };
+    // A name bound to an accepted dependency's exact export is not this
+    // package's to weaken. Both attribution channels above and below widen a
+    // *local* unresolved obligation onto export names, and the widest
+    // mechanism (`FallbackAll`) reaches every name in the map -- so
+    // `@kobalte/utils`, whose own `node.contains(element)`-shaped census
+    // refuses 41 times, reopened `access`'s proven callbacks claim and
+    // `Key`'s reads, creates and returns, none of which it implements. An ESM
+    // re-export binding is immutable and its target lives in the dependency's
+    // archive: no obligation located in this package's modules is evidence
+    // about that function's body. Snapshot those summaries and put them back
+    // once every channel has run, so the dependency's receipt-validated claim
+    // survives its importer's own uncertainty.
+    //
+    // Only names the projection itself answered are restored, so a locally
+    // implemented export -- including one that merely *calls* a dependency --
+    // keeps every bit of attribution it earns.
+    let dependency_bound = if request.contract_entry_file.is_empty() {
+        BTreeMap::new()
+    } else {
+        let entry_file = Path::new(&request.contract_entry_file).canonicalize()?;
+        let mut bound = BTreeMap::new();
+        for (name, summary) in &exports {
+            if accepted_reexport_summary_for_name(
+                facts,
+                &files_by_canonical_path,
+                contracts,
+                &entry_file,
+                name,
+            )?
+            .is_some()
+            {
+                bound.insert(name.clone(), summary.clone());
+            }
+        }
+        bound
+    };
     let entry_entities_by_name = if request.contract_entry_file.is_empty() {
         HashMap::new()
     } else {
@@ -5537,6 +5573,9 @@ fn emit_package_contract(
             unresolved_claim_domains(&defect.kind),
             &mut exports,
         );
+    }
+    for (name, summary) in dependency_bound {
+        exports.insert(name, summary);
     }
     // Unresolved-claim attribution deliberately enriches the inferred
     // summaries after the initial export-kind pass. Reconcile once more at
@@ -6063,16 +6102,37 @@ fn contract_exports_for_entry_file(
             )
             .into());
         }
-        let summary = match program.contract_exports.get(&name).cloned() {
+        // The accepted identity answers first, not second. A name this entry
+        // file re-exports from an accepted dependency has exactly one
+        // authoritative summary -- that dependency's own, projected from its
+        // receipt -- and this package contains no declaration that could say
+        // anything further about it. The project analysis nevertheless emits a
+        // syntax fragment for every export specifier, and an external
+        // `export { name } from "dependency"` has no local target to walk, so
+        // that fragment degrades to the bare value summary. Consulting
+        // `contract_exports` first therefore let that degenerate entry shadow
+        // the projection for every *named* re-export, leaving
+        // `accepted_reexport_summary_for_name` reachable only for `export *`:
+        // `@kobalte/utils` published `access`, `Key` and `mergeRefs` as
+        // `{"call":{}}` while the accepted `@solid-primitives/utils` contract
+        // it was generated against states `access`'s callbacks claim outright.
+        //
+        // The projection still answers `None` for everything that is not a
+        // re-export landing on exactly one accepted runtime identity -- a
+        // locally declared export, a purely relative re-export chain, an
+        // unresolved or namespace binding, or an ambiguous multi-identity
+        // chain (which refuses) -- so the local analysis remains the answer
+        // for every name this package actually implements.
+        let accepted_summary = accepted_reexport_summary_for_name(
+            facts,
+            files_by_canonical_path,
+            contracts,
+            &entry_file,
+            &name,
+        )?;
+        let summary = match accepted_summary {
             Some(summary) => summary,
-            None => accepted_reexport_summary_for_name(
-                facts,
-                files_by_canonical_path,
-                contracts,
-                &entry_file,
-                &name,
-            )?
-            .ok_or_else(|| {
+            None => program.contract_exports.get(&name).cloned().ok_or_else(|| {
                 format!(
                     "emit package contract: entry file {} exports {name:?}, but no semantic summary was produced",
                     entry_file.display()
