@@ -241,10 +241,13 @@ fn effective_inner_call_return(
     } else {
         "accessor"
     };
-    if matches!(
-        primitive,
-        Primitive::CreateSignal | Primitive::CreateStore | Primitive::CreateResource
-    ) {
+    // The dialect's own tuple list. This was a hardcoded
+    // `CreateSignal | CreateStore | CreateResource`, which is neither
+    // dialect's: `createResource` does not exist in 2.0, and 2.0's
+    // `createOptimistic` and `createOptimisticStore` -- both declared to
+    // return two-slot tuples -- were missing, so a read traced through either
+    // was told the call returns the store itself.
+    if context.dialect.returns_reactive_tuple(primitive) {
         return Some(ContractReturn {
             kind: "tuple".into(),
             elements: vec![

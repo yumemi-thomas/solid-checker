@@ -1644,10 +1644,12 @@ fn discover_interprocedural_graph(
                 }
                 continue;
             }
-            // `splitProps` only creates property views. Its source and key
+            // A props split only creates property views. Its source and key
             // lists are values even when erased JavaScript types leave their
-            // callability unknown.
-            if primitive == Some(Primitive::SplitProps) {
+            // callability unknown. Asked of the dialect because 1.x's
+            // `splitProps` is 2.0's `omit`, and naming only the 1.x spelling
+            // raised this obligation about 2.0's key lists.
+            if primitive.is_some_and(|primitive| lookup.dialect.splits_props(primitive)) {
                 continue;
             }
             let resolved_call = lookup.resolved_callee_call(file, call.callee);

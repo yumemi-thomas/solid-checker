@@ -21297,3 +21297,46 @@ the chain for those 127 is four local changes, not one: the dialect row (done),
 a parameter-relative return derivation in the generator, a consumer rule that
 conditions on the caller's argument, and then a `returns` closure the census can
 decide. Recorded here rather than attempted.
+
+## 2026-09-15 — sweeping the dialect-extraction literals
+
+**Two more found and fixed; the rest of the class is clean.** The merge defect
+above had a mechanical cause — `ecf6e0d8` translated string literals to
+`Primitive::` constants — so every primitive named in shared code was checked
+against both vocabularies. Twelve names in `solid-reactive-ir` belong to only
+one dialect. Ten are correct: a 2.0-only API has no 1.x twin (`flush`,
+`refresh`, `affects`, `resolve`, `onSettled`, `httpStatus`, `httpHeader`,
+`createOwner` — the last documented as such at its site), and
+`createTrackedEffect` appears only inside a union with `createEffect` and
+`createRenderEffect` that already covers both.
+
+Two were the same defect as the merge:
+
+- **`interproc.rs`'s props-split suppression** named `Primitive::SplitProps`,
+  which is 1.x's. 2.0 replaced `splitProps` with `omit`
+  (`@solidjs/signals`' `store/utils.d.ts`: `omit(props: T, ...keys: K)`), so a
+  2.0 project's key lists could raise the unknown-callback obligation the
+  suppression exists to prevent. Now `Dialect::splits_props`.
+- **`source_discovery.rs`'s tuple list** was
+  `CreateSignal | CreateStore | CreateResource` — **neither dialect's**.
+  `createResource` does not exist in 2.0, and 2.0's `createOptimistic`
+  (declared `Signal<T> = [get: SourceAccessor<T>, set: Setter<T>]`) and
+  `createOptimisticStore` (declared `[get: Store<T>, set: StoreSetter<T>]`)
+  were missing, so a read traced through either was told the call returns the
+  store *itself* rather than slot 0 of a tuple. Now
+  `Dialect::returns_reactive_tuple`, with `createMutable` and
+  `createProjection` deliberately absent because they return the store whole.
+
+**Neither has a behaviour fixture, and that is the finding.** Coverage is
+unmoved at 550 across 94 projects — nothing in the repository exercises either
+path on the affected dialect, which is precisely how both literals survived the
+extraction. Both paths need contract-shaped inputs that a `reactive-ir` fixture
+cannot supply: the tuple row is reached only for a call to a **contracted**
+export whose contract states a `returns` and whose body resolves to the
+primitive (`effective_inner_call_return`), and the split row only when the
+argument's callability is erased inside a package with no accepted contract.
+The rows themselves are pinned by cross-dialect tests in `solid-dialect`, which
+is where the vocabulary claim lives; the behaviour pins belong in
+`fixtures/package-contracts/` and are not written. Until they are, these two are
+correct-by-construction rather than measured — the weaker of the two standards
+this repository holds itself to.

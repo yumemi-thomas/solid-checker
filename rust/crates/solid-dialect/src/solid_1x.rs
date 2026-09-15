@@ -1925,6 +1925,22 @@ impl Dialect for Solid1x {
         primitive == Primitive::MergeProps
     }
 
+    /// 1.x spells it `splitProps`.
+    fn splits_props(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::SplitProps
+    }
+
+    /// `createSignal` returns `[get, set]`, `createStore` returns
+    /// `[store, setStore]`, and `createResource` returns
+    /// `[accessor, { mutate, refetch }]`. `createMutable` returns the store
+    /// itself, so it is deliberately absent.
+    fn returns_reactive_tuple(&self, primitive: Primitive) -> bool {
+        matches!(
+            primitive,
+            Primitive::CreateSignal | Primitive::CreateStore | Primitive::CreateResource
+        )
+    }
+
     fn creates_directive_owner(&self, _primitive: Primitive) -> bool {
         // Solid 1.x applies directives and refs through untrack(), which
         // clears Listener but preserves Owner. Nothing created there enters

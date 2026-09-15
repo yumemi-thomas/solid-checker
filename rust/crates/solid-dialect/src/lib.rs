@@ -1349,6 +1349,38 @@ pub trait Dialect: Sync {
     /// reported.
     fn merges_props_reactivity(&self, primitive: Primitive) -> bool;
 
+    /// Whether `primitive` takes a props object and key lists and returns
+    /// views over it, so every one of its arguments is a *value* — never a
+    /// callback the caller hands over.
+    ///
+    /// The engine needs this to keep quiet: erased JavaScript types leave a
+    /// key list's callability unknown, and without the row a split raises an
+    /// unknown-callback obligation about arguments that cannot be callbacks.
+    ///
+    /// A dialect question for the same reason the merge above is: 1.x's
+    /// `splitProps(props, ...keys)` is 2.0's `omit(props, ...keys)`
+    /// (`@solidjs/signals`' `store/utils.d.ts`), and shared code used to name
+    /// only 1.x's.
+    fn splits_props(&self, primitive: Primitive) -> bool;
+
+    /// Whether a call of `primitive` returns a **tuple** whose first slot
+    /// carries the reactive value.
+    ///
+    /// The shape question, distinct from [`Dialect::returns_store`]'s kind
+    /// question and from [`Dialect::reactive_result_slot`]'s per-slot role: a
+    /// read traced through this call has to know it must go through slot 0
+    /// rather than through the call's own value. `createMutable` (1.x) and
+    /// `createProjection` (2.0) return the store *itself* and are therefore
+    /// not rows here, however store-kinded they are.
+    ///
+    /// Each dialect's list is its own, and neither is the other's: 1.x's
+    /// `createResource` returns `[accessor, { mutate, refetch }]` and does not
+    /// exist in 2.0, while 2.0's `createOptimistic` returns
+    /// `Signal<T> = [get, set]` and `createOptimisticStore` returns
+    /// `[get: Store<T>, set: StoreSetter<T>]`, neither of which exists in 1.x.
+    /// Shared code carried one hardcoded list that was neither dialect's.
+    fn returns_reactive_tuple(&self, primitive: Primitive) -> bool;
+
     /// Whether the runtime serializes a literal `false` JSX attribute value
     /// by *removing* the attribute on intrinsic elements.
     ///
@@ -2867,6 +2899,56 @@ mod tests {
             // own value.
             for primitive in [Primitive::SplitProps, Primitive::Omit] {
                 assert!(!dialect.merges_props_reactivity(primitive));
+            }
+        }
+    }
+
+    #[test]
+    /// The other two lists that survived the dialect extraction as literals.
+    /// Both were single-vocabulary and shared code asked them of everyone.
+    fn each_dialect_names_its_own_props_split_and_tuple_returns() {
+        let one = Version::V1.dialect();
+        let two = Version::V2.dialect();
+
+        // 1.x's `splitProps` is 2.0's `omit`; neither answers for the other.
+        assert!(one.splits_props(Primitive::SplitProps));
+        assert!(two.splits_props(Primitive::Omit));
+        assert!(!one.splits_props(Primitive::Omit));
+        assert!(!two.splits_props(Primitive::SplitProps));
+
+        // Shared by both: the two-slot returns every dialect has.
+        for primitive in [Primitive::CreateSignal, Primitive::CreateStore] {
+            assert!(one.returns_reactive_tuple(primitive));
+            assert!(two.returns_reactive_tuple(primitive));
+        }
+        // 1.x-only, and the member of the old hardcoded list that made it
+        // wrong for 2.0.
+        assert!(one.returns_reactive_tuple(Primitive::CreateResource));
+        assert!(!two.returns_reactive_tuple(Primitive::CreateResource));
+        // 2.0-only, and what the old list was missing.
+        for primitive in [
+            Primitive::CreateOptimistic,
+            Primitive::CreateOptimisticStore,
+        ] {
+            assert!(two.returns_reactive_tuple(primitive));
+            assert!(!one.returns_reactive_tuple(primitive));
+        }
+        // A store returned *whole* is not a tuple, however store-kinded.
+        assert!(one.returns_store(Primitive::CreateMutable));
+        assert!(!one.returns_reactive_tuple(Primitive::CreateMutable));
+        assert!(two.returns_store(Primitive::CreateProjection));
+        assert!(!two.returns_reactive_tuple(Primitive::CreateProjection));
+        // Every tuple row is a source factory; the converse does not hold.
+        for dialect in [one, two] {
+            for name in dialect_names(dialect) {
+                let Some(primitive) = dialect.primitive(name) else {
+                    continue;
+                };
+                assert!(
+                    !dialect.returns_reactive_tuple(primitive)
+                        || dialect.creates_reactive_source(primitive),
+                    "{name} returns a reactive tuple but is not a source factory"
+                );
             }
         }
     }

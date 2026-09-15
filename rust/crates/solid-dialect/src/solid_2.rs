@@ -1815,6 +1815,28 @@ impl Dialect for Solid2 {
         primitive == Primitive::Merge
     }
 
+    /// 2.0 replaced `splitProps` with `omit`; `store/utils.d.ts` declares
+    /// `omit(props: T, ...keys: K)`, the same props-plus-key-lists shape.
+    fn splits_props(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::Omit
+    }
+
+    /// `createSignal` and `createOptimistic` both return
+    /// `Signal<T> = [get: SourceAccessor<T>, set: Setter<T>]`; `createStore`
+    /// and `createOptimisticStore` both return
+    /// `[get: Store<T>, set: StoreSetter<T>]`. `createProjection` returns the
+    /// store itself, so it is deliberately absent, and `createResource` is not
+    /// 2.0 vocabulary at all.
+    fn returns_reactive_tuple(&self, primitive: Primitive) -> bool {
+        matches!(
+            primitive,
+            Primitive::CreateSignal
+                | Primitive::CreateStore
+                | Primitive::CreateOptimistic
+                | Primitive::CreateOptimisticStore
+        )
+    }
+
     fn creates_directive_owner(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
