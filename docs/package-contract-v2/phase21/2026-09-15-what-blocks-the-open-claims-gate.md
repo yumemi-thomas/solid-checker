@@ -691,3 +691,58 @@ Note for (2): the receipt is build-pinned — `authenticate_policy2_receipt`
 compares `entry.verifier_build_digest` to the receipt payload's — so bundles are
 re-issued per checker build. The legacy conformance corpus cannot supply them;
 it is policy-1-era material, which is what the pinning test's name records.
+
+## 24. Correction to § 14 and § 19, and the actual wall
+
+§ 14 said `@kobalte/utils`'s 124 withheld claims are Node's type-stripping
+refusal, and § 19 said lifting it would reopen the package's 426 consumer call
+sites. The first is true of the claims. The second is **wrong**, and testing the
+symlink against the real package is what showed it.
+
+**The symlink fix works.** `@kobalte/utils@0.9.2` installed from the registry,
+pinned Node 24.11.1:
+
+| | `.` → `dist/index.js` | `./src/props.ts` |
+| --- | --- | --- |
+| real directory in `node_modules` | resolves | **refuses**: stripping unsupported |
+| symlinked to a realpath outside | resolves | **resolves** |
+
+**But it unblocks entrypoints no consumer imports.** All 22 of the package's
+type-stripping failures are `./src/*.ts` artifact cases. A consumer writes
+`import { mergeDefaultProps } from "@kobalte/utils"`, which is `.`, and `.`
+resolves to `dist/index.js`, which needs no stripping and never did.
+
+**The generated contract has no `.` entrypoint at all.** It carries 20, every
+one of them `./src/*.ts`. The refusal audit says why:
+
+```
+entrypoint ".", stage artifact-case, class dependency-composition:
+accepted dependency @solid-primitives/keyed has no exact runtime binding
+for export Key
+```
+
+`dist/index.js` opens with `export { Key } from '@solid-primitives/keyed'`. One
+re-exported name with no runtime binding in its dependency's contract refuses
+the whole public entrypoint, and with it every export the package has.
+
+**This is the wall, and it is not local to `@kobalte/utils`.** Across the
+corpus's 418 probes there are 341 artifact-case refusals — 173
+`dependency-composition`, 168 `published-artifact`. **Ninety-seven of them are
+on `.`, across 40 packages**, and the single largest cause is this one:
+
+| refusals on `.` | cause |
+| ---: | --- |
+| 46 | `accepted dependency <dep> has no exact runtime binding for export <name>` |
+| 26 | `solid-checker:unresolved-dependency-module=<@tanstack/…>` |
+| 7 | `@solidjs/signals has no exact runtime binding for export $PROXY` |
+| 6 | `resolved target <root>/dist/index.jsx is not a file` |
+
+Seven of those 40 packages are ones real consumers import, and they carry
+**1,947 call sites** — `@kobalte/utils` 942 and `@solid-primitives/utils` 820
+between them.
+
+So the reason a user gets no useful feedback about these packages is neither
+closure depth, nor recipes, nor the interpreter: **the public entrypoint never
+produces a contract**, because one re-exported name in it cannot be bound. Every
+closure measurement in this document is downstream of that, and the `./src/*`
+cases those measurements describe are entrypoints nobody imports.
