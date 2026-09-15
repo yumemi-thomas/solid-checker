@@ -874,3 +874,47 @@ The real remaining question for `@kobalte/utils` is therefore whether one case's
 `recursive-value-shape` refusal should abort the case set, or whether the set
 should publish the cases that did certify. That is a different investigation
 from the one § 25 pointed at, and nothing about `keyed` is part of it.
+
+## 27. The case set already publishes what certified; `.` is refused on its merits
+
+§ 26 left the question "should one case's `recursive-value-shape` refusal abort
+the case set, or should the set publish the cases that did certify". Measured,
+the set already publishes what certified, and ADR 0070's machinery does exactly
+what it says. Instrumenting `certifyRecoverableCaseSelection` for
+`@kobalte/utils@0.9.2|solid1|only`:
+
+```
+SUBDIV cases=24 accepted=[0..16,18,19,22,23] refusals=[17,20,21]
+strategy: independent-prepared-selection
+publishedCases: 21
+```
+
+Twenty-one of twenty-four cases publish. The combined attempt refuses, the
+retained baseline refuses, `existingPublication === false` admits a subset, the
+prepared set is subdivided, the accepted union is independently re-certified,
+and it is published. No case that certified is lost, and the final publication
+did not fail — there was no `FINALFAIL`.
+
+**The three that refuse, refuse on their own evidence**, all in the same family:
+
+| case | family | reason |
+| --- | --- | --- |
+| `./src/scroll-into-view.ts` | `recursive-value-shape` | parameter-rooted read lacks positive original-input identity |
+| `.` (`import`) | `recursive-value-shape` | `contains`: operation value path is locally open (complete=true, presence=Absent, callability=Unknown, reasons=[]) |
+| `.` (`import, solid`) | `recursive-value-shape` | as above |
+
+So `@kobalte/utils`'s `.` entrypoint is not blocked by dependency composition,
+by the graph lane, by `keyed`, or by case-set publication policy. It is refused
+by Type Facts during live graph export-value verification, on export
+`contains`, because an operation value path stays locally open with
+`presence=Absent, callability=Unknown` and **no reasons recorded**.
+
+That empty `reasons=[]` is the next thread: a locally open value path that
+cannot say why it is open is the same class of unhelpful refusal as the three
+misleading messages in § 26, and it is the only thing now standing between this
+package's 942 consumer call sites and a contract.
+
+**Nothing was changed for this section.** The instruction it answers was to make
+the case set publish what certified; it already does, and the 21-case
+publication is the proof. Writing a fix would have meant changing behaviour that
+is correct to chase a symptom whose cause is three layers away.
