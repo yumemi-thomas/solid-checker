@@ -9,11 +9,11 @@ use serde::{
 use serde_json::Value;
 use sha2::{Digest as _, Sha256, Sha512};
 use solid_reactive_ir::contract_semantics::{
-    ClaimDomain, ClaimPath, ContractProposal, NormalizedContract, SemanticClaimPath,
+    ClaimDomain, ClaimPath, ContractProposal, NormalizedContract, SemanticClaimPath, ValueRoot,
     certification::{
-        CertificationCandidates, DemandPlanningError, DependencyDemandInput, ProofDemandGraph,
-        ProofDemandSubject, ProofFamily, ProofWitnessVariant, WitnessBinding, WitnessCoverage,
-        proof_policy_2,
+        CertificationCandidates, DemandPlanningError, DependencyDemandInput, PositiveFactSubject,
+        ProofDemandGraph, ProofDemandSubject, ProofFamily, ProofWitnessVariant, WitnessBinding,
+        WitnessCoverage, proof_policy_2,
     },
 };
 use std::{
@@ -577,6 +577,11 @@ impl CertificationPlan {
         // candidate count; the one extra pass is the synthesis pass, taken at
         // most once — here, or by the batch that seeded this call.
         let mut already_withheld: Vec<WithheldClosure> = Vec::new();
+        // The rung below `already_withheld`: operations whose own stated facts
+        // the census refused. Each pass withdraws at least one more by name, so
+        // this loop stays bounded by the operation count on top of ADR 0036's
+        // candidate count.
+        let mut withheld_operations: Vec<WithheldOperation> = Vec::new();
         let mut synthesized: Option<synthesized_vetoes::SynthesizedCorpus> = seed;
         // Set when a synthesized corpus could not run for this artifact case
         // and its served candidates were withheld by name: the plan then keeps
@@ -587,9 +592,10 @@ impl CertificationPlan {
                 .as_ref()
                 .map(synthesized_vetoes::SynthesizedCorpus::configuration)
                 .or(probes);
-            let gated = self.recipe_gated_with(
+            let gated = self.recipe_gated_with_operations(
                 configuration.map(ProbeHarnessConfiguration::recipe_corpus),
                 &already_withheld,
+                &withheld_operations,
             )?;
             let plan = gated.plan();
             // An artifact case whose every demand the snapshot itself satisfies
@@ -608,16 +614,39 @@ impl CertificationPlan {
                     issuer,
                     revocation_epoch,
                 )
-                .map(|finalized| finalized.with_withheld_closures(gated.withheld().to_vec()));
+                .map(|finalized| {
+                    finalized
+                        .with_withheld_closures(gated.withheld().to_vec())
+                        .with_withheld_operations(withheld_operations.clone())
+                });
             }
             let evidence = match type_facts::acquire_and_verify_export_values(plan, pin) {
                 Ok(evidence) => evidence,
                 Err(error) => {
                     let records = census_refusal_withholding(plan, &error);
-                    if records.is_empty() {
+                    if !records.is_empty() {
+                        already_withheld.extend(records);
+                        continue;
+                    }
+                    // No closure candidate to withdraw, so try the smaller
+                    // claim: the operation whose own stated fact was refused.
+                    // A record already held is not progress — the same refusal
+                    // twice means the weakening did not reach it — so the
+                    // transaction refuses rather than looping.
+                    let operations = positive_fact_refusal_withholding(plan, &error)
+                        .into_iter()
+                        .filter(|record| {
+                            !withheld_operations.iter().any(|held| {
+                                held.artifact_case == record.artifact_case
+                                    && held.export == record.export
+                                    && held.operation == record.operation
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    if operations.is_empty() {
                         return Err(error.into());
                     }
-                    already_withheld.extend(records);
+                    withheld_operations.extend(operations);
                     continue;
                 }
             };
@@ -680,7 +709,11 @@ impl CertificationPlan {
                 issuer,
                 revocation_epoch,
             )
-            .map(|finalized| finalized.with_withheld_closures(gated.withheld().to_vec()));
+            .map(|finalized| {
+                finalized
+                    .with_withheld_closures(gated.withheld().to_vec())
+                    .with_withheld_operations(withheld_operations.clone())
+            });
         }
     }
 
@@ -783,6 +816,106 @@ pub(super) fn census_refusal_withholding(
             })
         })
         .collect()
+}
+
+/// The operation a refused positive-fact demand states, when the refusal names
+/// one.
+///
+/// The counterpart of [`census_refusal_withholding`] for the *positive* half of
+/// a proposal. A closure candidate that cannot be decided is withheld and the
+/// document keeps its operations; an operation whose own stated fact cannot be
+/// verified has nothing left to stand on, and the document has to stop stating
+/// it. Both are weakenings, and both leave the rest of the export publishable —
+/// which is the whole difference between a package with a contract and a
+/// package with none.
+///
+/// A demand that names no operation — a selected call, a guard case, an
+/// exported value's own shape — yields nothing here and still refuses the
+/// artifact case, because there is no smaller claim to withdraw.
+pub(super) fn positive_fact_refusal_withholding(
+    plan: &CertificationPlan,
+    error: &TypeFactsCertificationError,
+) -> Vec<WithheldOperation> {
+    let mut error = error;
+    while let TypeFactsCertificationError::TransactionStage { source, .. }
+    | TypeFactsCertificationError::GraphNodeStage { source, .. } = error
+    {
+        error = source;
+    }
+    let refusals: Vec<(&str, &str)> = match error {
+        TypeFactsCertificationError::UnsupportedDemand { demand, reason }
+        | TypeFactsCertificationError::FamilyOpen { demand, reason } => {
+            vec![(demand.as_str(), reason.as_str())]
+        }
+        TypeFactsCertificationError::CensusRefused { refusals } => refusals
+            .iter()
+            .map(|refusal| (refusal.demand.as_str(), refusal.reason.as_str()))
+            .collect(),
+        _ => return Vec::new(),
+    };
+    refusals
+        .into_iter()
+        .filter_map(|(demand_id, reason)| {
+            let demand = plan
+                .demand_graph()
+                .demands()
+                .iter()
+                .find(|demand| demand.id().as_str() == demand_id)?;
+            let ProofDemandSubject::PositiveFact(subject) = demand.subject() else {
+                return None;
+            };
+            let (artifact_case, export, operation) = positive_fact_operation(subject)?;
+            Some(WithheldOperation {
+                artifact_case: artifact_case.to_owned(),
+                export: export.to_owned(),
+                operation,
+                reason: format!("{WITHHELD_OPERATION_CENSUS_REFUSED_PREFIX}{reason}"),
+            })
+        })
+        .collect()
+}
+
+/// The `(artifact case, export, operation)` a positive-fact subject names.
+fn positive_fact_operation(subject: &PositiveFactSubject) -> Option<(&str, &str, String)> {
+    match subject {
+        PositiveFactSubject::Operation {
+            artifact_case,
+            export,
+            operation,
+            ..
+        }
+        | PositiveFactSubject::CallbackBinding {
+            artifact_case,
+            export,
+            operation,
+            ..
+        } => Some((artifact_case, export, operation.clone())),
+        // An edge is withdrawn by withdrawing either endpoint, and `from` is
+        // the one the edge is stated *by*.
+        PositiveFactSubject::OperationEdge {
+            artifact_case,
+            export,
+            from,
+            ..
+        } => Some((artifact_case, export, from.clone())),
+        PositiveFactSubject::RecursiveValue {
+            artifact_case,
+            export,
+            root,
+            ..
+        } => match root {
+            ValueRoot::OperationInput { operation, .. }
+            | ValueRoot::OperationOutput { operation } => {
+                Some((artifact_case, export, operation.0.clone()))
+            }
+            // The exported value's own shape is not an operation's claim, so
+            // there is nothing smaller than the artifact case to withdraw.
+            ValueRoot::Export => None,
+        },
+        PositiveFactSubject::SelectedCall { .. }
+        | PositiveFactSubject::Resource { .. }
+        | PositiveFactSubject::GuardCase { .. } => None,
+    }
 }
 
 /// ADR 0036 § 2: the candidate whose mandatory veto ended in an error or a
@@ -1003,10 +1136,13 @@ pub fn certify_value_only_case_set(
         // A census refusal in the batch names one plan's candidate; the
         // per-plan loop withdraws it and re-plans that plan, and re-acquires
         // the others on their own.
+        // The same applies one rung down: a refused positive fact names one
+        // plan's operation, and only the per-plan loop can withdraw it.
         Err(error)
-            if gated_plans
-                .iter()
-                .any(|plan| !census_refusal_withholding(plan, &error).is_empty()) =>
+            if gated_plans.iter().any(|plan| {
+                !census_refusal_withholding(plan, &error).is_empty()
+                    || !positive_fact_refusal_withholding(plan, &error).is_empty()
+            }) =>
         {
             return plans.iter().map(|plan| individually(plan)).collect();
         }
@@ -1402,6 +1538,27 @@ pub struct WithheldClosure {
     pub reason: String,
 }
 
+/// One operation withdrawn from the published document because a positive fact
+/// it states could not be certified.
+///
+/// The rung below [`WithheldClosure`]. A withheld *closure* keeps every
+/// operation and stops claiming the enumeration is exhaustive; a withheld
+/// *operation* removes a claim the document should not have made, and opens
+/// the domain that listed it for the same reason.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WithheldOperation {
+    pub artifact_case: String,
+    pub export: String,
+    /// The operation id as the document spells it.
+    pub operation: String,
+    pub reason: String,
+}
+
+/// The prefix of the reason an operation carries when the implementation
+/// census refused a positive fact it states. The census's own refusal text
+/// follows the prefix.
+pub const WITHHELD_OPERATION_CENSUS_REFUSED_PREFIX: &str = "operation census refused: ";
+
 /// The reason recipe-gated planning withholds a candidate no corpus addresses.
 pub const WITHHELD_CLOSURE_NO_RECIPE: &str = "no recipe in corpus";
 
@@ -1486,6 +1643,63 @@ pub enum RecipeGatingError {
 /// gating withholds are exactly `ClaimDomain::PROPOSABLE`; a record naming any
 /// other is refused rather than applied, because a domain nothing proposes
 /// cannot have been gated.
+/// Removes every withheld operation from its export and opens the domains that
+/// listed it.
+///
+/// Cross-export provenance is cleared here rather than in the export, because
+/// `composed_from` names an operation of a *sibling* export of the same
+/// artifact case: only a pass over the whole case can see that the named
+/// operation is gone. Clearing provenance only removes a discharge route, and
+/// the operation keeps its own evidence.
+pub(crate) fn withheld_operation_weakening(
+    candidate: &NormalizedContract,
+    withheld: &[WithheldOperation],
+) -> Result<NormalizedContract, RecipeGatingError> {
+    use solid_reactive_ir::contract_semantics::OperationId;
+
+    let mut artifact_cases = candidate.artifact_cases().to_vec();
+    let mut seeds: BTreeMap<(String, String), BTreeSet<OperationId>> = BTreeMap::new();
+    for operation in withheld {
+        seeds
+            .entry((operation.artifact_case.clone(), operation.export.clone()))
+            .or_default()
+            .insert(OperationId(operation.operation.clone()));
+    }
+    let mut gone: BTreeMap<String, BTreeSet<(String, OperationId)>> = BTreeMap::new();
+    for ((artifact_case, export_name), ids) in seeds {
+        let export = artifact_cases
+            .iter_mut()
+            .find(|case| case.id == artifact_case)
+            .and_then(|case| case.exports.get_mut(&export_name))
+            .ok_or_else(|| RecipeGatingError::MissingExport {
+                artifact_case: artifact_case.clone(),
+                export: export_name.clone(),
+            })?;
+        let withdrawn = export.withhold_operations(&ids);
+        gone.entry(artifact_case)
+            .or_default()
+            .extend(withdrawn.into_iter().map(|id| (export_name.clone(), id)));
+    }
+    for (artifact_case, withdrawn) in gone {
+        let Some(case) = artifact_cases
+            .iter_mut()
+            .find(|case| case.id == artifact_case)
+        else {
+            continue;
+        };
+        for export in case.exports.values_mut() {
+            export.clear_composed_provenance(&withdrawn);
+        }
+    }
+    ContractProposal::new(candidate.package().clone(), artifact_cases)
+        .normalize()
+        .map_err(|error| {
+            RecipeGatingError::Replanning(CertificationPlanningError::InvalidCandidate(
+                error.to_string(),
+            ))
+        })
+}
+
 pub(crate) fn withheld_weakening(
     candidate: &NormalizedContract,
     withheld: &[WithheldClosure],
@@ -1633,6 +1847,41 @@ impl CertificationPlan {
             });
         }
         let selected = withheld_weakening(&self.selected_candidate, &withheld)?;
+        Ok(RecipeGatedPlan {
+            plan: self.replanned_with(selected)?,
+            withheld,
+        })
+    }
+
+    /// [`Self::recipe_gated_with`] with operations the transaction has already
+    /// withdrawn because a positive fact they state could not be certified.
+    ///
+    /// The weakened candidate is re-planned *before* closure gating, because
+    /// withdrawing an operation changes the candidate universe: a closure
+    /// candidate over a domain that listed the operation is no longer the same
+    /// claim, and gating the old plan would offer a recipe for a claim this
+    /// document no longer makes.
+    pub fn recipe_gated_with_operations(
+        &self,
+        recipe_corpus: Option<&Path>,
+        already_withheld: &[WithheldClosure],
+        withheld_operations: &[WithheldOperation],
+    ) -> Result<RecipeGatedPlan, RecipeGatingError> {
+        if withheld_operations.is_empty() {
+            return self.recipe_gated_with(recipe_corpus, already_withheld);
+        }
+        let weakened = withheld_operation_weakening(&self.selected_candidate, withheld_operations)?;
+        self.replanned_with(weakened)?
+            .recipe_gated_with(recipe_corpus, already_withheld)
+    }
+
+    /// Re-derives the candidate universe, demand graph and witness bindings for
+    /// a weakened candidate, keeping every verified artifact fact unchanged.
+    ///
+    /// Weakening never re-acquires: the snapshot, resolution, closure and
+    /// exports are facts about bytes that did not move, and only the claims
+    /// made over them changed.
+    fn replanned_with(&self, selected: NormalizedContract) -> Result<Self, RecipeGatingError> {
         let policy = proof_policy_2();
         let candidates = policy
             .inspect_candidates(&selected)
@@ -1653,22 +1902,19 @@ impl CertificationPlan {
             self.verified_initialization.as_ref(),
             &demand_graph,
         );
-        Ok(RecipeGatedPlan {
-            plan: Self {
-                verified_initialization: self.verified_initialization.clone(),
-                snapshot: self.snapshot.clone(),
-                verified_resolution: self.verified_resolution.clone(),
-                verified_closure: self.verified_closure.clone(),
-                verified_exports: self.verified_exports.clone(),
-                selected_candidate: selected,
-                candidates,
-                demand_graph,
-                artifact_witnesses,
-                import_request: self.import_request.clone(),
-                resolved_import: self.resolved_import.clone(),
-                certification_sources: self.certification_sources.clone(),
-            },
-            withheld,
+        Ok(Self {
+            verified_initialization: self.verified_initialization.clone(),
+            snapshot: self.snapshot.clone(),
+            verified_resolution: self.verified_resolution.clone(),
+            verified_closure: self.verified_closure.clone(),
+            verified_exports: self.verified_exports.clone(),
+            selected_candidate: selected,
+            candidates,
+            demand_graph,
+            artifact_witnesses,
+            import_request: self.import_request.clone(),
+            resolved_import: self.resolved_import.clone(),
+            certification_sources: self.certification_sources.clone(),
         })
     }
 }
@@ -18550,15 +18796,20 @@ export const value = phantom;
                     error.contains("SourceCensus"),
                     "different snapshot bytes must not borrow a foreign declaration: {error}"
                 );
-                let own = graphs[1].certify_value_only(&pin, &issuer, 1, None);
-                let error = format!(
-                    "{:?}",
-                    own.err()
-                        .expect("the mutated input must remain refused in its own context")
-                );
+                // In its *own* context the mutation is not a refusal any more:
+                // since 2026-09-16 the unprovable read is withdrawn and the
+                // export publishes without it. The claim this pins is
+                // unchanged — the mutated input is never proved — and the
+                // withdrawal names the mutation exactly as the refusal did.
+                let own = graphs[1]
+                    .certify_value_only(&pin, &issuer, 1, None)
+                    .expect("withdrawing the unprovable read leaves the case publishable");
+                let withheld = own.root().withheld_operations();
                 assert!(
-                    error.contains("original-input identity"),
-                    "the own-context refusal must bind the mutation: {error}"
+                    withheld
+                        .iter()
+                        .any(|record| record.reason.contains("original-input identity")),
+                    "the own-context withdrawal must bind the mutation: {withheld:?}"
                 );
             } else {
                 let finalized = result.unwrap_or_else(|error| {
@@ -18754,14 +19005,44 @@ export const value = phantom;
                 result
                     .expect("an authenticated unwritten parameter proves the read input identity");
             } else {
-                let error = format!(
-                    "{:?}",
-                    result
-                        .err()
-                        .expect("a reassigned parameter must stay refused")
-                );
+                // The read cannot be proved. Since 2026-09-16 that *withdraws
+                // the operation* instead of refusing the artifact case: the
+                // export still publishes, stating one claim fewer, and the
+                // withdrawal is recorded by name. What this case has always
+                // pinned — that an unprovable parameter read is never
+                // published as a proven fact — is unchanged, and is now
+                // asserted against the document rather than against a refusal
+                // message.
                 let expected = if min == 0 || runtime == default_read { "original-input identity" } else { "tighter operation cardinality" };
-                assert!(error.contains(expected), "{error}");
+                let graph = result
+                    .expect("withdrawing the unprovable read leaves the case publishable");
+                let root = graph.root();
+                let withheld = root.withheld_operations();
+                // The semantic model spells an operation id in full; the wire
+                // form shortens it to `read-0` when it compacts the summary.
+                assert!(
+                    withheld.iter().any(|record| record
+                        .operation
+                        .ends_with(":value:operation:read-0")
+                        && record.export == "value"
+                        && record.reason.contains(expected)),
+                    "{withheld:?}"
+                );
+                let published: serde_json::Value =
+                    serde_json::from_slice(root.canonical_main()).expect("published main is JSON");
+                let states_the_read = published["summaries"]
+                    .as_object()
+                    .expect("summaries")
+                    .values()
+                    .any(|summary| {
+                        summary["call"]["operations"]
+                            .as_array()
+                            .is_some_and(|operations| !operations.is_empty())
+                    });
+                assert!(
+                    !states_the_read,
+                    "the withdrawn read must not survive into the published document"
+                );
             }
         }
     }

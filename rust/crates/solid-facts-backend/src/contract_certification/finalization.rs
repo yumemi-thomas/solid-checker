@@ -28,6 +28,7 @@ pub struct FinalizedPolicy2Contract {
     /// material: the canonical main already says those domains are open, and
     /// the receipt binds nothing about them.
     withheld_closures: Vec<super::WithheldClosure>,
+    withheld_operations: Vec<super::WithheldOperation>,
 }
 
 impl FinalizedPolicy2Contract {
@@ -43,6 +44,26 @@ impl FinalizedPolicy2Contract {
 
     pub(super) fn with_withheld_closures(mut self, withheld: Vec<super::WithheldClosure>) -> Self {
         self.withheld_closures = withheld;
+        self
+    }
+
+    /// The operations this transaction withdrew from the document it
+    /// published, because a positive fact they state could not be certified.
+    ///
+    /// Reported for the same reason `withheld_closures` is: a certified
+    /// contract weaker than the proposal it came from must say so, or the
+    /// weakening is indistinguishable from a generator that never made the
+    /// claim.
+    #[must_use]
+    pub fn withheld_operations(&self) -> &[super::WithheldOperation] {
+        &self.withheld_operations
+    }
+
+    pub(super) fn with_withheld_operations(
+        mut self,
+        withheld: Vec<super::WithheldOperation>,
+    ) -> Self {
+        self.withheld_operations = withheld;
         self
     }
 
@@ -253,6 +274,7 @@ pub(super) fn finalize_value_only_with_dependencies(
         authenticated,
         trust_configuration,
         withheld_closures: Vec::new(),
+        withheld_operations: Vec::new(),
     })
 }
 

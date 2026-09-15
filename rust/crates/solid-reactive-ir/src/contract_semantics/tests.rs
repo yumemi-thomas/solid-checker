@@ -156,6 +156,81 @@ fn artifact_case(id: &str) -> ArtifactCase {
     }
 }
 
+/// Withdrawing an operation the census could not certify has to leave the
+/// export publishable and the domain that listed it *open*: a shorter list
+/// still marked closed would assert an absence nothing established, which is a
+/// stronger claim than the one being withdrawn.
+#[test]
+fn withholding_an_operation_opens_its_domain_and_takes_its_dependents() {
+    let case = artifact_case("server-import");
+    let mut read = operation("read-0", OperationKind::Read);
+    let mut dependent = operation("write-0", OperationKind::Write);
+    dependent.trigger = Some(Trigger::Operation(OperationId("read-0".into())));
+    let mut untouched = operation("create-0", OperationKind::Create);
+    untouched.trigger = Some(Trigger::Event(Event::Call));
+    read.inputs.push(ValueShape::Parameter {
+        index: 0,
+        path: vec!["contains".into()],
+    });
+    let mut semantics = call(vec![read, dependent, untouched], vec![]);
+    semantics.edges.push(OperationEdge {
+        kind: EdgeKind::Orders,
+        from: OperationId("read-0".into()),
+        to: OperationId("create-0".into()),
+    });
+    let mut export = export(&case, "contains", ValueShape::Unknown, semantics);
+    assert!(export.call.claims.reads.is_closed());
+
+    let withdrawn = export.withhold_operations(&BTreeSet::from([OperationId("read-0".into())]));
+
+    assert_eq!(
+        withdrawn,
+        BTreeSet::from([OperationId("read-0".into()), OperationId("write-0".into())]),
+        "an operation triggered by a withdrawn one describes nothing either"
+    );
+    let ids = export
+        .call
+        .operations
+        .iter()
+        .map(|operation| operation.id.0.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        ids,
+        vec!["create-0"],
+        "only the unrelated operation survives"
+    );
+    assert!(
+        export.call.edges.is_empty(),
+        "an edge touching a withdrawn operation is removed"
+    );
+    assert!(
+        !export.call.claims.reads.is_closed(),
+        "the domain that listed the withdrawn operation is opened"
+    );
+    assert!(
+        export.call.claims.reads.items().is_empty(),
+        "and no longer lists it"
+    );
+    assert!(
+        !export.call.claims.writes.is_closed(),
+        "so is the domain that listed the cascade"
+    );
+    assert!(
+        export.call.claims.creates.is_closed(),
+        "a domain that listed nothing withdrawn keeps its closure"
+    );
+
+    // An id this export does not carry is not a withdrawal, and changes
+    // nothing: the caller learns that from the empty return rather than from a
+    // document that quietly lost a closure.
+    let mut untouched_export = export.clone();
+    let none =
+        untouched_export.withhold_operations(&BTreeSet::from([OperationId("absent".into())]));
+    assert!(none.is_empty());
+    assert_eq!(untouched_export.call.operations.len(), 1);
+    assert!(untouched_export.call.claims.creates.is_closed());
+}
+
 fn proposal_with(shape: ValueShape, call: CallSemantics) -> ContractProposal {
     let mut case = artifact_case("server-import");
     let export = export(&case, "createResource", shape, call);

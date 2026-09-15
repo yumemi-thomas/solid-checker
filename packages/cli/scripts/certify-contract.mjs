@@ -697,6 +697,11 @@ function certificationPlannings(generated, artifactSnapshot, options = null) {
 /// already says the withheld domains are open.
 export const WITHHELD_CLOSURE_MARKER = "solid-checker:withheld-closure=";
 
+/// The rung below it: one operation the transaction withdrew from the document
+/// it published, because a positive fact the operation states could not be
+/// certified. A certified contract weaker than its proposal has to say so.
+export const WITHHELD_OPERATION_MARKER = "solid-checker:withheld-operation=";
+
 const CLOSURE_CANDIDATE_MARKER = "solid-checker:closure-candidates=";
 const CERTIFIED_CLOSURE_MARKER = "solid-checker:certified-closures=";
 
@@ -779,6 +784,31 @@ export function closureCandidatesFromNativeOutput(stdout) {
       )
       .slice(0, 64)
   };
+}
+
+export function withheldOperationsFromNativeOutput(stdout) {
+  const records = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(WITHHELD_OPERATION_MARKER)) continue;
+    try {
+      const record = JSON.parse(trimmed.slice(WITHHELD_OPERATION_MARKER.length));
+      if (
+        record &&
+        typeof record === "object" &&
+        typeof record.artifactCase === "string" &&
+        typeof record.export === "string" &&
+        typeof record.operation === "string" &&
+        typeof record.reason === "string"
+      ) {
+        records.push(record);
+      }
+    } catch {
+      // A malformed diagnostic line is not authority for anything and never
+      // fails a transaction, exactly as the closure marker's is not.
+    }
+  }
+  return records;
 }
 
 export function withheldClosuresFromNativeOutput(stdout) {
@@ -1772,6 +1802,7 @@ async function executePreparedPublishedGraphs({
     authority: "native-certification-complete",
     catalogRoot,
     withheldClosures: withheldClosuresFromNativeOutput(child.stdout),
+    withheldOperations: withheldOperationsFromNativeOutput(child.stdout),
     closureCandidates: closureCandidatesFromNativeOutput(child.stdout),
     certifiedClosures: certifiedClosuresFromNativeOutput(child.stdout)
   };
@@ -3082,6 +3113,7 @@ async function executeNativeCertification({
     authority: "native-certification-complete",
     catalogRoot,
     withheldClosures: withheldClosuresFromNativeOutput(child.stdout),
+    withheldOperations: withheldOperationsFromNativeOutput(child.stdout),
     closureCandidates: closureCandidatesFromNativeOutput(child.stdout),
     certifiedClosures: certifiedClosuresFromNativeOutput(child.stdout)
   };
@@ -3423,6 +3455,7 @@ function writeAudit(
   stageDurationsMs,
   graphPreparation = null,
   withheldClosures = [],
+  withheldOperations = [],
   probeCorpus = null
 ) {
   if (!path) return;
@@ -3449,6 +3482,7 @@ function writeAudit(
         graphPreparation,
         refusals: refusal.refusals ?? [],
         withheldClosures,
+        withheldOperations,
         // The probe recipe corpus this run was given, or `null` when it was given
         // none. It qualifies every `no recipe in corpus` record above: with a
         // corpus, that reason is a finding about the closure, reached after the
@@ -3509,6 +3543,7 @@ function writeSuccessAudit(
   stageDurationsMs,
   graphPreparation = null,
   withheldClosures = [],
+  withheldOperations = [],
   plannedProposal = null,
   closureCandidates = null,
   certifiedClosures = null,
@@ -3534,6 +3569,10 @@ function writeSuccessAudit(
     // had to carry, and the reason. The certified contract leaves those
     // domains open; this is the record of why.
     withheldClosures,
+    // The rung below them: operations withdrawn from the published document
+    // because a positive fact they state could not be certified. The export
+    // still publishes, its domain open, stating one claim fewer.
+    withheldOperations,
     // The probe recipe corpus this run was given, or `null` when it was given
     // none. It qualifies every `no recipe in corpus` record above: with a
     // corpus, that reason is a finding about the closure, reached after the
@@ -3668,6 +3707,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
   // it — reused from disk or regenerated here. Read for the audit only.
   let plannedProposalPath = null;
   let withheldClosures = [];
+  let withheldOperations = [];
   let closureCandidates = null;
   let certifiedClosures = null;
   const stageDurationsMs = {};
@@ -3828,6 +3868,9 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
         }),
         certify: async ({ witnesses }) => measure("certification", async () => {
           requireProduct(witnesses, "certification", "native-certification-complete");
+          withheldOperations = Array.isArray(witnesses?.withheldOperations)
+            ? witnesses.withheldOperations
+            : [];
           withheldClosures = Array.isArray(witnesses?.withheldClosures)
             ? witnesses.withheldClosures
             : [];
@@ -3895,6 +3938,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       stageDurationsMs,
       { ...(graphPreparation ?? {}), reusedProposal },
       withheldClosures,
+      withheldOperations,
       plannedProposalPath ? plannedClosureSummary(plannedProposalPath) : null,
       closureCandidates,
       certifiedClosures,
@@ -3921,6 +3965,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       // as much as a certified one.
       reusedProposal ? { ...(graphPreparation ?? {}), reusedProposal: true } : graphPreparation,
       withheldClosures,
+      withheldOperations,
       options.probeRecipeCorpus ? resolve(options.probeRecipeCorpus) : null
     );
     throw refusal;

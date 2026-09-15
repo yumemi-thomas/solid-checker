@@ -1177,6 +1177,17 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
 /// itself already says the domain is open, so nothing here is authority.
 const WITHHELD_CLOSURE_MARKER: &str = "solid-checker:withheld-closure=";
 
+/// One stdout line per operation a transaction withdrew from the document it
+/// published, because a positive fact the operation states could not be
+/// certified.
+///
+/// The rung below `withheldClosures`, and reported for the same reason: a
+/// certified contract weaker than the proposal it came from has to say so, or
+/// the weakening is indistinguishable from a generator that never made the
+/// claim — `docs/precision-backlog.md` § "A certified contract can be weaker
+/// than the proposal it came from".
+const WITHHELD_OPERATION_MARKER: &str = "solid-checker:withheld-operation=";
+
 /// One stdout line naming every closure candidate the *planner* derived from
 /// the proposal, before any gating.
 ///
@@ -1290,6 +1301,25 @@ fn report_withheld_closures(
             );
         }
         println!("{WITHHELD_CLOSURE_MARKER}{record}");
+    }
+    for withheld in finalized.withheld_operations() {
+        let mut record = serde_json::json!({
+            "artifactCase": withheld.artifact_case,
+            "export": withheld.export,
+            "operation": withheld.operation,
+            "reason": withheld.reason,
+        });
+        if let (Some(object), Some(node)) = (record.as_object_mut(), node) {
+            object.insert(
+                "node".into(),
+                serde_json::json!({
+                    "package": node.package_name,
+                    "version": node.package_version,
+                    "digest": node.digest(),
+                }),
+            );
+        }
+        println!("{WITHHELD_OPERATION_MARKER}{record}");
     }
     Ok(())
 }

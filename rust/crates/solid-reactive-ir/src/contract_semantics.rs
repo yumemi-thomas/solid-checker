@@ -736,6 +736,136 @@ impl ExportSemantics {
         }
     }
 
+    /// Clears `composed_from` naming any withdrawn `(export, operation)` of
+    /// this artifact case.
+    ///
+    /// The sibling half of [`Self::withhold_operations`], which can only see
+    /// its own export. Provenance is an *additional* discharge route, never the
+    /// only one, so clearing it weakens the document and never strengthens it.
+    pub fn clear_composed_provenance(&mut self, withdrawn: &BTreeSet<(String, OperationId)>) {
+        for operation in &mut self.call.operations {
+            if operation.composed_from.as_ref().is_some_and(|composed| {
+                withdrawn.contains(&(composed.export.clone(), composed.operation.clone()))
+            }) {
+                operation.composed_from = None;
+            }
+        }
+    }
+
+    /// Withdraws operations whose positive facts no census could certify, and
+    /// opens every domain that listed one.
+    ///
+    /// This is the weakening below [`Self::open_call_domains`]. Opening a
+    /// domain keeps every operation and only stops claiming the enumeration is
+    /// exhaustive; this *removes* an operation the document should never have
+    /// stated, and then opens its domain for the same reason — a shorter list
+    /// still marked closed would assert an absence the census never
+    /// established, which is a stronger claim than the one being withdrawn.
+    ///
+    /// The withdrawal is transitive within the export, because a reference to
+    /// a withdrawn operation describes nothing:
+    ///
+    /// - an operation triggered by a withdrawn one goes with it;
+    /// - an edge touching a withdrawn operation is removed;
+    /// - a callback invocation naming a withdrawn operation, or sourced from
+    ///   its output, is removed and opens `callbacks`;
+    /// - `composed_from` naming a withdrawn operation of *this* export is
+    ///   cleared, which only removes a discharge route and never adds one.
+    ///
+    /// Returns every id actually withdrawn, the seeds included, so a caller
+    /// can record the cascade rather than infer it. An id this export does not
+    /// carry contributes nothing.
+    pub fn withhold_operations(&mut self, seeds: &BTreeSet<OperationId>) -> BTreeSet<OperationId> {
+        let mut gone: BTreeSet<OperationId> = self
+            .call
+            .operations
+            .iter()
+            .filter(|operation| seeds.contains(&operation.id))
+            .map(|operation| operation.id.clone())
+            .collect();
+        loop {
+            let cascade: BTreeSet<OperationId> = self
+                .call
+                .operations
+                .iter()
+                .filter(|operation| !gone.contains(&operation.id))
+                .filter(|operation| match &operation.trigger {
+                    Some(Trigger::Operation(trigger)) => gone.contains(trigger),
+                    _ => false,
+                })
+                .map(|operation| operation.id.clone())
+                .collect();
+            if cascade.is_empty() {
+                break;
+            }
+            gone.extend(cascade);
+        }
+        if gone.is_empty() {
+            return gone;
+        }
+        let mut opened: BTreeSet<ClaimDomain> = BTreeSet::new();
+        for domain in ClaimDomain::ALL {
+            let Some(claim) = self.call.claims.operation_claim_mut(domain) else {
+                continue;
+            };
+            let removed = match claim {
+                KnowledgeSet::Unknown => continue,
+                KnowledgeSet::Partial(items) | KnowledgeSet::Complete(items) => {
+                    let before = items.len();
+                    items.retain(|id| !gone.contains(id));
+                    before != items.len()
+                }
+            };
+            if !removed {
+                continue;
+            }
+            // A domain emptied by the withdrawal is *unknown*, not an empty
+            // list. `Complete([])` proves the domain has no operations and
+            // `Partial([])` is refused outright ("partial knowledge must
+            // contain positive evidence"); the truth after withdrawing the
+            // only thing it listed is that this document no longer says.
+            if claim.items().is_empty() {
+                *claim = KnowledgeSet::Unknown;
+            }
+            opened.insert(domain);
+        }
+        let sourced_from_gone = |source: &ValueSource| match source {
+            ValueSource::OperationOutput { operation, .. } => gone.contains(operation),
+            _ => false,
+        };
+        let callbacks_changed = match &mut self.call.claims.callbacks {
+            KnowledgeSet::Unknown => false,
+            KnowledgeSet::Partial(items) | KnowledgeSet::Complete(items) => {
+                let before = items.len();
+                items.retain(|invocation| {
+                    !gone.contains(&invocation.operation) && !sourced_from_gone(&invocation.from)
+                });
+                before != items.len()
+            }
+        };
+        if callbacks_changed {
+            if self.call.claims.callbacks.items().is_empty() {
+                self.call.claims.callbacks = KnowledgeSet::Unknown;
+            }
+            opened.insert(ClaimDomain::Callbacks);
+        }
+        self.call
+            .operations
+            .retain(|operation| !gone.contains(&operation.id));
+        self.call
+            .edges
+            .retain(|edge| !gone.contains(&edge.from) && !gone.contains(&edge.to));
+        for operation in &mut self.call.operations {
+            if operation.composed_from.as_ref().is_some_and(|composed| {
+                composed.export == self.identity.public_name && gone.contains(&composed.operation)
+            }) {
+                operation.composed_from = None;
+            }
+        }
+        self.open_call_domains(opened);
+        gone
+    }
+
     #[must_use]
     pub fn unresolved_call_claims(&self) -> Vec<ClaimPath> {
         ClaimDomain::ALL

@@ -761,6 +761,9 @@ struct PlannedGraphNode {
     /// What recipe-gated planning withheld from this node's plan; empty until
     /// [`PublishedContractGraphPlan::recipe_gated`] derives the gated graph.
     withheld: Vec<super::WithheldClosure>,
+    /// The operations this node's plan was weakened by, carried so the
+    /// published result can report them exactly as it reports `withheld`.
+    withheld_operations: Vec<super::WithheldOperation>,
     /// The proposal this node was **planned** with — the one its identity's
     /// `semantic_digest` names and every parent's closure edge accepted.
     /// Recipe gating replaces `plan` with a plan over a weakened proposal; this
@@ -972,7 +975,12 @@ impl PublishedContractGraphPlan {
         &self,
         recipe_corpus: Option<&Path>,
     ) -> Result<Self, PublishedGraphCertificationError> {
-        self.recipe_gated_per_node(&BTreeMap::new(), recipe_corpus, &BTreeMap::new())
+        self.recipe_gated_per_node(
+            &BTreeMap::new(),
+            recipe_corpus,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        )
     }
 
     /// [`Self::recipe_gated`] with ADR 0036's per-node inputs: the corpus and
@@ -984,6 +992,7 @@ impl PublishedContractGraphPlan {
         synthesized: &BTreeMap<String, super::synthesized_vetoes::SynthesizedCorpus>,
         base_corpus: Option<&Path>,
         already_withheld: &BTreeMap<String, Vec<super::WithheldClosure>>,
+        withheld_operations: &BTreeMap<String, Vec<super::WithheldOperation>>,
     ) -> Result<Self, PublishedGraphCertificationError> {
         // Nodes gate independently, and a wide graph re-gates every one of
         // them on every pass (616 nodes × 12 passes on `corvu@0.7.2`), so the
@@ -999,9 +1008,10 @@ impl PublishedContractGraphPlan {
                     .or(base_corpus);
                 let (plan, withheld) = node
                     .plan
-                    .recipe_gated_with(
+                    .recipe_gated_with_operations(
                         corpus,
                         already_withheld.get(digest).map_or(&[], Vec::as_slice),
+                        withheld_operations.get(digest).map_or(&[], Vec::as_slice),
                     )
                     .map_err(
                         |source| PublishedGraphCertificationError::RecipeGatingAtNode {
@@ -1020,6 +1030,10 @@ impl PublishedContractGraphPlan {
                     dependencies: node.dependencies.clone(),
                     source_dependencies: node.source_dependencies.clone(),
                     withheld,
+                    withheld_operations: withheld_operations
+                        .get(digest)
+                        .cloned()
+                        .unwrap_or_default(),
                     accepted_candidate: node.accepted_candidate.clone(),
                 })
             },
@@ -1173,7 +1187,9 @@ impl PublishedContractGraphPlan {
             })?;
             finalized.push(FinalizedGraphNode {
                 identity: node.identity.clone(),
-                finalized: contract.with_withheld_closures(node.withheld.clone()),
+                finalized: contract
+                    .with_withheld_closures(node.withheld.clone())
+                    .with_withheld_operations(node.withheld_operations.clone()),
             });
         }
         if !withdrawals.is_empty() {
@@ -1304,6 +1320,10 @@ fn certify_graphs_with_recipe_gating(
         .collect::<BTreeSet<_>>();
     let passes = candidate_count + type_facts_nodes.len() + 2;
     let mut already_withheld = BTreeMap::<String, Vec<super::WithheldClosure>>::new();
+    // The rung below it, per node: operations whose own stated facts the
+    // census refused. Each pass withdraws at least one more by name, so the
+    // graph loop stays bounded.
+    let mut withheld_operations = BTreeMap::<String, Vec<super::WithheldOperation>>::new();
     let mut synthesized = BTreeMap::<String, super::synthesized_vetoes::SynthesizedCorpus>::new();
     let mut synthesis_attempted = BTreeSet::new();
     let base_corpus = probes.map(super::ProbeHarnessConfiguration::recipe_corpus);
@@ -1324,7 +1344,14 @@ fn certify_graphs_with_recipe_gating(
         let pass_started = std::time::Instant::now();
         let gated = graphs
             .iter()
-            .map(|graph| graph.recipe_gated_per_node(&synthesized, base_corpus, &already_withheld))
+            .map(|graph| {
+                graph.recipe_gated_per_node(
+                    &synthesized,
+                    base_corpus,
+                    &already_withheld,
+                    &withheld_operations,
+                )
+            })
             .collect::<Result<Vec<_>, _>>()?;
         // Every Type Facts node stays in the request set on every pass, and
         // only the nodes whose demand-graph root moved are acquired again.
@@ -1373,6 +1400,31 @@ fn certify_graphs_with_recipe_gating(
                             .entry(digest.to_owned())
                             .or_default()
                             .extend(records);
+                        continue;
+                    }
+                    // No closure candidate at this node: withdraw the
+                    // operation whose own stated fact the census refused. A
+                    // record already held is not progress, so it does not
+                    // count and the graph refuses instead of looping.
+                    let held = withheld_operations
+                        .get(digest)
+                        .map_or(&[][..], Vec::as_slice);
+                    let operations = super::positive_fact_refusal_withholding(&node.plan, &source)
+                        .into_iter()
+                        .filter(|record| {
+                            !held.iter().any(|existing| {
+                                existing.artifact_case == record.artifact_case
+                                    && existing.export == record.export
+                                    && existing.operation == record.operation
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    withdrawn += operations.len();
+                    if !operations.is_empty() {
+                        withheld_operations
+                            .entry(digest.to_owned())
+                            .or_default()
+                            .extend(operations);
                     }
                 }
                 if withdrawn == 0 {
@@ -2578,6 +2630,7 @@ fn plan_graph_node(
         dependencies: Vec::new(),
         source_dependencies,
         withheld: Vec::new(),
+        withheld_operations: Vec::new(),
         accepted_candidate,
     })
 }
