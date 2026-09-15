@@ -2303,16 +2303,24 @@ fn a_percent_escaped_file_url_names_the_same_file() {
 
 #[test]
 fn an_export_condition_that_is_not_a_plain_name_refuses_before_it_reaches_the_interpreter() {
-    // Requested conditions arrive from the certification request and are
-    // interpolated into a `--conditions=` flag and into the observation
-    // packages' manifests, so a name outside the conservative charset refuses
-    // rather than being passed through.
+    // Requested conditions arrive from the certification request and reach a
+    // `--conditions=` argv element, a JSON value in the observation manifest,
+    // and the `,`-joined `reproduction-conditions:` identity component. The
+    // last is the only one that constrains the charset, and only against `,`;
+    // the rest of this list is well-formedness, kept because these are the
+    // spellings that would matter again if a condition ever reached a path.
     for condition in [
         "",
         "with space",
         "with\"quote",
         "with\nnewline",
-        "a/b",
+        "with,comma",
+        "/leading",
+        "trailing/",
+        "a//b",
+        "a/./b",
+        "a/../b",
+        "@scope/a/b",
         &"x".repeat(65),
     ] {
         let error =
@@ -2323,7 +2331,19 @@ fn an_export_condition_that_is_not_a_plain_name_refuses_before_it_reaches_the_in
             "unexpected error for {condition:?}: {error}"
         );
     }
-    for condition in ["import", "module-sync", "react-server", "node_18", "v1.2"] {
+    // The scoped form Node admits and packages use. `@tanstack/custom-condition`
+    // is a real condition of `@tanstack/solid-query` and
+    // `@tanstack/solid-query-persist-client`; refusing it withheld 408 closures
+    // across those two rows on 2026-09-15, 108 of them `returns`.
+    for condition in [
+        "import",
+        "module-sync",
+        "react-server",
+        "node_18",
+        "v1.2",
+        "a/b",
+        "@tanstack/custom-condition",
+    ] {
         plain_condition_name(condition).expect("a plain condition name is accepted");
     }
 }

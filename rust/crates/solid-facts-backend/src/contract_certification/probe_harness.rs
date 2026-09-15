@@ -301,13 +301,13 @@ const cjs = createRequire(import.meta.url);
 const resolveModule = import.meta.resolve;
 const esm = [];
 const required = [];
-for (const condition of process.argv.slice(2)) {
-  const specifier = `solid-checker-probe-condition-${condition}`;
+for (const index of process.argv.slice(2)) {
+  const specifier = `solid-checker-probe-condition-${index}`;
   try {
-    if (resolveModule(specifier).endsWith("/applied.mjs")) esm.push(condition);
+    if (resolveModule(specifier).endsWith("/applied.mjs")) esm.push(index);
   } catch {}
   try {
-    if (cjs.resolve(specifier).endsWith("/applied.mjs")) required.push(condition);
+    if (cjs.resolve(specifier).endsWith("/applied.mjs")) required.push(index);
   } catch {}
 }
 process.stdout.write(`esm:${esm.join(",")}\nrequire:${required.join(",")}\n`);
@@ -1747,15 +1747,34 @@ fn requested_conditions(plan: &CertificationPlan) -> Result<Vec<String>, ProbeHa
     Ok(conditions)
 }
 
-/// One plain export-condition name, refused unless it is safe to interpolate
-/// into an interpreter flag and into a package manifest.
+/// One export-condition name, refused unless it is safe in every channel it
+/// still reaches.
+///
+/// It reaches three: a `--conditions=` argv element (no shell, so nothing is
+/// special there), a JSON *value* in the observation manifest (serde escapes
+/// it), and the `,`-joined `reproduction-conditions:` component of the probe
+/// gate's identity. Only the last constrains the charset, and only against `,`.
+///
+/// The scoped form is admitted because Node admits it and packages use it:
+/// `@tanstack/custom-condition` is a real condition of two corpus rows, and
+/// refusing it withheld 408 closures — 108 of them `returns` — for a reason
+/// that was never about the condition. It used to reach a directory path and an
+/// npm package name; `observe_conditions_in` now names those by candidate
+/// index, so `/` is no longer a path separator anywhere here. A leading or
+/// trailing `/`, an empty segment, and `.`/`..` as segments stay refused: they
+/// are not well-formed scoped names, and they are the spellings that would
+/// matter again if this ever reached a path.
 fn plain_condition_name(condition: &str) -> Result<(), ProbeHarnessError> {
-    if condition.is_empty()
-        || condition.len() > 64
-        || !condition.bytes().all(
-            |byte| matches!(byte, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'.' | b'_'),
-        )
-    {
+    let well_formed = !condition.is_empty()
+        && condition.len() <= 64
+        && condition.bytes().all(|byte| {
+            matches!(byte, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'@' | b'/')
+        })
+        && condition
+            .split('/')
+            .all(|segment| !segment.is_empty() && segment != "." && segment != "..")
+        && condition.matches('/').count() <= 1;
+    if !well_formed {
         return Err(ProbeHarnessError::Configuration(format!(
             "export condition {condition:?} is not a plain condition name, so it cannot be given \
              to the pinned interpreter"
@@ -1849,14 +1868,33 @@ fn observe_conditions_in(
         &asker.join(PRIVATE_PACKAGE_SCOPE_MANIFEST_NAME),
         PRIVATE_PACKAGE_SCOPE_MANIFEST,
     )?;
-    for condition in candidates {
-        let name = format!("{CONDITION_PACKAGE_PREFIX}{condition}");
+    // The package is named by the candidate's **index**, never by the condition
+    // itself. A community condition is a scoped name (`@tanstack/custom-condition`
+    // is the corpus's), and interpolating one here put a `/` into a directory
+    // path and into an npm package name that then cannot resolve — which is why
+    // `plain_condition_name` refused the whole charset and, with it, every probe
+    // of the two `@tanstack` rows: 408 withheld closures on 2026-09-15, 108 of
+    // them `returns`. The index carries no such characters, so the condition
+    // string now appears in exactly one place, as a JSON value serde escapes.
+    for (index, condition) in candidates.iter().enumerate() {
+        let name = format!("{CONDITION_PACKAGE_PREFIX}{index}");
         let package = modules.join(&name);
         fs::create_dir(&package)?;
+        // Written by hand rather than with `serde_json::json!`, because an
+        // `exports` conditions object is **ordered**: Node takes the first key
+        // that matches, and serde_json's default map sorts them, which puts
+        // `"default"` ahead of almost every condition name and answers every
+        // candidate `unapplied`. Only the condition needs escaping, and
+        // `to_string` on a `str` is exactly a quoted, escaped JSON string.
+        let key = serde_json::to_string(condition).map_err(|error| {
+            ProbeHarnessError::Configuration(format!(
+                "export condition {condition:?} cannot be written into a manifest: {error}"
+            ))
+        })?;
         write_private_file(
             &package.join("package.json"),
             format!(
-                "{{\"name\":\"{name}\",\"exports\":{{\".\":{{\"{condition}\":\
+                "{{\"name\":\"{name}\",\"exports\":{{\".\":{{{key}:\
                  \"./applied.mjs\",\"default\":\"./unapplied.mjs\"}}}}}}\n"
             )
             .as_bytes(),
@@ -1878,8 +1916,10 @@ fn observe_conditions_in(
         command.arg(format!("--conditions={condition}"));
     }
     command.arg(&script);
-    for condition in candidates {
-        command.arg(condition);
+    // Indices, matching the packages written above. The observer never sees a
+    // condition name, so nothing it prints can collide with its own separators.
+    for index in 0..candidates.len() {
+        command.arg(index.to_string());
     }
     command
         .current_dir(directory)
@@ -1916,16 +1956,24 @@ fn observe_conditions_in(
                 ))
             })?;
         let mut applied = Vec::new();
-        for condition in line.split(',').filter(|value| !value.is_empty()) {
+        for index in line.split(',').filter(|value| !value.is_empty()) {
             // Only what it was asked about: an answer naming anything else is
-            // not an answer to this question.
-            if !candidates.contains(&condition) {
-                return Err(ProbeHarnessError::NodeProvenance(format!(
-                    "the pinned Node executable reported export condition {condition:?}, which it \
-                     was not asked about"
-                )));
-            }
-            applied.push(condition.to_owned());
+            // not an answer to this question. The interpreter answers in the
+            // indices it was given, so this is a bounds check on the same
+            // candidate list rather than a name lookup — and an index is the
+            // one spelling that cannot collide with the `,` this line splits
+            // on, whatever a package chose to call its condition.
+            let condition = index
+                .parse::<usize>()
+                .ok()
+                .and_then(|index| candidates.get(index))
+                .ok_or_else(|| {
+                    ProbeHarnessError::NodeProvenance(format!(
+                        "the pinned Node executable reported export-condition candidate \
+                         {index:?}, which it was not asked about"
+                    ))
+                })?;
+            applied.push((*condition).to_owned());
         }
         applied.sort();
         applied.dedup();
