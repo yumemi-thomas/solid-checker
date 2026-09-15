@@ -525,3 +525,54 @@ This is the highest-value item in the document: `@kobalte/utils` carries
 `mergeDefaultProps` (254 consumer sites), `callHandler` (112) and
 `createGenerateId` (60) — 426 sites across three exports, at the top of § 5's
 worklist, and all 124 of its withheld claims are this one wall.
+
+## 20. The `noRecipe` bucket is roughly half a mirage
+
+§ 13 counted 691 `no recipe in corpus` claims and § 16 called them 691
+hand-authored observations. Writing three of them says that estimate is too
+high, and names why.
+
+Scaffolding `@solid-primitives/utils@7.0.0-next.4`'s `reads` gaps produced **17
+serviceable candidates and 7 the scaffold could already name as unserviceable**
+(`property-access-unknown-accessor`, `iteration-protocol` and `coercion` premises
+the census refuses — no recipe serves one). Three of the 17 were finished by
+hand, chosen by consumer demand: `entries` (37 sites), `keys` (22),
+`tryOnCleanup` (37). All three artifact cases carry **no
+`runtime-accessor-installation` hazard**, which is the documented precondition
+for a short recipe and the same one the checked-in corvu recipes cite.
+
+Certifying against them:
+
+| export | before | after |
+| --- | --- | --- |
+| `entries` | `no recipe in corpus` | `census refused: … reasons=["callSignatureNotUnique"]` |
+| `keys` | `no recipe in corpus` | `census refused: … reasons=["callSignatureNotUnique"]` |
+| `tryOnCleanup` | `no recipe in corpus` | `no recipe in corpus` (claim id moved, below) |
+
+**Two of the three are unserviceable, and only writing the recipe revealed it.**
+`entries` and `keys` are `Object.entries` and `Object.keys` in the published
+bytes — overloaded built-ins, so the runtime implementation transcript has no
+unique call signature and the census refuses whatever a recipe observes. This is
+the throwing scaffold working exactly as designed: a candidate withheld as
+`no recipe` is weakened out of the plan before its demands are discharged, so a
+refusal underneath stays masked until a recipe puts it back.
+
+The scaffold's own header measured the same ratio on this package from the other
+direction — 45 scaffolds, 24 census-refused, 21 worth finishing. Two of three
+here agrees with it. So of the 691 `noRecipe` claims, expect **roughly half to
+unmask as census gaps** rather than resolve into observations: the recipe backlog
+is nearer 350 claims, and an equal number are really census work wearing a
+recipe's label. Neither estimate should be trusted further than the one package
+both measurements come from.
+
+**A gotcha worth recording: claim ids are not stable across corpus changes.**
+`tryOnCleanup` scaffolded as `claim:v1:sha256:7780abb2…` and certified as
+`claim:v1:sha256:4168c6d8…`. The id is content-addressed over the proposal, and
+admitting the `entries` and `keys` candidates changed the proposal, which moved
+every id in it. Scaffold against the audit of the run the corpus will actually
+be used with, and re-scaffold after any change that admits or weakens a
+candidate.
+
+Nothing from this experiment is committed to `probe-recipes/`: two of the three
+address claims no recipe can serve, and the third addresses an id that no longer
+exists.
