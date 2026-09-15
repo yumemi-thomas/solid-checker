@@ -1051,3 +1051,93 @@ result, so adding the row would move no finding here.
 not. The § 15 ceiling stands at 1.5% with no lever behind it, and the honest
 next question is the one § 15 already posed: whether the checker's
 contract-independent rules are where the value is.
+
+## 20. The contract-independent rules, measured against the corpus
+
+§ 15 measured what package contracts deliver. This measures what the rest of the
+checker delivers on the same code, so the two can be compared.
+
+### Method
+
+A fresh `make build-checker-release` — the previous release binary predated
+three Rust commits — run over every `tsconfig.json` in `corvu`, `kobalte` and
+`solid-docs` (31 projects, 861 `.ts`/`.tsx` source files), default settings, no
+presets, no accepted contracts. Findings deduplicated on `(rule, path, exact
+span)`, because the monorepo roots re-include their packages' sources and the
+raw total double-counts by roughly half.
+
+`solid-primitives`, the fourth demand root, is not checked out here; this is
+three of the four.
+
+### Result: 965 unique findings
+
+| rule | total | violation | uncertifiable | files |
+| --- | ---: | ---: | ---: | ---: |
+| `SC9005` package-contract-incomplete **[contract]** | 465 | 0 | 465 | 324 |
+| `SC1001` strict-read-untracked | 175 | 71 | 104 | 68 |
+| `SC9012` reactive-dispatch-unresolved | 149 | 0 | 149 | 58 |
+| `SC4001` missing-owner | 90 | 0 | 90 | 64 |
+| `SC7001` missing-effect-function | 42 | 0 | 42 | 34 |
+| `SC2001` reactive-write-in-owned-scope | 18 | 18 | 0 | 11 |
+| `SC8015` prefer-show *(preference)* | 9 | 9 | 0 | 4 |
+| `SC2003` no-direct-mutation | 9 | 9 | 0 | 2 |
+| `SC9011` reactive-source-uncaptured | 6 | 0 | 6 | 6 |
+| `SC1007` reactive-handler-frozen | 2 | 2 | 0 | 1 |
+
+**109 contract-independent violations** and 391 contract-independent
+uncertifiables, against 465 contract-dependent uncertifiables. By repository:
+kobalte 89, corvu 15, solid-docs 5; five of the 109 are in test files.
+
+Set against § 15: the contract pipeline produced 0 violations here and 465
+"cannot tell". The rules that need no contract produced 109 proven-defect
+claims. **That is the entire product-value comparison, and it is not close.**
+
+### Quality: one confirmed false-positive class
+
+`SC2003 no-direct-mutation` fires 9 times, all in `@kobalte/core`, and all nine
+are wrong:
+
+```tsx
+ref()!.style.transitionDuration = "0s";   // collapsible-content.tsx:107
+inputRef()!.value = formattedValue;       // number-field-root.tsx:291
+```
+
+`ref` is a signal accessor returning an `HTMLElement`. Writing
+`.style.transitionDuration` on a DOM element is ordinary, correct Solid —
+kobalte does it deliberately, with a comment explaining why. The finding claims
+*"Solid hands out a readonly proxy, so the write is dropped"* and hints *"Props
+are readonly by design"*, and neither applies: the write target is a DOM node,
+not a props or store proxy, and the write is not dropped. These are
+`kind: "violation"`, so they are proven-defect claims, not hedged ones.
+
+### A suspicion that did not survive testing
+
+Reading the `SC1001` findings in situ suggested a second false-positive class —
+signals read inside event handlers and inside `createEffect`. A minimal case
+says otherwise:
+
+| shape | fires? |
+| --- | --- |
+| signal read inside an event handler | **no** |
+| signal read inside `createEffect` | **no** |
+| signal read once at component setup | yes, `uncertifiable` |
+
+So `SC1001`'s core discrimination is right, and its 71 corpus violations are
+**unassessed**, not presumed wrong. Reading findings next to source is not
+evidence; this is the same mistake §§ 9–13 kept making, caught here before it
+reached a conclusion.
+
+### Two robustness notes
+
+`kobalte/packages/core` — the single most important project in the corpus —
+initially **refused outright**: `policy-2 acceptance receipt requires
+authenticated issuer provenance`. The cause was a `.solid-checker/` catalog
+directory left behind by this session's own certification runs. A stale catalog
+does not degrade to "ignore it and analyse anyway"; it fails the whole project.
+Moving the directory aside recovered all 149 of that project's findings.
+
+And `SC4001`'s 90 findings are all `uncertifiable` — "I cannot prove this effect
+has an owner", not "this effect leaks". The minimal case shows it firing on a
+`createEffect` inside an ordinary component. That is fail-closed behaviour
+working as specified, but from a user's seat 856 of the 965 findings say
+"cannot tell", and that ratio is the honest headline for the current output.
