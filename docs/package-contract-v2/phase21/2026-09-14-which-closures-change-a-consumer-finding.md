@@ -1141,3 +1141,101 @@ has an owner", not "this effect leaks". The minimal case shows it firing on a
 `createEffect` inside an ordinary component. That is fail-closed behaviour
 working as specified, but from a user's seat 856 of the 965 findings say
 "cannot tell", and that ratio is the honest headline for the current output.
+
+## 21. Assessing the 71 `SC1001` violations
+
+§ 20 left these unassessed after a suspicion about them failed a minimal test.
+They have now been assessed by reproduction rather than by reading.
+
+### The split
+
+| | count |
+| --- | ---: |
+| `"X" is read **directly** in C` | 42 |
+| `"X" is read **through** H in C` | 29 |
+
+and by the enclosing context the message names:
+
+| enclosing context | direct | through a helper |
+| --- | ---: | ---: |
+| `rendering function` (component setup) | 27 | 5 |
+| a named function — `onPointerDown`, `onHoverOutside`, `onInput`, `onFocus`, `onBlur`, `onItemLeave`, `toggle`, `focusContent`, `tabIndex`, `fill`, `stroke`, `borderWidth`, `strokeWidth`, `highlighted`, `half`, `open` … | 15 | **24** |
+
+### A reproduced false-positive class: one call of indirection drops the execution role
+
+Same file, same handler, same accessor, same element — the only difference is
+whether the read is direct or one call away:
+
+```tsx
+const [ref, setRef] = createSignal<HTMLElement>();
+const widthOf = () => ref()?.clientWidth;
+
+const onPointerDown = () => {
+  const direct = ref();          // silent — correct
+  const viaHelper = widthOf();   // SC1001 *violation*
+};
+
+return <div ref={setRef} onPointerDown={onPointerDown} />;
+```
+
+And the same asymmetry for a derived accessor used in JSX, which is the
+`tabIndex` / `fill` shape:
+
+```tsx
+const doubled = () => n() * 2;
+const direct = () => (n() > 0 ? 0 : -1);           // silent
+const viaHelper = () => (doubled() > 0 ? 0 : -1);  // SC1001 *violation*
+return <><span tabIndex={direct()} /><span tabIndex={viaHelper()} /></>;
+```
+
+Both reads are correct Solid: an event handler runs at event time and a derived
+accessor is tracked where JSX calls it. The direct read is exempted; the
+propagated one is not. The evidence line shows where it goes wrong — it judges
+the **call site** rather than the enclosing scope:
+
+```
+"ref" is a reactive accessor
+widthOf reads the reactive accessor
+the call to widthOf propagates that read into onPointerDown
+the call is outside every compiler-tracked JSX region and deferred callback
+```
+
+The last line is true of the *call* `widthOf()` and irrelevant: the call sits
+inside `onPointerDown`, whose role already exempts a direct read of the same
+accessor two lines above. Interprocedural propagation carries the read but not
+the role.
+
+**This accounts for the 24 via-helper findings in a named context.** The
+mechanism is verified on two shapes; that each of the 24 named contexts is
+genuinely fresh-at-call-time is inferred from the context name, not proven
+case by case.
+
+### What is not a false positive
+
+The 32 findings in a `rendering function` (27 direct, 5 through a helper) are
+the rule's core shape — a read at component setup, frozen — and nothing here
+contradicts them. The remaining 15 direct reads in named contexts are
+**unassessed**: minimal reproductions of two of their shapes (a read inside an
+arrow stored as an object property, and a prop bound to a native event handler)
+came back `uncertifiable` rather than `violation`, so the corpus versions prove
+something the minimal ones do not, and reading them is not evidence.
+
+### A separate observation: two rules, one span
+
+`SearchItem.tsx:18-19` carries `SC1001` *and* `SC1007` on the same spans, and a
+minimal case reproduces the pair. `SC1007` says the listener is installed once;
+`SC1001` says the read sees the current value once. On a prop bound to a native
+event handler those are close to the same claim about the same bytes. AGENTS.md
+permits a different claim about the same code and forbids a duplicate one, so
+this is worth deciding rather than leaving.
+
+### Revised corpus picture
+
+| | count |
+| --- | ---: |
+| reproduced false-positive class (role lost through a helper) | **24** |
+| core shape, setup-time reads, no evidence against | 32 |
+| unassessed | 15 |
+
+Against § 20's 100 contract-independent violations, a fix for the propagation
+asymmetry would remove about a quarter of them.
