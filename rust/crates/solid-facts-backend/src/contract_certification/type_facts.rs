@@ -5027,6 +5027,7 @@ fn value_shape_constructor(value: &ValueShape) -> &'static str {
             ..
         } => "reactive/setter",
         ValueShape::Store { .. } => "store",
+        ValueShape::MergedProps { .. } => "merged-props",
         ValueShape::Action { .. } => "action",
         ValueShape::Component => "component",
         ValueShape::Cleanup { .. } => "cleanup",
@@ -11000,9 +11001,19 @@ fn census_returns_domain(
     {
         return census_parameter_returns_transcript(implementation, *index).map_err(refuse);
     }
+    // ADR 0109's third shape: a props object carrying the caller's argument's
+    // reactivity. Placed after the whole-parameter arm, which is the narrower
+    // claim: a return that *is* the parameter is not a merge of it.
+    if let [operation] = proposed.items()
+        && let Some(operation) = export.operation(&operation.0)
+        && operation.kind == OperationKind::Return
+        && let Some(ValueShape::MergedProps { from }) = &operation.output
+    {
+        return census_merged_props_returns_transcript(implementation, *from).map_err(refuse);
+    }
     if !proposed.items().is_empty() {
         return Err(refuse(format!(
-            "a returns closure candidate must enumerate no operation or one whole-parameter return, but the proposal names {} unsupported operation(s)",
+            "a returns closure candidate must enumerate no operation, one whole-parameter return, or one merged props root, but the proposal names {} unsupported operation(s)",
             proposed.items().len()
         )));
     }
@@ -11050,8 +11061,27 @@ fn census_parameter_returns_transcript(
 /// The per-transcript half of [`census_returns_domain`]: the premises read off
 /// the implementation transcript alone, so they can be pinned against a
 /// synthesized transcript. `Err` is the refusal, by name and location.
-fn census_returns_transcript(
+/// ADR 0109's premises, read off the implementation transcript alone.
+///
+/// The claim is conditional — "property reads of the returned object reach
+/// through to the caller's argument at `from`" — so the census proves two
+/// things and refuses everything else by name: that **every** completion this
+/// export can reach is a props merge, and that the merge's one parameter-rooted
+/// source is the `from` the proposal names.
+///
+/// Deviation from the ADR, recorded there: its premise 4 required every *other*
+/// merge source to be an own literal. That was written to stop a consumer
+/// reading "reactive only if you passed a reactive argument" about an object
+/// that is always reactive — but the error it prevents is an **under**-report,
+/// which is the safe direction, and no producer fact proves an object literal
+/// inert (the argument tracer leaves an object literal's slot empty, which is
+/// indistinguishable from untraced). What survives is the part that is about
+/// this shape's expressiveness rather than about safety: two parameter-rooted
+/// sources are a claim this kind cannot spell, and picking one would be
+/// arbitrary, so they refuse.
+fn census_merged_props_returns_transcript(
     implementation: &typefacts::ExportImplementationTranscript,
+    from: u16,
 ) -> Result<Vec<String>, String> {
     let at = format!(
         "{}:{}..{}",
@@ -11059,6 +11089,142 @@ fn census_returns_transcript(
         implementation.location.start_byte,
         implementation.location.end_byte
     );
+    // Premise 1, and premises 4-5, are exactly the empty closure's: a plain
+    // completion form and a classified, present control-flow census. Shared
+    // rather than restated so the two arms cannot drift.
+    let control_flow = require_plain_classified_completion(implementation, &at)?;
+    let mut sites = Vec::new();
+    let mut reachable = 0_usize;
+    for site in &control_flow.returns {
+        // An unreachable completion performs nothing, as in ADR 0035.
+        if site.reach == Reachability::Unreachable {
+            sites.push(format!(
+                "census-return:{}:{}:{}:{}:value-unreachable",
+                site.location.path,
+                site.location.start_byte,
+                site.location.end_byte,
+                reachability_name(site.reach)
+            ));
+            continue;
+        }
+        // Premise 2. A bare completion yields `undefined`, which is not a props
+        // object, so it contradicts the claim outright rather than weakening it.
+        if site.value.is_none() {
+            return Err(format!(
+                "merged-props returns census refuses a valueless completion at {}:{}..{}: the \
+                 claim is that every invocation yields a merged props object",
+                site.location.path, site.location.start_byte, site.location.end_byte
+            ));
+        }
+        // Premise 2, continued: the returned value is *itself* the merge's
+        // result -- an empty `path` -- and not a member of something a merge
+        // produced. An empty `sources` list is the producer's silence and
+        // refuses; it is never "traced to nothing, therefore a merge".
+        let merged = site.sources.iter().any(|source| {
+            source.path.is_empty()
+                && source.kind == typefacts::ImplementationValueSourceKind::CallResult
+                && source.target_path.is_empty()
+                && solid_dialect::unambiguous_props_merge(&source.target_name)
+        });
+        if !merged {
+            return Err(format!(
+                "merged-props returns census refuses a completion at {}:{}..{} whose value the \
+                 producer does not trace to a props merge",
+                site.location.path, site.location.start_byte, site.location.end_byte
+            ));
+        }
+        // Premise 3. The merge call itself, found by containment in this
+        // completion's own span, so a second merge elsewhere in the body is not
+        // read as this one's.
+        let mut merges = implementation.calls.iter().filter(|call| {
+            call.location.path == site.location.path
+                && call.location.start_byte >= site.location.start_byte
+                && call.location.end_byte <= site.location.end_byte
+                && solid_dialect::unambiguous_props_merge(&call.target_name)
+        });
+        let Some(call) = merges.next() else {
+            return Err(format!(
+                "merged-props returns census refuses a completion at {}:{}..{} whose merge call \
+                 is not in this implementation's own census",
+                site.location.path, site.location.start_byte, site.location.end_byte
+            ));
+        };
+        if merges.next().is_some() {
+            return Err(format!(
+                "merged-props returns census refuses a completion at {}:{}..{} carrying more than \
+                 one props merge: which one the value came from is not decided here",
+                site.location.path, site.location.start_byte, site.location.end_byte
+            ));
+        }
+        if call.kind != CallKind::Call {
+            return Err(format!(
+                "merged-props returns census refuses a props merge at {}:{}..{} that is not a \
+                 call",
+                call.location.path, call.location.start_byte, call.location.end_byte
+            ));
+        }
+        let mut rooted = call
+            .argument_parameters
+            .iter()
+            .flatten()
+            .filter(|source| source.path.is_empty());
+        let Some(source) = rooted.next() else {
+            return Err(format!(
+                "merged-props returns census refuses a props merge at {}:{}..{} with no \
+                 parameter-rooted source: the claim names one and there is none",
+                call.location.path, call.location.start_byte, call.location.end_byte
+            ));
+        };
+        if rooted.next().is_some() {
+            return Err(format!(
+                "merged-props returns census refuses a props merge at {}:{}..{} with more than \
+                 one whole-parameter source: this shape names one argument and choosing between \
+                 them is not a census decision",
+                call.location.path, call.location.start_byte, call.location.end_byte
+            ));
+        }
+        if source.parameter_index != usize::from(from) {
+            return Err(format!(
+                "merged-props returns census refuses a props merge at {}:{}..{} whose \
+                 parameter-rooted source is parameter {} while the proposal names {from}",
+                call.location.path,
+                call.location.start_byte,
+                call.location.end_byte,
+                source.parameter_index
+            ));
+        }
+        reachable += 1;
+        sites.push(format!(
+            "census-return-merged-props:{}:{}:{}:{}:{from}",
+            site.location.path,
+            site.location.start_byte,
+            site.location.end_byte,
+            reachability_name(site.reach)
+        ));
+    }
+    // A function with no reachable completion returns `undefined` on every
+    // path, which this claim is false of. The empty closure is the shape that
+    // describes it, and it has its own census.
+    if reachable == 0 {
+        return Err(format!(
+            "merged-props returns census refuses an implementation at {at} with no reachable \
+             value-carrying completion"
+        ));
+    }
+    sites.push(format!(
+        "census-returns-merged-props-total:{from}:{reachable}"
+    ));
+    Ok(sites)
+}
+
+/// The premises ADR 0035's empty closure and ADR 0109's merged props root
+/// share: a plain completion form, and a present, classified control-flow
+/// census. Shared rather than restated so the two arms cannot drift, and
+/// returning the census makes "present" a type rather than a repeated check.
+fn require_plain_classified_completion<'a>(
+    implementation: &'a typefacts::ExportImplementationTranscript,
+    at: &str,
+) -> Result<&'a typefacts::ControlFlowCensus, String> {
     // Premise 1: a plain callable. An `async` function hands its caller a
     // promise on every completion, a generator an iterator, whatever the body
     // does; an unclassified or unstated form is refused, never read as plain.
@@ -11133,6 +11299,19 @@ fn census_returns_transcript(
              control-flow marker {marker} at {at}"
         ));
     }
+    Ok(control_flow)
+}
+
+fn census_returns_transcript(
+    implementation: &typefacts::ExportImplementationTranscript,
+) -> Result<Vec<String>, String> {
+    let at = format!(
+        "{}:{}..{}",
+        implementation.location.path,
+        implementation.location.start_byte,
+        implementation.location.end_byte
+    );
+    let control_flow = require_plain_classified_completion(implementation, &at)?;
     // Premises 2 and 3: every return site at the floor is bare. An expression
     // body arrives as a value-carrying site over the body itself. A
     // value-carrying site the producer proved unreachable performs nothing and
@@ -13978,6 +14157,7 @@ const fn value_shape_kind_name(shape: &ValueShape) -> &'static str {
         ValueShape::AsyncIterable(_) => "async-iterable",
         ValueShape::Reactive { .. } => "reactive",
         ValueShape::Store { .. } => "store",
+        ValueShape::MergedProps { .. } => "merged-props",
         ValueShape::Action { .. } => "action",
         ValueShape::Component => "component",
         ValueShape::Cleanup { .. } => "cleanup",
@@ -24192,6 +24372,145 @@ mod tests {
     /// form and its return sites, and nothing else. Every premise refuses by
     /// name; a value-carrying site is admitted only when the producer proved it
     /// unreachable.
+    #[test]
+    /// ADR 0109. The claim is conditional — "reads of the returned object reach
+    /// through to the caller's argument at `from`" — so the census proves two
+    /// things: that every completion this export can reach is a props merge,
+    /// and that the merge's one parameter-rooted source is the `from` the
+    /// proposal names. Everything else refuses by name.
+    fn merged_props_returns_census_binds_every_completion_to_one_parameter() {
+        // One `return mergeProps(defaults, props)` over the span 10..40, whose
+        // merge call sits at 17..39 inside it. `merge_argument` is the
+        // parameter each argument slot is rooted at, `None` for a literal.
+        let transcript = |merge_name: &str,
+                          merge_arguments: Vec<Option<usize>>,
+                          site_value: bool,
+                          traced: bool| {
+            let mut site = json!({
+                "location": {"path": "/p/index.js", "startByte": 10, "endByte": 40},
+                "reach": "reachable"
+            });
+            if site_value {
+                site["value"] = json!({
+                    "callability": "nonCallable",
+                    "constructability": "nonConstructable",
+                    "primitive": {"mayBeNumber": false}
+                });
+            }
+            if traced {
+                site["sources"] = json!([{
+                    "kind": "callResult",
+                    "target": "merge#0",
+                    "targetName": merge_name,
+                    "targetModule": "solid-js"
+                }]);
+            }
+            let value: serde_json::Value = json!({
+                "location": {"path": "/p/index.js", "startByte": 0, "endByte": 50},
+                "completionForm": "plain",
+                "controlFlow": {"returns": [site]},
+                "calls": [{
+                    "location": {"path": "/p/index.js", "startByte": 17, "endByte": 39},
+                    "reach": "reachable",
+                    "kind": "call",
+                    "targetName": merge_name,
+                    "targetModule": "solid-js",
+                    "argumentParameters": merge_arguments
+                        .iter()
+                        .map(|rooted| match rooted {
+                            Some(index) => json!({"parameterIndex": index}),
+                            None => json!(null),
+                        })
+                        .collect::<Vec<_>>()
+                }]
+            });
+            serde_json::from_value::<typefacts::ExportImplementationTranscript>(value).unwrap()
+        };
+
+        // `mergeDefaultProps(defaults, props) { return mergeProps(defaults, props) }`
+        // -- argument 1 is the export's parameter 1, and nothing else is rooted.
+        let sites = census_merged_props_returns_transcript(
+            &transcript("mergeProps", vec![None, Some(1)], true, true),
+            1,
+        )
+        .expect("the 1.x spelling over one whole parameter certifies");
+        assert_eq!(
+            sites,
+            vec![
+                "census-return-merged-props:/p/index.js:10:40:reachable:1".to_owned(),
+                "census-returns-merged-props-total:1:1".to_owned(),
+            ]
+        );
+        // The 2.0 spelling of the same primitive is the same claim.
+        census_merged_props_returns_transcript(
+            &transcript("merge", vec![None, Some(1)], true, true),
+            1,
+        )
+        .expect("the 2.0 spelling certifies identically");
+
+        // The proposal must name the parameter the census found, not another.
+        let wrong = census_merged_props_returns_transcript(
+            &transcript("mergeProps", vec![None, Some(1)], true, true),
+            0,
+        )
+        .expect_err("a proposal naming a different parameter is not this claim");
+        assert!(
+            wrong.contains("parameter 1 while the proposal names 0"),
+            "{wrong}"
+        );
+
+        // Two whole-parameter sources: a claim this shape cannot spell.
+        let ambiguous = census_merged_props_returns_transcript(
+            &transcript("mergeProps", vec![Some(0), Some(1)], true, true),
+            1,
+        )
+        .expect_err("two parameter-rooted sources refuse rather than pick");
+        assert!(
+            ambiguous.contains("more than one whole-parameter source"),
+            "{ambiguous}"
+        );
+
+        // No parameter-rooted source at all: the claim names one and there is
+        // none, so the merged object carries nothing of the caller's.
+        let rootless = census_merged_props_returns_transcript(
+            &transcript("mergeProps", vec![None], true, true),
+            0,
+        )
+        .expect_err("a merge of the export's own literals carries no caller reactivity");
+        assert!(
+            rootless.contains("no parameter-rooted source"),
+            "{rootless}"
+        );
+
+        // Not a props merge at all.
+        let other = census_merged_props_returns_transcript(
+            &transcript("createMemo", vec![None, Some(1)], true, true),
+            1,
+        )
+        .expect_err("only a props merge yields this shape");
+        assert!(other.contains("does not trace to a props merge"), "{other}");
+
+        // The producer traced nothing. Silence is never "therefore a merge".
+        let untraced = census_merged_props_returns_transcript(
+            &transcript("mergeProps", vec![None, Some(1)], true, false),
+            1,
+        )
+        .expect_err("an empty sources list is the producer's silence");
+        assert!(
+            untraced.contains("does not trace to a props merge"),
+            "{untraced}"
+        );
+
+        // A valueless completion yields `undefined`, which contradicts the
+        // claim outright — that is ADR 0035's empty closure, not this one.
+        let bare = census_merged_props_returns_transcript(
+            &transcript("mergeProps", vec![None, Some(1)], false, false),
+            1,
+        )
+        .expect_err("a bare completion is not a merged props object");
+        assert!(bare.contains("refuses a valueless completion"), "{bare}");
+    }
+
     #[test]
     fn returns_census_admits_only_bare_or_unreachable_completions() {
         let transcript = |form: serde_json::Value,

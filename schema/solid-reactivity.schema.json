@@ -555,6 +555,7 @@
         { "$ref": "#/$defs/asyncIterableValue" },
         { "$ref": "#/$defs/reactiveValue" },
         { "$ref": "#/$defs/storeValue" },
+        { "$ref": "#/$defs/mergedPropsValue" },
         { "$ref": "#/$defs/actionValue" },
         { "$ref": "#/$defs/componentValue" },
         { "$ref": "#/$defs/cleanupValue" },
@@ -685,6 +686,16 @@
         "resource": { "$ref": "#/$defs/nonemptyString" },
         "closed": { "type": "array", "uniqueItems": true, "items": { "const": "capabilities" } },
         "capabilities": { "$ref": "#/$defs/capabilityClaims" }
+      }
+    },
+    "mergedPropsValue": {
+      "description": "ADR 0109. An object whose property reads reach through to the caller's argument at `from`: what a props merge yields. Conditional on purpose \u2014 a merge creates no reactive source, it carries its arguments'. A consumer asserts reactivity of this value exactly when the argument it passed at `from` is itself reactive, and asserts nothing otherwise; reading it as a store would claim reactivity of a merge of plain objects.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "from"],
+      "properties": {
+        "kind": { "const": "merged-props" },
+        "from": { "type": "integer", "minimum": 0 }
       }
     },
     "capabilityClaims": {

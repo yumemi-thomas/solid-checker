@@ -735,11 +735,14 @@ fn normalize_value(
     path: &str,
 ) -> Result<(), ModelError> {
     match value {
+        // A merged props object carries no resource and no child shape: what it
+        // exposes is the caller's argument's, which this side never sees.
         ValueShape::Unknown
         | ValueShape::Plain
         | ValueShape::Parameter { .. }
         | ValueShape::Callable
         | ValueShape::Component
+        | ValueShape::MergedProps { .. }
         | ValueShape::RefApplication => {}
         ValueShape::Tuple(items) => {
             validate_open_nonempty(items, &format!("{path}.tuple-items"))?;
@@ -1690,6 +1693,7 @@ fn visit_closed_value(
         | ValueShape::Action { .. }
         | ValueShape::Component
         | ValueShape::Cleanup { .. }
+        | ValueShape::MergedProps { .. }
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
     }
@@ -2087,6 +2091,7 @@ fn open_value_closure(
         | ValueShape::Action { .. }
         | ValueShape::Component
         | ValueShape::Cleanup { .. }
+        | ValueShape::MergedProps { .. }
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
     }
@@ -2112,6 +2117,7 @@ fn visit_value(value: &ValueShape, root: ValueRoot, path: ValuePath, claims: &mu
         | ValueShape::Action { .. }
         | ValueShape::Component
         | ValueShape::Cleanup { .. }
+        | ValueShape::MergedProps { .. }
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
         ValueShape::Tuple(items) => {

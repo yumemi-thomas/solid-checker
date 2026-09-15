@@ -1531,6 +1531,21 @@ pub enum ValueShape {
         resource: Option<ResourceId>,
         capabilities: KnowledgeSet<CapabilityClaim>,
     },
+    /// An object whose property reads reach through to **the caller's argument
+    /// at `from`**: what a props merge yields (ADR 0109).
+    ///
+    /// Conditional, and that is the whole shape. A merge creates no reactive
+    /// source; it carries its arguments'. `solid-js@1.9.14` returns a `$PROXY`
+    /// only when some source is already a proxy or is a function, and otherwise
+    /// rebuilds the object preserving each source's own descriptors — so
+    /// `mergeProps({ a: 1 }, { b: 2 })` is plain and destructuring it loses
+    /// nothing. A [`ValueShape::Store`] here would assert reactivity the
+    /// runtime does not always produce; this shape asserts it exactly of a
+    /// caller who passed a reactive argument at `from`, and asserts nothing
+    /// otherwise.
+    MergedProps {
+        from: u16,
+    },
     Action {
         transition: Option<ResourceId>,
     },

@@ -1,6 +1,6 @@
 # ADR 0109: A `returns` census for a merged props root
 
-- Status: **proposed, not implemented** (2026-09-15)
+- Status: accepted and implemented (2026-09-15); written before implementation
 - Date: 2026-09-15
 - Owners: the policy-2 behavioral call-domain census, the semantic model's
   return shapes and the stable-v1 schema, the generator's return derivation,
@@ -197,6 +197,70 @@ finite clean run never establishes the closure; the census does.
   consumer conditional exists for the direct call. What is missing is a spelling
   and a census arm. Recorded as the reason this ADR is written before it is
   scheduled.
+
+## Implementation (2026-09-15)
+
+- **Producer.** Unchanged, as predicted. No new fact, no protocol bump, no
+  schema digest move.
+- **Model and wire.** `ValueShape::MergedProps { from }`, canonical discriminant
+  **17** — appended, never inserted, because a discriminant is part of the
+  semantic digest and renumbering an existing shape would move every receipt
+  that ever described one. `WireValueNode::MergedProps { from }` with `from`
+  **required**: an absent index states nothing, and defaulting it to zero would
+  name a parameter the producer never claimed. `mergedPropsValue` in
+  `schema/solid-reactivity.schema.json`. `ContractReturn` carries it as
+  `kind: "merged-props"` with a `parameter` and no label, which is why
+  `validate_contract_return` files it with the parameter-carrying kinds rather
+  than the reactive leaves.
+- **Census.** `census_merged_props_returns_transcript`, dispatched from
+  `census_returns_domain` after the whole-parameter arm — the narrower claim
+  first, since a return that *is* the parameter is not a merge of it. ADR 0035's
+  premises 1, 4 and 5 are now shared through
+  `require_plain_classified_completion` rather than restated, so the two arms
+  cannot drift. `solid_dialect::unambiguous_props_merge` is the dialect-agnostic
+  query the certifier needs: a transcript names a module specifier and an export
+  and never says which dialect the artifact resolved, so the answer is taken
+  only where both dialects agree — which, since each is silent about the other's
+  spelling, means `mergeProps` is decided by 1.x alone and `merge` by 2.0 alone.
+- **Generator.** `returns_walk::merged_props_return` beside
+  `valueless_completion`, collected project-wide into
+  `Program::merged_props_returns` (off the wire, fail-closed `Default`) because
+  it must resolve a callee to a dialect primitive and that needs the entity
+  tables. Attached at the emit boundary as `ContractExport::merged_props_return`
+  by the same two identities the other two walk verdicts use. In
+  `normalize_export` it is matched **before** the empty closure, which is
+  documentation rather than necessity: a body that returns a merge yields a
+  value, so the valueless-completion walk declines on the very return this one
+  reads.
+- **Consumer.** One arm in `binding_initializes_reactive_store`. It is the first
+  contract claim whose meaning depends on the caller's argument, and it answers
+  `false` rather than `unknown` for a plain argument — the merge of two plain
+  objects is plain, and destructuring it loses nothing.
+- **Measured.** `callback-slot-props-forwarding` moves and nothing else does:
+  `Stylesheet`, `WithDefaults` and `WithLazyExtras` gain
+  `returns: [{merged-props, from 0}]` and close `returns`, while `makeStore`,
+  `makeSignal` and `derive` are untouched. Coverage stays at 550 findings across
+  94 projects, because no fixture consumes an accepted contract — see
+  Consequences. Seven census cases are pinned by
+  `merged_props_returns_census_binds_every_completion_to_one_parameter`.
+
+### Deviation from the decision above
+
+**Premise 4 is dropped**, and the ADR was wrong to require it. It asked that
+every merge source other than the claimed parameter be an own literal, to stop a
+consumer reading "reactive only if you passed a reactive argument" about an
+object that is always reactive. Two things are wrong with that. The error it
+prevents is an **under**-report — the consumer misses a finding — which is the
+safe direction and not what a premise is for. And no producer fact proves an
+object literal inert: the argument tracer leaves an object literal's slot empty,
+which is indistinguishable from untraced, so the premise could only have been
+implemented as "refuse everything", making the census decide nothing.
+
+What survives is the half that is about this shape's *expressiveness* rather
+than about safety: two whole-parameter sources are a claim `merged-props` cannot
+spell, and choosing between them is not a census decision, so they refuse. The
+census is therefore sound but not complete — it certifies "reads reach through
+to argument `from`" and says nothing about whether they also reach elsewhere.
 
 ## Consequences
 

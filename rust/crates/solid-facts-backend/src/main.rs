@@ -7181,6 +7181,10 @@ struct GeneratedOwnerRequirements {
     /// answer a `returns: []` proposal needs.
     clean_returns_walk_by_symbol: HashSet<String>,
     clean_returns_walk_by_function: HashSet<FunctionKey>,
+    /// ADR 0109: the parameter a props merge the function returns carries the
+    /// reactivity of, by the same two identities. Absence is "do not propose".
+    merged_props_return_by_symbol: HashMap<String, usize>,
+    merged_props_return_by_function: HashMap<FunctionKey, usize>,
 }
 
 fn canonical_symbol_aliases(facts: &solid_facts::ProjectFacts) -> HashMap<String, String> {
@@ -7336,6 +7340,22 @@ fn generated_owner_requirements_by_symbol(
                 }
                 indexed.clean_returns_walk_by_function.insert(key.clone());
             }
+            // ADR 0109's walk, indexed the same way. It resolves a callee to a
+            // dialect primitive, so unlike the one above it is computed inside
+            // the IR with the entity tables in hand and only read here.
+            if let Some(parameter) = program
+                .merged_props_returns
+                .parameter_for(file.path.as_str(), span)
+            {
+                if let Some(Some(symbol)) = function_symbols.get(&key) {
+                    indexed
+                        .merged_props_return_by_symbol
+                        .insert(symbol.clone(), parameter);
+                }
+                indexed
+                    .merged_props_return_by_function
+                    .insert(key.clone(), parameter);
+            }
             if !program
                 .creates_proposal_walk
                 .proposes(file.path.as_str(), span)
@@ -7475,6 +7495,17 @@ fn attach_generated_owner_requirements(
         || default_function
             .as_ref()
             .is_some_and(|key| generated.clean_creates_walk_by_function.contains(key));
+    // ADR 0109's walk verdict, read by the same two identities and in the same
+    // order as the two above.
+    summary.merged_props_return = symbol
+        .as_ref()
+        .and_then(|symbol| generated.merged_props_return_by_symbol.get(symbol))
+        .or_else(|| {
+            default_function
+                .as_ref()
+                .and_then(|key| generated.merged_props_return_by_function.get(key))
+        })
+        .copied();
     // ADR 0035: the same shape for `returns: []`, read from the syntax walk.
     summary.returns_walk_clean = symbol
         .as_ref()

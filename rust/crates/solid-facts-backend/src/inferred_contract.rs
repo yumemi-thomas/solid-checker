@@ -166,9 +166,19 @@ pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
                         || inherited
                         || reads_enumeration_is_confirmable(export)
                 })
+                // ADR 0109: a single merged-props return is proposable — the
+                // census decides it against the producer's control-flow and
+                // call censuses, exactly as it decides the whole-parameter
+                // identity beside it.
                 .filter(|domain| {
                     *domain != ClaimDomain::Returns
                         || inherited
+                        || export.operation_claim(ClaimDomain::Returns).is_some_and(|claim| {
+                            matches!(claim.items(), [id] if export.operation(&id.0).is_some_and(|operation| {
+                                operation.kind == OperationKind::Return
+                                    && matches!(&operation.output, Some(ValueShape::MergedProps { .. }))
+                            }))
+                        })
                         || export
                             .operation_claim(
                                 ClaimDomain::Returns,
@@ -561,6 +571,36 @@ fn normalize_export(
     // weakening below turns into a partial claim rather than a closure.
     let returns = match &summary.returns {
         ContractClaim::Open => KnowledgeSet::Unknown,
+        // ADR 0109, before the empty closure and deliberately: a body that
+        // returns a props merge *does* yield a value, so the two are mutually
+        // exclusive by construction — the valueless-completion walk declines on
+        // the very return this one reads. Ordering them makes that explicit
+        // rather than relying on it.
+        ContractClaim::Known(None)
+            if scope.publishes_bootstrapped_reactive_domains()
+                && summary.kind == "function"
+                && summary.merged_props_return.is_some() =>
+        {
+            let from = summary
+                .merged_props_return
+                .expect("checked in the guard above");
+            let id = OperationId(format!("{prefix}return"));
+            operations.push(operation(
+                id.clone(),
+                OperationKind::Return,
+                Vec::new(),
+                Some(ValueShape::MergedProps {
+                    from: u16::try_from(from).map_err(|_| {
+                        ContractFailure::InvalidSemanticModel {
+                            reason: format!(
+                                "merged-props parameter {from} exceeds the normalized model limit"
+                            ),
+                        }
+                    })?,
+                }),
+            ));
+            KnowledgeSet::Complete(vec![id])
+        }
         ContractClaim::Known(None) => {
             // A projected summary has no local implementation, so
             // `returns_walk_clean` is `false` for every re-export and this arm
@@ -1178,6 +1218,21 @@ fn return_shape(returned: &ContractReturn) -> Result<ValueShape, ContractFailure
         "store-path" => ValueShape::Store {
             resource: None,
             capabilities: KnowledgeSet::Unknown,
+        },
+        // ADR 0109: the conditional props root. The parameter is the claim, so
+        // an absent one refuses rather than defaulting to argument 0.
+        "merged-props" => ValueShape::MergedProps {
+            from: u16::try_from(returned.parameter.ok_or_else(|| {
+                ContractFailure::InvalidSemanticModel {
+                    reason: "merged-props return shape requires a parameter index".into(),
+                }
+            })?)
+            .map_err(|_| ContractFailure::InvalidSemanticModel {
+                reason: format!(
+                    "return parameter {} exceeds the normalized model limit",
+                    returned.parameter.expect("checked above")
+                ),
+            })?,
         },
         "argument" => ValueShape::Parameter {
             index: u16::try_from(returned.parameter.ok_or_else(|| {

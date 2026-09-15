@@ -876,7 +876,10 @@ fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static st
                 validate_contract_return(property)?;
             }
         }
-        "argument" | "callback-result" | "callback-result-function" => {
+        // `merged-props` joins the parameter-carrying kinds rather than the
+        // reactive leaves: its whole content is *which* argument it reaches
+        // through to (ADR 0109), and a leaf's label would say nothing.
+        "argument" | "callback-result" | "callback-result-function" | "merged-props" => {
             if returned.parameter.is_none()
                 || !returned.label.is_empty()
                 || !returned.elements.is_empty()
@@ -1062,6 +1065,14 @@ pub struct ContractExport {
     /// can confirm site for site. A proposal input, never evidence: empty is
     /// "do not propose", and a summary no pass reached is empty.
     pub direct_callback_parameters: BTreeSet<usize>,
+    /// ADR 0109: the parameter whose reactivity a props merge this export
+    /// returns carries, when the generator's own walk cleared the body
+    /// ([`crate::returns_walk::MergedPropsReturns`]).
+    ///
+    /// A proposal input and never a proof: `None` is "do not propose",
+    /// including for a summary no walk reached. The certifier re-derives every
+    /// premise from the producer's control-flow and call censuses.
+    pub merged_props_return: Option<usize>,
     /// The accepted dependency export this summary was *projected from*, when
     /// the public name is a cross-package re-export and nothing in this
     /// package declares it.
@@ -1518,6 +1529,14 @@ pub struct Program {
     /// nothing rather than proposing everything.
     #[serde(skip)]
     pub creates_proposal_walk: CreatesProposalWalk,
+    /// ADR 0109's proposal input: which parameter's reactivity a props merge
+    /// returned by each function carries.
+    ///
+    /// Off the wire for the same reason as the walk above, and with the same
+    /// fail-closed [`Default`]: an absent entry is "do not propose", so a
+    /// deserialized `Program` proposes none of these rather than all of them.
+    #[serde(skip)]
+    pub merged_props_returns: returns_walk::MergedPropsReturns,
 }
 
 /// How contract binding answered across the program's declarations.

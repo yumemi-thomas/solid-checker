@@ -21473,3 +21473,33 @@ consumer to ask the dialect), `ImplementationCall.argument_parameters` already
 gives the parameter root of each argument slot, and the certifier already reads
 that exact shape for the factory-return premise. What is missing is a spelling
 and a census arm, not a fact.
+
+### ADR 0109 implemented the same day
+
+`docs/adr/0109-a-returns-census-for-a-merged-props-root.md` is accepted and
+implemented. The wire cost landed as predicted — `ValueShape::MergedProps`,
+canonical discriminant 17 appended so no existing semantic digest moves, and a
+`merged-props` node whose `from` is required rather than defaulted. The producer
+cost was **zero**, also as predicted: `ReturnSite.sources` and
+`ImplementationCall.argument_parameters` already carry every premise.
+
+Measured: `callback-slot-props-forwarding`'s three `mergeProps` wrappers gain
+`returns: [{merged-props, from 0}]` and close `returns`; `makeStore`,
+`makeSignal` and `derive` are untouched; coverage holds at 550 findings across
+94 projects.
+
+**One premise of the ADR was dropped and the ADR records why.** It required every
+merge source other than the claimed parameter to be an own literal. That premise
+prevented an *under*-report, which is the safe direction, and no producer fact
+proves an object literal inert — the argument tracer leaves an object literal's
+slot empty, indistinguishable from untraced — so it could only have been
+implemented as a blanket refusal. The census is sound but not complete: it
+certifies "reads reach through to argument `from`" and says nothing about
+whether they also reach elsewhere.
+
+**Still not measurable here.** The consumer half — `binding_initializes_reactive_store`'s
+new `merged-props` arm — fires only for a *contracted* callee, and no fixture
+consumes an accepted contract. That is the third claim now resting on the same
+missing corpus capability, beside `returns_reactive_tuple` and the
+`mergeDefaultProps` yield. Whether the 127 actually drop still needs the kobalte
+corpus this repository does not have.

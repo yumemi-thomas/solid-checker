@@ -250,13 +250,35 @@ fn binding_initializes_reactive_store(
     else {
         return false;
     };
-    let contracted_store = ctx
+    let contracted_return = ctx
         .entities
         .get(&location(file.path.shared(), call.callee))
         .and_then(|symbol| ctx.contracted.get(symbol))
         .and_then(|binding| binding.summary.returns.known())
-        .and_then(Option::as_ref)
-        .is_some_and(|returned| returned.kind == "store-path");
+        .and_then(Option::as_ref);
+    let contracted_store = contracted_return.is_some_and(|returned| match returned.kind.as_str() {
+        "store-path" => true,
+        // ADR 0109. The only contract claim whose meaning depends on the
+        // *caller's* argument: the wrapper yields a props object carrying the
+        // reactivity of whatever was passed at `parameter`, and carrying
+        // nothing when that argument carries nothing. So the question is asked
+        // of this call site, and an argument that is neither a props root nor a
+        // store answers `false` rather than `unknown` — the merge of two plain
+        // objects is plain, and destructuring it loses nothing.
+        "merged-props" => returned
+            .parameter
+            .and_then(|parameter| call.arguments.get(parameter))
+            .filter(|argument| !argument.spread)
+            .and_then(|argument| {
+                ctx.entities
+                    .get(&location(file.path.shared(), argument.span))
+            })
+            .is_some_and(|symbol| {
+                ctx.prop_sources.contains_key(symbol)
+                    || ctx.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
+            }),
+        _ => false,
+    });
     contracted_store
         || known_primitive(&primitive_name(
             file.path.as_str(),

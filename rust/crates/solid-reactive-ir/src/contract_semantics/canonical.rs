@@ -889,6 +889,13 @@ impl CanonicalWriter {
                 self.u8(16);
                 self.option(resource.as_ref(), Self::resource_id);
             }
+            // Appended, never inserted: a discriminant is part of the semantic
+            // digest, so renumbering an existing shape would move every receipt
+            // that ever described one.
+            ValueShape::MergedProps { from } => {
+                self.u8(17);
+                self.u16(*from);
+            }
         }
     }
 

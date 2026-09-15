@@ -107,3 +107,178 @@ pub fn valueless_completion(
     }
     Ok(())
 }
+
+/// The generator's **merged props return** walk (ADR 0109): which of this
+/// export's own parameters a props merge it returns carries the reactivity of.
+///
+/// A proposal input, never a proof, exactly as [`valueless_completion`] is. The
+/// certifier re-asks every question here against the producer's control-flow
+/// census and its resolved call census, where reachability and exact callee
+/// identity live; what this decides is the earlier one — has the generator's
+/// own syntax seen a body that is nothing but a props merge over one of its
+/// parameters?
+///
+/// Silence is "do not propose", and every path out is `None`:
+///
+/// * an `async` function or a generator hands its caller a promise or an
+///   iterator, not a props object;
+/// * a completion that is not a call of a primitive the dialect's
+///   [`solid_dialect::Dialect::merges_props_reactivity`] row names — including
+///   a bare `return;` and a body that can fall off its end;
+/// * a merge with no whole-parameter argument, or with more than one: this
+///   shape names a single argument and choosing between two is not the
+///   generator's call;
+/// * two completions that name different parameters.
+///
+/// A body with *no* completion at all yields `None` too: that function returns
+/// `undefined`, which ADR 0035's empty closure describes and this shape does
+/// not.
+#[must_use]
+pub(crate) fn merged_props_return(
+    file: &FileFacts,
+    function: &FunctionFact,
+    entities: &crate::EntitySymbols,
+    symbol_names: &std::collections::HashMap<crate::SymbolId, crate::SymbolName>,
+    dialect: &dyn solid_dialect::Dialect,
+) -> Option<usize> {
+    if function.r#async || function.generator {
+        return None;
+    }
+    // The parameter bindings this export declares, by symbol. A destructured or
+    // rest parameter has no single whole-parameter identity, so it contributes
+    // none and an argument rooted at it can never match.
+    let parameters = function
+        .parameters
+        .iter()
+        .enumerate()
+        .filter(|(_, parameter)| parameter.shape == solid_facts::ast::BindingShape::Identifier)
+        .filter_map(|(index, parameter)| {
+            let name = parameter.names.first()?;
+            let symbol = entities.get(&crate::location(file.path.shared(), name.span))?;
+            Some((symbol.clone(), index))
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+    if parameters.is_empty() {
+        return None;
+    }
+
+    let body = function.body;
+    let mut completions = Vec::new();
+    if let Some(expression) = function.expression_return.as_ref() {
+        completions.push(expression.span);
+    }
+    for returned in &file.ast.returns {
+        if returned.span.start < body.start || returned.span.end > body.end {
+            continue;
+        }
+        // The same nesting rule `valueless_completion` applies, and for the
+        // same reason: a return inside a nested callable is that callable's
+        // completion, not this one's.
+        let nested = file.ast.functions.iter().any(|other| {
+            other.span != function.span
+                && other.span.start >= body.start
+                && other.span.end <= body.end
+                && (other.span.start < returned.span.start || returned.span.end < other.span.end)
+                && other.span.start <= returned.span.start
+                && returned.span.end <= other.span.end
+        });
+        if nested {
+            continue;
+        }
+        // A bare completion yields `undefined`, which contradicts the claim.
+        completions.push(returned.argument?);
+    }
+    if completions.is_empty() {
+        return None;
+    }
+
+    let mut agreed = None::<usize>;
+    for completion in completions {
+        let call = file.ast.calls.iter().find(|call| call.span == completion)?;
+        let primitive = crate::known_primitive(&crate::primitive_name(
+            file.path.as_str(),
+            call.callee,
+            call.static_callee(&file.source),
+            entities,
+            symbol_names,
+            dialect,
+        ))?;
+        if !dialect.merges_props_reactivity(primitive) {
+            return None;
+        }
+        let mut rooted = call
+            .arguments
+            .iter()
+            .filter(|argument| {
+                !argument.spread
+                    && argument.value == solid_facts::ast::ArgumentValueKind::Identifier
+            })
+            .filter_map(|argument| {
+                entities
+                    .get(&crate::location(file.path.shared(), argument.span))
+                    .and_then(|symbol| parameters.get(symbol))
+                    .copied()
+            });
+        let index = rooted.next()?;
+        if rooted.next().is_some() {
+            return None;
+        }
+        match agreed {
+            Some(agreed) if agreed != index => return None,
+            _ => agreed = Some(index),
+        }
+    }
+    agreed
+}
+
+/// Every function in the project whose body is nothing but a props merge over
+/// one of its own parameters, by file and span (ADR 0109).
+///
+/// Built once with the analysis in hand, because the walk has to resolve a
+/// callee to a dialect primitive and that needs the entity and symbol tables.
+/// Read at the emit boundary by the same two identities `creates_walk_clean`
+/// and `returns_walk_clean` are read by.
+///
+/// **A proposal input.** An absent entry is "do not propose", which is also
+/// what an unanalysed function has.
+/// One cleared function: its span in its file, and the parameter its merge
+/// carries the reactivity of.
+type MergedPropsReturnRow = ((u32, u32), usize);
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct MergedPropsReturns {
+    by_file: std::collections::BTreeMap<String, Vec<MergedPropsReturnRow>>,
+}
+
+impl MergedPropsReturns {
+    /// The parameter a props merge returned by the function at `span` carries
+    /// the reactivity of, when this walk cleared it.
+    #[must_use]
+    pub fn parameter_for(&self, path: &str, span: (u64, u64)) -> Option<usize> {
+        let span = (u32::try_from(span.0).ok()?, u32::try_from(span.1).ok()?);
+        self.by_file
+            .get(path)?
+            .iter()
+            .find(|(function, _)| *function == span)
+            .map(|(_, parameter)| *parameter)
+    }
+}
+
+pub(crate) fn collect_merged_props_returns(
+    ctx: &crate::pipeline::AnalysisContext<'_>,
+) -> MergedPropsReturns {
+    let mut by_file = std::collections::BTreeMap::<String, Vec<MergedPropsReturnRow>>::new();
+    for file in &ctx.facts.files {
+        for function in &file.ast.functions {
+            if let Some(parameter) =
+                merged_props_return(file, function, ctx.entities, ctx.symbol_names, ctx.dialect)
+            {
+                by_file
+                    .entry(file.path.to_string())
+                    .or_default()
+                    .push(((function.span.start, function.span.end), parameter));
+            }
+        }
+    }
+    MergedPropsReturns { by_file }
+}

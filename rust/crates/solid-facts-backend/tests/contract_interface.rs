@@ -93,6 +93,7 @@ fn inferred_entrypoint_workflow_refuses_a_same_named_export_from_the_wrong_subpa
             returns_walk_clean: false,
             direct_callback_parameters: Default::default(),
             inherited_from: None,
+            merged_props_return: None,
         },
     )]);
 
@@ -150,6 +151,7 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
             returns_walk_clean: true,
             direct_callback_parameters: Default::default(),
             inherited_from: None,
+            merged_props_return: None,
         },
     )]);
     let mut primary = resolved();

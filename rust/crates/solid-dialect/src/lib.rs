@@ -297,6 +297,31 @@ pub fn unambiguous_callable_result_tuple_item(name: &str, index: usize) -> bool 
     !answers.is_empty() && answers.into_iter().all(|answer| answer)
 }
 
+/// Returns true only when the exact public name is a **props merge** —
+/// a call that yields an object carrying its arguments' reactivity — in every
+/// dialect that canonically exports it (ADR 0109).
+///
+/// The dialect-agnostic form of [`Dialect::merges_props_reactivity`], for the
+/// certifier: a census reads a producer fact naming a module specifier and an
+/// export, and nothing in a transcript says which dialect the artifact resolved.
+/// Answering only where the two agree is what lets it ask without choosing.
+/// Both dialects answer for their own spelling and are silent about the other's,
+/// so `mergeProps` is decided by 1.x alone and `merge` by 2.0 alone, and neither
+/// is decided by a dialect that does not export it.
+#[must_use]
+pub fn unambiguous_props_merge(name: &str) -> bool {
+    let answers = [Version::V1, Version::V2]
+        .into_iter()
+        .filter_map(|version| {
+            let dialect = version.dialect();
+            let primitive = dialect.primitive(name)?;
+            (dialect.name_of(primitive) == Some(name))
+                .then(|| dialect.merges_props_reactivity(primitive))
+        })
+        .collect::<Vec<_>>();
+    !answers.is_empty() && answers.into_iter().all(|answer| answer)
+}
+
 /// Which part of what a primitive call returns a question is about.
 ///
 /// `Whole` is the returned value itself; `TupleItem(n)` is slot `n` of a

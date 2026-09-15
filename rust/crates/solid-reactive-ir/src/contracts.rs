@@ -164,6 +164,8 @@ pub fn project_export_semantics(
         creates_walk_declines: Vec::new(),
         returns_walk_clean: false,
         direct_callback_parameters: BTreeSet::new(),
+        // A projected dependency export has no body here to walk.
+        merged_props_return: None,
         // The projection alone states no acceptance identity;
         // `project_accepted_export` attaches it.
         inherited_from: None,
@@ -344,6 +346,14 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
         ValueShape::Store { .. } => Some(ContractReturn {
             kind: "store-path".into(),
             label: "normalized store result".into(),
+            ..ContractReturn::default()
+        }),
+        // ADR 0109. Carries the caller's argument index and *no* label: this is
+        // not a reactive leaf, it is a conditional one, and reading it as a
+        // `store-path` would assert reactivity of a merge of plain objects.
+        ValueShape::MergedProps { from } => Some(ContractReturn {
+            kind: "merged-props".into(),
+            parameter: Some(usize::from(*from)),
             ..ContractReturn::default()
         }),
         ValueShape::Parameter { index, .. } => Some(ContractReturn {
@@ -1675,6 +1685,9 @@ fn contract_export_function(
         creates_walk_clean: false,
         // This summary *is* the local inference, so it is never inherited.
         inherited_from: None,
+        // Attached at the emit boundary from `Program::merged_props_returns`,
+        // beside the other two walk verdicts.
+        merged_props_return: None,
         creates_walk_declines: Vec::new(),
         returns_walk_clean: false,
         // ADR 0100: a proposal input read beside the rows. Kept whether or not
