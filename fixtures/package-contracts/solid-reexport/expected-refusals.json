@@ -10,9 +10,9 @@
       "entrypoint": ".",
       "conditions": [],
       "stage": "artifact-case",
-      "class": "dependency-composition",
+      "class": "published-artifact",
       "applicability": "runtime-module",
-      "reason": "accepted dependency solid-js has no exact runtime binding for export createMemo"
+      "reason": "solid-checker-rust: emit package contract: entry file <package-root>/index.js has no runtime ESM exports"
     }
   ],
   "inapplicable": [],

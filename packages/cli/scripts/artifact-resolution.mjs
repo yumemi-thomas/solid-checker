@@ -2103,6 +2103,24 @@ function bindExport(
       axis
     );
     if (!result) {
+      // The built-in runtime foundation is not an unaccepted dependency, and a
+      // binding demand on it can never be met: `solid-js`, `@solidjs/signals`
+      // and `@solidjs/web` have no package contract by design (ADR 0027).
+      // `canonicalClosure` below already exempts them for the same reason;
+      // this branch did not, and the asymmetry refused the whole artifact case
+      // of any package re-exporting a core name.
+      //
+      // The emitter drops such a name from the document (Rust's
+      // `export_binds_core_runtime`), so the two censuses agree that it is not
+      // part of this package's surface. Returning unbound here is the same
+      // statement on the resolution side: the caller already skips a name with
+      // no binding (`if (!runtimeTarget || !declarationTarget) continue`), so
+      // every other export survives. ADR 0027's "missing native behavior stays
+      // unknown", not a claim that the export does not exist.
+      if (coreRuntimeSpecifier(externalDirect.specifier)) {
+        visiting.delete(identity);
+        return undefined;
+      }
       fail(
         "accepted-dependency-binding",
         `accepted dependency ${externalDirect.specifier} has no exact ${axis} binding for export ${externalDirect.name}`

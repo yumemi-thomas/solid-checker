@@ -988,6 +988,23 @@ fn bind_exports(
 ) -> Result<ArtifactCase, ContractFailure> {
     for (name, export) in &mut case.exports {
         let binding = resolved.exports.get(name).ok_or_else(|| {
+            // Deliberately still a refusal, and the third of the three
+            // censuses that have to agree about the built-in runtime
+            // foundation. The emitter drops a name whose every export binds
+            // core (`export_binds_core_runtime`), and the resolver returns it
+            // unbound (`bindExport`'s `coreRuntimeSpecifier` arm), because
+            // `solid-js`, `@solidjs/signals` and `@solidjs/web` have no package
+            // contract by design (ADR 0027). So a document that *does* name one
+            // here disagrees with the emitter that produced it -- a stale
+            // document, or a hand-edited one -- and loosening this to skip the
+            // name would accept that disagreement silently.
+            //
+            // Nothing here can name the core case more precisely: `name` is an
+            // export name, not a specifier, and the document records no origin
+            // for it — deciding "core-owned" needs the re-export chain, which
+            // is the emitter's input and not this function's. So this stays the
+            // generic refusal, and the invariant it rests on is stated above
+            // rather than re-derived here.
             invalid_identity(format!(
                 "resolved artifact has no exact runtime/declaration binding for export {name:?}"
             ))

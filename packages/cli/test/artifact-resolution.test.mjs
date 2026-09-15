@@ -1794,6 +1794,64 @@ describe("exact artifact records and closure", () => {
     })).toThrow(/accepted dependency .* has no exact runtime binding for export/);
   });
 
+  test("a re-export from the built-in runtime foundation is unbound, not a refusal", () => {
+    // `solid-js`, `@solidjs/signals` and `@solidjs/web` have no package
+    // contract by design (ADR 0027), so a binding demand on one can never be
+    // met. `canonicalClosure` already exempts them; this pins the
+    // export-binding half, which did not, and refused the whole artifact case
+    // of any package re-exporting a core name.
+    //
+    // The emitter drops the same names from the document
+    // (`export_binds_core_runtime`), so the two censuses agree the name is not
+    // part of this package's surface. On 2026-09-15 the missing exemption left
+    // `@solid-primitives/utils@6.4.1`'s `.` entrypoint -- 820 consumer call
+    // sites -- with no contract at all.
+    const root = fixture(
+      {
+        name: "core-reexporter",
+        version: "1.0.0",
+        exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+      },
+      {
+        "index.js": 'export { isServer } from "solid-js/web";\nexport const own = 1;\n',
+        "index.d.ts":
+          'export declare const isServer: boolean;\nexport declare const own: number;\n'
+      }
+    );
+    const resolved = resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "core-reexporter",
+      packageRoot: root,
+      integrity: "sha512:test",
+      acceptedDependencies: {}
+    });
+    expect(Object.keys(resolved.exports)).toEqual(["own"]);
+  });
+
+  test("a re-export from an ordinary unaccepted dependency still refuses", () => {
+    // The falsifier: only core is exempt. Anything else keeps the refusal,
+    // because an ordinary dependency's contract can be supplied and this one
+    // was not.
+    const root = fixture(
+      {
+        name: "ordinary-reexporter",
+        version: "1.0.0",
+        exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+      },
+      {
+        "index.js": 'export { child } from "accepted";\n',
+        "index.d.ts": 'export declare const child: number;\n'
+      }
+    );
+    expect(() => resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "ordinary-reexporter",
+      packageRoot: root,
+      integrity: "sha512:test",
+      acceptedDependencies: {}
+    })).toThrow(/accepted dependency accepted has no exact runtime binding for export child/);
+  });
+
   test("names the missing accepted dependency for an import-then-export binding", () => {
     const root = fixture(
       {

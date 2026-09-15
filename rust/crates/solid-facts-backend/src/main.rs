@@ -8970,6 +8970,23 @@ fn exported_names_for_file(
             ) {
                 continue;
             }
+            // A name this package only re-exports from the built-in runtime
+            // foundation is the dialect's to describe, not this package's, and
+            // nothing can ever bind it: core has no package contract by design
+            // (ADR 0027). Dropping it here is what keeps the three censuses
+            // agreeing -- the emitted document, `bind_exports`, and the JS
+            // resolver's `bindExport` -- and what lets every other export of
+            // the entrypoint survive instead of the whole artifact case
+            // refusing over one core name.
+            if export_binds_core_runtime(
+                facts,
+                files_by_canonical_path,
+                &path,
+                &name,
+                &mut HashSet::new(),
+            ) {
+                continue;
+            }
             names.insert(name);
         }
         for binding in file.ast.exported_bindings(export) {
@@ -9080,6 +9097,143 @@ fn export_is_type_only(
         }
     }
     proven
+}
+
+/// Whether every export of `name` from `path` binds into the built-in runtime
+/// foundation.
+///
+/// `solid-js`, `@solidjs/signals` and `@solidjs/web` have no package contract
+/// **by design** (ADR 0027): ordinary analysis takes their behavior from the
+/// selected dialect, and `core_runtime_contract_reference` withholds one. A
+/// package that re-exports a core name therefore publishes a name nothing can
+/// ever bind — and every census downstream demands a binding for it, so the
+/// whole artifact case refuses over a name whose behavior the dialect already
+/// owns. That is what left `@solid-primitives/utils@6.4.1`'s `.` entrypoint
+/// with no contract on 2026-09-15 (`accepted dependency solid-js/web has no
+/// exact runtime binding for export isServer`), and with it every consumer of
+/// the 820 call sites that import it.
+///
+/// Omitting the name is not a claim that the export does not exist. It is ADR
+/// 0027's "missing native behavior stays unknown", stated in the one place
+/// that can state it: this package has no standing to describe a name it does
+/// not implement, and the dialect describes it already.
+///
+/// Mirrors `export_is_type_only` beside it in structure and in strictness:
+/// **every** export of the name must bind core, so a name also exported
+/// locally, or re-exported from an ordinary dependency, stays in the surface
+/// and keeps its existing refusal. Anything this walk cannot see proves
+/// nothing and returns `false`.
+fn export_binds_core_runtime(
+    facts: &solid_facts::ProjectFacts,
+    files_by_canonical_path: &HashMap<PathBuf, &solid_facts::FileFacts>,
+    path: &Path,
+    name: &str,
+    visiting: &mut HashSet<(PathBuf, String)>,
+) -> bool {
+    let Ok(path) = path.canonicalize() else {
+        return false;
+    };
+    if !visiting.insert((path.clone(), name.to_owned())) {
+        return false;
+    }
+    let Some(file) = files_by_canonical_path.get(&path).copied() else {
+        return false;
+    };
+    let mut proven = false;
+    for export in file.ast.module_level_exports() {
+        for specifier in export
+            .specifiers
+            .iter()
+            .chain(export.declarations.iter())
+            .filter(|specifier| specifier.exported.as_str() == name)
+        {
+            if export.type_only || specifier.type_only {
+                continue;
+            }
+            let local_name = file
+                .source_text(specifier.local.span)
+                .unwrap_or(specifier.exported.as_str());
+            let core = match export.module.as_deref() {
+                Some(module) if module.starts_with('.') => {
+                    resolve_relative_export(facts, &path, module).is_ok_and(|target| {
+                        export_binds_core_runtime(
+                            facts,
+                            files_by_canonical_path,
+                            &target,
+                            local_name,
+                            visiting,
+                        )
+                    })
+                }
+                Some(module) => solid_dialect::core_runtime_specifier(module),
+                None => local_import_binds_core_runtime(
+                    facts,
+                    files_by_canonical_path,
+                    file,
+                    &path,
+                    local_name,
+                    visiting,
+                ),
+            };
+            if !core {
+                return false;
+            }
+            proven = true;
+        }
+        // A locally declared export of the same name is this package's own,
+        // and settles the question against core immediately.
+        if export.module.is_none()
+            && file.ast.exported_bindings(export).any(|binding| {
+                binding
+                    .names
+                    .iter()
+                    .any(|declared| file.source_text(declared.span) == Some(name))
+            })
+        {
+            return false;
+        }
+    }
+    proven
+}
+
+/// The `import { x } from "solid-js/web"; export { x }` spelling of the above,
+/// which carries the same public identity but states no module at the export.
+fn local_import_binds_core_runtime(
+    facts: &solid_facts::ProjectFacts,
+    files_by_canonical_path: &HashMap<PathBuf, &solid_facts::FileFacts>,
+    file: &solid_facts::FileFacts,
+    path: &Path,
+    local_name: &str,
+    visiting: &mut HashSet<(PathBuf, String)>,
+) -> bool {
+    for import in &file.ast.imports {
+        for binding in &import.bindings {
+            if file.source_text(binding.local.span) != Some(local_name) {
+                continue;
+            }
+            if import.type_only || binding.type_only {
+                return false;
+            }
+            let Some(imported) = binding.imported.as_deref().or_else(|| {
+                (binding.kind == solid_facts::ast::ImportKind::Default).then_some("default")
+            }) else {
+                return false;
+            };
+            if !import.module.starts_with('.') {
+                return solid_dialect::core_runtime_specifier(&import.module);
+            }
+            return resolve_relative_export(facts, path, &import.module).is_ok_and(|target| {
+                export_binds_core_runtime(
+                    facts,
+                    files_by_canonical_path,
+                    &target,
+                    imported,
+                    visiting,
+                )
+            });
+        }
+    }
+    false
 }
 
 /// Whether the local name a bare `export { x }` specifier names is an import
