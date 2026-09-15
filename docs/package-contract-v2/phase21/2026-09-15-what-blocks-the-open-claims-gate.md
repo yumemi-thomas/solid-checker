@@ -482,3 +482,46 @@ emptiness test added nothing to those.
 This is the `−43` of § 17 going the other way: a real regression on the branch,
 found by the gate that exists for it, and the only number in this document that
 should have moved and now has.
+
+## 19. Correction to § 14: the type-stripping wall is liftable
+
+§ 14 called Node's refusal to strip types under `node_modules` "a deliberate
+restriction with no flag to lift" and treated `@kobalte/utils`'s 124 claims as
+closed by the interpreter. That was asserted, not tested. Tested, it is wrong.
+
+Node's refusal keys on a `/node_modules/` segment in the **resolved realpath**,
+and Node realpaths what it resolves. Against the pinned Node 24.11.1, with a
+package whose `exports` names `./src/index.ts`:
+
+| | placement | result |
+| --- | --- | --- |
+| A | real directory at `node_modules/dep` | refuses: stripping unsupported |
+| B | `node_modules/dep` → symlink to `packages/dep` | **resolves and strips** |
+| C | B again, with `--preserve-symlinks` | refuses |
+
+C is the control: the mechanism is realpath resolution and nothing else. Bare
+specifier resolution, the `exports` map and the conditions all work unchanged
+through the symlink.
+
+**This preserves byte identity**, which is why it is admissible where
+transpiling is not: the file the probe executes is the same file the witness
+read, reached by a different path. Nothing is recompiled and no digest moves.
+
+Three things the harness would have to handle, all identified, none unknown:
+
+1. **The reported resolution is the realpath.** `import.meta.resolve("dep")`
+   returns `…/packages/dep/src/index.ts`, not the `node_modules` spelling, so
+   `verify_reported_resolution` compares against a path that no longer contains
+   the private `node_modules` prefix. The harness already canonicalizes for the
+   macOS `/var` → `/private/var` case, so the machinery exists.
+2. **`--preserve-symlinks` must never be passed**, and that should be asserted
+   rather than assumed.
+3. **The workspace census and tree digest** cover "the whole private
+   `node_modules`" and refuse symlinks in several places. Moving the package
+   copy out of `node_modules` and linking to it changes what those watch, and
+   that is the part that needs design rather than a patch.
+
+This is the highest-value item in the document: `@kobalte/utils` carries
+`mergeDefaultProps` (254 consumer sites), `callHandler` (112) and
+`createGenerateId` (60) — 426 sites across three exports, at the top of § 5's
+worklist, and all 124 of its withheld claims are this one wall.
