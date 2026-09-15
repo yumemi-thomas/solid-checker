@@ -449,3 +449,36 @@ Two consequences:
 
 The −43 certified closures are worth their own look; they are consistent with
 the four lost receipts in § 8 and are not explained here.
+
+## 18. Resolved: the four lost receipts of § 8
+
+§ 8 recorded four rows the 2026-09-14 pin certified and `a8fc8cbb` refused, all
+with `retained floor main has no certified exports`, and said they were not
+diagnosed and that the suspect was `59c957b6`. The suspect was wrong.
+
+`inspectRetainedCertificationFloor` required the retained case's `exports` map
+to be **non-empty**. `solid-devtools@0.34.5`'s `.` entrypoint resolves, on both
+its `browser` and its `import` branch, to `./dist/index_noop.js` — a zero-byte
+production no-op whose sha256 is `e3b0c442…`, the digest of the empty string,
+carrying `"initialization": "inert"`. Its case has `exports: {}` because the
+module exports nothing. That is the correct contract for it, and the floor read
+it as "nothing was certified".
+
+The field is still required and must still be a map — absent, `null`, an array
+and a string all refuse, each pinned. Only emptiness is admitted, and nothing is
+weakened: integrity at that point is the document digest the catalog entry
+names, the receipt's `mainDigest` binding over the same bytes, and the
+`matches.length !== 1` check requiring the case to equal one exact expected
+selected input in package, selection, importer, artifact and both traces. The
+emptiness test added nothing to those.
+
+| probe | before | after |
+| --- | --- | --- |
+| `solid-devtools@0.34.5\|solid1\|only` | refused | **certified** |
+| `@tanstack/solid-start@1.168.47\|solid1\|only` | refused | **certified** |
+| `@tanstack/solid-start@2.0.0-rc.2\|solid2\|floor` | refused | **certified** |
+| `@tanstack/solid-start@2.0.0-rc.2\|solid2\|head` | refused | **certified** |
+
+This is the `−43` of § 17 going the other way: a real regression on the branch,
+found by the gate that exists for it, and the only number in this document that
+should have moved and now has.
