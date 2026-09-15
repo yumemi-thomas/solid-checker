@@ -54,7 +54,23 @@ export function inspectRetainedCertificationFloor({ catalogRoot, expected }) {
     if (entries.length !== 1 || entries[0][1].cases?.length !== 1) throw new Error("retained floor main has an unexpected case census");
     const [entrypoint, body] = entries[0];
     const { exports, ...selection } = body.cases[0];
-    if (!exports || !Object.keys(exports).length) throw new Error("retained floor main has no certified exports");
+    // The map must be present and must be a map. It may be **empty**: a package
+    // whose selected artifact exports nothing has exactly this contract, and
+    // `solid-devtools@0.34.5`'s `.` is that package -- its browser and import
+    // branches both resolve to `./dist/index_noop.js`, a zero-byte module
+    // (sha256 e3b0c442…, the empty string) marked `"initialization": "inert"`.
+    // Requiring a non-empty map read "nothing was certified" off a case where
+    // there was nothing to certify, and cost that row its receipt.
+    //
+    // Nothing is weakened by allowing it. Integrity here is the document digest
+    // the catalog entry names, the receipt's `mainDigest` binding over the same
+    // bytes, and the `matches.length !== 1` check below, which requires this
+    // case to equal one exact expected selected input in package, selection,
+    // importer, artifact and both traces. An emptiness test adds nothing to
+    // those and is not what would catch a stripped publication.
+    if (!exports || typeof exports !== "object" || Array.isArray(exports)) {
+      throw new Error("retained floor main has no exports map");
+    }
     const matches = expected.filter(item => {
       const r = item.resolution;
       return item.coordinate.entrypoint === entrypoint && imported.requestedEntrypoint === entrypoint

@@ -81,3 +81,37 @@ test("malformed pointers do not fall back to a leftover catalog", () => {
     }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("an artifact that exports nothing is a floor, and a missing or malformed exports map is not", () => {
+  // `solid-devtools@0.34.5`'s `.` resolves to `./dist/index_noop.js`, a
+  // zero-byte production no-op. Its case carries `exports: {}` because there is
+  // nothing to export, and requiring a non-empty map cost that row its receipt
+  // on 2026-09-15 with "retained floor main has no certified exports".
+  const empty = mkdtempSync(join(tmpdir(), "retained-floor-empty-"));
+  try {
+    const expected = publication(empty, [".", "./other"], ({ main }) => {
+      Object.values(main.entrypoints)[0].cases[0].exports = {};
+    });
+    const got = inspectRetainedCertificationFloor({ catalogRoot: empty, expected });
+    assert.deepEqual(got.cases.map(c => c.entrypoint), [".", "./other"]);
+  } finally { rmSync(empty, { recursive: true, force: true }); }
+
+  // The field itself is still required, and still has to be a map: absent, null
+  // and array all refuse, so "empty is allowed" never becomes "anything goes".
+  for (const exports of [undefined, null, [], "summary"]) {
+    const root = mkdtempSync(join(tmpdir(), "retained-floor-noexports-"));
+    try {
+      const expected = structuredClone(publication(root));
+      publication(root, [".", "./other"], ({ main }) => {
+        const first = Object.values(main.entrypoints)[0].cases[0];
+        if (exports === undefined) delete first.exports;
+        else first.exports = exports;
+      });
+      assert.throws(
+        () => inspectRetainedCertificationFloor({ catalogRoot: root, expected }),
+        /retained floor/,
+        `exports=${JSON.stringify(exports)} must refuse`
+      );
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  }
+});
