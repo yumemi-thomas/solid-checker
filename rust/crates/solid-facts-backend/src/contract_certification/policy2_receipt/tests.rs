@@ -1,4 +1,7 @@
 use super::*;
+
+/// The set every fixture receipt in this file is issued over.
+const CONDITIONS: &[String] = &[];
 use crate::ContractFailure;
 use crate::artifact_resolution::{
     ClosureManifest, ClosurePackageIdentity, ResolutionAuthority, ResolutionTrace,
@@ -862,7 +865,14 @@ fn publication_commits_one_pointer_after_both_content_objects() {
     let mut changed_receipt = receipt.clone();
     changed_receipt.push(b' ');
     assert!(matches!(
-        publish_policy2_catalog(&root, &main, &changed_receipt, &authenticated, &resolved),
+        publish_policy2_catalog(
+            &root,
+            &main,
+            &changed_receipt,
+            &authenticated,
+            &resolved,
+            CONDITIONS
+        ),
         Err(ReceiptPublicationError::Unauthenticated(_))
     ));
     assert!(!root.exists());
@@ -875,12 +885,26 @@ fn publication_commits_one_pointer_after_both_content_objects() {
         bindings.semantic_digest
     );
     assert!(matches!(
-        publish_policy2_catalog(&root, &alternate_main, &receipt, &authenticated, &resolved),
+        publish_policy2_catalog(
+            &root,
+            &alternate_main,
+            &receipt,
+            &authenticated,
+            &resolved,
+            CONDITIONS
+        ),
         Err(ReceiptPublicationError::Unauthenticated(_))
     ));
     assert!(!root.exists());
-    let published =
-        publish_policy2_catalog(&root, &main, &receipt, &authenticated, &resolved).unwrap();
+    let published = publish_policy2_catalog(
+        &root,
+        &main,
+        &receipt,
+        &authenticated,
+        &resolved,
+        CONDITIONS,
+    )
+    .unwrap();
     assert_eq!(fs::read(&published.main_path).unwrap(), main);
     assert_eq!(fs::read(&published.receipt_path).unwrap(), receipt);
     let pointer: serde_json::Value =
@@ -952,6 +976,7 @@ fn normal_catalog_discovery_authenticates_the_published_policy2_entry() {
         &receipt,
         &authenticated,
         &resolved,
+        std::slice::from_ref(&"import".to_owned()),
     )
     .unwrap();
     let configuration = Policy2TrustConfiguration::new(trust, Some(issuer.scope().into())).unwrap();

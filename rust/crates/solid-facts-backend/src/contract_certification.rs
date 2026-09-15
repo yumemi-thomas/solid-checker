@@ -697,6 +697,7 @@ impl CertificationPlan {
             finalized.receipt(),
             finalized.authenticated(),
             &self.resolved_import,
+            &self.import_request.export_conditions,
         )
     }
 

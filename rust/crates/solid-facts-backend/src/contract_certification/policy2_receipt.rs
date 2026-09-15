@@ -1396,6 +1396,15 @@ struct CatalogEntry<'a> {
     bindings: &'a Policy2ReceiptBindings,
     status: CatalogStatus,
     import: &'a ResolvedImport,
+    /// The export conditions `artifactAcceptanceRoot` was computed over.
+    ///
+    /// Recorded because the root is a digest and a consumer cannot invert it.
+    /// Without this a consumer could only *guess* the set — and the guess in
+    /// `default_condition_artifact_identity` was the constant `["import"]`, so
+    /// a project declaring its real conditions (`node, import` for a Node
+    /// target, say) was refused while a project declaring the wrong ones was
+    /// admitted. Declaring honestly broke it; that is why this field exists.
+    export_conditions: &'a [String],
 }
 
 #[derive(Clone, Copy, Serialize)]
@@ -1415,6 +1424,7 @@ pub fn publish_policy2_catalog(
     receipt: &[u8],
     authenticated: &AuthenticatedPolicy2Receipt,
     resolved_import: &ResolvedImport,
+    export_conditions: &[String],
 ) -> Result<PublishedPolicy2Catalog, ReceiptPublicationError> {
     let (_, normalized) = validate_canonical_main(canonical_main)
         .map_err(|error| ReceiptPublicationError::Unauthenticated(error.to_string()))?;
@@ -1475,6 +1485,7 @@ pub fn publish_policy2_catalog(
             bindings: &authenticated.bindings,
             status,
             import: resolved_import,
+            export_conditions,
         }],
     })
     .map_err(|error| ReceiptPublicationError::Io(error.to_string()))?;

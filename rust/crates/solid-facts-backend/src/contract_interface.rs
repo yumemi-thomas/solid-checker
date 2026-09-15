@@ -287,6 +287,14 @@ struct AcceptedCatalogEntry {
     bindings: Option<Policy2ReceiptBindings>,
     status: AcceptedCatalogStatus,
     import: ResolvedImport,
+    /// The export conditions `artifactAcceptanceRoot` was computed over.
+    ///
+    /// `None` for a catalog published before this was recorded. Those fall back
+    /// to the `["import"]` guess below, which is what every consumer did
+    /// unconditionally until now — so an older catalog keeps exactly the
+    /// behaviour it had, and a newer one stops needing the guess.
+    #[serde(default)]
+    export_conditions: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -568,7 +576,11 @@ fn read_catalog_with_trust(
                     importer: entry.import.importer.clone(),
                     specifier: entry.import.specifier.clone(),
                     contract,
-                    artifact_identity: default_condition_artifact_identity(&entry.import, bindings),
+                    artifact_identity: default_condition_artifact_identity(
+                        &entry.import,
+                        bindings,
+                        entry.export_conditions.as_deref(),
+                    ),
                 });
             }
         }
@@ -602,15 +614,21 @@ fn read_catalog_with_trust(
 fn default_condition_artifact_identity(
     import: &crate::artifact_resolution::ResolvedImport,
     bindings: &crate::contract_certification::Policy2ReceiptBindings,
+    export_conditions: Option<&[String]>,
 ) -> Option<String> {
     if bindings.artifact_acceptance_root.is_empty() {
         return None;
     }
-    let derived = crate::contract_certification::policy2_artifact_acceptance_root(
-        import,
-        std::slice::from_ref(&"import".to_owned()),
-    )
-    .ok()?;
+    // The set the catalog recorded, and only `["import"]` as a fallback for a
+    // catalog published before it was recorded. Guessing was the defect: an
+    // entry certified under `node, import` derived a root for `import`, matched
+    // nothing, and the case was unreachable however the consumer declared
+    // itself. The equality below is still the whole check — a recorded set that
+    // does not reproduce the signed root states nothing.
+    let fallback = ["import".to_owned()];
+    let conditions = export_conditions.unwrap_or(&fallback);
+    let derived =
+        crate::contract_certification::policy2_artifact_acceptance_root(import, conditions).ok()?;
     (derived == bindings.artifact_acceptance_root).then_some(derived)
 }
 
@@ -633,55 +651,195 @@ pub type InstalledArtifactIdentity<'a> = dyn Fn(&str) -> Option<(String, String,
 /// condition facts of its own, and conditions select the artifact, so an empty
 /// set admits nothing rather than assuming `import`.
 pub fn admitted_project_artifacts(
-    catalog: &Path,
+    catalogs: &[PathBuf],
     trust: Option<&Policy2TrustConfiguration>,
     project_directory: &Path,
     conditions: &std::collections::BTreeSet<String>,
     installed_integrity: &InstalledArtifactIdentity,
+    resolved_target: &ResolvedTargetIdentity,
 ) -> Result<Vec<(String, String)>, ContractFailure> {
-    if conditions.is_empty() {
-        return Ok(Vec::new());
-    }
     let _ = (project_directory, trust);
-    let (catalog, _) = decode_accepted_contract_catalog(catalog)?;
-    let conditions = conditions.iter().cloned().collect::<Vec<_>>();
+    let declared = conditions.iter().cloned().collect::<Vec<_>>();
+    // Every authentic case, across every catalog. A case set publishes one
+    // catalog *per case*, so a per-catalog decision would never see two cases
+    // of the same package together and could not tell an unambiguous artifact
+    // from an ambiguous one -- it would admit both, which is the unsound
+    // direction.
+    let mut authentic: BTreeMap<String, Vec<AuthenticCase>> = BTreeMap::new();
+    for path in catalogs {
+        let (catalog, _) = decode_accepted_contract_catalog(path)?;
+        for entry in catalog.contracts {
+            if !matches!(
+                entry.status,
+                AcceptedCatalogStatus::Policy2PersistentLocal
+                    | AcceptedCatalogStatus::Policy2Portable
+            ) {
+                continue;
+            }
+            let Some(bindings) = entry
+                .bindings
+                .as_ref()
+                .filter(|bindings| !bindings.artifact_acceptance_root.is_empty())
+            else {
+                continue;
+            };
+            let Some((name, version, integrity)) = installed_integrity(&entry.import.specifier)
+            else {
+                continue;
+            };
+            // Recompute against the *installed* identity rather than the
+            // catalog's record of it: the catalog states what certification
+            // resolved, and the question here is whether this project resolved
+            // the same thing.
+            let mut installed = entry.import.clone();
+            installed.package_name = name;
+            installed.package_version = version;
+            installed.package_integrity = integrity;
+            // The conditions the entry recorded, not the ones this host
+            // declared. Reproducing the signed root is a statement about the
+            // *case*; whether it applies to this project is decided below.
+            let fallback = ["import".to_owned()];
+            let case_conditions = entry
+                .export_conditions
+                .clone()
+                .unwrap_or_else(|| fallback.to_vec());
+            let Ok(derived) = crate::contract_certification::policy2_artifact_acceptance_root(
+                &installed,
+                &case_conditions,
+            ) else {
+                continue;
+            };
+            if derived != bindings.artifact_acceptance_root {
+                continue;
+            }
+            let Some(case) = AuthenticCase::new(derived, &entry.import, case_conditions) else {
+                continue;
+            };
+            authentic
+                .entry(entry.import.specifier.clone())
+                .or_default()
+                .push(case);
+        }
+    }
+
     let mut admitted = Vec::new();
-    for entry in catalog.contracts {
-        if !matches!(
-            entry.status,
-            AcceptedCatalogStatus::Policy2PersistentLocal | AcceptedCatalogStatus::Policy2Portable
-        ) {
-            continue;
-        }
-        let Some(bindings) = entry
-            .bindings
-            .as_ref()
-            .filter(|bindings| !bindings.artifact_acceptance_root.is_empty())
-        else {
+    for (specifier, cases) in authentic {
+        // What this project resolved the specifier to. Without it nothing is
+        // admitted.
+        let Some(target) = resolved_target(&specifier) else {
             continue;
         };
-        let Some((name, version, integrity)) = installed_integrity(&entry.import.specifier) else {
+        // TypeScript resolves the *declaration* file, and one `.d.ts` is
+        // routinely shared by several export-condition branches. So the
+        // resolved file selects a set of candidate cases, not one case.
+        let reaching = cases
+            .iter()
+            .filter(|case| case.reaches(&target))
+            .collect::<Vec<_>>();
+        let Some(selected) = select_case(&reaching, &declared) else {
             continue;
         };
-        // Recompute against the *installed* identity rather than the catalog's
-        // record of it: the catalog states what certification resolved, and the
-        // question here is whether this project resolved the same thing.
-        let mut installed = entry.import.clone();
-        installed.package_name = name;
-        installed.package_version = version;
-        installed.package_integrity = integrity;
-        let Ok(derived) = crate::contract_certification::policy2_artifact_acceptance_root(
-            &installed,
-            &conditions,
-        ) else {
-            continue;
-        };
-        if derived == bindings.artifact_acceptance_root {
-            admitted.push((entry.import.specifier.clone(), derived));
-        }
+        admitted.push((specifier, selected.identity.clone()));
     }
     Ok(admitted)
 }
+
+/// Chooses which acceptance applies to this project, among those certified
+/// about a file it actually resolved.
+///
+/// Two regimes, because the honest answer differs:
+///
+/// - **No declaration** — the linter case. ESLint and Oxlint hosts do not know
+///   their export conditions, and a wrong guess is worse than none: the guess
+///   this replaced was the constant `["import"]`, which refused every project
+///   that declared its real conditions and admitted only ones that declared
+///   that exact set. With nothing declared, admit only when every candidate was
+///   proven about the *same runtime file* — they then describe the same bytes,
+///   and which branch reached them changes nothing about what is true of them.
+///   Candidates that disagree cannot both be what this project runs, and
+///   nothing here can choose, so refuse.
+/// - **A declaration** — authoritative, with Node's own selection semantics. A
+///   case applies when every condition it was certified under is one this host
+///   declares, and the most specific such case wins. Set *equality* would be
+///   wrong in both directions: a host declaring `node, import, development`
+///   must still match a case certified under `node, import`, and a host
+///   declaring `require` must not match one certified under `import` however
+///   many declaration files the two branches share.
+fn select_case<'a>(
+    reaching: &[&'a AuthenticCase],
+    declared: &[String],
+) -> Option<&'a AuthenticCase> {
+    let first = reaching.first()?;
+    if declared.is_empty() {
+        return reaching
+            .iter()
+            .all(|case| case.runtime_target == first.runtime_target)
+            .then_some(*first);
+    }
+    let applicable = reaching
+        .iter()
+        .filter(|case| case.conditions.iter().all(|it| declared.contains(it)))
+        .collect::<Vec<_>>();
+    let best = applicable.iter().map(|case| case.conditions.len()).max()?;
+    let mut most_specific = applicable
+        .iter()
+        .filter(|case| case.conditions.len() == best);
+    match (most_specific.next(), most_specific.next()) {
+        (Some(one), None) => Some(**one),
+        // Two equally specific cases under different condition sets is not
+        // something a declaration can resolve. Refuse.
+        _ => None,
+    }
+}
+
+/// One acceptance that reproduced its signed artifact root against this
+/// project's installed bytes.
+struct AuthenticCase {
+    identity: String,
+    /// The runtime file the contract was proven about, package-relative.
+    runtime_target: String,
+    /// The declaration file paired with it, package-relative. Empty when the
+    /// entry names none.
+    declaration_target: String,
+    conditions: Vec<String>,
+}
+
+impl AuthenticCase {
+    /// Both sides of the comparison are absolute paths on different machines,
+    /// so the package-relative spelling is the only comparable part.
+    fn new(
+        identity: String,
+        import: &crate::artifact_resolution::ResolvedImport,
+        conditions: Vec<String>,
+    ) -> Option<Self> {
+        let relative = |path: &str| -> Option<String> {
+            let root = import.package_root.replace('\\', "/");
+            path.replace('\\', "/")
+                .strip_prefix(root.trim_end_matches('/'))
+                .map(|rest| rest.trim_start_matches('/').to_owned())
+                .filter(|rest| !rest.is_empty())
+        };
+        Some(Self {
+            identity,
+            runtime_target: relative(&import.runtime.path)?,
+            declaration_target: relative(&import.declarations.path).unwrap_or_default(),
+            conditions,
+        })
+    }
+
+    /// Whether this project's resolved file is one this case was certified
+    /// about. The analyzer resolves TypeScript's answer, which is the
+    /// declaration file; the runtime spelling is accepted too, so a host that
+    /// resolves the runtime target directly is not excluded.
+    fn reaches(&self, target: &str) -> bool {
+        self.runtime_target == target || self.declaration_target == target
+    }
+}
+
+/// What the caller can state about a specifier's *resolved runtime file*,
+/// relative to the installed package root. `None` when the project cannot state
+/// one exactly — an unresolved import, or two importers that disagree.
+pub type ResolvedTargetIdentity<'a> = dyn Fn(&str) -> Option<String> + 'a;
 
 /// The project's local accepted-contract tier: every catalog it holds.
 ///
@@ -1297,6 +1455,100 @@ mod tests {
             "no local tier discovers nothing"
         );
         let _ = fs::remove_dir_all(&project);
+    }
+
+    fn case(identity: &str, runtime: &str, conditions: &[&str]) -> AuthenticCase {
+        AuthenticCase {
+            identity: identity.to_owned(),
+            runtime_target: runtime.to_owned(),
+            declaration_target: "dist/index.d.ts".to_owned(),
+            conditions: conditions.iter().map(|it| (*it).to_owned()).collect(),
+        }
+    }
+
+    fn selected(cases: &[AuthenticCase], declared: &[&str]) -> Option<String> {
+        let reaching = cases.iter().collect::<Vec<_>>();
+        let declared = declared
+            .iter()
+            .map(|it| (*it).to_owned())
+            .collect::<Vec<_>>();
+        select_case(&reaching, &declared).map(|case| case.identity.clone())
+    }
+
+    /// The defect this replaced: `artifactAcceptanceRoot` is a digest over a
+    /// condition set the catalog never recorded, so a consumer could only guess
+    /// it, and the guess was the constant `["import"]`. A project declaring its
+    /// real conditions was refused; one declaring that exact set was admitted.
+    /// Declaring honestly broke it.
+    ///
+    /// Measured against `@solid-primitives/debounce@1.3.0`, whose two certified
+    /// cases reach the same `dist/index.js` through `/exports/./import` and
+    /// `/exports/./node/import`.
+    #[test]
+    fn a_declaration_selects_by_node_condition_semantics() {
+        let cases = [
+            case("root-import", "dist/index.js", &["import"]),
+            case("root-node", "dist/index.js", &["node", "import"]),
+        ];
+        // A superset of a case's conditions selects it, and the most specific
+        // applicable case wins.
+        assert_eq!(
+            selected(&cases, &["import"]).as_deref(),
+            Some("root-import")
+        );
+        assert_eq!(
+            selected(&cases, &["node", "import"]).as_deref(),
+            Some("root-node"),
+            "the most specific applicable case wins, not the first"
+        );
+        assert_eq!(
+            selected(&cases, &["browser", "import", "development"]).as_deref(),
+            Some("root-import"),
+            "a host declaring more than a case needs still matches it"
+        );
+        // A host whose conditions contain none of a case's is not that case.
+        assert_eq!(selected(&cases, &["require"]), None);
+        assert_eq!(selected(&cases, &["solid"]), None);
+    }
+
+    /// The linter case. ESLint and Oxlint hosts do not know their export
+    /// conditions, so requiring a declaration would make delivery a no-op for
+    /// them -- silently, which is the worst failure mode a linter can have.
+    #[test]
+    fn no_declaration_admits_only_an_unambiguous_artifact() {
+        let same = [
+            case("root-import", "dist/index.js", &["import"]),
+            case("root-node", "dist/index.js", &["node", "import"]),
+        ];
+        assert_eq!(
+            selected(&same, &[]).as_deref(),
+            Some("root-import"),
+            "candidates proven about the same runtime file describe the same bytes"
+        );
+        // One `.d.ts` shared by branches that run *different* files is exactly
+        // where a guess would be unsound, and there is nothing here to choose
+        // with.
+        let differing = [
+            case("root-import", "dist/index.js", &["import"]),
+            case("root-require", "dist/index.cjs", &["require"]),
+        ];
+        assert_eq!(
+            selected(&differing, &[]),
+            None,
+            "candidates that disagree about the runtime file must refuse"
+        );
+        // With a declaration the same pair is decidable.
+        assert_eq!(
+            selected(&differing, &["require"]).as_deref(),
+            Some("root-require")
+        );
+    }
+
+    /// Nothing resolved, or nothing certified about what was resolved.
+    #[test]
+    fn no_candidate_admits_nothing() {
+        assert_eq!(selected(&[], &[]), None);
+        assert_eq!(selected(&[], &["import"]), None);
     }
 
     /// The older spelling still wins outright: it is the one a user may have

@@ -878,10 +878,11 @@ struct PackageManifest {
 /// versions of one dependency admits neither — which is the nested-install case
 /// the importer key used to guard.
 pub fn admitted_project_artifacts(
-    catalog: &Path,
+    catalogs: &[PathBuf],
     trust: Option<&crate::contract_certification::Policy2TrustConfiguration>,
     project_directory: &Path,
     conditions: &std::collections::BTreeSet<String>,
+    facts: &solid_facts::ProjectFacts,
 ) -> Result<Vec<(String, String)>, BackendError> {
     let installed = |specifier: &str| -> Option<(String, String, String)> {
         let module = package_name_of_specifier(specifier)?;
@@ -890,12 +891,48 @@ pub fn admitted_project_artifacts(
         let integrity = installed_package_integrity(project_directory, &directory).ok()??;
         Some((module, manifest.version, integrity))
     };
+    // What this project resolved the specifier to, relative to the installed
+    // package root -- the fact that lets an acceptance be bound to this project
+    // without the host having to declare export conditions it usually does not
+    // know. `None` whenever the project cannot state one exactly: an unresolved
+    // import, a specifier no importer reached, or two importers that disagree
+    // (a nested install), each of which admits nothing rather than picking.
+    let resolved_target = |specifier: &str| -> Option<String> {
+        let module = package_name_of_specifier(specifier)?;
+        let (directory, _) = installed_package_manifest(project_directory, &module).ok()??;
+        let root = fs::canonicalize(&directory).ok()?;
+        let attested = facts.resolved_imports.as_ref()?;
+        let mut selected: Option<String> = None;
+        for (_, import) in attested.iter() {
+            if import.text.as_str() != specifier
+                || import.resolution == solid_facts::ImportResolution::Unresolved
+            {
+                continue;
+            }
+            let resolved = fs::canonicalize(Path::new(import.resolved_path.as_ref())).ok()?;
+            let relative = resolved
+                .strip_prefix(&root)
+                .ok()?
+                .to_string_lossy()
+                .replace('\\', "/");
+            if relative.is_empty() {
+                return None;
+            }
+            match &selected {
+                Some(existing) if existing != &relative => return None,
+                Some(_) => {}
+                None => selected = Some(relative),
+            }
+        }
+        selected
+    };
     crate::contract_interface::admitted_project_artifacts(
-        catalog,
+        catalogs,
         trust,
         project_directory,
         conditions,
         &installed,
+        &resolved_target,
     )
     .map_err(|error| BackendError::Contract(error.to_string()))
 }

@@ -21714,3 +21714,74 @@ obstacle is working from the wrong number.
 `load_authenticated_policy2_embedded_contract`, the real loader, is fully
 implemented and needs two inputs (`Policy2ReceiptBindings`, `BuiltInReceiptEntry`)
 that `EmbeddedBundle` does not carry.
+
+## 2026-09-15 — the acceptance root committed to a set nobody recorded
+
+**Resolved.** The entry above left delivery working but requiring
+`--runtime-condition import`. Asked whether that is realistic for the Oxlint and
+ESLint integration, the measurement said no — and for a sharper reason than
+configuration burden:
+
+~~~
+[import]           certified        <- the only set that worked
+[node,import]      missing          <- the other certified case's own branch
+[browser,import]   missing
+[require]          missing
+~~~
+
+**Declaring your conditions honestly broke it.** `artifactAcceptanceRoot` is a
+digest over an export-condition set, and the set was recorded **nowhere** — not
+in `import`, not in `bindings`. A consumer could therefore only *guess* it, and
+`default_condition_artifact_identity` guessed the constant `["import"]`. So a
+Node-targeting project declaring `node, import`, which is correct, was refused,
+while the catalog held a case certified for exactly `/exports/./node/import`.
+Both linters drive the same plugin, and neither can supply a set its users
+usually do not know.
+
+Three changes, each measured:
+
+- **The set is recorded.** `exportConditions` on the catalog entry, written from
+  the certified `import_request.export_conditions`. Absent on an older catalog,
+  which keeps the `["import"]` fallback — exactly the behaviour it had.
+- **Admission decides across catalogs, not one at a time.** A case set publishes
+  one catalog *per case*, so the previous per-catalog call never saw two cases of
+  the same package together and could not tell an unambiguous artifact from an
+  ambiguous one. It admitted both, which is the unsound direction.
+- **The artifact is selected by the file the analyzer resolved.** The installed
+  integrity fixes the tarball; the resolved file fixes which file inside it.
+  This is what removes the declaration requirement.
+
+**One correction worth keeping, because it cost a wrong first attempt.** The
+certifier records the **runtime** file it proved about (`dist/index.js`); the
+analyzer's resolution is TypeScript's, which lands on the **declaration** file
+(`dist/index.d.ts`). Matching only the runtime target admitted nothing at all.
+Both spellings are compared now.
+
+**Selection follows Node's own semantics, in two regimes.** With no declaration
+— the linter case — admit only when every candidate was proven about the *same
+runtime file*: they describe the same bytes, so which branch reached them changes
+nothing. Candidates that disagree (one `.d.ts` shared by `import` and `require`
+branches running different files) refuse, because nothing can choose. With a
+declaration, a case applies when every condition it was certified under is one
+the host declares, and the most specific applicable case wins. Set *equality*
+would be wrong in both directions.
+
+Measured after:
+
+~~~
+[none]             certified   <- zero configuration; ESLint and Oxlint need none
+[import]           certified
+[node,import]      certified
+[browser,import]   certified
+[require]          missing     <- correctly refused
+[solid]            missing     <- correctly refused
+~~~
+
+and the analysis with **no** flags now reports `SC4001 missing-owner` plus the
+open-claims `SC9005`, where before it reported `certified` with nothing.
+
+**Still open.** The `exportConditions` field is additive on a schema-v1 catalog,
+so every already-published catalog keeps the `["import"]` fallback until it is
+re-certified; nothing re-certifies them. And the **bundled** tier is untouched:
+`EMBEDDED_BUNDLES` and `EMBEDDED_SOLID1_BUNDLES` are still `&[]` with a stub
+loader, which is now zero-configuration convenience rather than the only road.

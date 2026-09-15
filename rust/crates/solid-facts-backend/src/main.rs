@@ -3024,10 +3024,11 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                     let contracts = match discovered_catalog.as_deref() {
                         Some(path) => contracts.with_admitted_artifacts(
                             solid_facts_backend::admitted_project_artifacts(
-                                path,
+                                std::slice::from_ref(&path.to_path_buf()),
                                 trust.as_ref(),
                                 &package_root,
                                 &request.runtime.conditions,
+                                &facts,
                             )?,
                         ),
                         None => contracts,
@@ -3195,15 +3196,13 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         // to redo work already done -- for a contract the analysis was about to
         // accept and diagnose with. A report that disagrees with the analyzer
         // about whether a contract applies is worse than no report.
-        let mut admitted = Vec::new();
-        for path in &catalogs {
-            admitted.extend(solid_facts_backend::admitted_project_artifacts(
-                path,
-                trust.as_ref(),
-                directory,
-                &request.runtime.conditions,
-            )?);
-        }
+        let admitted = solid_facts_backend::admitted_project_artifacts(
+            &catalogs,
+            trust.as_ref(),
+            directory,
+            &request.runtime.conditions,
+            &facts,
+        )?;
         let contracts = if admitted.is_empty() {
             contracts
         } else {
@@ -3321,15 +3320,13 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         // Admission is per catalog, and a case set holds one per artifact case:
         // the case that matches this project's installed artifact is the one
         // whose acceptance root recomputes, and the others simply admit nothing.
-        let mut admitted = Vec::new();
-        for path in &discovered_catalogs {
-            admitted.extend(solid_facts_backend::admitted_project_artifacts(
-                path,
-                trust.as_ref(),
-                directory,
-                &request.runtime.conditions,
-            )?);
-        }
+        let admitted = solid_facts_backend::admitted_project_artifacts(
+            &discovered_catalogs,
+            trust.as_ref(),
+            directory,
+            &request.runtime.conditions,
+            &facts,
+        )?;
         let contracts = if admitted.is_empty() {
             contracts
         } else {
