@@ -17,8 +17,17 @@
 // deliberately excluded -- rewording a hint should not churn 30 files.
 
 import { execFile, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
 
@@ -44,6 +53,22 @@ const checker = locate(
 );
 const typefacts = locate("SOLID_TYPEFACTS_BIN", join(root, "bin", "solid-typefacts"));
 
+// A fixture that wants to be analyzed against an *accepted* contract is run from
+// a scratch copy, because the receipt binds the absolute importer path the
+// consumer itself computes -- an authorized tree is bound to where it sits and
+// cannot be committed. This tool mints that receipt; it is built alongside the
+// checker by every target that builds one, and is never packaged.
+//
+// Looked for beside the checker first, for that reason: a `verify`-profile
+// checker paired with a stale `debug` authorizer would be two different builds
+// deciding one answer.
+const authorizeTool = locate(
+  "SOLID_CONTRACT_AUTHORIZE_BIN",
+  join(dirname(checker), "solid-contract-authorize"),
+  join(root, "rust", "target", "debug", "solid-contract-authorize")
+);
+const authorizationScratch = join(root, "rust", "target", "fixture-authorization");
+
 for (const [name, path] of [
   ["checker", checker],
   ["type facts producer", typefacts]
@@ -64,7 +89,13 @@ function fixtureProjects() {
       if (!entry.isDirectory()) continue;
       const directory = join(base, entry.name);
       const tsconfig = join(directory, "tsconfig.json");
-      if (existsSync(tsconfig)) found.push({ id: `${group}/${entry.name}`, directory, tsconfig });
+      if (!existsSync(tsconfig)) continue;
+      found.push({
+        id: `${group}/${entry.name}`,
+        directory,
+        tsconfig,
+        authorizes: existsSync(join(directory, ".solid-checker", "authorize-contract.json"))
+      });
     }
   }
   return found.sort((a, b) => a.id.localeCompare(b.id));
@@ -223,7 +254,7 @@ const IDENTICAL_SOURCES = [
  * that a fixture edit that shifts a line does not read as a rule change, and
  * repository-relative paths so snapshots do not carry anyone's home directory.
  */
-function comparable(finding, keepWording) {
+function comparable(finding, keepWording, rebase = (path) => relative(root, path)) {
   const location = finding.primaryLocation ?? {};
   const portable = (value) =>
     typeof value === "string" ? value.split(root).join("<ROOT>") : value;
@@ -232,7 +263,7 @@ function comparable(finding, keepWording) {
     code: finding.id,
     kind: finding.kind,
     severity: finding.severity,
-    path: location.path ? relative(root, location.path) : null,
+    path: location.path ? rebase(location.path) : null,
     start: location.startByte ?? null,
     end: location.endByte ?? null,
     fixes: Array.isArray(finding.fixes) ? finding.fixes.length : 0,
@@ -284,10 +315,70 @@ function runtimeArguments(tsconfig) {
   return args;
 }
 
-async function analyze(tsconfig, keepWording) {
+/**
+ * Materializes a fixture that asked for an accepted contract, authorizes its
+ * own hand-written resolution, and returns where to analyze it.
+ *
+ * Three things here are the point rather than incidental mechanics:
+ *
+ * - **A copy.** The receipt binds the absolute importer path, so authorizing in
+ *   place would write a machine-bound receipt into the tree, move the directory
+ *   digest underneath the gate cache, and race the other projects.
+ * - **Trust out of band.** The configuration is written *beside* the copy and
+ *   passed as a flag. A project cannot nominate its own issuer, so the same
+ *   authorized tree analyzed without the flag is refused outright -- which is
+ *   what keeps a fixed fixture signing key from being a forgery, and is pinned
+ *   by `an_authorized_catalog_is_refused_without_the_trust_configuration`.
+ * - **The stub is required.** Dialect selection takes the nearest
+ *   `node_modules/solid-js/package.json` above the project, and a copy sits at a
+ *   different depth than the fixture. A fixture carrying its own stub decides
+ *   its dialect wherever it is analyzed; one relying on an ancestor would
+ *   silently change catalog when copied.
+ */
+function materializeAuthorized(project) {
+  if (!existsSync(authorizeTool)) {
+    console.error(
+      `${project.id} asks for an accepted contract but ${relative(root, authorizeTool)}` +
+        ` is missing -- run 'make build-checker-debug'`
+    );
+    process.exit(2);
+  }
+  if (!existsSync(join(project.directory, "node_modules", "solid-js", "package.json"))) {
+    console.error(
+      `${project.id} asks for an accepted contract but ships no node_modules/solid-js stub --` +
+        ` a copied fixture cannot inherit a dialect from its ancestors`
+    );
+    process.exit(2);
+  }
+  const base = join(authorizationScratch, project.id.replace("/", "__"));
+  const destination = join(base, "project");
+  rmSync(base, { recursive: true, force: true });
+  mkdirSync(base, { recursive: true });
+  cpSync(project.directory, destination, { recursive: true });
+  const trust = join(base, "trust.json");
+  execFileSync(authorizeTool, ["--project", destination, "--trust-output", trust], {
+    encoding: "utf8"
+  });
+  // The tool canonicalizes its own `--project`, and the receipt binds what it
+  // canonicalized; the checker must be pointed at the same spelling.
+  return {
+    directory: realpathSync(destination),
+    trust,
+    id: relative(root, project.directory).split(sep).join("/")
+  };
+}
+
+async function analyze(tsconfig, keepWording, authorized) {
   const { stdout: output } = await run(
     checker,
-    ["--format", "json", "--project", tsconfig, ...runtimeArguments(tsconfig)],
+    [
+      "--format",
+      "json",
+      "--project",
+      tsconfig,
+      ...(authorized ? ["--receipt-trust-configuration", authorized.trust] : []),
+      ...runtimeArguments(tsconfig)
+    ],
     {
       cwd: root,
       encoding: "utf8",
@@ -299,7 +390,15 @@ async function analyze(tsconfig, keepWording) {
     }
   );
   const snapshot = JSON.parse(output);
-  const findings = (snapshot.findings ?? []).map((finding) => comparable(finding, keepWording));
+  // An authorized project is analyzed from scratch space, so its findings name
+  // paths that exist nowhere in the repository. Spell them as the fixture the
+  // snapshot is about.
+  const rebase = authorized
+    ? (path) => join(authorized.id, relative(authorized.directory, path))
+    : undefined;
+  const findings = (snapshot.findings ?? []).map((finding) =>
+    comparable(finding, keepWording, rebase)
+  );
   findings.sort(
     (a, b) =>
       (a.path ?? "").localeCompare(b.path ?? "") ||
@@ -340,10 +439,17 @@ if (projects.length === 0) {
 // With that added, a project's findings are a function of exactly its tree, the
 // dialect-selection chain above it, the two binaries, and the environment --
 // which is what makes running the 83 of them concurrently sound.
+// The authorization tool is an input wherever a project asks for an accepted
+// contract: it decides what the analyzed catalog says. It joins the key only
+// when some project asks, so a corpus with none of them is not invalidated by a
+// tool it never runs -- and `materializeAuthorized` exits rather than skipping
+// when a project asks and the tool is absent.
 const cache = openGateCache({
   gate: "coverage",
   scriptPath: import.meta.filename,
-  binaries: [checker, typefacts, `${typefacts}.buildinfo`]
+  binaries: projects.some((project) => project.authorizes)
+    ? [checker, typefacts, `${typefacts}.buildinfo`, authorizeTool]
+    : [checker, typefacts, `${typefacts}.buildinfo`]
 });
 const concurrency = gateConcurrency();
 
@@ -360,9 +466,13 @@ const unitParts = (project) => () => [
 const computed = await mapPool(
   projects,
   (project) =>
-    cache.run(unitParts(project), () =>
-      analyze(project.tsconfig, KEEPS_WORDING.has(project.id))
-    ),
+    cache.run(unitParts(project), () => {
+      const authorized = project.authorizes ? materializeAuthorized(project) : undefined;
+      const tsconfig = authorized
+        ? join(authorized.directory, "tsconfig.json")
+        : project.tsconfig;
+      return analyze(tsconfig, KEEPS_WORDING.has(project.id), authorized);
+    }),
   { concurrency }
 );
 

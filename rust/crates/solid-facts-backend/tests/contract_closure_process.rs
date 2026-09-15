@@ -31,13 +31,8 @@ use std::{
 };
 
 use crate::support::{decode_findings, temporary_directory};
-use solid_facts_backend::{
-    ConfiguredReceiptIssuer, Policy2ReceiptBindings, Policy2ReceiptProvenance,
-    RECEIPT_WITNESS_FAMILIES, ResolvedImport, authenticate_policy2_receipt,
-    canonicalize_policy2_main, encode_policy2_trust_configuration, issue_policy2_receipt,
-    policy2_artifact_acceptance_root, policy2_main_closed_claims_root,
-    policy2_main_semantic_digest, policy2_resolved_import_root,
-    policy2_trust_configuration_for_issuer, publish_policy2_catalog,
+use solid_facts_backend::fixture_authorization::{
+    authorize_fixture_contract, read_fixture_contract_request,
 };
 
 /// The fixture is reused rather than duplicated: its `App.tsx` already pairs a
@@ -60,45 +55,6 @@ fn copy_tree(from: &Path, to: &Path) {
             copy_tree(&entry.path(), &target);
         } else {
             fs::copy(entry.path(), &target).unwrap();
-        }
-    }
-}
-
-/// Shape-valid stand-ins for roots whose authority comes from the verifier
-/// sessions that would supply them in a real certification. `Policy2ReceiptBindings`
-/// validates shape only, by design, and this test is about what the *consumer*
-/// does with an authenticated receipt.
-fn root(index: u16) -> String {
-    format!("sha256:{index:064x}")
-}
-
-/// The stored catalog spells every path relative to the project, which is what
-/// makes the fixture relocatable; `ResolvedImport::validate` requires absolute
-/// ones. Rewrite exactly the project-relative fields against the temporary
-/// copy, leaving package-relative closure entries alone.
-fn absolutize(import: &mut serde_json::Value, project: &Path) {
-    let at = |value: &serde_json::Value| -> String {
-        project
-            .join(value.as_str().expect("path is a string"))
-            .to_string_lossy()
-            .into_owned()
-    };
-    for key in ["importer", "packageRoot"] {
-        import[key] = at(&import[key]).into();
-    }
-    for key in ["packageManifest", "runtime", "declarations"] {
-        import[key]["path"] = at(&import[key]["path"]).into();
-    }
-    let Some(exports) = import["exports"].as_object_mut() else {
-        return;
-    };
-    for binding in exports.values_mut() {
-        for axis in ["runtime", "declarations"] {
-            binding[axis]["module"]["path"] = project
-                .join(binding[axis]["module"]["path"].as_str().unwrap())
-                .to_string_lossy()
-                .into_owned()
-                .into();
         }
     }
 }
@@ -146,50 +102,42 @@ fn catalog_bearing_fixtures() -> Vec<String> {
 /// Mints a policy-2 receipt over a fixture's own accepted catalog and returns
 /// the findings the checker then produces.
 ///
-/// The authorization is replaced and nothing else: the catalog's `import`
-/// block is reused verbatim, so this swaps an obsolete policy-1 receipt for a
-/// test-scoped policy-2 one without touching the resolution the fixture pins.
+/// The authorization is replaced and nothing else: the catalog's `import` block
+/// is reused verbatim by `solid_facts_backend::fixture_authorization`, so this
+/// swaps an obsolete policy-1 receipt for a test-scoped policy-2 one without
+/// touching the resolution the fixture pins. That module is the single
+/// implementation — `scripts/coverage.mjs` reaches the same code through
+/// `solid-contract-authorize`, so a snapshot fixture and this corpus cannot
+/// drift apart in what "authorized" means.
 fn mint_and_analyze(
     fixture: &str,
     label: &str,
     reopen: Option<&str>,
 ) -> Result<Vec<serde_json::Value>, String> {
+    mint_and_analyze_with_trust(fixture, label, reopen, true)
+}
+
+/// As above, with the choice of whether to hand the checker the trust
+/// configuration. Withholding it is not a degenerate case — it is the control
+/// that makes a fixed fixture signing key sound.
+fn mint_and_analyze_with_trust(
+    fixture: &str,
+    label: &str,
+    reopen: Option<&str>,
+    supply_trust: bool,
+) -> Result<Vec<serde_json::Value>, String> {
     let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("caller guards on the producer");
 
-    let project = temporary_directory(label).join("consumer");
+    let scratch = temporary_directory(label);
+    let project = scratch.join("consumer");
     copy_tree(&repository_root().join(fixture), &project);
-    // The catalog reader canonicalizes every path it rebases, and the receipt
-    // binds the importer it will compute. On macOS `env::temp_dir()` is a
-    // symlink (`/var` -> `/private/var`), so an uncanonicalized root here binds
-    // a path the consumer never derives.
+    // The authorization canonicalizes the project it rebases paths against, and
+    // the receipt binds the importer the consumer will compute. On macOS
+    // `env::temp_dir()` is a symlink (`/var` -> `/private/var`), so an
+    // uncanonicalized root here binds a path the consumer never derives.
     let project = fs::canonicalize(&project).unwrap();
+    let request = read_fixture_contract_request(&project).map_err(|error| error.to_string())?;
 
-    // The fixture's catalog already carries a valid `import` block; only its
-    // policy-1 authorization is obsolete. Reuse the resolver answer verbatim so
-    // this test replaces the *authorization*, not the resolution.
-    let catalog_path = project.join(".solid-checker/accepted-contracts.json");
-    let catalog: serde_json::Value =
-        serde_json::from_slice(&fs::read(&catalog_path).unwrap()).unwrap();
-    let contracts = catalog["contracts"].as_array().expect("a contracts array");
-    if contracts.len() != 1 {
-        // `publish_policy2_catalog` writes a catalog holding exactly one
-        // contract, so a fixture pinning several cannot be minted through the
-        // public publication path. Reported rather than worked around: a
-        // hand-assembled multi-entry catalog would be this test asserting its
-        // own idea of the on-disk shape.
-        return Err(format!(
-            "catalog publishes {} contracts; publication writes one",
-            contracts.len()
-        ));
-    }
-    let entry = &contracts[0];
-    if entry["status"] != "obsolete-policy1" {
-        return Err(format!("catalog status is {}", entry["status"]));
-    }
-    let mut import = entry["import"].clone();
-    absolutize(&mut import, &project);
-    let resolved: ResolvedImport = serde_json::from_value(import).unwrap();
-    let document = project.join(entry["document"].as_str().unwrap());
     // `"<domain>-items"` strips the domain's positive operations instead of
     // reopening it: the claim stays closed, but over nothing. Reopening and
     // stripping are different questions — one removes the proof that an
@@ -198,7 +146,7 @@ fn mint_and_analyze(
     // second.
     if let Some(domain) = reopen.and_then(|value| value.strip_suffix("-items")) {
         let mut contract: serde_json::Value =
-            serde_json::from_slice(&fs::read(&document).unwrap()).unwrap();
+            serde_json::from_slice(&fs::read(&request.document).unwrap()).unwrap();
         for summary in contract["summaries"].as_object_mut().unwrap().values_mut() {
             let call = summary["call"].as_object_mut().expect("a call object");
             let removed = call
@@ -220,13 +168,13 @@ fn mint_and_analyze(
                 });
             }
         }
-        fs::write(&document, serde_json::to_vec(&contract).unwrap()).unwrap();
+        fs::write(&request.document, serde_json::to_vec(&contract).unwrap()).unwrap();
     } else if let Some(domain) = reopen {
         // Reopening one domain in the fixture's own document is how this file
         // asks whether *partial* closure is worth anything: every sibling
         // domain stays closed and usable.
         let mut contract: serde_json::Value =
-            serde_json::from_slice(&fs::read(&document).unwrap()).unwrap();
+            serde_json::from_slice(&fs::read(&request.document).unwrap()).unwrap();
         for summary in contract["summaries"].as_object_mut().unwrap().values_mut() {
             let closed = summary["call"]["closed"].as_array_mut().unwrap();
             closed.retain(|value| value != domain);
@@ -245,97 +193,32 @@ fn mint_and_analyze(
                     .remove(domain);
             }
         }
-        fs::write(&document, serde_json::to_vec(&contract).unwrap()).unwrap();
+        fs::write(&request.document, serde_json::to_vec(&contract).unwrap()).unwrap();
     }
-    let canonical_main = canonicalize_policy2_main(&fs::read(&document).unwrap()).unwrap();
 
-    let bindings = Policy2ReceiptBindings {
-        importer: resolved.importer.clone(),
-        specifier: resolved.specifier.clone(),
-        resolved_import_root: policy2_resolved_import_root(&resolved).unwrap(),
-        artifact_acceptance_root: policy2_artifact_acceptance_root(&resolved, &["import".into()])
-            .unwrap(),
-        semantic_digest: policy2_main_semantic_digest(&canonical_main).unwrap(),
-        artifact_provenance_root: root(1),
-        snapshot_root: root(2),
-        package_root: root(3),
-        manifest_root: root(4),
-        artifacts_root: root(5),
-        declarations_root: root(6),
-        transform_root: root(7),
-        exports_root: root(8),
-        closure_root: root(9),
-        demand_graph_root: root(10),
-        verified_positive_root: root(11),
-        witness_roots: RECEIPT_WITNESS_FAMILIES
-            .iter()
-            .enumerate()
-            .map(|(index, family)| {
-                (
-                    (*family).to_owned(),
-                    root(u16::try_from(100 + index).unwrap()),
-                )
-            })
-            .collect(),
-        producer_sessions_root: root(12),
-        dependency_receipts_root: root(13),
-        dependency_trust_root: root(14),
-        probe_gate_root: root(15),
-        // Rebound by the consumer from the document itself: a test issuer
-        // cannot assert a closure the contract does not carry.
-        closed_claims_root: policy2_main_closed_claims_root(&canonical_main).unwrap(),
-        verifier_source_digest: root(17),
-        verifier_build_digest: root(18),
-    };
+    let authorization =
+        authorize_fixture_contract(&project, &request).map_err(|error| error.to_string())?;
 
-    let issuer = ConfiguredReceiptIssuer::persistent_local("solid-checker-fixture", [7u8; 32])
-        .expect("test-scoped issuer");
-    let receipt = issue_policy2_receipt(&canonical_main, &bindings, &issuer).unwrap();
-    let trust = policy2_trust_configuration_for_issuer(&issuer, &bindings.verifier_build_digest, 0)
-        .unwrap();
-    let authenticated = authenticate_policy2_receipt(
-        &canonical_main,
-        &receipt,
-        &bindings,
-        Policy2ReceiptProvenance::PersistentLocal {
-            trust_store: trust.trust_store(),
-            scope: issuer.scope(),
-        },
-    )
-    .expect("the test issuer's own receipt authenticates under its own trust");
+    // Out of band, exactly as an ordinary analysis requires, and *outside* the
+    // project: the catalog never references trust bytes, so a project cannot
+    // name its own issuer.
+    let trust_path = scratch.join("fixture-trust.json");
+    fs::write(&trust_path, &authorization.trust_configuration).unwrap();
 
-    // Publication replaces the catalog atomically; the obsolete pointer must be
-    // gone rather than merged with.
-    fs::remove_file(&catalog_path).unwrap();
-    publish_policy2_catalog(
-        &project.join(".solid-checker"),
-        &canonical_main,
-        &receipt,
-        &authenticated,
-        &resolved,
-    )
-    .expect("publish the freshly authorized catalog");
-
-    // Out of band, exactly as an ordinary analysis requires: the project never
-    // names its own issuer.
-    let trust_path = project.join("fixture-trust.json");
-    fs::write(
-        &trust_path,
-        encode_policy2_trust_configuration(&trust).unwrap(),
-    )
-    .unwrap();
-
+    let mut arguments = vec![
+        "--project".to_owned(),
+        project.join("tsconfig.json").to_string_lossy().into_owned(),
+        "--typefacts".to_owned(),
+        typefacts,
+        "--format".to_owned(),
+        "json".to_owned(),
+    ];
+    if supply_trust {
+        arguments.push("--receipt-trust-configuration".to_owned());
+        arguments.push(trust_path.to_string_lossy().into_owned());
+    }
     let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
-        .args([
-            "--project",
-            &project.join("tsconfig.json").to_string_lossy(),
-            "--typefacts",
-            &typefacts,
-            "--receipt-trust-configuration",
-            &trust_path.to_string_lossy(),
-            "--format",
-            "json",
-        ])
+        .args(&arguments)
         .output()
         .unwrap();
     if !output.status.success() {
@@ -346,6 +229,31 @@ fn mint_and_analyze(
     }
 
     Ok(decode_findings(&output.stdout))
+}
+
+/// The property that makes a fixed fixture signing key sound rather than a
+/// forgery: a published, authenticated, correctly signed catalog still buys
+/// nothing until a verifier is *separately* told to trust the issuer.
+///
+/// Without this, "the corpus can supply an accepted contract" would be
+/// indistinguishable from "a directory can declare itself trusted", and every
+/// snapshot downstream of an authorized fixture would be worthless. It is also
+/// the reason `fixtures/reactive-ir/package-merged-props-consumer` can be
+/// committed at all.
+#[test]
+fn an_authorized_catalog_is_refused_without_the_trust_configuration() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let refusal = mint_and_analyze_with_trust(FIXTURE, "unauthorized-trust", None, false)
+        .expect_err("a policy-2 catalog with no trusted issuer must not be accepted");
+    assert!(
+        refusal.contains("authenticated issuer provenance"),
+        "refused for the wrong reason: {refusal}"
+    );
+    // The control: the same tree, the same receipt, the trust supplied.
+    mint_and_analyze_with_trust(FIXTURE, "authorized-trust", None, true)
+        .expect("the same catalog is accepted once the issuer is trusted");
 }
 
 /// Separates two things a contract's `reads` claim carries, because

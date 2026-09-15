@@ -90,7 +90,7 @@ build-rust: build-typefacts
 # the packaged checker under bin/ untouched.
 build-checker-debug: build-typefacts
 	$(CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) \
-	  -p solid-facts-backend --bin solid-checker-rust
+	  -p solid-facts-backend --bin solid-checker-rust --bin solid-contract-authorize
 
 # A fresh optimized checker for performance measurements. Like the debug gate
 # build, this leaves the checked-in packaged binary under bin/ untouched.

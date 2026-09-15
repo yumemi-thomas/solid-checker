@@ -232,8 +232,11 @@ trap - INT TERM HUP
 test "$tests_status" -eq 0
 
 step build-checker
+# `solid-contract-authorize` travels with the checker: coverage runs it for any
+# fixture that asks to be analyzed against an accepted contract, and looks for it
+# beside the checker it was given.
 cargo +1.97 build --profile "$cargo_profile" --manifest-path "$rust_manifest" \
-  -p solid-facts-backend --bin solid-checker-rust
+  -p solid-facts-backend --bin solid-checker-rust --bin solid-contract-authorize
 
 step coverage
 SOLID_CHECKER_BIN="$checker_bin" \

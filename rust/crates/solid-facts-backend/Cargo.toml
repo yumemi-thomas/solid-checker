@@ -54,6 +54,13 @@ path = "src/bin/solid-checker-cold-start-bench.rs"
 name = "solid-contract-bundles"
 path = "src/bin/solid-contract-bundles.rs"
 
+# A gate tool, never packaged: it authorizes a fixture-supplied contract so the
+# corpus can analyze a consumer against an accepted one. See
+# src/fixture_authorization.rs for why a fixed signing seed is not a forgery.
+[[bin]]
+name = "solid-contract-authorize"
+path = "src/bin/solid-contract-authorize.rs"
+
 [[bin]]
 name = "solid-contract-phase16-bench"
 path = "src/bin/solid-contract-phase16-bench.rs"

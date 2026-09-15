@@ -90,6 +90,11 @@ mod diagnostics;
 pub mod dialect;
 mod evidence_sidecars;
 mod first_party_bundles;
+/// Authorizing a fixture-supplied contract, so a corpus can analyze a
+/// consumer against an accepted one. Never reached by an ordinary
+/// analysis: the trust it mints is returned to the caller, not written
+/// into the project.
+pub mod fixture_authorization;
 mod inferred_contract;
 mod package_requirements;
 mod phase16_benchmark;

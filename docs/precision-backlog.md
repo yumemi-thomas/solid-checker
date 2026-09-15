@@ -21503,3 +21503,67 @@ consumes an accepted contract. That is the third claim now resting on the same
 missing corpus capability, beside `returns_reactive_tuple` and the
 `mergeDefaultProps` yield. Whether the 127 actually drop still needs the kobalte
 corpus this repository does not have.
+
+## 2026-09-15 — the corpus can supply an accepted contract
+
+**Resolved for the capability; two of the three claims it blocked are still
+blocked, for other reasons.** Three entries above end with the same sentence —
+"no fixture consumes an accepted contract" — and name it as one missing
+capability shared by ADR 0109's consumer arm, the `returns_reactive_tuple` row,
+and the ownership filter's `SC4001`-versus-`source: created` pair. The
+capability now exists:
+[the design note](package-contract-v2/phase21/2026-09-15-an-accepted-contract-a-fixture-can-supply.md).
+
+A fixture ships `.solid-checker/authorize-contract.json` — the resolver answer
+it has always hand-written, and **no** catalog — and `scripts/coverage.mjs`
+copies the tree, has `solid-contract-authorize` mint a policy-2 receipt over the
+document, and analyzes the copy with the trust configuration supplied out of
+band. The minting itself is not new; five days old, in
+`the_catalog_bearing_fixtures_mint_a_policy_2_corpus`. What is new is that a
+**snapshot** fixture can reach it, that a fixture with no prior catalog can, and
+that the document can state the claim being pinned instead of whatever the
+fixture already shipped. `fixture_authorization` is one library module and both
+callers use it, so "authorized" cannot come to mean two things.
+
+**Why a checked-in signing seed is sound.** A catalog does not reference trust
+bytes, so a signature buys nothing until a verifier is separately told to trust
+the key — and nothing a fixture can commit does the telling. The same authorized
+tree with the flag reports `SC1001`; without it the analysis is refused outright
+for want of authenticated issuer provenance. Both directions are pinned by
+`an_authorized_catalog_is_refused_without_the_trust_configuration`, and the tool
+refuses a `--trust-output` inside the project.
+
+**Measured.** `fixtures/reactive-ir/package-merged-props-consumer` is the first
+one, and it settles ADR 0109's consumer arm. Four calls, two exports of the same
+shape, varying only where the props sit: `withDefaults(props)` (claim names
+argument 0) and `withOverrides({…}, props)` (names argument 1) report `SC1003`;
+`withDefaults({label: "fallback"})` is clean, which is the conditional answering
+`false` rather than `unknown`. An implementation that ignored the parameter index
+would report three of the four; one that hard-coded argument 0 would report a
+different two. Un-authorized the same fixture reports **nothing at all**, so
+every finding in its snapshot is attributable to the authorization. Coverage
+moves 550 → 552 across 95 projects.
+
+**The fourth call is the incompleteness, pinned.** `withOverrides(props, {…})`
+puts props at an index the contract does not name and is clean — an under-report
+ADR 0109 states explicitly, since a real merge carries every source's
+reactivity. It is in the snapshot so the gap is visible in the instrument rather
+than only in prose.
+
+**Still open.**
+
+- **The `returns_reactive_tuple` behaviour pin is now authorable and not
+  written.** It needs a contract stating an `argument` or `callback-result`
+  return, which this capability makes possible; nothing else blocks it.
+- **The `mergeDefaultProps` yield is not a fixture question.** It needs the
+  kobalte corpus and a pass-2 harness, neither of which is in this repository.
+  No fixture capability can substitute.
+- **The ownership filter's pair** (the `SC4001` fixture recorded above as
+  blocked on "a fixture that can hold an accepted contract again") is unblocked
+  and unwritten.
+- **The fourteen catalog-bearing fixtures still snapshot their rejection.**
+  Their catalogs are untouched. Several of them exist to pin refusal, so moving
+  them is a deliberate per-fixture decision, not a sweep.
+- **This is still a fixture, not a certification.** A hand-written document
+  authorized by a test-scoped issuer says nothing about whether the certifier
+  can produce such a contract. It cannot yet.

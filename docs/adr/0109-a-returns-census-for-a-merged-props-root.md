@@ -279,12 +279,21 @@ to argument `from`" and says nothing about whether they also reach elsewhere.
   existing return shape is absolute.
 - **Fixtures.** The generation half is authorable today
   (`callback-slot-props-forwarding`'s `Stylesheet` is already the shape). The
-  consumer half is **not**: it needs a project consuming an accepted contract,
-  and the corpus has no dependency-catalog surface while every fixture-supplied
-  catalog is `obsolete-policy1` because an accepted one needs a receipt a fixture
-  cannot forge. That blocker is recorded in `docs/precision-backlog.md`
-  (2026-09-15) and is shared with the `returns_reactive_tuple` row; closing it
-  once serves both.
+  consumer half was **not**, and is now: the blocker this bullet recorded — every
+  fixture-supplied catalog being `obsolete-policy1`, because an accepted one
+  needs a receipt a fixture cannot forge — was closed the same day by
+  `src/fixture_authorization.rs` and `scripts/coverage.mjs`, which authorize a
+  fixture's own resolution in a scratch copy and supply the trust out of band.
+
+  **Measured, and the arm is exactly as narrow as this ADR claims.**
+  `fixtures/reactive-ir/package-merged-props-consumer` calls two exports of the
+  same shape four times, varying only where the props sit: `withDefaults(props)`
+  (contract names argument 0) and `withOverrides({…}, props)` (names argument 1)
+  report `SC1003`; `withDefaults({label: "fallback"})` is clean, which is the
+  conditional answering `false` rather than `unknown`. The fourth,
+  `withOverrides(props, {…})`, is also clean and is this ADR's admitted
+  incompleteness in a snapshot: a real merge carries argument 0's reactivity and
+  the census does not certify it.
 - **Yield, honestly.** It closes `returns` for props wrappers. Whether the 127
   *disappear* depends on `reactiveReads` also closing, which the 2026-09-15
   attribution fix should deliver — but neither half is measurable in this

@@ -131,7 +131,12 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // (1.x `splitProps`, 2.0 `omit`), pinning that the callback inventory's
       // split suppression is a dialect row and not a comparison against one
       // vocabulary's constant.
-      stableMainDocuments: 191,
+      // 192 adds package-merged-props-consumer's main document: the first
+      // fixture contract the corpus *authorizes* rather than ships as an
+      // obsolete catalog, pinning ADR 0109's consumer arm (a `merged-props`
+      // return is reactive exactly when the caller's argument at that index
+      // is).
+      stableMainDocuments: 192,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
