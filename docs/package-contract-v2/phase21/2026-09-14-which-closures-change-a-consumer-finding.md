@@ -641,3 +641,88 @@ of this observation is that its cause is not known. Anything further should
 start from the generator's own analysis of `dist/eventListener.js`, which is
 where the content is missing, rather than from the certification machinery
 downstream of it.
+
+## 15. The coverage census: what a contract states about what consumers import
+
+§§ 9–14 chased one empty document through five wrong explanations. That was the
+wrong shape of question. The question this report exists to answer is whether a
+consumer with contracts for the packages they use gets useful feedback, and that
+is a coverage number, not a mechanism.
+
+### Method
+
+The demand side was already measured (§ 3): 2,585 consumer call sites, 242
+distinct exports, 146 projects, of which 1,958 sites name a package installed in
+the corpus. Aggregated by package, demand is extremely concentrated — **two
+packages carry 80% of all call sites**, and the whole in-corpus tail is 18
+packages.
+
+For each of those 18, the installed version was resolved from the corpus, the
+package was certified once at its root entrypoint through the ordinary plain
+lane, and every demanded export was classified against the emitted document:
+`operations` (the contract states at least one), `closed-empty` (determined to
+state nothing), `degenerate` (`{"call": {}}`, nothing determined), or `absent`.
+`@solid-primitives/utils` also publishes `./immutable`, certified separately and
+folded in, because certifying only `.` would have scored 24 of its demanded
+exports as absent when they are simply behind another entrypoint.
+
+### The result
+
+| package | version | call sites | ops | closed-empty | degenerate | absent | sites with a stated operation |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `@kobalte/utils` | 0.9.2 | 942 | **0** | 18 | 23 | 0 | 0 / 942 (0.0%) |
+| `@solid-primitives/utils` | 6.4.1 | 820 | 8 | 24 | 19 | 3 | 257 / 820 (**31.3%**) |
+| `@kobalte/solidbase` | 0.6.13 | 60 | — | — | — | — | refused: `.` is not exported by the package |
+| `@solid-primitives/rootless` | 1.5.3 | 39 | 0 | 0 | 4 | 0 | 0 / 39 (0.0%) |
+| `@solidjs/start` | 2.0.0 | 24 | 0 | 0 | 2 | 7 | 0 / 24 (0.0%) |
+| `@solid-primitives/platform` | 0.1.2 | 18 | 0 | 0 | 5 | 0 | 0 / 18 (0.0%) |
+| `@kobalte/core` | 0.13.12 | 16 | 0 | 0 | 5 | 0 | 0 / 16 (0.0%) |
+| `@solid-primitives/trigger` | 1.0.11 | 9 | 0 | 0 | 2 | 0 | 0 / 9 (0.0%) |
+| `@solid-primitives/marker` | 0.2.2 | 8 | 2 | 0 | 0 | 0 | 8 / 8 (100.0%) |
+| `@solid-primitives/scheduled` | 1.5.3 | 5 | 2 | 0 | 0 | 0 | 5 / 5 (100.0%) |
+| `@solid-primitives/memo` | 1.5.1 | 4 | 0 | 0 | 2 | 0 | 0 / 4 (0.0%) |
+| `@solid-primitives/keyed` | 1.2.2 | 2 | 0 | 0 | 1 | 0 | 0 / 2 (0.0%) |
+| `@solid-primitives/context` | 0.2.3 | 2 | — | — | — | — | refused: closure module `solid-js/types/reactive/signal.js` not found |
+| `@solidjs/meta` | 0.29.4 | 2 | 0 | 0 | 1 | 0 | 0 / 2 (0.0%) |
+| `@solid-primitives/storage` | 4.4.0 | 1 | 0 | 0 | 1 | 0 | 0 / 1 (0.0%) |
+| `permission`, `tween`, `timer` | — | 6 | — | — | — | — | no version resolvable from the corpus |
+
+**14.3%** — 270 of the 1,890 measured call sites import an export whose contract
+states any operation at all.
+
+The distribution is bimodal, not uniform. Two tiny packages score 100%; one
+mid-size package scores 31%; **everything else scores zero**, including
+`@kobalte/utils`, which alone carries 48% of all consumer demand and states
+nothing about a single one of its 41 demanded exports.
+
+### The number that actually matters is smaller
+
+"States an operation" is not the same as "can raise a finding about how you use
+it". Across every demanded export in the census, the contracts state 29 `invoke`,
+15 `read`, 7 `return` and 7 `cleanup` operations — and only **four exports carry
+an owner requirement**, the thing that turns a contract into a defect in the
+consumer's own code (`SC4001`):
+
+| export | package | call sites |
+| --- | --- | ---: |
+| `createMicrotask` | `@solid-primitives/utils` | 20 |
+| `createMarker` | `@solid-primitives/marker` | 8 |
+| `debounce`, `throttle` | `@solid-primitives/scheduled` | 5 |
+
+**29 of 1,890 call sites — 1.5%.** That is the ceiling on useful consumer
+feedback from package contracts against this corpus today, and it is reached
+only *after* the acceptance gate of § 4 is solved, which no consumer passes at
+all right now.
+
+### What this settles
+
+The answer to the question this report was opened to answer is: **no, not yet,
+and not by a small margin.** A user who certified every package they import
+would get contract-derived feedback at 1.5% of their call sites.
+
+It also reframes §§ 9–14. `@solid-primitives/event-listener` stating nothing is
+not an anomaly worth five explanations — it is the *majority* behaviour. Thirteen
+of the fifteen measured packages state nothing about the exports their consumers
+actually call. Debugging one of them was answering a question nobody needed
+answered; the generator's coverage across packages is the problem, and it is
+visible without any mechanism hunt.
