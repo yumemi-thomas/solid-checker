@@ -2786,6 +2786,17 @@ fn primitive_callback_execution(
             });
     }
     match (primitive, parameter) {
+        // The next two arms are **unreachable in this build** and kept
+        // deliberately, for the same reason as `Version::V1`: `Primitive` is
+        // the shared vocabulary, and no dialect this build carries names
+        // `On` or `MergeProps` -- both were Solid 1.x's, retired by ADR 0110.
+        // 2.0's nearest relative to `mergeProps` is `merge`, which this
+        // dialect does not model as a callback-taking primitive at all, so it
+        // does not arrive here under another spelling. What each arm says
+        // remains true of the primitive it names; it is the *reaching* that
+        // is gone, and a future dialect that carries either name finds the
+        // reasoning rather than re-deriving it.
+        //
         // `on` returns an adapter; neither the dependency callback nor the
         // user callback runs during the call that creates that adapter. The
         // dialect labels the dependency callback `Inline` for the checker so
