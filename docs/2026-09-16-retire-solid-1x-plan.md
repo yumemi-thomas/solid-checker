@@ -900,19 +900,40 @@ ends that have since closed. What actually closed them:
 What is left, in recommended order:
 
 1. **`some_audit_denies_primitive` matches on export and domain, never on
-   `row.package`** -- the only remaining item that could be a *correctness*
-   issue rather than lost coverage, and the reason it is first.
+   `row.package`** — **investigated 2026-09-17; it is a real imprecision, the
+   obvious fix is wrong, and the code is unchanged.** Recorded in full in that
+   function's doc comment; the short version:
 
-   The proposal generator therefore reads `@solidjs/signals`' `createSignal`
-   row as covering `solid-js`' re-declaration, which the dialect withholds on
-   purpose (§ 7.4: the `node`/`worker`/`deno` body reaches `ctx.serialize`).
-   Its doc comment argues this is safe because a proposal is only ever proven
-   later against authenticated bytes, and that argument was checked on
-   2026-09-16 and holds -- `census_dialect_axiom` is archive-bound and refuses
-   it. But it is the same package-blind name match whose *cross-dialect* form
-   was a real bug before the retirement, so it wants a deliberate look rather
-   than an inherited one. Bounded: one function, one doc comment, and a test
-   that pins whichever answer is right.
+   - **The defect is real and was demonstrated**, on a probe package that
+     separates the two cases against the audited rc.3 install. `solid-js`
+     re-*declares* `createSignal`, `createMemo`, `createStore`,
+     `createProjection`, `createOptimistic` and `createOptimisticStore` from
+     `./client/hydration.js`, and the audit withholds rows for those six
+     implementations on purpose. They are answered out of `@solidjs/signals`'
+     rows anyway: the generator proposes a closed `creates` the audit refuses
+     to make, and emits no `dialect-silent` decline record — blinding the
+     "audit this primitive next" instrument exactly where a row is missing.
+   - **It is not a soundness hole.** The proposal still has to survive the
+     archive-bound implementation census, which refuses it, so nothing false
+     certifies. The cost is an open claim that can never close, plus the
+     missing decline record.
+   - **Passing the caller's package makes it worse, and this was measured
+     rather than argued.** The only package identity at the call site is
+     `ResolvedDeclaration::origin_module`, which is the module the *import
+     specifier* resolved to — not the archive owning the declaration. Probed
+     against the real install, a `solid-js` import of `untrack` or `createRoot`
+     reports `solid-js` there too, even though `solid-js` re-exports both from
+     `@solidjs/signals`. Keying on it declines those **ten** legitimate
+     re-exports to fix these **six** re-declarations, and
+     `fixtures/package-contracts/callback-reactive-arguments` catches the
+     regression.
+   - **What a correct fix needs:** discriminate on
+     `ResolvedDeclaration::source_file` — the file the declaration actually
+     lives in, which is what `census_dialect_axiom` already uses to bind an
+     archive. That field is not plumbed to this call site, so the work is a new
+     accessor beside `callee_origin_module` plus the decision of what the
+     decline record's `package` field should then say (it is pinned by
+     `fixtures/package-contracts/creates-decline-records`).
 
 2. **`callback-deferred-untracked-chain`** -- authoring, not porting, and it
    needs audited 2.0 facts that do not exist yet. Three of its exports have no

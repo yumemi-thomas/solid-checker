@@ -715,6 +715,40 @@ pub fn canonical_primitive_name(name: &str) -> bool {
 /// Whether **some** dialect's negative authority carries a row denying
 /// `domain` for a primitive spelled `export`, with no archive identity bound.
 ///
+/// # Known imprecision: a row's package is not consulted (measured 2026-09-17)
+///
+/// A row is `(package, export, domain)` and this matches only the last two, so
+/// one package's denial answers for every package exporting that name. It has
+/// a live consequence in 2.0: `solid-js` re-*declares* `createSignal`,
+/// `createMemo`, `createStore`, `createProjection`, `createOptimistic` and
+/// `createOptimisticStore` from `./client/hydration.js` rather than
+/// re-exporting `@solidjs/signals`', and [`Solid2`]'s audit withholds rows for
+/// those six implementations on purpose (`solid_2.rs` § 7.4 — the
+/// `node`/`worker`/`deno` bodies can reach `ctx.serialize`, which *is* a
+/// create). They are nevertheless answered out of `@solidjs/signals`' rows, so
+/// the generator proposes a closed `creates` the audit refuses to make and
+/// emits **no** `dialect-silent` decline record for them — which blinds the
+/// "audit this primitive next" instrument exactly where a row is missing.
+///
+/// Not a soundness hole: the proposal still has to survive the archive-bound
+/// implementation census (`census_dialect_axiom`), which resolves the callee's
+/// declaration into a snapshot and asks [`primitive_performs_no_operation`] —
+/// so the claim never certifies. The cost is an open claim that can never
+/// close, plus the missing decline record.
+///
+/// **The obvious fix is wrong, and was tried.** Passing the caller's package
+/// makes it *worse*: the only package identity available at the call site is
+/// `ResolvedDeclaration::origin_module`, which is the module the import
+/// specifier resolved to and not the archive that owns the declaration. Probed
+/// against the audited rc.3 install, a `solid-js` import of `untrack` or
+/// `createRoot` — names `solid-js` genuinely re-exports from
+/// `@solidjs/signals` — reports `solid-js` there too. Keying on it declines
+/// those ten legitimate re-exports to fix these six re-declarations, a net
+/// precision loss that `fixtures/package-contracts/callback-reactive-arguments`
+/// catches. A correct fix has to discriminate on
+/// `ResolvedDeclaration::source_file`, the way the census already does; that
+/// field is not plumbed to this call site today.
+///
 /// # This answers a proposal question, never a proof one
 ///
 /// [`primitive_performs_no_operation`] is the proof-bearing form: it takes an
