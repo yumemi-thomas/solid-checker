@@ -1384,3 +1384,102 @@ elsewhere.
 **"Each fix reveals another" is not evidence of divergence.** It is evidence the
 invariant has not been stated yet. Five symptoms, one rule, two clauses; the
 right move was to name the rule, not to revert the change.
+
+## 33. Shipped: C, the compiled-in accepted-contract tier
+
+§ 22 scoped bundling and § 23 corrected where it goes. Both are now built, and
+the gate a consumer stops at has moved for the first time.
+
+### The measurement
+
+A project that has never run `contract certify`: `@solid-primitives/keyed@1.5.3`
+installed, an npm lockfile stating its integrity, one `<Key each={…}>` call.
+
+| | finding | context |
+| --- | --- | --- |
+| `--no-bundled-contracts` | 1 | `no receipt-accepted contract matches this exact import` |
+| default | 1 | `unknown-contract-claims:reactiveReads,returns,ownerRequirements` |
+
+That is the transition `sc9005-acceptance-gate` recorded as never having
+happened once across 146 real consumer projects: 2,585 of 2,585 findings at the
+acceptance gate, **zero** at the open-claims gate. `contract check` on the same
+project now answers `@solid-primitives/keyed: certified (receipt-issued
+stable-v1 index)`, and the analysis report lists the package as accepted.
+
+The finding count did not fall, and that is the honest shape of this change: the
+acceptance gate was never the *last* gate, it was the *first*. What moved is
+that the contract is now read, so the remaining message names the three claim
+domains that are open rather than saying nothing was accepted. Closing those is
+the consumer-rule and closure work, and it was unreachable until now.
+
+### What was built
+
+- **`accepted_bundles`** — the tier. It feeds `AcceptedContractIndex` through a
+  new `from_artifact_acceptances`, so a bundle lands in `by_artifact` and in
+  nothing else: it has no importer in this project, and putting it in `imports`
+  would have keyed it on a path that cannot occur here *and* made every report
+  enumerating `semantic_identity` claim the project accepted a contract it never
+  reached.
+- **Admission shares one rule with the project tier.** `AuthenticCase`,
+  `select_case` and the declared-condition normalization are now `pub(crate)`
+  and used by both, because "does this acceptance apply to this project" must
+  not have two implementations.
+- **`contract_bundling` + `solid-contract-bundle`** — the generator. It
+  authenticates the certification's own receipt through the ordinary loader,
+  then re-issues it as a built-in one over the *same* canonical main and the
+  *same* bindings, and refuses: a core-runtime package (ADR 0027), a receipt
+  with no `artifactAcceptanceRoot`, a multi-case document, an identity that does
+  not reproduce its own signed root, and a target outside the package root. It
+  loads its own output with the consumer's loader before writing anything.
+- **`scripts/bundle-accepted-contracts.mjs` + `make accepted-bundles`** — reads
+  the same `--keep-temp` run the coverage census reads, so delivery and
+  measurement come from one certification.
+- **23 bundles over 6 packages** are checked in: `@solid-primitives/keyed`,
+  `marker`, `permission`, `tween` at `.`, and `@solidjs/start` and
+  `@kobalte/solidbase` across their sub-entrypoints. Wildcard-reached
+  entrypoints are skipped by the same `nameableEntrypoint` rule the census uses.
+
+### Two corrections to § 23
+
+- **Bundles are not build-pinned.** § 23 said "the receipt is build-pinned …
+  so bundles are re-issued per checker build". `authenticate_policy2_receipt`
+  compares `entry.verifier_build_digest` to the receipt payload's, and *both*
+  come from the bundle; nothing on the consumer path compares either to the
+  running binary. What is pinned is the **proof policy**: `validate_payload`
+  compares `payload.policy_digest` to `proof_policy_2()`, so a policy change
+  refuses the whole set at once. That is the refresh trigger, and
+  `every_bundle_this_build_carries_authenticates` makes it loud.
+- **The entry digest is not an independent witness.** § 22 called it "an
+  independently attested entry digest". It is a digest over the receipt bytes
+  stored beside the receipt bytes, in one repository, compiled into one binary.
+  It catches a tampered or stale object; it is not evidence against whoever can
+  write both. The authority here is review, and `pkg/contracts/accepted/README.md`
+  says so rather than implying more.
+
+### What this does not reach, exactly
+
+- **The daemon.** `daemon.rs` has its own, older catalog path: one
+  `accepted-contracts.json`, no case-set discovery, and no artifact admission at
+  all. It therefore gets neither the project tier's artifact matching nor this
+  one. Whatever hosts run through the daemon — the editor path — see no change.
+  This is the same gap that already kept case sets out of the daemon, and it
+  should be closed once for both tiers rather than twice.
+- **WASM.** `packages/wasm` loads contracts through `load_external_contract_index`
+  and never sees the compiled-in tier.
+- **Lockfiles past npm.** Admission needs the installed tarball integrity, and
+  `installed_package_integrity` still reads only `package-lock.json` and npm's
+  hidden lockfile. A pnpm, bun or yarn project states no integrity, so it admits
+  nothing and is unchanged. This is the single largest limit on who this reaches,
+  and it is a smaller piece of work than anything else on this list.
+- **Six packages is not the demand list.** The top of the census's demand —
+  `@kobalte/utils` (942 sites) and `@solid-primitives/utils` (820) — is not here,
+  because the run publishes their catalogs at `./src/*.ts` entrypoints no
+  consumer names. § 27 and § 29 are about exactly that, and they gate how much
+  of the pinned 30.9% this tier can actually deliver.
+
+### Fixed in passing
+
+`scripts/contract-coverage-census.test.mjs` imported `node:test`. `verify.sh`
+runs `scripts/*.test.mjs` under vitest, where that import throws before a single
+test registers — so the census gate's own tests never ran in `make verify` from
+the commit that added them (687e5d6e) until now. Both files import `vitest`.
