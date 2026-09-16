@@ -42,6 +42,22 @@ pub enum Version {
     V2,
 }
 
+/// Every vocabulary this build carries, in ascending version order.
+///
+/// The cross-dialect helpers below ask their question of each entry and answer
+/// only where the answers agree; the tests that loop it assert one property
+/// per vocabulary. Both iterate *this* rather than enumerating [`Version`]
+/// because the question is "what do the vocabularies I have say", which is not
+/// the same question as "which Solid versions exist" — [`Version::V1`] is
+/// retained for classification long after a build stops carrying its
+/// vocabulary, so detection can recognise an installed 1.x runtime in order to
+/// refuse it rather than silently analyzing it as 2.0 (ADR 0110).
+///
+/// Retiring a dialect is therefore an edit *here*, plus deleting whatever is
+/// genuinely differential. Nothing that merely happens to run over every
+/// vocabulary needs touching.
+pub const DIALECTS: &[&'static dyn Dialect] = &[&Solid1x, &Solid2];
+
 impl Version {
     /// The adapter for this version.
     #[must_use]
@@ -227,10 +243,10 @@ pub enum OwnerRequirementRole {
 /// name stays open rather than inheriting behavior from another dialect.
 #[must_use]
 pub fn unambiguous_owner_requirement_role(name: &str) -> Option<OwnerRequirementRole> {
-    let mut roles = [Version::V1, Version::V2]
-        .into_iter()
-        .filter_map(|version| {
-            let dialect = version.dialect();
+    let mut roles = DIALECTS
+        .iter()
+        .copied()
+        .filter_map(|dialect| {
             let primitive = dialect.primitive(name)?;
             (dialect.name_of(primitive) == Some(name)).then_some(primitive)
         })
@@ -250,10 +266,10 @@ pub fn unambiguous_owner_requirement_role(name: &str) -> Option<OwnerRequirement
 /// identifies `argument` as a callback for this exact call shape.
 #[must_use]
 pub fn unambiguous_callback_argument(name: &str, argument: usize, argument_count: usize) -> bool {
-    let answers = [Version::V1, Version::V2]
-        .into_iter()
-        .filter_map(|version| {
-            let dialect = version.dialect();
+    let answers = DIALECTS
+        .iter()
+        .copied()
+        .filter_map(|dialect| {
             let primitive = dialect.primitive(name)?;
             (dialect.name_of(primitive) == Some(name))
                 .then(|| dialect.callback_execution_at(primitive, argument, argument_count))
@@ -269,9 +285,9 @@ pub fn unambiguous_callback_argument(name: &str, argument: usize, argument_count
 /// every dialect that recognizes it from this module.
 #[must_use]
 pub fn unambiguous_callable_type(origin_module: &str, name: &str) -> bool {
-    let roles = [Version::V1, Version::V2]
-        .into_iter()
-        .filter_map(|version| version.dialect().type_role(origin_module, name))
+    let roles = DIALECTS
+        .iter()
+        .filter_map(|dialect| dialect.type_role(origin_module, name))
         .collect::<Vec<_>>();
     !roles.is_empty()
         && roles
@@ -283,10 +299,10 @@ pub fn unambiguous_callable_type(origin_module: &str, name: &str) -> bool {
 /// dialect that canonically exports the exact primitive name.
 #[must_use]
 pub fn unambiguous_callable_result_tuple_item(name: &str, index: usize) -> bool {
-    let answers = [Version::V1, Version::V2]
-        .into_iter()
-        .filter_map(|version| {
-            let dialect = version.dialect();
+    let answers = DIALECTS
+        .iter()
+        .copied()
+        .filter_map(|dialect| {
             let primitive = dialect.primitive(name)?;
             (dialect.name_of(primitive) == Some(name)).then_some(match primitive {
                 Primitive::CreateSignal => matches!(index, 0 | 1),
@@ -310,10 +326,10 @@ pub fn unambiguous_callable_result_tuple_item(name: &str, index: usize) -> bool 
 /// is decided by a dialect that does not export it.
 #[must_use]
 pub fn unambiguous_props_merge(name: &str) -> bool {
-    let answers = [Version::V1, Version::V2]
-        .into_iter()
-        .filter_map(|version| {
-            let dialect = version.dialect();
+    let answers = DIALECTS
+        .iter()
+        .copied()
+        .filter_map(|dialect| {
             let primitive = dialect.primitive(name)?;
             (dialect.name_of(primitive) == Some(name))
                 .then(|| dialect.merges_props_reactivity(primitive))
@@ -364,10 +380,10 @@ pub enum ReactiveRole {
 /// reactivity table would make one answer carry two claims.
 #[must_use]
 pub fn unambiguous_reactive_result_slot(name: &str, slot: ResultSlot) -> Option<ReactiveRole> {
-    let answers = [Version::V1, Version::V2]
-        .into_iter()
-        .filter_map(|version| {
-            let dialect = version.dialect();
+    let answers = DIALECTS
+        .iter()
+        .copied()
+        .filter_map(|dialect| {
             let primitive = dialect.primitive(name)?;
             (dialect.name_of(primitive) == Some(name))
                 .then(|| dialect.reactive_result_slot(primitive, slot))
@@ -395,9 +411,8 @@ pub fn exports_value_from(origin_module: &str, name: &str) -> bool {
     if origin_module.is_empty() || name.is_empty() {
         return false;
     }
-    [Version::V1, Version::V2].into_iter().any(|version| {
-        version
-            .dialect()
+    DIALECTS.iter().any(|dialect| {
+        dialect
             .export_modules(name, ExportPosition::Value)
             .contains(&origin_module)
     })
@@ -421,12 +436,9 @@ pub fn primitive_defining_package(package: &str) -> bool {
     if package.is_empty() {
         return false;
     }
-    [Version::V1, Version::V2].into_iter().any(|version| {
-        version
-            .dialect()
-            .primitive_defining_packages()
-            .contains(&package)
-    })
+    DIALECTS
+        .iter()
+        .any(|dialect| dialect.primitive_defining_packages().contains(&package))
 }
 
 /// Whether a *specifier* names the built-in runtime foundation — the package
@@ -438,9 +450,9 @@ pub fn primitive_defining_package(package: &str) -> bool {
 /// other.
 #[must_use]
 pub fn core_runtime_specifier(specifier: &str) -> bool {
-    [Version::V1, Version::V2]
-        .into_iter()
-        .flat_map(|version| version.dialect().primitive_defining_packages())
+    DIALECTS
+        .iter()
+        .flat_map(|dialect| dialect.primitive_defining_packages())
         .any(|name| {
             specifier == *name
                 || specifier
@@ -671,14 +683,9 @@ pub fn audited_archives(name: &str) -> Vec<&'static AuditedArchive> {
     if name.is_empty() {
         return Vec::new();
     }
-    [Version::V1, Version::V2]
-        .into_iter()
-        .flat_map(|version| {
-            version
-                .dialect()
-                .negative_claim_authority()
-                .archives_named(name)
-        })
+    DIALECTS
+        .iter()
+        .flat_map(|dialect| dialect.negative_claim_authority().archives_named(name))
         .collect()
 }
 
@@ -689,8 +696,7 @@ pub fn canonical_primitive_name(name: &str) -> bool {
     if name.is_empty() {
         return false;
     }
-    [Version::V1, Version::V2].into_iter().any(|version| {
-        let dialect = version.dialect();
+    DIALECTS.iter().any(|dialect| {
         dialect
             .primitive(name)
             .is_some_and(|primitive| dialect.name_of(primitive) == Some(name))
@@ -722,8 +728,8 @@ pub fn some_audit_denies_primitive(export: &str, domain: CallClaimDomain) -> boo
     if export.is_empty() || !canonical_primitive_name(export) {
         return false;
     }
-    [Version::V1, Version::V2].into_iter().any(|version| {
-        let authority = version.dialect().negative_claim_authority();
+    DIALECTS.iter().any(|dialect| {
+        let authority = dialect.negative_claim_authority();
         authority
             .rows
             .iter()
@@ -781,10 +787,10 @@ pub fn primitive_performs_no_operation(
     if export.is_empty() || !canonical_primitive_name(export) {
         return false;
     }
-    let answers = [Version::V1, Version::V2]
-        .into_iter()
-        .filter_map(|version| {
-            let authority = version.dialect().negative_claim_authority();
+    let answers = DIALECTS
+        .iter()
+        .filter_map(|dialect| {
+            let authority = dialect.negative_claim_authority();
             authority
                 .archives
                 .contains(archive)
@@ -2493,8 +2499,8 @@ mod tests {
 
     #[test]
     fn the_boundary_name_round_trips_through_the_boundary_kind() {
-        for version in [Version::V1, Version::V2] {
-            let dialect = version.dialect();
+        for &dialect in DIALECTS {
+            let version = dialect.version();
             for boundary in [Boundary::Async, Boundary::Error] {
                 let name = dialect.boundary_name(boundary);
                 assert_eq!(
@@ -2523,8 +2529,8 @@ mod tests {
     /// a call it will never see.
     #[test]
     fn every_primitive_is_exported_from_a_module_the_dialect_owns() {
-        for version in [Version::V1, Version::V2] {
-            let dialect = version.dialect();
+        for &dialect in DIALECTS {
+            let version = dialect.version();
             for name in dialect_names(dialect).iter().copied() {
                 let modules = dialect.export_modules(name, ExportPosition::Value);
                 assert!(
@@ -2654,8 +2660,8 @@ mod tests {
     /// would read a function as an options object, or the reverse.
     #[test]
     fn no_primitive_takes_its_options_where_it_takes_a_callback() {
-        for version in [Version::V1, Version::V2] {
-            let dialect = version.dialect();
+        for &dialect in DIALECTS {
+            let version = dialect.version();
             for name in dialect_names(dialect).iter().copied() {
                 let primitive = dialect.primitive(name).unwrap();
                 let Some(options) = dialect.options_argument(primitive) else {
@@ -2702,8 +2708,8 @@ mod tests {
     /// inside `untrack` at module scope go unreported.
     #[test]
     fn creating_an_owner_and_inheriting_one_are_distinguished() {
-        for version in [Version::V1, Version::V2] {
-            let dialect = version.dialect();
+        for &dialect in DIALECTS {
+            let version = dialect.version();
             assert_eq!(
                 dialect.callback_owners(Primitive::CreateRoot),
                 &[(0, CallbackOwner::Creates)],
@@ -2747,9 +2753,9 @@ mod tests {
 
         // Both signatures accept Owner | null. A concrete call sharpens this
         // flat answer from its first argument.
-        for version in [Version::V1, Version::V2] {
+        for &dialect in DIALECTS {
             assert_eq!(
-                version.dialect().callback_owners(Primitive::RunWithOwner),
+                dialect.callback_owners(Primitive::RunWithOwner),
                 &[(1, CallbackOwner::Conditional)]
             );
         }
@@ -2768,8 +2774,8 @@ mod tests {
     /// to the table accomplishes nothing.
     #[test]
     fn every_name_in_the_vocabulary_is_recognisable_at_its_declaration() {
-        for version in [Version::V1, Version::V2] {
-            let dialect = version.dialect();
+        for &dialect in DIALECTS {
+            let version = dialect.version();
             for name in dialect_names(dialect) {
                 assert!(
                     dialect.declares_primitive(name),
@@ -3073,8 +3079,8 @@ mod tests {
         // createReaction allocates a computation the moment it is called, in
         // both runtimes, so it carries the same leaf-scope disposal
         // obligation as createEffect.
-        for version in [Version::V1, Version::V2] {
-            let dialect = version.dialect();
+        for &dialect in DIALECTS {
+            let version = dialect.version();
             assert_eq!(
                 dialect.cleanup_rule(Primitive::CreateReaction),
                 CleanupRule::Always,
