@@ -164,7 +164,12 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // 22 with package-repeated-open-claim, whose catalog is deliberately
       // `obsolete-policy1` like its sibling's: the collapse is about how
       // repeated obligations are reported, not about which gate raised them.
-      obsoletePolicy1Catalogs: 22,
+      //
+      // 21 on 2026-09-16: one such catalog went with the 1.9.14-stub fixtures
+      // the Solid 1.x retirement deleted (ADR 0110). Like the main-document
+      // count above, this enumerates checked-in files rather than measuring an
+      // analysis answer.
+      obsoletePolicy1Catalogs: 21,
       proofVersion: 2,
       receiptVersion: 2,
       policyStatus: "active",

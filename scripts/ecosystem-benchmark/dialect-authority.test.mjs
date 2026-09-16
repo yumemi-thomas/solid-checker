@@ -42,19 +42,19 @@ test("the checked-in pins load and name the archives the Rust tables audit", () 
   const document = loadAuditedArchives();
   assert.equal(document.schemaVersion, 1);
   const solid2 = document.dialects.find(dialect => dialect.id === "solid-v2");
-  const solid1 = document.dialects.find(dialect => dialect.id === "solid-v1");
-  // Both halves matter. The v2 entry is the reach the corpus has; the v1 entry
-  // is a dialect that audited nothing at all, and an absent entry there would
-  // read as "not a dialect" rather than "no authority".
+  // The mirror carries one entry per dialect the Rust tables define, so
+  // retiring the 1.x dialect (ADR 0110) removed its entry here too. Asserting
+  // the whole id list rather than only the surviving entry is deliberate: an
+  // entry appearing or vanishing is exactly what this pin exists to catch,
+  // and a `find` that silently returns `undefined` would not.
+  assert.deepEqual(
+    document.dialects.map(dialect => dialect.id).sort(),
+    ["solid-v2"]
+  );
   assert.deepEqual(
     solid2.archives.map(archive => `${archive.name}@${archive.version}`).sort(),
     ["@solidjs/signals@2.0.0-rc.3", "@solidjs/web@2.0.0-rc.3", "solid-js@2.0.0-rc.3"]
   );
-  assert.deepEqual(
-    solid1.archives.map(archive => `${archive.name}@${archive.version}`),
-    ["solid-js@1.9.14"]
-  );
-  assert.equal(solid1.negativeRowCount, 16);
 });
 
 test("a pin file that parses but pins nothing is refused, not read as full coverage", () => {
