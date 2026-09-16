@@ -623,6 +623,81 @@ behaviour below is expressible:
 Update `docs/adding-a-dialect.md` so it no longer implies two shipped
 dialects, and the CLI README's supported-versions statement.
 
+## Step 3 progress (2026-09-16)
+
+**The dry run's failure list, as recorded, was incomplete and partly stale.**
+Measured again after step 4 landed, with every integration target and
+`--no-fail-fast`: **38 failing assertions across four targets**, not ~40 across
+"four targets" enumerated loosely. The classification that matters:
+
+- **24 `solid_one_*`** in `dialects_process` — the v1 vocabulary and
+  compiler-integration tests. They go with the dialect.
+- **`the_dialect_pair_reports_different_findings_from_identical_sources`** —
+  deleted outright, contrast-only, already verified.
+- **Six whose scope, not whose subject, was 1.x** — narrowed in
+  `aacddf12`, and they now pass in *both* arms.
+- **Three `cross_file_*`** — ported in `bc51f4b5`; they were dialect-neutral
+  mechanics that merely ran under 1.x fixtures.
+- **`an_incompatible_core_package_requires_a_dialect_change_not_a_receipt`** —
+  see the product consequence below.
+- **`contract_closure_process::the_catalog_bearing_fixtures_mint_a_policy_2_corpus`**
+  — a corpus-composition pin the deletion itself moves; re-pin it there, not
+  before.
+
+Two of these (`core_runtime_model_needs_no_contract_and_is_not_reported_as_certified`
+and the policy-2 corpus pin) were **not** in the original enumeration, and one
+of them fails only *because of step 4*: `--check-contracts` on an unsupported
+runtime now returns a findings snapshot rather than a contract report. That is
+the intended fail-closed behaviour — reporting package status under a language
+the project does not run is the silent wrong-language answer ADR 0110 forbids —
+but it is a **shape change for that mode**, and it was accidental rather than
+designed. Pin it deliberately when the CLI surface work lands.
+
+### A product consequence the plan did not anticipate
+
+`PackageContractStatus.status == "unsupported-runtime"` becomes **unreachable**.
+It is produced when an imported core package is outside the selected dialect's
+`primitive_defining_packages()`. v1 models `["solid-js"]`; v2 models
+`["solid-js", "@solidjs/signals", "@solidjs/web"]` — which is the whole union
+across dialects, so under a v2-only build every core package is modelled. The
+status, its `remedy` ("a core package contract cannot extend the built-in
+model"), and its membership in the certification-blocking set all survive as
+code with no producer, and
+`an_incompatible_core_package_requires_a_dialect_change_not_a_receipt` loses its
+subject entirely.
+
+This is a decision, not a cleanup: keeping it matches `Version::V1`, which step 4
+deliberately retains so the refusal can recognise 1.x to refuse it, and the next
+dialect re-reaches it. Deleting it touches `--check-contracts` output, the
+blocking-status set, and any schema that names it. **Recommend keeping it** with
+a comment naming the unreachability, and recording it here rather than leaving a
+reader to discover an untested status.
+
+### The deletion's measured surface
+
+Larger than the inventory suggested, and not confined to the dialect crates:
+
+- **`Version::V1`: 63 references**, 50 of them in `solid-dialect/src/lib.rs`
+  alone. It stays (step 4 needs it), so each one is a read, not a delete.
+- **`Version::dialect()` returns `&'static dyn Dialect` and maps `V1 =>
+  &Solid1x`.** Removing `solid_1x.rs` therefore changes that signature or that
+  arm — a retained `Version::V1` with no vocabulary behind it is the first thing
+  the deletion has to decide.
+- **`Solid1xRuleOptions` is a shared IR type**, not a v1 artifact:
+  `solid-reactive-ir` re-exports it from `lib.rs`, `pipeline.rs` carries it as
+  `solid1x_rule_options`, and six call sites outside its own module use it. It
+  is 1.x-*named*, not 1.x-*scoped*, and belongs with the
+  `solid1x_syntax/structure/options.rs` rename slice.
+- **The IR itself names the 1.x vocabulary**: `PrimitiveName::new("flush",
+  &solid_dialect::Solid1x)` and the same for `batch` in
+  `solid-reactive-ir/src/lib.rs`.
+- 14 `#[cfg(feature = "dialect-v1")]` sites in the backend.
+
+Nothing here changes the plan's conclusion — it changes the estimate. The
+deletion is one atomic commit (no intermediate state compiles) over a surface
+that reaches into the shared IR, and it wants its own uninterrupted pass rather
+than being started at the end of one.
+
 ## Verification and handoff
 
 Per slice: the row from the AGENTS.md check table. Before handoff:
@@ -679,7 +754,9 @@ individually green. What is left, in the order it has to happen:
    the two documents that still describe two shipped dialects accurately —
    `docs/adding-a-dialect.md` and the CLI README's supported-versions
    statement.
-2. **Step 3's deletion — now unblocked.** In the three groups the dry run measured — the
+2. **Step 3's deletion — in progress.** The preparation is done (see
+   "Step 3 progress" below); what remains is the atomic deletion itself. In the
+   three groups the dry run measured — the
    `solid_one_*` bulk, the one-line `DIALECT_INDEPENDENT` edit plus the
    verified dialect-pair deletion, and the six tests whose names do not say v1
    and so need their claim read. `carries_eslint_era_rules()` gets its own
