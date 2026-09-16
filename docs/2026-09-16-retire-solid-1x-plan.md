@@ -937,21 +937,37 @@ What is left, in recommended order:
      two-line local stub that plainly does create. The snapshot now matches the
      README.
 
-2. **`callback-deferred-untracked-chain`** -- authoring, not porting, and it
-   needs audited 2.0 facts that do not exist yet. Three of its exports have no
-   mechanical counterpart: `mountShape`/`mountShapeArrow` transcribe 1.x's
-   `onMount`, which 2.0 removes; `mergePropsShape` depends on `mergeProps`
-   wrapping function-valued sources in a memo, and `Solid2` does not model
-   `MergeProps` as a callback-taking primitive at all; and
-   `unestablishedScheduleShape` rests on 1.x's `createSignal(fn)` *storing* the
-   function, where 2.0's is the derived form that invokes it. `memoShape` and
-   `renderEffectShape` additionally claim eagerness (`inline`) from cited 1.x
-   runtime bytes, so the 2.0 claims need their own citations rather than a
-   translation.
+2. **`callback-deferred-untracked-chain`** — **scoped 2026-09-17 by probing
+   every candidate export against the audited rc.3 install.** It is not a port,
+   and three of its claims do not survive at all. What the probe established:
 
-   `interproc.rs`' `primitive_callback_execution` cites this fixture's
-   `unestablishedScheduleShape` as the pin that a missing row makes the wrapper
-   chain refuse; that comment currently says the pin is absent.
+   | 1.x export | 1.x claim | 2.0 |
+   | --- | --- | --- |
+   | `inlineShape` (`untrack`) | same-stack / untracked | same, ports |
+   | `trackedShape` (`createEffect`) | queued / tracked | queued / tracked *(see below — the word is right, the schedule is the known approximation)* |
+   | `cleanupShape` (`onCleanup`+`untrack`) | queued / untracked | same, ports |
+   | `memoInsideUntrack` | tracked | queued / tracked, ports |
+   | `mountShape` (`createEffect`+`untrack`) | **queued** / untracked | **same-stack** / untracked — a real dialect divergence, not a regression: `Solid2::tracked_callback_timing` audits 2.0's `createEffect` compute as `DuringCall` (it reaches `effect()`, which calls `recompute(node, true)` before queueing the effect function), where 1.x's is `AfterCall` |
+   | `unestablishedScheduleShape` (`createSignal(fn)`) | **open** — no schedule proven | **resolves** — the premise is gone. 1.x refused because `createSignal(fn)` *stores* the function; 2.0 models it as a compute slot with a `Tracked` row, so the chain answers instead of refusing |
+   | `memoShape`, `renderEffectShape` | inline, from measured 1.x bytes | need their own probe measurement |
+   | `mergePropsShape` | tracked | **no counterpart** — 2.0's `merge` is not modelled as a callback-taking primitive |
+
+   Two consequences worth carrying:
+
+   - **`interproc.rs`' citation cannot be restored as written.** It names
+     `unestablishedScheduleShape` as the pin that "a missing row makes the
+     chain refuse", and no `createSignal` shape produces that in 2.0. A 2.0
+     fixture needs a primitive the dialect states *no* timing for —
+     `createStore` and `createOptimisticStore` are the documented candidates
+     ("their derived overloads did not accept the probe's call shape, so no
+     measurement backs a claim").
+   - **The fixture is now the way to pin a live approximation**, not just to
+     restore coverage. The direct-invocation rung publishes `queued` for every
+     tracked callback regardless of the dialect's audited timing; with 1.x gone
+     that is wrong for every 2.0 tracked primitive except `createTrackedEffect`.
+     See `docs/precision-backlog.md` § "Remaining approximations", which this
+     investigation widened. The chain rung is already correct, so the fixture's
+     value is precisely that it distinguishes the two rungs.
 
 3. **`escaping-private-helper`** -- the biggest remaining hole, and the
    expensive one. Its claim is dialect-neutral and strong (the call graph's

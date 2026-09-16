@@ -7751,6 +7751,22 @@ Rows this corrected, all measured at this branch's base:
     publishes `queued` where `same-stack` is the true answer. Its sibling
     `trackedShape` (`createEffect`) publishes `queued` correctly, so the fixture
     does not distinguish the two today;
+
+    **Widened by the Solid 1.x retirement, measured 2026-09-17.** That last
+    sentence was true only of 1.x, whose `createEffect` is `AfterCall`. `Solid2`
+    states `DuringCall` for `createMemo`, `createSignal`, `createOptimistic`,
+    `createProjection`, `createEffect` and `createRenderEffect`, and `AfterCall`
+    for `createTrackedEffect` alone — so with 1.x gone this default is wrong for
+    **every** tracked primitive except that one. Probed against the audited rc.3
+    install, `createMemo`, `createSignal`, `createEffect` and
+    `createRenderEffect` each publish `at.schedule: "queued"` for a directly
+    invoked parameter where `same-stack` is the audited answer
+    (`solid_2.rs::tracked_callback_timing` cites the bytes: both effects reach
+    `effect()`, which calls `recompute(node, true)` before queueing the *effect*
+    function). The chain rung is unaffected and already correct — the same
+    callbacks under a clearing wrapper compose to `same-stack`. So the fixture
+    that would distinguish the two rungs is exactly the one the retirement
+    deleted, and re-authoring it is now the way to pin the fix;
   - `contract_callback_execution`'s `ExecutionRole::TrackedJsx` arm
     (`lib.rs`), a compiler-lowering role with no wrapper chain to compose.
 - **The `Unestablished` schedule is not yet represented in the certification
