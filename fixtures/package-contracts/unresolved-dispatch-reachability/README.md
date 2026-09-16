@@ -31,9 +31,19 @@ reference inside an `ExportFact.span`, and an `ExportNamedDeclaration`'s span
 covers the declaration's whole body -- so `apply(Panel, ...)` and
 `return Panel` read as export surface, the escape was never seen, and the
 partial answer was trusted. `fixtures/package-contracts/escaping-private-helper`
-is the fixture that makes the sentence true: one entrypoint per escape shape,
-each widening to every export, beside a `./called` control that keeps this
+was the fixture that made the sentence true: one entrypoint per escape shape,
+each widening to every export, beside a `./called` control that kept this
 fixture's exact behavior.
+
+**That fixture went with the Solid 1.x retirement (ADR 0110), and its 2.0
+counterpart is not authored yet.** The escape test still behaves as described
+below -- the code did not change -- but every arm named below is currently
+*unpinned*, so read those names as a description of the intended enumeration
+rather than as a guarantee something would catch it regressing. Porting it needs
+an `@solidjs/web` stub and a `jsxImportSource` arrangement across the fixture's
+thirty JSX files, because 2.0 moves `namespace JSX` out of `solid-js` and `For`
+gains a `keyed: false` overload that inverts its children callback; the work is
+tracked in `docs/2026-09-16-retire-solid-1x-plan.md`.
 
 A rendered tag is *not* on that list, though it was, for a different reason: the
 call graph enumerated only call expressions, so the tag named no call site. It

@@ -2745,9 +2745,14 @@ fn forwarded_callback_ambient_execution(
 /// **A row here is not permission to publish a callback claim.** This table has
 /// two consumers whose polarity is opposite. The wrapper-chain fold needs a row
 /// to classify the position at all, and a *missing* row makes the chain refuse
-/// so the inner slot's own answer stands -- a stronger claim, not a weaker one
-/// (`fixtures/package-contracts/callback-deferred-untracked-chain`'s
-/// `unestablishedScheduleShape` pins exactly that). The contract inventory in
+/// so the inner slot's own answer stands -- a stronger claim, not a weaker one.
+/// `fixtures/package-contracts/callback-deferred-untracked-chain`'s
+/// `unestablishedScheduleShape` pinned exactly that and **went with the Solid
+/// 1.x retirement (ADR 0110); nothing pins it today**, because the fixture was
+/// built on `onMount`, which 2.0 removes. The behaviour described here is
+/// unchanged; only its regression guard is missing, and authoring the 2.0
+/// counterpart is tracked in `docs/2026-09-16-retire-solid-1x-plan.md`. The
+/// contract inventory in
 /// [`interprocedural_contributions`] wants the opposite reading, so the premises
 /// it needs before rooting an `invoke` claim on a forwarded parameter live
 /// there, in [`primitive_slot_roots_parameter_invoke`], and never by deleting a
