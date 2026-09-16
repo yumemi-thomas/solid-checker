@@ -500,12 +500,49 @@ step proposed. Resolved 2026-09-16.**
   it was already unreachable before this plan, and AGENTS.md forbids widening
   a semantic change into one.
 
-- **Still open, and independent of the retirement:** sub-step 4's blocker — the
-  Solid 2 `creates` census refuses callees resolved into
-  `solid-js/types/client/hydration.d.ts` (seen on
-  `@solid-primitives/scheduled@2.0.0-next.2`, `createSignal`). That is a
-  resolution defect to fix before the first `solid2` census is worth pinning,
-  not a step of this plan.
+- **Sub-step 4's "blocker" is not one, and calling it a resolution defect was
+  wrong (corrected 2026-09-16).** The census does refuse callees resolved into
+  `solid-js/types/client/hydration.d.ts` — `createSignal` on
+  `@solid-primitives/scheduled@2.0.0-next.2` is the observed case — but
+  resolution is working, and its answer is correct. Traced end to end:
+
+  - `solid-js@2.0.0-rc.3`'s `types/index.d.ts:8` **re-declares**
+    `createSignal`, `createMemo`, `createEffect` and eight siblings from
+    `./client/hydration.js`. Line 1 re-exports a different set from
+    `@solidjs/signals`, and `createSignal` is **not** among them — checked
+    against the audited install, not inferred.
+  - So the callee's declaration really does land in `hydration.d.ts`, and the
+    archive it binds is `solid-js`, not `@solidjs/signals`.
+  - `NEGATIVE_ROWS` carries `createSignal`/`creates` for
+    **`package: "@solidjs/signals"`** only. `solid-js`' re-declaration is
+    withheld on purpose (`solid_2.rs` § 7.4): the browser bodies create
+    nothing, but the `node`/`worker`/`deno` body reaches
+    `ctx.serialize(id, deferred.promise, deferStream)`, which
+    `semantic-model.md` § creates **[Decision 2026-09-04]** settles *is* a
+    create.
+  - `census_dialect_axiom` is archive-bound — it takes
+    `audited_archive_for_snapshot(snapshot)` for the snapshot the declaration
+    resolves into and asks `primitive_performs_no_operation`. With the row
+    withheld that is `false`, no terminator is issued, and the claim stays
+    open. That is the refusal.
+
+  A `(package, export, domain)` row carries no condition, so closing this one
+  would state something false for every SSR consumer. **The fix is a
+  condition-aware negative table — an open item in ADR 0007 — not a resolver
+  change**, and it is a design change well outside this plan. The census
+  numbers are readable now, with this hole named: no `creates` statement is
+  available for the eleven primitives `solid-js` re-declares from
+  `./client/hydration.js`, however they are imported.
+
+  **One thing to look at while there, deliberately not changed here:**
+  `some_audit_denies_primitive` matches `row.export` and `row.domain` and
+  never `row.package`, so the *proposal* generator reads `@solidjs/signals`'
+  row as covering `solid-js`' withheld re-declaration. Its doc comment argues
+  this is safe because a proposal is only ever proven later against
+  authenticated bytes — and the trace above is that argument working, since
+  the archive-bound census is what refuses. It is the same package-blind
+  name match whose cross-*dialect* form was a real bug before the retirement,
+  so it wants a deliberate look rather than an inherited one.
 
 ### Original text, kept for the record
 
@@ -533,6 +570,8 @@ step proposed. Resolved 2026-09-16.**
    resolution before reading the new census numbers; the 1.x-era pin
    (`ownerRequirement: 31`, 29/1,890 actionable sites) is the comparison
    baseline and must be recorded beside the new one.
+   **Corrected above: resolution is right and the refusal is a deliberately
+   withheld row. Only the baseline sentence still stands.**
 5. Apply the accepted-tier resolution from the open decision above — this
    sub-step has no default. If the tier is regenerated, it covers only the
    20 packages with a `solid2` row; `@solidjs/start` and `@kobalte/solidbase`
