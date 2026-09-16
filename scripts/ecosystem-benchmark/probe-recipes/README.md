@@ -42,6 +42,39 @@ an error or a timeout). None of them fails the row; a *contradiction* still
 does. Re-read the ids from a run's `…certification-audit.json`
 `withheldClosures` array after any generator change.
 
+### It is not a hypothetical weakness: measured 2026-09-16, 1 of 325 addressed
+
+`scripts/probe-recipe-addressing.mjs` measures it against a census run and pins
+the answer at `benchmarks/ecosystem/probe-recipe-addressing.json`. The first
+run found **one** recipe still addressing a claim the run proposed. All 159
+`solid-primitives-utils-*` modules addressed none — against a run that
+certified `@solid-primitives/utils@6.4.1`, the exact version twenty of them were
+written for. The corpus holds five separate `noop`-reads recipes, one per
+historical artifact case, and every one of them is dead.
+
+The cost is counted the way `contract-coverage-census.mjs` counts everything,
+in consumer call sites at entrypoints a consumer can name: **526 sites across
+54 demanded exports** stay open because a recipe exists for them and addresses
+nothing. `access`, `noop`, `asArray`, `tryOnCleanup`, `accessWith`, `trueFn`,
+`createCallbackStack` — the list in the pin is the list in the section below
+describing what was written and what it measured.
+
+Of the 159, **117 match exactly one current candidate** by `(export, domain)` at
+a nameable entrypoint and none match more than one, so the mapping is
+unambiguous where it exists; the 42 that match nothing are `afterPaint` and
+`createIdGenerator`, which this version does not export, and the `immutable*`
+family, which belongs to `./immutable`. That does **not** make re-addressing a
+matter of editing `claimId`s — a module re-pointed at a case it was not written
+for can complete without emitting, and a clean non-observation *satisfies* the
+gate. Use the two-pass scaffold procedure below.
+
+So re-addressing a recipe is not optional housekeeping after a generator
+change; it is the difference between the corpus doing its job and being inert.
+The gate cannot prove a recipe *serves* — only that its id still names a claim
+the run proposed — and it says nothing about recipes for packages a given run
+does not certify, which are reported apart as out of scope rather than counted
+as dead.
+
 ## A module and its entry must agree on the event, and nothing used to check
 
 `event_matches` requires the emitted event's **marker and class** to equal the

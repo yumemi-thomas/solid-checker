@@ -1,0 +1,491 @@
+{
+  "format": "solid-checker-probe-recipe-addressing",
+  "addressingVersion": 1,
+  "corpus": "scripts/ecosystem-benchmark/probe-recipes",
+  "demand": "docs/package-contract-v2/phase21/2026-09-14-consumer-demand-recensus.json",
+  "totals": {
+    "recipes": 325,
+    "addressed": 1,
+    "stale": 172,
+    "outOfScope": 152,
+    "unservedClaims": 1188,
+    "unplaceableClaims": 1090,
+    "unservedExports": 54,
+    "unservedSites": 526
+  },
+  "families": [
+    {
+      "subject": "@solid-primitives/utils",
+      "recipes": 159,
+      "addressed": 0,
+      "stale": 159,
+      "inScope": true
+    },
+    {
+      "subject": "@corvu/utils",
+      "recipes": 48,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "@corvu-next/utils",
+      "recipes": 34,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "motion-utils",
+      "recipes": 27,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "@floating-ui/utils",
+      "recipes": 20,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "@kobalte/utils",
+      "recipes": 8,
+      "addressed": 1,
+      "stale": 7,
+      "inScope": true
+    },
+    {
+      "subject": "@corvu-next/utils,solid-js",
+      "recipes": 6,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "@solid-primitives/scheduled",
+      "recipes": 6,
+      "addressed": 0,
+      "stale": 6,
+      "inScope": true
+    },
+    {
+      "subject": "@tanstack/store",
+      "recipes": 6,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "@solid-primitives/refs,solid-js",
+      "recipes": 4,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "@solid-primitives/i18n",
+      "recipes": 3,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "seroval",
+      "recipes": 3,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "@solidjs/web",
+      "recipes": 1,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    }
+  ],
+  "unserved": [
+    {
+      "export": "@solid-primitives/utils::access",
+      "sites": 157,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::noop",
+      "sites": 98,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::asArray",
+      "sites": 51,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::tryOnCleanup",
+      "sites": 37,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::accessWith",
+      "sites": 27,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::trueFn",
+      "sites": 27,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::createCallbackStack",
+      "sites": 22,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::createHydratableSignal",
+      "sites": 20,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::createMicrotask",
+      "sites": 20,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::asAccessor",
+      "sites": 11,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::isObject",
+      "sites": 10,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::chain",
+      "sites": 7,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::clamp",
+      "sites": 7,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/platform::isSafari",
+      "sites": 6,
+      "domains": [
+        "callbacks",
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/scheduled::debounce",
+      "sites": 4,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::reverseChain",
+      "sites": 4,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/permission::createPermission",
+      "sites": 3,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::compare",
+      "sites": 3,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::falseFn",
+      "sites": 3,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::ofClass",
+      "sites": 3,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/tween::createTween",
+      "sites": 2,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solidjs/meta::Title",
+      "sites": 2,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/scheduled::throttle",
+      "sites": 1,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/timer::createPolled",
+      "sites": 1,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/solidbase::MDXProvider",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/solidbase::useMDXComponents",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/keyed::Entries",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/keyed::Rerun",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/platform::isBrave",
+      "sites": 0,
+      "domains": [
+        "callbacks",
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/scheduled::createScheduled",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/scheduled::leading",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/scheduled::leadingAndTrailing",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/scheduled::scheduleIdle",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/timer::createIntervalCounter",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/timer::createTimeoutLoop",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/timer::createTimer",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/timer::makeTimer",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/tween::default",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::createHydrateSignal",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::defaultEquals",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::defer",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::isNonNullable",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::json",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::number",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::pipe",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::safe",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::withAccess",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solidjs/meta::Base",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solidjs/meta::Link",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solidjs/meta::Meta",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solidjs/meta::MetaProvider",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solidjs/meta::Style",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solidjs/meta::Stylesheet",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solidjs/meta::useHead",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    }
+  ]
+}

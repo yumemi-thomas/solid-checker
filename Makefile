@@ -356,6 +356,14 @@ ecosystem-regression: build-checker-release
 # harness refuse every gated row ("probe write isolation was violated"), which
 # cost ten of eighteen packages on the first attempt.
 #
+# The second measurement over the same run is `probe-recipe-addressing.mjs`:
+# what the corpus of hand-written runtime-probe recipes still addresses. A
+# recipe is addressed by a content digest over its exact claim, so a generator
+# change silently orphans it -- the candidate is withheld as `no recipe in
+# corpus`, the row still certifies, and the export's summary goes degenerate.
+# It ran first on 2026-09-16 and found 1 of 325 recipes still addressing
+# anything. Both halves are pinned under `benchmarks/ecosystem/`.
+#
 # Not in `make verify`, for `ecosystem-regression`'s reasons: it needs the
 # registry and minutes of compute. Run it when a change could move what a
 # contract *says*, as opposed to whether it certifies at all.
@@ -371,6 +379,8 @@ contract-coverage-census: build-checker-release
 	  --json "$(CURDIR)/rust/target/coverage-census/run.json" \
 	  --markdown "$(CURDIR)/rust/target/coverage-census/run.md"
 	$(BUN) scripts/contract-coverage-census.mjs \
+	  --run "$(CURDIR)/rust/target/coverage-census/run.json"
+	$(BUN) scripts/probe-recipe-addressing.mjs \
 	  --run "$(CURDIR)/rust/target/coverage-census/run.json"
 
 # Regenerates the compiled-in accepted-contract tier from the same run the

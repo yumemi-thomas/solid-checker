@@ -22100,3 +22100,61 @@ policy-2 corpus pin caught it (10 SC9005 → 8) before it could ship.
 Pinned by `fixtures/reactive-ir/package-repeated-open-claim` (one export, two
 importers, one finding) with `package-unknown-callback-consumer` as the negative
 control (two exports, one import span, two findings).
+
+### The probe-recipe corpus addressed nothing, and nothing said so (2026-09-16)
+
+A hand-written runtime-probe recipe is addressed by `claimId`, a content digest
+over the exact normalized claim — package, version, artifact case, export,
+domain. The corpus README has always stated the consequence: anything that moves
+the emitted contract document moves the id, and the recipe then addresses
+nothing. Nothing enforced it, and the failure is silent on both sides. Rust
+withholds the candidate as `no recipe in corpus` and the row still certifies;
+the corpus keeps a module nobody runs, and the next regeneration adds a family
+beside it rather than replacing it.
+
+**Measured against the pinned census run: 1 of 325 recipes addressed a claim the
+run proposed.** All 159 `solid-primitives-utils-*` modules addressed none — and
+the run certified `@solid-primitives/utils@6.4.1`, the exact version twenty of
+them were written for and whose `reads` domains the README records them closing.
+The corpus holds five `noop`-reads recipes, one per historical artifact case, and
+all five are dead.
+
+**What it costs, in the census's own units.** A withheld candidate leaves its
+claim domain open, so the export's summary stays degenerate: **526 consumer call
+sites across 54 demanded exports**, counted only at entrypoints a consumer can
+name. `access` (157), `noop` (98), `asArray` (51), `tryOnCleanup` (37),
+`accessWith` (27), `trueFn` (27), `createCallbackStack` (22) — every one of them
+has a recipe in this repository that addresses nothing.
+
+**Not fixed here; made loud.** `scripts/probe-recipe-addressing.mjs` measures the
+corpus against a certification run and pins the answer at
+`benchmarks/ecosystem/probe-recipe-addressing.json`, and
+`make contract-coverage-census` now runs it over the same run the census reads.
+
+**The regeneration is tractable, and doing it blind is not sound.** Of the 159
+`solid-primitives-utils-*` modules, 117 match exactly one current candidate by
+`(export, domain)` at a nameable entrypoint, none match more than one, and 42
+match nothing — `afterPaint` and `createIdGenerator`, which this version does not
+export, and the `immutable*` family, which belongs to the `./immutable`
+entrypoint. So the mapping is unambiguous where it exists. It still may not be
+applied by editing `claimId`s: a recipe that completes without emitting its
+marker is a `CleanNonObservation`, which **satisfies** the gate, so a module
+re-pointed at a case it was not written for would close that domain on the census
+alone rather than withhold it. The corpus README's procedure — scaffold into a
+scratch corpus, certify, scaffold again over that audit — is the only sound
+route, and it needs a certification run.
+
+**Two things the gate deliberately cannot say.** It cannot prove a recipe
+*serves* — only that its id still names a claim the run proposed; a recipe whose
+emit sits behind a condition that never holds still fails open, as
+`ecosystem-probe-recipes.test.mjs` already records. And a recipe for a package
+the run did not certify is reported as out of scope, never as stale, so the
+number does not move with which packages a run happened to include.
+
+**One count is withheld rather than estimated.** 1,090 of the 1,188 withheld
+candidates come from dependency-graph nodes that certify without retaining a
+proposal, so no artifact places them at an entrypoint. Pricing them would repeat
+the inflation `contract-coverage-census.mjs`'s header records — it put
+`mergeDefaultProps` at 254 sites when every one of its cases is a `./*`-reached
+`./src/*.ts` file no import can name. They are counted apart as
+`unplaceableClaims` and priced at nothing.
