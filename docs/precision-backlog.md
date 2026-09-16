@@ -22374,6 +22374,55 @@ it the only build. The emission side (an `SC9013`-class refusal at the three
 `detect` call sites — `daemon.rs`, `main.rs`, `solid-checker-session-bench.rs`)
 is still to do, and must land in the same slice as the deletion.
 
+### Eleven ownership cases asserted nothing, and the gate's own rule caused it (2026-09-16)
+
+`scripts/ownership-gate.mjs` required every negative case to "name at least one
+absent rule or family". The intent is right — a negative with no stated claim is
+not a test. The effect was the opposite of the intent.
+
+An `absent` clause is evaluated by filtering the actual findings for that rule
+name. If **no catalog declares the name**, nothing can ever emit it, so the
+clause is satisfied by any implementation — including one that emits nothing at
+all, or everything. An author writing a case for "upstream has this rule and we
+deliberately do not" had no real rule to name, reached for the upstream name,
+and satisfied the requirement with a clause that cannot fail. The rule that
+existed to prevent empty negatives is what produced vacuous ones.
+
+Measured across the 306 cases: **23 `absent` clauses name a rule no catalog
+declares**, and for **11 cases that clause was the only assertion** — those
+eleven proved nothing whatsoever. Among them are both `typescript-owned` cases,
+`react-prop/typescript-owned/001` and `innerhtml/typescript-owned/001`, which
+carry the most important invariant in the project (TypeScript owns the
+diagnostic, the checker stays silent) and were asserting it vacuously.
+
+Fixed on both sides:
+
+- **The gate rejects an ineffective clause.** An `absent.rule` must be declared
+  by that case's dialect catalog, and an `absent.family` must prefix-match a
+  declared rule; otherwise the case fails with a message saying why the clause
+  cannot fail and what to write instead. Verified by a negative control:
+  restoring one clause reproduces the failure, and removing it clears it.
+- **`expect.silent: true` is the honest shape** for "this source emits no
+  finding at all". It is falsifiable by any emission, which an undeclared
+  `absent` name is not, and it now satisfies the "state a claim" requirement.
+- **All 23 cases repaired**: the undeclared clause is dropped and the intent
+  moved to a `note` recording that the checker deliberately does not implement
+  that upstream rule — a fact about the catalog, not about the source, which is
+  why it never belonged in a per-case finding filter. The 11 that were left
+  with nothing now carry `silent: true`, and all eleven pass, so the assertion
+  is both true and able to fail.
+
+Gate green at 306 cases, ledger 465 rows, coverage unmoved at 97 projects / 556
+findings.
+
+Two notes for the retirement. Nineteen of the 23 are `upstream/*` cases that
+step 3 deletes anyway, so the lasting value is the gate rule and the two
+`typescript-owned` cases — which is also the answer to what their v2
+counterparts should look like when they are authored: `silent: true`, not an
+`absent` clause naming a rule 2.0 will not have either. And the general lesson
+matches the `array-shape-v1` entry above from a different direction: **a
+green negative is only worth what its assertion could have caught.**
+
 ### The single-dialect arms now run their tests, and that doubled `make verify` (2026-09-16)
 
 Closing the gap recorded above — four `cargo check` arms proving only that the

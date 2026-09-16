@@ -726,12 +726,9 @@
       }
      }
     ],
-    "absent": [
-     {
-      "rule": "v1/event-handlers"
-     }
-    ]
-   }
+    "absent": []
+   },
+   "note": "The checker deliberately does not implement v1/event-handlers; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "no-implicit-draggable/positive/001",
@@ -746,12 +743,10 @@
    "enableRules": [],
    "expect": {
     "findings": [],
-    "absent": [
-     {
-      "rule": "v1/no-implicit-draggable"
-     }
-    ]
-   }
+    "absent": [],
+    "silent": true
+   },
+   "note": "The checker deliberately does not implement v1/no-implicit-draggable; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "valid-jsx-nesting/positive/001",
@@ -766,13 +761,10 @@
    "enableRules": [],
    "expect": {
     "findings": [],
-    "absent": [
-     {
-      "rule": "v1/valid-jsx-nesting",
-      "reason": "retired generic HTML parser policy; outside the Solid semantic checker domain"
-     }
-    ]
-   }
+    "absent": [],
+    "silent": true
+   },
+   "note": "The checker deliberately does not implement v1/valid-jsx-nesting; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "primitive-in-directive-application/positive/001",
@@ -790,12 +782,10 @@
     "absent": [
      {
       "rule": "v1/reactive-write-in-owned-scope"
-     },
-     {
-      "rule": "v1/primitive-in-directive-application"
      }
     ]
-   }
+   },
+   "note": "The checker deliberately does not implement v1/primitive-in-directive-application; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "v1/no-array-handlers/positive/001",
@@ -810,12 +800,10 @@
    "enableRules": [],
    "expect": {
     "findings": [],
-    "absent": [
-     {
-      "rule": "v1/no-array-handlers"
-     }
-    ]
-   }
+    "absent": [],
+    "silent": true
+   },
+   "note": "The checker deliberately does not implement v1/no-array-handlers; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "v1/jsx-no-duplicate-props/component-negative/001",
@@ -871,12 +859,9 @@
       }
      }
     ],
-    "absent": [
-     {
-      "rule": "v1/no-innerhtml"
-     }
-    ]
-   }
+    "absent": []
+   },
+   "note": "The checker deliberately does not implement v1/no-innerhtml; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "reactive-read/distinct-claim/001",
@@ -965,12 +950,10 @@
    "enableRules": [],
    "expect": {
     "findings": [],
-    "absent": [
-     {
-      "rule": "v1/no-react-specific-props"
-     }
-    ]
-   }
+    "absent": [],
+    "silent": true
+   },
+   "note": "TypeScript owns this diagnostic (TS2322: the prop does not exist on the element's attribute type) and the checker deliberately carries no rule for it. The expectation asserts both halves: TypeScript really does report it at this span, and no checker finding is emitted there. `silent` keeps the broader claim that nothing else fires either."
   },
   {
    "id": "innerhtml/typescript-owned/001",
@@ -985,12 +968,10 @@
    "enableRules": [],
    "expect": {
     "findings": [],
-    "absent": [
-     {
-      "rule": "v1/no-innerhtml"
-     }
-    ]
-   }
+    "absent": [],
+    "silent": true
+   },
+   "note": "TypeScript owns this diagnostic (TS2322: the prop does not exist on the element's attribute type) and the checker deliberately carries no rule for it. The expectation asserts both halves: TypeScript really does report it at this span, and no checker finding is emitted there. `silent` keeps the broader claim that nothing else fires either."
   },
   {
    "id": "no-destructure/negative/001",
@@ -1026,12 +1007,10 @@
    "enableRules": [],
    "expect": {
     "findings": [],
-    "absent": [
-     {
-      "rule": "v1/event-handlers"
-     }
-    ]
-   }
+    "absent": [],
+    "silent": true
+   },
+   "note": "The checker deliberately does not implement v1/event-handlers; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "no-react-deps/fix/001",
@@ -1066,12 +1045,9 @@
       }
      }
     ],
-    "absent": [
-     {
-      "rule": "v1/no-react-deps"
-     }
-    ]
-   }
+    "absent": []
+   },
+   "note": "The checker deliberately does not implement v1/no-react-deps; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "upstream/components-return-once__valid__00",
@@ -2163,12 +2139,10 @@
    "enableRules": [],
    "expect": {
     "findings": [],
-    "absent": [
-     {
-      "rule": "v1/no-unknown-namespaces"
-     }
-    ]
-   }
+    "absent": [],
+    "silent": true
+   },
+   "note": "The checker deliberately does not implement v1/no-unknown-namespaces; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "upstream/jsx-no-undef__valid__05",
@@ -5163,13 +5137,10 @@
    "enableRules": [],
    "expect": {
     "findings": [],
-    "absent": [
-     {
-      "rule": "v1/no-proxy-apis",
-      "reason": "retired target-compatibility policy; source does not prove a Solid runtime defect"
-     }
-    ]
-   }
+    "absent": [],
+    "silent": true
+   },
+   "note": "The checker deliberately does not implement v1/no-proxy-apis; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "upstream/reactivity__valid__06",
@@ -5366,13 +5337,10 @@
    "enableRules": [],
    "expect": {
     "findings": [],
-    "absent": [
-     {
-      "rule": "v1/no-proxy-apis",
-      "reason": "retired target-compatibility policy; source does not prove a Solid runtime defect"
-     }
-    ]
-   }
+    "absent": [],
+    "silent": true
+   },
+   "note": "The checker deliberately does not implement v1/no-proxy-apis; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "upstream/reactivity__valid__14",
@@ -5387,13 +5355,10 @@
    "enableRules": [],
    "expect": {
     "findings": [],
-    "absent": [
-     {
-      "rule": "v1/no-proxy-apis",
-      "reason": "retired target-compatibility policy; source does not prove a Solid runtime defect"
-     }
-    ]
-   }
+    "absent": [],
+    "silent": true
+   },
+   "note": "The checker deliberately does not implement v1/no-proxy-apis; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "upstream/reactivity__valid__15",
@@ -6833,13 +6798,10 @@
    "enableRules": [],
    "expect": {
     "findings": [],
-    "absent": [
-     {
-      "rule": "v1/self-closing-comp",
-      "reason": "retired formatting preference; explicit closing syntax is runtime-equivalent"
-     }
-    ]
-   }
+    "absent": [],
+    "silent": true
+   },
+   "note": "The checker deliberately does not implement v1/self-closing-comp; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "upstream/reactivity__valid__73",
@@ -7256,13 +7218,11 @@
     "findings": [],
     "absent": [
      {
-      "rule": "v1/untracked-derived-function"
-     },
-     {
       "rule": "v1/strict-read-untracked"
      }
     ]
-   }
+   },
+   "note": "The checker deliberately does not implement v1/untracked-derived-function; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "upstream/reactivity__invalid__07",
@@ -7344,12 +7304,9 @@
       }
      }
     ],
-    "absent": [
-     {
-      "rule": "v1/untracked-derived-function"
-     }
-    ]
-   }
+    "absent": []
+   },
+   "note": "The checker deliberately does not implement v1/untracked-derived-function; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "upstream/reactivity__invalid__09",
@@ -7439,12 +7396,9 @@
       }
      }
     ],
-    "absent": [
-     {
-      "rule": "v1/untracked-derived-function"
-     }
-    ]
-   }
+    "absent": []
+   },
+   "note": "The checker deliberately does not implement v1/untracked-derived-function; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "upstream/reactivity__invalid__11",
@@ -7480,12 +7434,9 @@
       }
      }
     ],
-    "absent": [
-     {
-      "rule": "v1/untracked-derived-function"
-     }
-    ]
-   }
+    "absent": []
+   },
+   "note": "The checker deliberately does not implement v1/untracked-derived-function; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "upstream/reactivity__invalid__12",
@@ -7539,12 +7490,9 @@
       }
      }
     ],
-    "absent": [
-     {
-      "rule": "v1/untracked-derived-function"
-     }
-    ]
-   }
+    "absent": []
+   },
+   "note": "The checker deliberately does not implement v1/untracked-derived-function; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "upstream/reactivity__invalid__13",
@@ -7909,12 +7857,9 @@
       }
      }
     ],
-    "absent": [
-     {
-      "rule": "v1/no-array-handlers"
-     }
-    ]
-   }
+    "absent": []
+   },
+   "note": "The checker deliberately does not implement v1/no-array-handlers; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "upstream/reactivity__invalid__24",
@@ -8233,13 +8178,9 @@
       }
      }
     ],
-    "absent": [
-     {
-      "rule": "v1/no-async-tracked-scope",
-      "reason": "retired shape rule; only a proven reactive read after await remains defective"
-     }
-    ]
-   }
+    "absent": []
+   },
+   "note": "The checker deliberately does not implement v1/no-async-tracked-scope; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "upstream/reactivity__invalid__31",
@@ -8293,13 +8234,9 @@
       }
      }
     ],
-    "absent": [
-     {
-      "rule": "v1/no-async-tracked-scope",
-      "reason": "retired shape rule; only a proven reactive read after await remains defective"
-     }
-    ]
-   }
+    "absent": []
+   },
+   "note": "The checker deliberately does not implement v1/no-async-tracked-scope; that is a fact about the catalog, not about this source, so it is recorded here rather than as an `absent` clause no implementation could ever fail."
   },
   {
    "id": "upstream/reactivity__invalid__32",

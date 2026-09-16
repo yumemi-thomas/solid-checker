@@ -106,6 +106,27 @@ const ownershipOracleCache = openGateCache({
 
 const manifest = JSON.parse(readFileSync(CASES_PATH, "utf8"));
 const ledger = JSON.parse(readFileSync(LEDGER_PATH, "utf8"));
+
+// The externally visible rule names each dialect's catalog declares.
+//
+// Needed because an `absent` clause naming a rule *no* catalog declares cannot
+// fail: nothing can ever emit it, so the clause is satisfied by any
+// implementation, including one that emits nothing at all. Eleven cases were
+// written that way -- each naming an upstream rule the checker deliberately
+// does not carry -- and every one of them asserted nothing. Recorded in
+// docs/precision-backlog.md, 2026-09-16.
+const catalogRules = Object.fromEntries(
+  ["solid-v1", "solid-v2"].map((dialect) => {
+    const document = JSON.parse(
+      readFileSync(join(ROOT, `packages/cli/lib/rules-${dialect}.json`), "utf8")
+    );
+    const rules = Array.isArray(document) ? document : (document.rules ?? document);
+    const names = Array.isArray(rules)
+      ? rules.map((rule) => (typeof rule === "string" ? rule : rule.name))
+      : Object.keys(rules);
+    return [dialect, new Set(names)];
+  })
+);
 const failures = [];
 
 if (manifest.schemaVersion !== 1) fail(failures, "cases.json: schemaVersion must be 1");
@@ -168,7 +189,34 @@ for (const [index, testCase] of (manifest.cases ?? []).entries()) {
   const expected = testCase.expect?.findings;
   const absent = testCase.expect?.absent;
   if (!Array.isArray(expected) || !Array.isArray(absent)) fail(failures, `${label}: expect.findings and expect.absent must be arrays`);
-  if ((expected?.length ?? 0) === 0 && (absent?.length ?? 0) === 0) fail(failures, `${label}: a negative case must name at least one absent rule or family`);
+  // A negative case has to assert something that can fail. Three shapes do:
+  // an expected finding, an `absent` clause naming a rule this dialect's
+  // catalog actually declares, or `silent: true` -- "this source emits no
+  // finding at all", which is falsifiable by any emission.
+  //
+  // Requiring a *named* absent rule and nothing else is what produced the
+  // vacuous cases: an author with no rule to name reached for the upstream
+  // name the checker deliberately does not implement, and the requirement
+  // defeated itself.
+  const silent = testCase.expect?.silent === true;
+  const declared = catalogRules[testCase.dialect] ?? new Set();
+  const effective = (clause) =>
+    clause.rule
+      ? declared.has(clause.rule)
+      : [...declared].some((name) => name.startsWith(clause.family));
+  for (const clause of absent ?? []) {
+    if (clause.rule === undefined && clause.family === undefined) {
+      fail(failures, `${label}: an absent clause must name a rule or a family`);
+    } else if (!effective(clause)) {
+      fail(
+        failures,
+        `${label}: absent ${clause.rule ?? clause.family} is not declared by the ${testCase.dialect} catalog, so the clause cannot fail and asserts nothing. Use "silent": true to assert the source emits nothing, and record a deliberately unimplemented upstream rule in the case's "note".`
+      );
+    }
+  }
+  if ((expected?.length ?? 0) === 0 && (absent?.length ?? 0) === 0 && !silent) {
+    fail(failures, `${label}: a negative case must name at least one absent rule or family, or set "silent": true`);
+  }
   const findingSpans = [];
   for (const [findingIndex, expectation] of (expected ?? []).entries()) {
     const findingLabel = `${label} finding[${findingIndex}]`;
@@ -361,6 +409,12 @@ for (const value of resolved.values()) {
     const ownEnd = ownStart + byteLength(testCase.source.text);
     if (!claimed.has(index) && finding.primaryLocation.startByte < ownEnd && ownStart < finding.primaryLocation.endByte) fail(failures, `${label}: unclaimed ${finding.rule}/${finding.id} at ${finding.primaryLocation.startByte}..${finding.primaryLocation.endByte}`);
   });
+  if (testCase.expect.silent === true && actual.length) {
+    fail(
+      failures,
+      `${label}: declared silent but emitted ${actual.length} finding(s): ${actual.map((finding) => finding.rule).join(", ")}`
+    );
+  }
   for (const absent of testCase.expect.absent) {
     const matched = actual.filter((finding) => absent.rule ? finding.rule === absent.rule : finding.rule.startsWith(absent.family));
     if (matched.length) fail(failures, `${label}: absent ${absent.rule ?? absent.family} emitted ${matched.length} finding(s)`);
