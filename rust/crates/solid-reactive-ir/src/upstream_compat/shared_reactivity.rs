@@ -258,7 +258,7 @@ fn expected_function_got_expression(
             };
             if context.dialect.static_event_values_are_attributes()
                 && (static_string_expression(context, file, expression).is_some()
-                    || super::solid1x_syntax::expression_is_static_literal(file, expression))
+                    || super::syntax::expression_is_static_literal(file, expression))
             {
                 // Solid 1.x freezes this value into a plain attribute instead
                 // of installing it as a listener. It is therefore not a

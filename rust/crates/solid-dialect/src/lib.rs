@@ -1707,14 +1707,6 @@ pub trait Dialect: Sync {
         None
     }
 
-    /// Whether this dialect's catalog carries the file-local ESLint-era rule
-    /// surface (the `SC8xxx` identities ported from eslint-plugin-solid).
-    /// Only the 1.x catalog does; the engine gates those passes on this
-    /// answer instead of naming a version.
-    fn carries_eslint_era_rules(&self) -> bool {
-        false
-    }
-
     /// Whether a statically known string/number in a native `on*` JSX
     /// position is emitted as an attribute instead of installed as a listener.
     /// Solid 1.x's compiler makes that node/value distinction; the shared

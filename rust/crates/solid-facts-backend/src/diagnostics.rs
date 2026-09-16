@@ -1579,7 +1579,6 @@ pub fn discover_rule_options(project: &Path) -> Result<RuleOptions, BackendError
             dialect::ALL.iter().any(|dialect| (dialect.has_rule)(rule))
                 || dialect::retired_rule(rule).is_some()
         },
-        |rule| dialect::by_id("solid-v1").is_some_and(|dialect| (dialect.has_rule)(rule)),
     )
 }
 
@@ -1610,7 +1609,6 @@ pub fn semantic_demand_options_for_enablement(
 fn discover_rule_options_with(
     project: &Path,
     has_rule: impl Fn(&str) -> bool,
-    owns_solid1x_options: impl Fn(&str) -> bool,
 ) -> Result<RuleOptions, BackendError> {
     let directory = if project.is_dir() {
         project
@@ -1621,15 +1619,10 @@ fn discover_rule_options_with(
         let candidate = ancestor.join(".solid-checker").join("rule-options.json");
         match fs::read_to_string(&candidate) {
             Ok(encoded) => {
-                return RuleOptions::parse_with_aliases(
-                    &encoded,
-                    &has_rule,
-                    &owns_solid1x_options,
-                    dialect::rule_alias,
-                )
-                .map_err(|error| {
-                    BackendError::RuleOptions(format!("{}: {error}", candidate.display()))
-                });
+                return RuleOptions::parse_with_aliases(&encoded, &has_rule, dialect::rule_alias)
+                    .map_err(|error| {
+                        BackendError::RuleOptions(format!("{}: {error}", candidate.display()))
+                    });
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error.into()),

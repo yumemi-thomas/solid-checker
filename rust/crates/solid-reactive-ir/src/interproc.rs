@@ -2863,18 +2863,17 @@ fn primitive_callback_execution(
 /// signal's value
 /// ([`solid_dialect::Dialect::stores_function_argument_as_value`]).
 ///
-/// `mergeProps` never reaches that check, and not because the dialects are
-/// silent about it. Solid 1.x answers it *ahead* of the
-/// [`solid_dialect::Dialect::callback_executions`] table:
-/// `Solid1x::callback_execution_at` returns [`solid_dialect::Execution::Tracked`]
-/// for every `argument < argument_count`, because `mergeProps(...sources)` is
-/// variadic and the flat table cannot say so
-/// (`merge_props_function_sources_are_variadic_tracked_computations` pins it).
-/// Solid 2.0 spells its own primitive [`Primitive::Merge`] and carries no
-/// `MergeProps` row at all. So the check would answer `true` under 1.x and
-/// `false` under 2.0 for a name 2.0 never resolves here -- neither of which is
-/// the question. What actually decides `mergeProps` is the conditional-callability
-/// premise above, which is the runtime's own dispatch.
+/// `mergeProps` never reaches that check, and not because the vocabulary is
+/// silent about it. 2.0 spells its own primitive [`Primitive::Merge`] and
+/// carries no `MergeProps` row at all, so the name does not resolve here --
+/// which is not the same answer as "resolves, and takes no callback there".
+/// What actually decides `mergeProps` is the conditional-callability premise
+/// above, which is the runtime's own dispatch.
+///
+/// (While the 1.x vocabulary was compiled in this paragraph also had to
+/// explain its variadic `mergeProps(...sources)` answer, which came ahead of
+/// the [`solid_dialect::Dialect::callback_executions`] table. That vocabulary
+/// was retired in ADR 0110.)
 ///
 /// **There is deliberately no arity premise.** The 2.0 runtime dispatches
 /// `createStore`'s first argument on `typeof first === "function"` alone

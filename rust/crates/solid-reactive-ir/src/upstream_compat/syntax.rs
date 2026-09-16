@@ -13,27 +13,22 @@ use solid_facts::FileFacts;
 use solid_facts::ast::{JsxAttributeValueKind, JsxElementFact};
 use solid_facts::core::Span;
 
-use super::{UpstreamCompatContext, is_lowercase_led, text, violation};
+use super::{is_lowercase_led, text, violation};
 use crate::StaticViolation;
 
-pub(super) fn check_file(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    violations: &mut Vec<StaticViolation>,
-) {
+pub(super) fn check_file(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
     for element in &file.ast.jsx_elements {
-        jsx_no_duplicate_props(file, element, context, violations);
+        jsx_no_duplicate_props(file, element, violations);
     }
 }
 
-/// `v1/jsx-no-duplicate-props` (SC8003) — the same prop written twice on one
+/// `jsx-no-duplicate-props` (SC8003) — the same prop written twice on one
 /// opening tag, whether directly or hidden inside a spread, and the related
 /// "more than one content source" check (`children` prop, JSX children,
 /// `innerHTML`, `textContent` all fighting over the same element).
 fn jsx_no_duplicate_props(
     file: &FileFacts,
     element: &JsxElementFact,
-    context: &UpstreamCompatContext<'_>,
     violations: &mut Vec<StaticViolation>,
 ) {
     // Attributes and spread-carried object properties compete for the same
@@ -52,7 +47,17 @@ fn jsx_no_duplicate_props(
     // a later `onSave` overwrites an earlier one no matter how either is
     // spelled. Applying the DOM model there would silence real duplicates.
     let intrinsic = is_lowercase_led(text(file, element.name.span));
-    let folds_dom_slots = intrinsic && context.dialect.carries_eslint_era_rules();
+    // The DOM-slot folding model was the 1.x compiler's, and went with that
+    // dialect (ADR 0110). It is a separate question from `intrinsic`, which
+    // the content-competition check below still asks: a component's props are
+    // a plain object either way.
+    //
+    // Slot folding was already `false` for every 2.0 analysis --
+    // `carries_eslint_era_rules()` gated it and only the 1.x catalog answered
+    // true -- so no finding moves here. The parameter stays on
+    // `duplicate_slot` because the model is a property of a *compiler*, and
+    // the next vocabulary whose lowering folds slots sets it again.
+    let folds_dom_slots = false;
     let mut candidates: Vec<(Span, Option<String>, &str)> = element
         .attributes
         .iter()

@@ -9,7 +9,21 @@
       "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
       "start": 409,
       "end": 447,
-      "fixes": 1
+      "fixes": 1,
+      "message": "Use Solid's `<For />` component for efficiently rendering lists. Array#map causes DOM elements to be recreated.",
+      "hint": "Solid 2.0's default `<For>` preserves item identity; `keyed={false}` instead passes an accessor and is not a semantics-preserving rewrite of an Array#map callback."
+    },
+    {
+      "rule": "prefer-for",
+      "code": "SC8014",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 751,
+      "end": 803,
+      "fixes": 0,
+      "message": "Use Solid's `<For />` component or `<Repeat />` component for rendering lists. Array#map causes DOM elements to be recreated.",
+      "hint": "Solid 2.0's default `<For>` preserves item identity; `keyed={false}` instead passes an accessor and is not a semantics-preserving rewrite of an Array#map callback."
     },
     {
       "rule": "prefer-show",
@@ -17,9 +31,11 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
-      "start": 470,
-      "end": 503,
-      "fixes": 0
+      "start": 826,
+      "end": 859,
+      "fixes": 0,
+      "message": "Use Solid's `<Show />` component for conditionally showing content.",
+      "hint": "Solid's compiler already covers this case; `<Show>` is a stylistic preference."
     },
     {
       "rule": "jsx-no-duplicate-props",
@@ -27,9 +43,11 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
-      "start": 521,
-      "end": 549,
-      "fixes": 0
+      "start": 877,
+      "end": 905,
+      "fixes": 0,
+      "message": "Using JSX children, `props.innerHTML` at the same time is not allowed.",
+      "hint": "Pick exactly one source of content for this element. When more than one of children, innerHTML, and textContent is set, they overwrite each other and the result depends on write order."
     }
   ]
 }

@@ -33,7 +33,7 @@ pub use owners::function_binding_name;
 pub use pipeline::{build, build_with_accepted_contracts_measured};
 pub use returns_walk::{ReturnsDecline, valueless_completion};
 
-pub use upstream_compat::solid1x_options::{RuleOptions, RuleOverride, Solid1xRuleOptions};
+pub use upstream_compat::rule_options::{RuleOptions, RuleOverride};
 
 pub use findings::{
     DOCS_BASE_URL, EvidenceStep, Finding, RuleManifestIdentity, RuleMetadata, SolveTimings,

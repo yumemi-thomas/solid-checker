@@ -85,12 +85,14 @@ fn prefer_for(
             continue;
         }
         let argument = &call.arguments[0];
-        let solid_one = context.dialect.carries_eslint_era_rules();
+        // The extra carve-out for an async callback was 1.x's and went with
+        // that dialect (ADR 0110): 2.0 reports the preference on an async
+        // mapper too, which `tsc-oracle` case `prefer-for [async]` pins as the
+        // spelling TypeScript already rejects on its own.
         if !matches!(
             argument.value,
             ArgumentValueKind::Function | ArgumentValueKind::AsyncFunction
-        ) || solid_one && argument.value == ArgumentValueKind::AsyncFunction
-        {
+        ) {
             continue;
         }
         // The autofix applies only to an arrow with exactly one non-rest
@@ -158,7 +160,11 @@ fn prefer_for(
             )
         } else {
             (
-                "Use Solid's `<For />` component or `<Index />` component for rendering lists. Array#map causes DOM elements to be recreated.",
+                // `<Index />` was 1.x's index-oriented component and 2.0 does
+                // not export it; `<Repeat />` is the 2.0 spelling. Naming an
+                // API the analyzed version does not have was harmless while
+                // both vocabularies shipped and is not now (ADR 0110).
+                "Use Solid's `<For />` component or `<Repeat />` component for rendering lists. Array#map causes DOM elements to be recreated.",
                 vec![],
             )
         };
@@ -166,11 +172,7 @@ fn prefer_for(
             id: "SC8014".into(),
             rule: "prefer-for".into(),
             message: message.into(),
-            hint: if solid_one {
-                "Pick `<For>` when the callback needs the item value reactively, `<Index>` when it needs the index reactively.".into()
-            } else {
-                "Solid 2.0's default `<For>` preserves item identity; `keyed={false}` instead passes an accessor and is not a semantics-preserving rewrite of an Array#map callback.".into()
-            },
+            hint: "Solid 2.0's default `<For>` preserves item identity; `keyed={false}` instead passes an accessor and is not a semantics-preserving rewrite of an Array#map callback.".into(),
             location: location(file.path.shared(), call.span),
             analysis_context: String::new(),
             fixes,

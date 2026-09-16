@@ -21,7 +21,7 @@ use crate::{
     ActionInvocation, AsyncRead, BuildError, BuildTimings, ContractExport,
     ContractGenerationObligation, LeafOwnerOperation, ObligationCounts, ObligationReach,
     OwnerRequirement, PrimitiveCreation, Program, ReactiveRead, ReactiveSourceKind, ReactiveWrite,
-    RuleOptions, Solid1xRuleOptions, StaticDefect, StaticViolation, location_order,
+    RuleOptions, StaticDefect, StaticViolation, location_order,
 };
 use crate::{
     cleanup, directives, owners, reactive_analysis, server_rules, static_api, static_rules,
@@ -189,7 +189,6 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
     pub(crate) contracted: &'a HashMap<SymbolId, ResolvedContractBinding>,
     pub(crate) rule_options: &'a RuleOptions,
-    pub(crate) solid1x_rule_options: &'a Solid1xRuleOptions,
 }
 
 pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, BuildError> {
@@ -503,7 +502,6 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         symbols_by_root: &typescript_indexes.symbols_by_root,
         contracted: &resolved_contracts.by_symbol,
         rule_options,
-        solid1x_rule_options: &rule_options.solid1x,
     };
     static_rules::static_prepass(&analysis, &mut draft);
     clock.finish(&mut build_timings, ReactiveIrStage::StaticPrepass);

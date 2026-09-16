@@ -8,34 +8,31 @@
 //! the reactive engine reads — Oxc AST facts, resolved primitives, TypeScript
 //! entities — never source text through a regex.
 //!
-//! # Which dialect runs which group
+//! # Which group runs
 //!
-//! [`check_file`] gates each submodule on the dialect version, mirroring what
-//! the two catalogs declare. The module names make that ownership explicit:
-//! the `solid1x_*` modules retain their historical implementation names, but
-//! their entry points are gated per rule: structural preferences and intrinsic
-//! content competition are shared, while attributes, directives, and DOM-slot
-//! folding remain 1.x-only. `shared_reactivity` contains defect classes carried by both catalogs
-//! (minus the one 1.x-only rule its own gate documents). The version match
-//! here and the catalogs above cannot drift silently: each dialect's solver
-//! panics on an emitted identity its catalog does not resolve, and both rule
-//! crates' fixture suites execute this pass.
+//! Every submodule here now runs for every compiled vocabulary. The
+//! `solid1x_*` module names were historical implementation names from the
+//! eslint-plugin-solid port and are gone with them;
+//! eslint-plugin-solid port, and the 1.x-only groups behind them — attributes,
+//! directives, DOM-slot folding, and the `jsx-no-undef` surface — went with
+//! that dialect (ADR 0110). What is left is shared, so the names say so:
+//! `syntax`, `structure`, `rule_options`, and `shared_reactivity`.
+//!
+//! The catalogs and this pass cannot drift silently: the solver panics on an
+//! emitted identity its catalog does not resolve, and the rule crate's fixture
+//! suite executes this pass.
 
+pub mod rule_options;
 mod shared_reactivity;
-mod solid1x_attributes;
-pub mod solid1x_options;
-mod solid1x_structure;
-mod solid1x_syntax;
-mod solid1x_undef;
+mod structure;
+mod syntax;
 
 use std::collections::{HashMap, HashSet};
 
 use crate::cache::SourceReferenceLocations;
 use crate::indexes::SemanticLookup;
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
-use crate::{
-    EntitySymbols, Fix, ReactiveSourceKind, StaticViolation, SymbolId, TextEdit, location,
-};
+use crate::{EntitySymbols, Fix, ReactiveSourceKind, StaticViolation, SymbolId, location};
 use solid_facts::FileFacts;
 use solid_facts::core::Span;
 use typefacts::{ArrayShape, Location, RuntimeValueDomain};
@@ -593,22 +590,6 @@ fn read_hex_escape(
     Some(value)
 }
 
-pub(super) fn fix_replace(
-    file: &FileFacts,
-    span: Span,
-    message: impl Into<String>,
-    new_text: impl Into<String>,
-) -> Fix {
-    Fix {
-        message: message.into(),
-        applicability: "safe".into(),
-        edits: vec![TextEdit {
-            location: location(file.path.shared(), span),
-            new_text: new_text.into(),
-        }],
-    }
-}
-
 /// Builds a static violation, filling in the boilerplate every rule shares
 /// (identity, location, and an empty `analysis_context` — the rules that
 /// need one, like `no-unknown-namespaces`, set it after the call).
@@ -683,10 +664,6 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// dialect's primitives, and with no body in the project is one whose
     /// reactive behaviour nothing in the analysis knows.
     pub(super) contracted: &'a HashMap<SymbolId, crate::contracts::ResolvedContractBinding>,
-    /// Per-rule options, defaulted to upstream's defaults when the project
-    /// carries no `.solid-checker/rule-options.json`. See
-    /// [`solid1x_options`].
-    pub(super) solid1x_options: &'a solid1x_options::Solid1xRuleOptions,
     pub(super) prefer_for_enabled: bool,
     pub(super) prefer_show_enabled: bool,
 }
@@ -696,13 +673,9 @@ pub(super) struct UpstreamCompatContext<'a> {
 fn check_file(file: &FileFacts, context: &UpstreamCompatContext<'_>) -> FileDiagnostics {
     let mut violations = Vec::new();
     let mut defects = Vec::new();
-    solid1x_syntax::check_file(file, context, &mut violations);
+    syntax::check_file(file, &mut violations);
     if context.prefer_for_enabled || context.prefer_show_enabled {
-        solid1x_structure::check_file(file, context, &mut violations);
-    }
-    if context.dialect.carries_eslint_era_rules() {
-        solid1x_attributes::check_file(file, context, &mut violations);
-        solid1x_undef::check_file(file, context, &mut violations);
+        structure::check_file(file, context, &mut violations);
     }
     shared_reactivity::check_file(file, context, &mut defects);
     FileDiagnostics {
@@ -733,11 +706,7 @@ pub(crate) fn check_project(
     reusable: bool,
     draft: &mut ProgramDraft,
 ) {
-    let (prefer_for_name, prefer_show_name) = if ctx.dialect.carries_eslint_era_rules() {
-        ("v1/prefer-for", "v1/prefer-show")
-    } else {
-        ("prefer-for", "prefer-show")
-    };
+    let (prefer_for_name, prefer_show_name) = ("prefer-for", "prefer-show");
     let prefer_for_enabled = ctx
         .rule_options
         .is_enabled(prefer_for_name, true, &["preferences"]);
@@ -776,7 +745,6 @@ pub(crate) fn check_project(
             )
         }),
         contracted: ctx.contracted,
-        solid1x_options: ctx.solid1x_rule_options,
         prefer_for_enabled,
         prefer_show_enabled,
     };

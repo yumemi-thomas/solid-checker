@@ -30,50 +30,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::RuntimeEnvironment;
 use serde::Deserialize;
 
-/// Options for `v1/prefer-classlist` (SC8013).
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields, default)]
-pub struct PreferClasslistOptions {
-    /// Upstream's `classnames`: the helper names whose object-literal call
-    /// in a `class` prop the rule rewrites to `classlist`.
-    pub classnames: Vec<String>,
-}
-
-impl Default for PreferClasslistOptions {
-    fn default() -> Self {
-        Self {
-            classnames: ["cn", "clsx", "classnames"]
-                .map(str::to_owned)
-                .into_iter()
-                .collect(),
-        }
-    }
-}
-
-/// Options owned specifically by the Solid 1.x compatibility implementation.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct Solid1xRuleOptions {
-    pub prefer_classlist: PreferClasslistOptions,
-}
-
-impl Solid1xRuleOptions {
-    const CONFIGURABLE_RULES: [&'static str; 1] = ["prefer-classlist"];
-
-    /// Applies an option object owned by the Solid 1.x compatibility layer.
-    ///
-    /// `None` means this is a catalog rule without dialect-specific options;
-    /// the shared project parser therefore never needs to know these names.
-    fn parse_rule(&mut self, rule: &str, value: &serde_json::Value) -> Option<Result<(), String>> {
-        let parsed = match rule {
-            "prefer-classlist" => {
-                serde_json::from_value(value.clone()).map(|parsed| self.prefer_classlist = parsed)
-            }
-            _ => return None,
-        };
-        Some(parsed.map_err(|error| error.to_string()))
-    }
-}
-
 /// Dialect-neutral project rule configuration.
 ///
 /// Enablement belongs here because every catalog uses it. Dialect-specific
@@ -84,7 +40,6 @@ pub struct RuleOptions {
     overrides: BTreeMap<String, RuleOverride>,
     requested_presets: BTreeSet<String>,
     requested_rules: BTreeSet<String>,
-    pub solid1x: Solid1xRuleOptions,
     /// Host-selected runtime evidence is part of the retained analysis
     /// identity, but is not a rule-owned option. Keeping it beside the
     /// catalog options lets the shared pipeline thread one immutable selector
@@ -114,12 +69,8 @@ impl RuleOptions {
     /// Parses a rule-options document, failing closed on anything it does
     /// not understand. `has_rule` keeps the dialect catalogs as the source of
     /// truth for names instead of duplicating their identity tables here.
-    pub fn parse(
-        encoded: &str,
-        has_rule: impl Fn(&str) -> bool,
-        owns_solid1x_options: impl Fn(&str) -> bool,
-    ) -> Result<Self, String> {
-        Self::parse_with_aliases(encoded, has_rule, owns_solid1x_options, |_| None)
+    pub fn parse(encoded: &str, has_rule: impl Fn(&str) -> bool) -> Result<Self, String> {
+        Self::parse_with_aliases(encoded, has_rule, |_| None)
     }
 
     /// Parses a document while canonicalizing former external names onto
@@ -129,7 +80,6 @@ impl RuleOptions {
     pub fn parse_with_aliases(
         encoded: &str,
         has_rule: impl Fn(&str) -> bool,
-        owns_solid1x_options: impl Fn(&str) -> bool,
         alias: impl Fn(&str) -> Option<&'static str>,
     ) -> Result<Self, String> {
         let document: Document = serde_json::from_str(encoded)
@@ -168,21 +118,20 @@ impl RuleOptions {
             // This module owns 1.x option shapes, not the catalog's external
             // namespace. Match the final, stable upstream rule key after the
             // catalog has validated the full external name.
-            let local_rule = rule.rsplit('/').next().unwrap_or(rule);
-            let result = owns_solid1x_options(rule)
-                .then(|| options.solid1x.parse_rule(local_rule, &value))
-                .flatten()
-                .unwrap_or_else(|| {
-                    if value.as_object().is_some_and(serde_json::Map::is_empty) {
-                        Ok(())
-                    } else {
-                        Err(format!(
-                            "this rule takes only `enabled`; the rules with additional options \
-                             are {}",
-                            Solid1xRuleOptions::CONFIGURABLE_RULES.join(", ")
-                        ))
-                    }
-                });
+            let result = if value.as_object().is_some_and(serde_json::Map::is_empty) {
+                Ok(())
+            } else {
+                // No rule in the shipped catalog takes options beyond
+                // `enabled`. The one that did was `v1/prefer-classlist`, whose
+                // `classnames` list went with the 1.x catalog (ADR 0110). The
+                // refusal stays because this module's whole point is that a
+                // typo must not silently mean "defaults" -- when a 2.0 rule
+                // grows an option, it is this arm that grows a parser.
+                Err(
+                    "this rule takes only `enabled`; no rule in this catalog takes additional options"
+                        .to_owned(),
+                )
+            };
             result.map_err(|error| format!("rule options for {configured_rule:?}: {error}"))?;
         }
         Ok(options)
@@ -229,37 +178,27 @@ mod tests {
         )
     }
 
-    fn solid1x_rule(rule: &str) -> bool {
-        rule.starts_with("v1/") || rule.starts_with("legacy/")
-    }
-
     #[test]
     fn an_empty_document_is_upstreams_defaults() {
-        let options =
-            RuleOptions::parse(r#"{ "schemaVersion": 1 }"#, known_rule, solid1x_rule).unwrap();
+        let options = RuleOptions::parse(r#"{ "schemaVersion": 1 }"#, known_rule).unwrap();
         assert_eq!(options, RuleOptions::default());
-        let options = options.solid1x;
-        assert_eq!(
-            options.prefer_classlist.classnames,
-            ["cn", "clsx", "classnames"]
-        );
     }
 
+    /// No rule ships an option beyond `enabled`, and a document that tries to
+    /// set one is refused rather than ignored.
     #[test]
-    fn parses_every_configurable_rule() {
-        let options = RuleOptions::parse(
+    fn a_rule_option_other_than_enabled_is_refused() {
+        let error = RuleOptions::parse(
             r#"{
               "schemaVersion": 1,
               "rules": {
-                "v1/prefer-classlist": { "classnames": ["cx"] }
+                "strict-read-untracked": { "classnames": ["cx"] }
               }
             }"#,
             known_rule,
-            solid1x_rule,
         )
-        .unwrap();
-        let options = options.solid1x;
-        assert_eq!(options.prefer_classlist.classnames, ["cx"]);
+        .expect_err("an unknown option must not be read as defaults");
+        assert!(error.contains("takes only `enabled`"), "{error}");
     }
 
     #[test]
@@ -274,7 +213,6 @@ mod tests {
               }
             }"#,
             known_rule,
-            solid1x_rule,
         )
         .unwrap();
         assert!(!options.is_enabled("v1/no-direct-mutation", true, &[]));
@@ -286,12 +224,11 @@ mod tests {
 
     #[test]
     fn rejects_unknown_rules_keys_and_schema_versions() {
-        assert!(RuleOptions::parse(r#"{ "schemaVersion": 2 }"#, known_rule, solid1x_rule).is_err());
+        assert!(RuleOptions::parse(r#"{ "schemaVersion": 2 }"#, known_rule).is_err());
         assert!(
             RuleOptions::parse(
                 r#"{ "schemaVersion": 1, "rules": { "v1/not-a-rule": {} } }"#,
                 known_rule,
-                solid1x_rule,
             )
             .is_err()
         );
@@ -299,7 +236,6 @@ mod tests {
             RuleOptions::parse(
                 r#"{ "schemaVersion": 1, "rules": { "v1/no-destructure": { "severity": "off" } } }"#,
                 known_rule,
-                solid1x_rule,
             )
             .is_err()
         );
@@ -307,7 +243,6 @@ mod tests {
             RuleOptions::parse(
                 r#"{ "schemaVersion": 1, "rules": { "v1/no-destructure": { "enabled": "no" } } }"#,
                 known_rule,
-                solid1x_rule,
             )
             .is_err()
         );
@@ -321,7 +256,6 @@ mod tests {
               "rules": { "old-missing-owner": { "enabled": false } }
             }"#,
             |rule| rule == "missing-owner",
-            |_| false,
             |rule| (rule == "old-missing-owner").then_some("missing-owner"),
         )
         .unwrap();
@@ -346,7 +280,6 @@ mod tests {
         let mut disabled = RuleOptions::parse(
             r#"{ "schemaVersion": 1, "rules": { "v1/prefer-classlist": { "enabled": false } } }"#,
             known_rule,
-            solid1x_rule,
         )
         .unwrap();
         disabled.request_presets(["preferences".into()]);
