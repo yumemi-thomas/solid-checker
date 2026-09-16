@@ -1557,3 +1557,58 @@ WASM is unchanged — `packages/wasm` loads contracts through
 still not the demand list: `@kobalte/utils` (942 sites) and
 `@solid-primitives/utils` (820) publish their catalogs only at `./src/*.ts`
 entrypoints no consumer names, which is the § 27 and § 29 blocker.
+
+## 35. Correction to § 33: the demand list was never blocked; the bundler read the wrong tree
+
+§ 33 shipped 23 bundles over 6 packages and explained the absence of the top of
+the demand list — `@kobalte/utils` (942 sites) and `@solid-primitives/utils`
+(820) — as the § 27/§ 29 wildcard-entrypoint blocker. That was wrong, and the
+reasoning behind it was read off a **stale directory**.
+
+`make contract-coverage-census` keeps its temporary trees where the OS puts them
+and records each row's retained output directory in the run report; the census
+reads them back through `--run`. The repository's own
+`rust/target/coverage-census/` holds the report and the leftovers of an earlier,
+failed attempt. § 24's "the generated contract has no `.` entrypoint at all" was
+re-confirmed against *those* leftovers, and the first bundle set was generated
+from them too.
+
+Against the pinned run itself, `@kobalte/utils` publishes `.` with 59 exports
+and 312 of its 942 sites stating an operation — which is what the pinned census
+has always counted. The census number and the bundle set simply came from
+different trees.
+
+**Corrected: 54 bundles over 22 packages**, generated with
+`--run rust/target/coverage-census/run.json`, the supported route, including
+both demand-list packages at `.`. Measured on a consumer that never certified
+anything, importing four `@kobalte/utils` exports across five files:
+
+| | findings |
+| --- | ---: |
+| `--no-bundled-contracts` | 1 (acceptance gate, collapsed per package) |
+| default | 19, carrying 16 further sites |
+
+### Two defects the correct route exposed
+
+- **The generator compared document digests.** One published artifact is
+  routinely certified more than once in a corpus run — as a root row and again
+  as another package's dependency node — and those documents differ in bytes
+  every time, because the artifact-case id, closure digests and provenance all
+  differ. Two `@solid-primitives/keyed@1.5.3` documents from the pinned run:
+  different digests, **byte-identical summaries for all six exports**. The
+  generator called that a conflict and aborted the entire run. It now compares
+  what the documents *say* — every export paired with its summary — keeps one
+  deterministically when they agree, and drops just that artifact, named, when
+  they do not.
+- **This is the same wrong comparator** recorded for `select_case` in
+  `docs/precision-backlog.md`: every digest in the bindings is domain-separated
+  by artifact-case identity, so none of them answers "do these say the same
+  thing". `ExportSemantics` is `Eq`; the claims are the comparator.
+
+### The graph lane is not needed
+
+Re-running the whole census with `--dependency-graph-lane` reproduces the pin
+**exactly** — 599 / 939 / 337 / 65 / 31, to the digit. The default lane already
+certifies the demand list's `.` entrypoints, so the Makefile target is unchanged
+and the lane stays what § 12 and the runner's own policy say it is: an explicit
+request, not a default.

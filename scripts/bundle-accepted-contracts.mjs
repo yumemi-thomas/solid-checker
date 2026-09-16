@@ -135,6 +135,42 @@ function bundleKey(entry) {
   ].join(" | ");
 }
 
+/**
+ * What a bundle's document *says*, canonically: every export of its one
+ * artifact case, paired with the summary it resolves to.
+ *
+ * This is the comparator, and the document digest is not. One published
+ * artifact is routinely certified more than once in a corpus run -- as a root
+ * row and again as another package's dependency node -- and those documents
+ * differ in bytes every time, because the artifact-case id, the closure digests
+ * and the provenance all differ. Measured: two `@solid-primitives/keyed@1.5.3`
+ * documents from one run, different digests, byte-identical summaries for all
+ * six exports. Comparing digests called that a conflict; comparing claims calls
+ * it what it is.
+ *
+ * Whole-document is exactly the one case's surface: an embedded bundle must
+ * carry a single artifact case, which is what the per-case catalogs publish.
+ */
+function claimsFingerprint(documentText) {
+  const document = JSON.parse(documentText);
+  const claims = [];
+  for (const [entrypoint, value] of Object.entries(document.entrypoints ?? {})) {
+    for (const artifactCase of value.cases ?? [value]) {
+      for (const [name, reference] of Object.entries(artifactCase?.exports ?? {})) {
+        claims.push([
+          entrypoint,
+          name,
+          JSON.stringify(document.summaries?.[reference] ?? null)
+        ]);
+      }
+    }
+  }
+  claims.sort(([leftEntry, leftName], [rightEntry, rightName]) =>
+    leftEntry.localeCompare(rightEntry) || leftName.localeCompare(rightName)
+  );
+  return sha256(JSON.stringify(claims));
+}
+
 function main() {
   const options = parseArguments(process.argv.slice(2));
   if (!existsSync(BUNDLER)) {
@@ -163,6 +199,7 @@ function main() {
   const bundles = new Map();
   const objects = new Map();
   const refused = [];
+  const conflicted = new Set();
   for (const catalog of roots.flatMap(publishedCatalogs)) {
     const trust = trustConfigurationFor(catalog);
     if (!trust) {
@@ -182,23 +219,37 @@ function main() {
       // would carry bytes nobody can reach. `--all-entrypoints` keeps them.
       if (!options.allEntrypoints && !nameableEntrypoint(entry.requestedEntrypoint)) continue;
       const key = bundleKey(entry);
+      const claims = claimsFingerprint(result.objects[entry.document]);
       const previous = bundles.get(key);
-      if (previous && previous.documentDigest !== entry.documentDigest) {
-        fail(
-          `two different contracts for ${key}: `
-          + `${previous.documentDigest} and ${entry.documentDigest}`
-        );
+      if (previous && previous.claims !== claims) {
+        // Two certifications of one published artifact that do not agree.
+        // Neither may be applied -- which one describes the bytes is exactly
+        // the question this cannot answer -- so the artifact is dropped and
+        // named. Dropping one key must not stop the other bundles: a corpus
+        // run reaches many packages, and one disagreement used to abort the
+        // whole generation.
+        conflicted.add(key);
+        continue;
       }
-      bundles.set(key, entry);
+      // Deterministic among documents that agree, so regenerating the same run
+      // reproduces the same bytes whatever order the catalogs were walked in.
+      if (!previous || entry.documentDigest < previous.documentDigest) {
+        bundles.set(key, { ...entry, claims });
+      }
       for (const member of [entry.document, entry.receipt]) {
         objects.set(member, result.objects[member]);
       }
     }
   }
 
+  for (const key of conflicted) bundles.delete(key);
   const ordered = [...bundles.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([, entry]) => entry);
+    .map(([, entry]) => {
+      const { claims, ...published } = entry;
+      void claims;
+      return published;
+    });
   const index = {
     format: "solid-checker-accepted-contract-bundle-index",
     bundleIndexVersion: 1,
@@ -207,6 +258,9 @@ function main() {
 
   for (const [catalog, reason] of refused) {
     console.error(`  refused ${relative(REPOSITORY, catalog)}: ${reason.split("\n")[0]}`);
+  }
+  for (const key of [...conflicted].sort()) {
+    console.error(`  dropped ${key}: two certifications of it do not agree`);
   }
   const packages = new Set(ordered.map(entry => entry.packageName));
   console.log(`${ordered.length} bundle(s) over ${packages.size} package(s)`);
@@ -217,7 +271,10 @@ function main() {
 
   rmSync(OBJECT_ROOT, { recursive: true, force: true });
   mkdirSync(OBJECT_ROOT, { recursive: true });
-  const members = [...objects.keys()].sort();
+  // Exactly what the index names. A run reaches many certifications of one
+  // artifact and keeps one; the rest are not this build's business.
+  const named = new Set(ordered.flatMap(entry => [entry.document, entry.receipt]));
+  const members = [...objects.keys()].filter(member => named.has(member)).sort();
   for (const member of members) {
     const bytes = objects.get(member);
     const address = member.split("/").pop().split(".")[0];
