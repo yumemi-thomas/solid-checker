@@ -22158,3 +22158,116 @@ the inflation `contract-coverage-census.mjs`'s header records — it put
 `mergeDefaultProps` at 254 sites when every one of its cases is a `./*`-reached
 `./src/*.ts` file no import can name. They are counted apart as
 `unplaceableClaims` and priced at nothing.
+
+### Porting a fixture to Solid 2 changed a closure proposal, and the dialect was the only input (2026-09-16)
+
+Step 1 of the Solid 1.x retirement plan ports every fixture that pins *shared*
+mechanics off its 1.x stub, precisely so a shared path that behaves differently
+under v2 is found while the 1.x control still exists. The first slice — the ten
+`package-contracts` fixtures whose own sources import **no** Solid primitive, so
+the only edited inputs are `node_modules/solid-js/package.json` (dialect
+selection) and the `dependencies` pin — found one on the first run.
+
+Seven are clean: the generated contract and proposal plan are identical modulo
+the three hashes that the manifest bytes feed (`package.integrity`,
+`manifest.sha256`, `closureSha256`, and the `claimId`/`artifactCase` ids
+derived from them, whose reordering in `closureCandidates` is hash ordering,
+not a changed claim set). The corpus totals are byte-identical to the baseline:
+5 exact fail-closed refusals, 19 local artifact-case refusals, 10 inapplicable
+artifact cases, 15 withheld claims, 243 declined closure proposals, 150 artifact
+cases, 206 possible operations, 1446 proof candidates, 5398 local open claims.
+
+Three are not, and all three move the same way. `callback-execution-boundary`
+(`Inline`), `destructured-parameter-callback` (`Parameter`) and
+`unresolved-dispatch-attribution` (`Arrow`, `Direct`, `Helper`) each **gain**
+`callbacks` in `closed` and `proposedClosures` under v2. Nothing else moves: the
+`callbacks` row itself, its operation (`invoke`, `at` the call event,
+`same-stack`, `untracked`, count 0..many) and every other domain are identical,
+and the two exports in that fixture whose callbacks genuinely escape
+(`Escaping`, `Returned`) are untouched under both dialects.
+
+The mechanism is in shared code, `interproc.rs:1288-1320`. `direct_own_call` —
+the bookkeeping that feeds `direct_callback_parameters`, which
+`callbacks_enumeration_is_confirmable` (`inferred_contract.rs:407`) requires
+before ADR 0100 lets the domain close — is set **only inside the last-resort
+`.or_else()` arm**. Under v1 these exports never reach it: they are capitalized,
+`lookup.inside_component` gives them `ExecutionRole::UntrackedRendering`
+(`execution_role.rs:598`), and `contract_callback_execution` maps that to
+`Some("inline")` two arms earlier (`lib.rs:1921`). The site is described, the
+word published is the same `inline`, and the record that the site *was* a direct
+own call is simply never written. Under v2 the lexical rung does not classify
+them, the derivation falls through to the last-resort arm, and the closure is
+proposed.
+
+So v2's answer is the better-founded one — the site is exactly the shape ADR 0100
+calls confirmable — and v1 was under-proposing. But the defect is **not** v1's,
+and deleting the v1 dialect does not fix it: `direct_own_call` is a fact about
+the call site, and it stays unrecorded for any export, on any dialect, whose
+execution word arrives from an earlier rung (a runtime row, a wrapper chain, or
+a lexical role that survives the `call_in_owner_body` filter). A v2 export in
+that position still under-proposes today.
+
+The checked-in expectation had been carrying the proof of this the whole time.
+In `unresolved-dispatch-domains-control`, two byte-identical callback sites in
+one file disagreed, and the only thing separating them was the export's first
+letter:
+
+    inert  -> closed: ["callbacks", "creates", "reads"]
+    Direct -> closed: ["creates", "reads"]
+
+`inert` is lowercase, so `inside_component` does not claim it, the derivation
+falls to the last-resort arm, and the closure is proposed. `Direct` is
+capitalized and loses the same closure for no semantic reason at all.
+
+**Fixed the same day.** `direct_own_call` is now read off the call —
+`call.direct_callee && call_in_owner_body`, which is what the field's own
+documentation at `lib.rs:1079` always said it meant — instead of being assigned
+inside the last-resort arm. The widening cannot over-propose:
+`callbacks_enumeration_is_confirmable` independently requires the published
+operation to be an untracked same-stack invoke at the call event, so a
+`deferred` or `tracked` word from an earlier rung still fails there.
+
+Four contract fixtures moved, each in exactly one way — `callbacks` added to
+`closed` and `proposedClosures`, no other field touched:
+`callback-execution-boundary` (`Inline` only), `destructured-parameter-callback`
+(all four patterns), `unresolved-dispatch-attribution` (`Arrow`, `Direct`,
+`Helper`) and `unresolved-dispatch-domains-control` (`Direct`, now agreeing with
+`inert`). The negatives all held: `Escaping` and `Returned` — the two exports
+whose callbacks genuinely escape — still close nothing, which is the claim that
+fixture exists to make, and the domains-control README's pin that "`callbacks`
+is claimed identically in both halves" is now true where it previously was not.
+`solid-reactive-ir --lib` stays at 240 passed, and coverage stays at 97 projects
+/ 556 findings: no reactive-ir finding moves, because this is a
+contract-generation proposal filter and nothing else reads it.
+
+With the asymmetry gone the three blocked fixtures port cleanly, hash-only, and
+all ten of the slice landed.
+
+**Measured on the real corpus: no movement at all.** `make
+contract-coverage-census` returns every figure byte-identical to the pin — 1940
+of 1958 sites measured, 599 operations stated (30.9%), 939 closed-empty (48.4%),
+337 degenerate (17.4%), 65 absent (3.4%), 31 carrying an owner requirement
+(1.6%) — and both halves report "did not regress against the pin", addressing
+included (325 recipes, 1 addressed, unchanged). `make ecosystem-regression`
+agrees harder: all 418 probes identical in `status`, `runtimeCompletion`,
+`integrityVerified` and `declaredWildcard`, none added or missing, and every
+`solid1`/`solid2`/`supplemental` aggregate unchanged. Only `durationMs` differs,
+and that is not readable here — the run happened with ~7,000 leftover
+`$TMPDIR/solid-checker-*` trees and `mds_stores` active, which is exactly the
+condition that inflates a timed run.
+
+Two reasons the zero is expected rather than suspicious. The census is
+structurally blind to this fix: its buckets count whether an operation is
+*stated*, and the `callbacks` row these exports publish was already stated and
+already counted in the 599 — the fix changes only whether the enumeration is
+additionally proposed *closed*, which no bucket tracks. And the shape it
+corrects is narrow: a capitalized export that invokes its own callback
+parameter directly in its body, where the capitalization is what diverted the
+derivation. The corpus's measured packages do not reach it in a way that
+surfaces in these aggregates.
+
+So this is a correctness fix to a proposal filter, paid for by four fixture
+snapshots, with no demonstrated effect on any real package today. Its value is
+that the filter now means what its documentation says, and that a v2 export
+arriving at an inline row through an earlier rung no longer silently loses a
+closure it has earned.

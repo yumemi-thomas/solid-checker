@@ -1278,14 +1278,29 @@ fn discover_interprocedural_graph(
                         callback_chain_reaches_owner_body(file, chain, &nodes[callback_owner])
                     })
                     .map(|chain| compose_callback_chain(&chain.wrappers));
-            // ADR 0100: whether the row below, if written, comes from the last
-            // rung alone -- a call of the parameter itself, written directly in
-            // the body of the function that declares it. That is the one row
-            // the implementation census confirms site for site, so it is
-            // recorded beside the row (`direct_callback_parameters`) rather
-            // than in it: the wire has one word, `inline`, for this and for a
-            // primitive's inline position alike.
-            let mut direct_own_call = false;
+            // ADR 0100: whether *the site* is a call of the parameter itself,
+            // written directly in the body of the function that declares it.
+            // That is the one row the implementation census confirms site for
+            // site, so it is recorded beside the row
+            // (`direct_callback_parameters`) rather than in it: the wire has
+            // one word, `inline`, for this and for a primitive's inline
+            // position alike.
+            //
+            // It is read off the call, not set inside whichever rung below
+            // happened to name the schedule. Recording it only in the
+            // last-resort arm made it a fact about the derivation instead of
+            // about the site, and silently under-proposed: a capitalized
+            // export whose body calls its own parameter takes
+            // `UntrackedRendering` -> `inline` from the lexical rung two arms
+            // earlier, publishes the identical row, and never recorded that
+            // the site was a direct own call -- so the census could confirm
+            // the enumeration and the generator never proposed it. Widening
+            // this cannot over-propose, because
+            // `callbacks_enumeration_is_confirmable` independently requires
+            // the published operation to be an untracked same-stack invoke at
+            // the call event: a `deferred` or `tracked` word from an earlier
+            // rung still fails there.
+            let direct_own_call = call.direct_callee && call_in_owner_body;
             let execution = match (runtime_execution, chain_execution) {
                 (Some(execution), _) => Some(execution),
                 (None, Some(composed)) => composed,
@@ -1313,10 +1328,7 @@ fn discover_interprocedural_graph(
                     // rung can classify the enclosing schedule, no row is
                     // written and the unknown-callback obligation opens the
                     // sentinel instead.
-                    .or_else(|| {
-                        direct_own_call = call.direct_callee && call_in_owner_body;
-                        direct_own_call.then_some("inline")
-                    }),
+                    .or_else(|| direct_own_call.then_some("inline")),
             };
             if let Some(execution) = execution {
                 if direct_own_call {

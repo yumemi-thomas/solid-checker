@@ -13,9 +13,9 @@
             "sha256": "7ef9e694a262b5b6893a789f7b51ed68642396130217353d24a9a054864c3ec7"
           },
           "exports": {
-            "Arrow": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
-            "Direct": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
-            "Helper": "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395",
+            "Arrow": "summary-5af260abe18d7fafbbcb241326a40a893015997b2d69a80d3106a1220257eb59",
+            "Direct": "summary-5af260abe18d7fafbbcb241326a40a893015997b2d69a80d3106a1220257eb59",
+            "Helper": "summary-5af260abe18d7fafbbcb241326a40a893015997b2d69a80d3106a1220257eb59",
             "inert": "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d"
           },
           "resolution": {
@@ -40,7 +40,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-44a530ddd93ba34adbb7dbb79328eed1dad195581a6d84138939f791702c2395": {
+    "summary-5af260abe18d7fafbbcb241326a40a893015997b2d69a80d3106a1220257eb59": {
       "call": {
         "callbacks": [
           {
@@ -52,6 +52,7 @@
           }
         ],
         "closed": [
+          "callbacks",
           "creates"
         ],
         "creates": [],
@@ -75,6 +76,7 @@
           }
         ],
         "proposedClosures": [
+          "callbacks",
           "creates"
         ]
       },
