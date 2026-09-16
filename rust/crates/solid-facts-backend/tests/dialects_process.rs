@@ -379,40 +379,39 @@ fn component_identity_comes_from_type_facts() {
         .map(|pattern| u64::try_from(source.find(pattern).unwrap()).unwrap())
         .to_vec();
     component_prop_patterns.sort_unstable();
-    // Was a differential: 2.0 proves the write at `setCount(1)` is in an owned
-    // scope and 1.x proved nothing there, so the pair contrasted dialect
-    // compatibility. With one dialect left there is no contrast to draw, and
-    // what survives is the claim the name now states — component identity is
-    // decided by Type Facts, which the SC2001 offset and the exact SC1003 set
-    // below both measure.
-    for (dialect, expected) in [("solid-v2", vec![typed_offset])] {
-        let findings = project_snapshot_findings(fixture.join("tsconfig.json"), Some(dialect));
-        let mut writes = findings
-            .iter()
-            .filter(|finding| finding["id"] == "SC2001")
-            .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
-            .collect::<Vec<_>>();
-        writes.sort_unstable();
-        assert_eq!(writes, expected, "wrong component identity in {dialect}");
-        let mut destructures = findings
-            .iter()
-            .filter(|finding| finding["id"] == "SC1003")
-            .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
-            .collect::<Vec<_>>();
-        destructures.sort_unstable();
-        assert_eq!(
-            destructures, component_prop_patterns,
-            "callback containment or a JSX render helper distorted component identity in {dialect}"
-        );
-        assert!(
-            findings.iter().all(|finding| {
-                finding["message"]
-                    .as_str()
-                    .is_none_or(|message| !message.contains("localSameName"))
-            }),
-            "a user-local type alias became a Solid accessor: {findings:#?}"
-        );
-    }
+    // Was a differential over a dialect pair: 2.0 proves the write at
+    // `setCount(1)` is in an owned scope and 1.x proved nothing there, so the
+    // two arms contrasted dialect compatibility. With one dialect there is no
+    // contrast to draw, so the loop is gone rather than iterating a list of
+    // one, and what survives is the claim the name now states — component
+    // identity is decided by Type Facts, which the SC2001 offset and the exact
+    // SC1003 set below both measure.
+    let findings = project_snapshot_findings(fixture.join("tsconfig.json"), Some("solid-v2"));
+    let mut writes = findings
+        .iter()
+        .filter(|finding| finding["id"] == "SC2001")
+        .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
+        .collect::<Vec<_>>();
+    writes.sort_unstable();
+    assert_eq!(writes, vec![typed_offset], "wrong component identity");
+    let mut destructures = findings
+        .iter()
+        .filter(|finding| finding["id"] == "SC1003")
+        .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
+        .collect::<Vec<_>>();
+    destructures.sort_unstable();
+    assert_eq!(
+        destructures, component_prop_patterns,
+        "callback containment or a JSX render helper distorted component identity"
+    );
+    assert!(
+        findings.iter().all(|finding| {
+            finding["message"]
+                .as_str()
+                .is_none_or(|message| !message.contains("localSameName"))
+        }),
+        "a user-local type alias became a Solid accessor: {findings:#?}"
+    );
 }
 
 #[test]
