@@ -673,7 +673,36 @@ blocking-status set, and any schema that names it. **Recommend keeping it** with
 a comment naming the unreachability, and recording it here rather than leaving a
 reader to discover an untested status.
 
-### The deletion's measured surface
+### `DIALECTS`: the deletion got much smaller (2026-09-16)
+
+The surface below was measured *before* `bf24c947`, and that commit changed the
+number by an order of magnitude. Twenty sites in `solid-dialect/src/lib.rs`
+enumerated `[Version::V1, Version::V2]` and immediately took `.dialect()` --
+thirteen cross-dialect helpers and seven test loops. None was a claim about
+which Solid versions exist; all were asking what the vocabularies on hand say.
+They now iterate a `DIALECTS` constant.
+
+Enumerating `Version` there was also subtly wrong, not merely verbose.
+`Version::V1` is retained for **classification** long after the build stops
+carrying its vocabulary, because detection must recognise an installed `1.9.14`
+in order to refuse it. "Which versions exist" and "which vocabularies I have"
+had been the same list by coincidence; step 3 is where they part.
+
+**Measured both ways.** Deleting `solid_1x.rs` outright was 178 compile-error
+sites across 28 tests in that one file. With `DIALECTS` in place, flipping it to
+`&[&Solid2]` leaves **six failing tests**, and all six are genuinely about 1.x:
+
+- `solid_1x::tests::the_authority_denies_creates_for_the_sixteen_and_nothing_else`
+- `audited_archives_are_looked_up_by_name_and_carry_all_four_fields` (2 -> 1)
+- `implementation_roles_require_canonical_cross_dialect_agreement`
+- `one_dialect_answers_for_a_shared_archive_name_only_while_the_other_is_absent`
+- `solid_1x_audits_solid_js_1_9_14_and_denies_only_its_sixteen_creates_rows`
+- `value_export_modules_answer_only_for_audited_dialect_modules`
+
+So the vocabulary layer is now a one-line edit plus six deletions. The surface
+below still stands for everything *outside* `solid-dialect`.
+
+### The deletion's measured surface (outside the vocabulary layer)
 
 Larger than the inventory suggested, and not confined to the dialect crates:
 
