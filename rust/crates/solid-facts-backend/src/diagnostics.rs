@@ -308,6 +308,68 @@ fn retain_enabled(
     })
 }
 
+/// The whole result for a project whose installed Solid runtime this build has
+/// no dialect for.
+///
+/// Not produced by the rules engine, and deliberately not reachable from it:
+/// there is no analysis behind it, so there is nothing for a rule to run on.
+/// Dialect detection builds this directly and hands it to the emission path.
+///
+/// **One finding, and never any others.** The refusal's entire claim is that
+/// the checker cannot model this project; a second finding beside it would be
+/// an assertion about source that was never analyzed under the language it
+/// actually runs. `metrics` is all zeroes for the same reason -- nothing was
+/// read, and reporting otherwise would overstate what happened.
+#[must_use]
+pub fn unsupported_runtime_snapshot(installed: &str, manifest: &Path) -> Snapshot {
+    let manifest = manifest.display().to_string();
+    Snapshot {
+        status: "uncertifiable".into(),
+        findings: vec![SnapshotFinding {
+            id: dialect::UNSUPPORTED_RUNTIME_CODE.into(),
+            rule: dialect::UNSUPPORTED_RUNTIME_RULE.into(),
+            kind: "uncertifiable".into(),
+            severity: "error".into(),
+            message: format!(
+                "solid-js {installed} is installed, and this build of solid-checker carries no dialect for it; the project was not analyzed"
+            ),
+            hint: "Upgrade the project to Solid 2.0, or use a checker release carrying the dialect for this runtime. Passing --dialect analyzes the project anyway, under a language it does not run."
+                .into(),
+            analysis_context: "dialect-detection".into(),
+            subject_kind: "project".into(),
+            primary_location: SourceLocation {
+                path: manifest.clone(),
+                start_byte: 0,
+                end_byte: 0,
+                line: 1,
+                column: 1,
+            },
+            related_locations: Vec::new(),
+            evidence: vec![SnapshotEvidence {
+                message: format!(
+                    "the nearest node_modules/solid-js above the project resolves here, and names version {installed}"
+                ),
+                location: Some(SourceLocation {
+                    path: manifest,
+                    start_byte: 0,
+                    end_byte: 0,
+                    line: 1,
+                    column: 1,
+                }),
+            }],
+            fixes: Vec::new(),
+        }],
+        package_summaries: Vec::new(),
+        metrics: Metrics {
+            files_analyzed: 0,
+            functions_analyzed: 0,
+            proof_obligations: 0,
+            cached_summaries: 0,
+            unresolved_obligations: 0,
+        },
+    }
+}
+
 fn snapshot_with_package_summaries(
     sources: &[SourceFile],
     package_summaries: Vec<PackageSummary>,

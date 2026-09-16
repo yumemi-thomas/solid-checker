@@ -124,9 +124,29 @@ fn resolve_dialect(
     match request.dialect.as_deref() {
         Some(id) => solid_facts_backend::dialect::by_id(id)
             .ok_or_else(|| format!("unknown dialect {id:?}").into()),
-        None => Ok(solid_facts_backend::dialect::detect(Path::new(
-            &request.project_id,
-        ))),
+        // A direct `--serve` for a project whose installed runtime this build
+        // has no dialect for refuses to start, rather than retaining a session
+        // that would answer every request under the wrong language. The
+        // ordinary CLI path never gets here: `run` refuses at the selection
+        // site, above the branch that consults this daemon at all. This is the
+        // backstop for the case that skips it.
+        None => match solid_facts_backend::dialect::detect_detailed(Path::new(&request.project_id))
+        {
+            solid_facts_backend::dialect::Detection::Installed { dialect, .. } => Ok(dialect),
+            solid_facts_backend::dialect::Detection::Unsupported {
+                installed,
+                manifest,
+                ..
+            } => Err(format!(
+                "solid-js {installed} at {} is a runtime this build carries no dialect for [{}]",
+                manifest.display(),
+                solid_facts_backend::dialect::UNSUPPORTED_RUNTIME_CODE
+            )
+            .into()),
+            solid_facts_backend::dialect::Detection::Defaulted { .. } => {
+                Ok(solid_facts_backend::dialect::default_dialect())
+            }
+        },
     }
 }
 

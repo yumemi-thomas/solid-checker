@@ -17,6 +17,8 @@ fixtures/upstream-parity/.staging/
 **/node_modules/
 !rust/crates/solid-facts-backend/tests/fixtures/contract-async/node_modules/
 !rust/crates/solid-facts-backend/tests/fixtures/contract-async/node_modules/**
+!rust/crates/solid-facts-backend/tests/fixtures/unsupported-runtime-v1/node_modules/
+!rust/crates/solid-facts-backend/tests/fixtures/unsupported-runtime-v1/node_modules/**
 # Contract integration tests use small, hand-written packages as fixtures.
 !fixtures/reactive-ir/package-*/node_modules/
 !fixtures/reactive-ir/package-*/node_modules/**

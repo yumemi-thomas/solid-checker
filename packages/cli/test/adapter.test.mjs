@@ -535,6 +535,52 @@ function enabledRules(merged) {
     .map(([name]) => name.slice("solid-checker/".length));
 }
 
+test("a project-scoped finding is reported on every linted file, not matched by path", () => {
+  // The unsupported-runtime refusal is located at the `node_modules/solid-js`
+  // manifest that decided the dialect. ESLint never lints that file, so the
+  // ordinary path match would drop it and hand the user a clean run over a
+  // project that was never analyzed -- the false certification the refusal
+  // exists to prevent. Reported on every file instead.
+  const refusal = {
+    id: "SC9013",
+    rule: "unsupported-solid-runtime",
+    kind: "uncertifiable",
+    severity: "error",
+    message: "solid-js 1.9.14 is installed, and this build of solid-checker carries no dialect for it; the project was not analyzed",
+    subjectKind: "project",
+    primaryLocation: {
+      path: "/tmp/app/node_modules/solid-js/package.json",
+      startByte: 0,
+      endByte: 0
+    }
+  };
+  const snapshot = { status: "uncertifiable", findings: [refusal] };
+
+  const reports = run(snapshot, "/tmp/app/src/App.tsx", "const a = 1;");
+  assert.equal(reports.length, 1, "the refusal reaches a file it does not name");
+  assert.match(reports[0].data.message, /SC9013/);
+  assert.deepEqual(reports[0].loc.start, { line: 1, column: 0 });
+  assert.deepEqual(
+    reports[0].loc.end,
+    { line: 1, column: 0 },
+    "the span is this file's origin, never an offset into the manifest's bytes"
+  );
+
+  // Every other file too: the whole project is unanalyzed, so no file in it
+  // may report clean.
+  assert.equal(run(snapshot, "/tmp/app/src/Other.tsx", "const b = 2;").length, 1);
+
+  // And the path match still governs everything that is not project-scoped:
+  // a file-scoped finding naming another file stays where it belongs.
+  const elsewhere = { ...refusal, subjectKind: "component-props", id: "SC1003" };
+  assert.equal(
+    run({ status: "violation", findings: [elsewhere] }, "/tmp/app/src/App.tsx", "const a = 1;")
+      .length,
+    0,
+    "dropping the project scope restores ordinary per-file matching"
+  );
+});
+
 function finding(id, rule, start, end) {
   return {
     id,

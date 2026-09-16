@@ -252,11 +252,57 @@ backend_dialect_lib_tests() {
   fi
 }
 
+# `$1` features, `$2` integration target, `$3` name filter, `$4` how many tests
+# that filter must select.
+#
+# The count is not decoration. A name filter that matches nothing runs zero
+# tests and exits 0 under both runners, so a renamed or deleted test would turn
+# this step green while proving nothing -- the same vacuous-negative failure
+# this repository has now found in three separate corpora. Assert the arity.
+backend_dialect_filtered_tests() {
+  TYPEFACTS_TEST_BIN="$PWD/bin/solid-typefacts"
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts"
+  export TYPEFACTS_TEST_BIN SOLID_TYPEFACTS_BIN
+  filtered_log=$(mktemp)
+  if [ "$rust_test_runner" = "nextest" ]; then
+    cargo +1.97 nextest run --config-file scripts/nextest.toml --profile verify \
+      --cargo-profile "$cargo_profile" --manifest-path "$rust_manifest" \
+      -p solid-facts-backend --test "$2" --no-default-features --features "$1" \
+      -E "test(~$3)" 2>&1 | tee "$filtered_log"
+  else
+    cargo +1.97 test --profile "$cargo_profile" --manifest-path "$rust_manifest" \
+      -p solid-facts-backend --test "$2" --no-default-features --features "$1" \
+      "$3" 2>&1 | tee "$filtered_log"
+  fi
+  if ! grep -qE "(test result: ok\. $4 passed|$4 tests run: $4 passed)" "$filtered_log"; then
+    echo "make verify: filter '$3' in $2 must select exactly $4 passing tests;" >&2
+    echo "  it did not. A filter that matches nothing is a green step that" >&2
+    echo "  tested nothing -- fix the filter or the test names." >&2
+    rm -f "$filtered_log"
+    exit 1
+  fi
+  rm -f "$filtered_log"
+}
+
 step test-backend-v1
 backend_dialect_lib_tests dialect-v1
 
 step test-backend-v2
 backend_dialect_lib_tests dialect-v2
+
+# The only configuration in which the unsupported-runtime refusal is reachable.
+#
+# `Detection::Unsupported` needs an installed major that no compiled-in dialect
+# carries, so a build holding every released major can never produce one: the
+# default build runs these two tests and they assert the *other* half (a 1.x
+# install is an ordinary project while its dialect is compiled in). This step
+# is where the refusal itself is actually executed.
+#
+# A name filter rather than the whole target, because `dialects_process` still
+# carries ~30 assertions that name the 1.x dialect and fail in this arm by
+# construction. Step 3 retires those, and this step then widens to the target.
+step test-backend-v2-runtime-refusal
+backend_dialect_filtered_tests dialect-v2 dialects_process unsupported_runtime_refusal 2
 
 step go-rust-tests
 TYPEFACTS_TEST_BIN="$PWD/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \

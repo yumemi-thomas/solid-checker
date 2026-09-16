@@ -1,5 +1,64 @@
 # Precision backlog
 
+## SC9013 refuses an unsupported Solid runtime, and the seam was one branch off (2026-09-16)
+
+Step 4 of the Solid 1.x retirement: dialect detection now emits
+`SC9013 unsupported-solid-runtime` instead of collapsing an installed major
+this build has no dialect for onto the default. The finding is uncertifiable,
+not a violation -- the project's source is not the defect, and the checker
+asserts nothing about source it never analyzed under the language it runs.
+
+**The landing site recorded the day before was wrong, and only checking found
+it.** The plan said `main.rs` immediately before
+`analyze_project_accepted_measured_with_enablement`. `detect` has *three* call
+sites, and `daemon::enabled()` defaults to on whenever `debug_assertions` is
+off, with `daemon::eligible` satisfied by exactly the ordinary project check.
+A release CLI therefore takes the daemon branch and returns from `run` without
+ever reaching that line, while the daemon's own `resolve_dialect` called plain
+`detect` and collapsed the install to v2. A refusal there would have been
+correct in debug, absent in every shipped build, and invisible to this
+repository's gates -- none of which run a release binary against an unsupported
+install. It lands at the *selection* site instead, above the daemon branch;
+`resolve_dialect` and the session bench take their own refusal for the
+`--serve` case that skips it. Verified by running the v2-only binary with
+`SOLID_CHECKER_DAEMON=1`: the refusal survives the daemon path.
+
+**Two further things checking turned up.**
+
+- **The ESLint adapter would have dropped it silently.** `projectFindings`
+  skips any finding whose `primaryLocation.path` is not the linted file, and
+  the refusal is located at the deciding `node_modules/solid-js/package.json`,
+  which ESLint never lints. Every ESLint user on an unsupported runtime would
+  have seen a clean run over a project that was never analyzed -- the exact
+  false certification the rule exists to prevent, reproduced one layer up. A
+  finding carrying `subjectKind: "project"` is now reported on every linted
+  file, spanned at that file's origin. Tested directly with an injected
+  snapshot, so the adapter's half is pinned even though the refusal itself is
+  not yet reachable through a shipped binary.
+- **`make verify` would not have run the proof.** `backend_dialect_lib_tests`
+  is `--lib` only, so the v2-only arm never executed an integration test. The
+  refusal is *unreachable* in any build carrying every released major -- a
+  build with both dialects can never produce `Detection::Unsupported` -- so the
+  v2-only arm is the only place its end-to-end behaviour exists at all. A new
+  `test-backend-v2-runtime-refusal` step runs it there by name filter, because
+  `dialects_process` still carries ~30 assertions that step 3 retires. The
+  helper asserts the filter selects exactly **2** passing tests: a name filter
+  matching nothing exits 0 under both runners, which is the same vacuous-green
+  this repository has now found in three separate corpora.
+
+**Reachability, stated plainly.** With the 1.x dialect compiled in there is
+nothing to refuse, so the default build's half of the fixture test asserts the
+opposite claim -- a 1.x install is an ordinary 1.x project. The fixture
+destructures component props so **every build that analyzes it reports
+SC1003**, which is what makes the refusing half non-vacuous: SC9013 appears
+*instead of* SC1003, not beside it. Step 3 makes the refusing half the only
+half.
+
+Remaining, and deliberately not done here: the CLI-level exit-status pin, which
+cannot fire until the shipped binary is v2-only; `docs/adding-a-dialect.md` and
+the CLI README's supported-versions statement, which still describe two shipped
+dialects accurately and are step 3's to change.
+
 ## Accepting a certified contract still moves no consumer finding: the key is the importer (2026-09-14)
 
 With ADR 0108 landed, the acceptance path could finally be run end to end on a

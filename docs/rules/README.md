@@ -1,6 +1,6 @@
 # Rules
 
-solid-checker has two dialect-owned catalogs: 18 rules for Solid 1.x and 26
+solid-checker has two dialect-owned catalogs: 18 rules for Solid 1.x and 27
 for Solid 2.0. Solid 1.x findings keep a `v1/` prefix; Solid 2.0 findings are
 unprefixed. The checker detects the installed `solid-js` major, with
 `--dialect solid-v1` and `--dialect solid-v2` available for unusual layouts.
@@ -57,7 +57,7 @@ Renamed and merged configuration keys, retired identities, and the six merges
 whose disables deliberately do not transfer are listed in the
 [catalog migration note](../rule-catalog-migration.md).
 
-## Solid 2.0 catalog — 26 rules
+## Solid 2.0 catalog — 27 rules
 
 | Code | Rule | Severity | Default |
 | --- | --- | --- | --- |
@@ -87,10 +87,16 @@ whose disables deliberately do not transfer are listed in the
 | SC9005 | [package-contract-incomplete](package-contract-incomplete.md) | error | on |
 | SC9011 | [reactive-source-uncaptured](reactive-source-uncaptured.md) | warning | on |
 | SC9012 | [reactive-dispatch-unresolved](reactive-dispatch-unresolved.md) | warning | on |
+| SC9013 | [unsupported-solid-runtime](unsupported-solid-runtime.md) | error | on |
 
 `http-response-after-flush`, `package-contract-incomplete`,
-`reactive-source-uncaptured`, and `reactive-dispatch-unresolved` can produce
-uncertifiable results. Their pages name the missing evidence and remediation.
+`reactive-source-uncaptured`, `reactive-dispatch-unresolved`, and
+`unsupported-solid-runtime` can produce uncertifiable results. Their pages name
+the missing evidence and remediation.
+
+`unsupported-solid-runtime` is the one identity here the rules engine never
+produces: dialect detection emits it before analysis, and it appears **alone**
+when it appears at all. See ADR 0110.
 
 ## Solid 1.x catalog — 18 rules
 

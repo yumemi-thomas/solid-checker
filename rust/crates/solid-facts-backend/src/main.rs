@@ -2675,6 +2675,17 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             "--emit-contract requires --contract-resolution and --emit-proposal-plan".into(),
         );
     }
+    // `detect_detailed` rather than `detect`: an installed Solid runtime this
+    // build has no dialect for is not a dialect choice, and collapsing it onto
+    // the default would analyze the project under a language it does not run.
+    // The refusal is carried to the analysis path below rather than raised
+    // here, because the contract-workflow modes in between do not analyze a
+    // Solid project and an installed runtime is none of their business.
+    //
+    // An explicit `--dialect` overrides detection outright, refusal included.
+    // That is the escape hatch for a resolved manifest that misreports what
+    // will actually be installed, and the rule page says so.
+    let mut unsupported_runtime = None;
     let dialect = match request.dialect.as_deref() {
         Some(id) => dialect::by_id(id).ok_or_else(|| {
             format!(
@@ -2686,11 +2697,25 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                     .join(", ")
             )
         })?,
-        None => dialect::detect(if request.contract_package_root.is_empty() {
-            Path::new(&request.project_id)
-        } else {
-            Path::new(&request.contract_package_root)
-        }),
+        None => {
+            let project = if request.contract_package_root.is_empty() {
+                Path::new(&request.project_id)
+            } else {
+                Path::new(&request.contract_package_root)
+            };
+            match dialect::detect_detailed(project) {
+                dialect::Detection::Installed { dialect, .. } => dialect,
+                dialect::Detection::Unsupported {
+                    installed,
+                    manifest,
+                    ..
+                } => {
+                    unsupported_runtime = Some((installed, manifest));
+                    dialect::default_dialect()
+                }
+                dialect::Detection::Defaulted { .. } => dialect::default_dialect(),
+            }
+        }
     };
     if !request.validate_contract_paths.is_empty() {
         for path in &request.validate_contract_paths {
@@ -2809,6 +2834,28 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     if !request.verify_policy2_discovery.is_empty() {
         verify_policy2_discovery(Path::new(&request.verify_policy2_discovery))?;
         return Ok(0);
+    }
+    // Refuse here: **before** the daemon branch below, not after it.
+    //
+    // `daemon::enabled()` defaults to on whenever `debug_assertions` is off,
+    // and `daemon::eligible` is satisfied by exactly the ordinary project
+    // check, so a release build takes `daemon::check` and returns from this
+    // function without ever reaching the analysis below. A refusal placed
+    // there would be correct in a debug build and silently absent in every
+    // shipped one -- and no gate here runs a release binary against an
+    // unsupported install, so nothing would have caught it.
+    if let Some((installed, manifest)) = unsupported_runtime {
+        let snapshot = solid_facts_backend::unsupported_runtime_snapshot(&installed, &manifest);
+        let emission = snapshot_emission::emit(
+            dialect,
+            &request.format,
+            &request.project_id,
+            &snapshot,
+            request.certify,
+            started.elapsed(),
+        )?;
+        io::stdout().write_all(&emission.output)?;
+        return Ok(emission.exit_code);
     }
     #[cfg(unix)]
     {

@@ -1694,3 +1694,134 @@ fn an_explicit_dialect_overrides_detection() {
         assert!(!rule.starts_with("v1/"), "explicit v2 produced {rule}");
     }
 }
+
+/// Runs the checker on a backend fixture and returns `(exit code, snapshot)`.
+///
+/// Distinct from [`project_snapshot_findings_with`], which asserts success:
+/// the refusal's exit code is part of what these tests pin, so failure has to
+/// be observable rather than an assertion inside the helper.
+fn run_checker(fixture: &str, extra_args: &[&str]) -> (i32, serde_json::Value) {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN")
+        .expect("guard the calling test on SOLID_TYPEFACTS_BIN before running the checker");
+    let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(fixture)
+        .join("tsconfig.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .arg("--typefacts")
+        .arg(&typefacts)
+        .arg("--format")
+        .arg("json")
+        .args(extra_args)
+        .arg("--project")
+        .arg(&project)
+        .output()
+        .expect("run checker");
+    let snapshot = serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
+        panic!(
+            "snapshot JSON from {}: {error}\nstdout: {}\nstderr: {}",
+            project.display(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        )
+    });
+    (output.status.code().expect("checker exit code"), snapshot)
+}
+
+fn finding_ids(snapshot: &serde_json::Value) -> Vec<String> {
+    snapshot["findings"]
+        .as_array()
+        .expect("findings array")
+        .iter()
+        .map(|finding| finding["id"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+/// An installed runtime this build has no dialect for replaces the analysis.
+///
+/// The two halves are one claim seen from either side of the feature flag, and
+/// the fixture is built so neither half can pass vacuously: `App.tsx`
+/// destructures component props, so **every build that analyzes this tree
+/// reports SC1003**. The build that refuses it therefore proves the refusal
+/// *replaces* the analysis rather than merely preceding it — SC1003 is gone,
+/// not accompanied.
+///
+/// With the 1.x dialect compiled in there is nothing to refuse, and the same
+/// tree is an ordinary 1.x project. Retiring that dialect makes the refusing
+/// half the only half.
+#[test]
+fn unsupported_runtime_refusal_replaces_the_analysis() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let (code, snapshot) = run_checker("unsupported-runtime-v1", &[]);
+    let ids = finding_ids(&snapshot);
+
+    #[cfg(feature = "dialect-v1")]
+    {
+        assert!(
+            ids.contains(&"SC1003".to_owned()),
+            "a 1.x install analyzed by a build carrying the 1.x dialect is an \
+             ordinary project, and this one destructures props: {ids:?}"
+        );
+        assert!(
+            !ids.contains(&"SC9013".to_owned()),
+            "nothing is unsupported while its dialect is compiled in: {ids:?}"
+        );
+        assert_eq!(code, 0);
+    }
+    #[cfg(not(feature = "dialect-v1"))]
+    {
+        assert_eq!(
+            ids,
+            vec!["SC9013".to_owned()],
+            "the refusal is the whole result: SC1003 is not reported beside it, \
+             because the source was never analyzed under the language it runs"
+        );
+        assert_eq!(snapshot["status"], "uncertifiable");
+        let finding = &snapshot["findings"][0];
+        assert_eq!(finding["rule"], "unsupported-solid-runtime");
+        assert_eq!(finding["kind"], "uncertifiable");
+        assert_eq!(finding["severity"], "error");
+        let message = finding["message"].as_str().unwrap();
+        assert!(
+            message.contains("1.9.14"),
+            "the refusal quotes the version it read: {message}"
+        );
+        let path = finding["primaryLocation"]["path"].as_str().unwrap();
+        assert!(
+            path.ends_with("unsupported-runtime-v1/node_modules/solid-js/package.json"),
+            "the deciding manifest is the location, because it is the file to change: {path}"
+        );
+        assert_eq!(
+            code, 0,
+            "without --certify the refusal reports and exits 0, exactly as \
+             every other uncertifiable result does"
+        );
+        assert_eq!(
+            run_checker("unsupported-runtime-v1", &["--certify"]).0,
+            1,
+            "an uncertifiable result fails certification"
+        );
+    }
+}
+
+/// `--dialect` is the documented escape hatch, and it overrides the refusal
+/// too: the tree analyzes under the named dialect in every build.
+#[test]
+fn unsupported_runtime_refusal_yields_to_an_explicit_dialect() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let (code, snapshot) = run_checker("unsupported-runtime-v1", &["--dialect", "solid-v2"]);
+    let ids = finding_ids(&snapshot);
+    assert!(
+        !ids.contains(&"SC9013".to_owned()),
+        "an explicit dialect is a decision, not a detection: {ids:?}"
+    );
+    assert!(
+        ids.contains(&"SC1003".to_owned()),
+        "and the analysis actually ran: {ids:?}"
+    );
+    assert_eq!(code, 0);
+}

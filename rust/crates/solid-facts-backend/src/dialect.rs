@@ -372,6 +372,19 @@ pub fn by_version(version: solid_dialect::Version) -> Option<&'static Dialect> {
         .find(|dialect| dialect.vocabulary.version() == version)
 }
 
+/// The diagnostic identity of the unsupported-runtime refusal.
+///
+/// Held here, not read from a catalog, because the refusal is decided
+/// **before** a dialect is chosen: it has to be emittable in any feature
+/// configuration, including one whose default catalog does not declare it.
+/// The Solid 2 catalog declares it too -- that is where adapters, suppression
+/// configuration and `docs/rules/` look it up -- and
+/// `the_refusal_identity_is_the_one_the_catalog_publishes` pins the two
+/// together so they cannot drift. See ADR 0110.
+pub const UNSUPPORTED_RUNTIME_CODE: &str = "SC9013";
+/// The rule name paired with [`UNSUPPORTED_RUNTIME_CODE`].
+pub const UNSUPPORTED_RUNTIME_RULE: &str = "unsupported-solid-runtime";
+
 /// What the dialect walk found, and where it found it.
 ///
 /// [`detect`] collapses this to a single dialect for callers that only need
@@ -402,6 +415,11 @@ pub enum Detection {
     /// does not run. The caller refuses.
     Unsupported {
         version: solid_dialect::Version,
+        /// The `version` field exactly as the manifest spelled it. The
+        /// refusal quotes this rather than the classified major, because
+        /// "1.9.14" tells the reader which install to go and change and
+        /// "Solid 1.x" does not.
+        installed: String,
         manifest: PathBuf,
     },
     /// Nothing resolved, or the nearest manifest names no released major
@@ -442,7 +460,7 @@ pub fn detect(project: &Path) -> &'static Dialect {
 /// [`detect`] with its reasoning intact. See [`Detection`].
 #[must_use]
 pub fn detect_detailed(project: &Path) -> Detection {
-    let Some((version, manifest)) = resolved_solid_version(project) else {
+    let Some((version, installed, manifest)) = resolved_solid_version(project) else {
         return Detection::Defaulted { manifest: None };
     };
     let Some(version) = version else {
@@ -456,18 +474,26 @@ pub fn detect_detailed(project: &Path) -> Detection {
             version,
             manifest,
         },
-        None => Detection::Unsupported { version, manifest },
+        None => Detection::Unsupported {
+            version,
+            installed,
+            manifest,
+        },
     }
 }
 
-/// The nearest installed `solid-js`, as `(classification, manifest path)`.
+/// The nearest installed `solid-js`, as
+/// `(classification, version as written, manifest path)`.
 ///
 /// The outer `Option` is "did the walk find a manifest carrying a version
 /// string at all"; the inner one is whether that string names a released
 /// major. They are separate answers and the caller needs both: a missing
 /// install and an install spelled `workspace:*` both default, but only the
-/// second can name the file that decided it.
-fn resolved_solid_version(project: &Path) -> Option<(Option<solid_dialect::Version>, PathBuf)> {
+/// second can name the file that decided it. The raw version string rides
+/// along because a refusal has to quote what it actually read.
+fn resolved_solid_version(
+    project: &Path,
+) -> Option<(Option<solid_dialect::Version>, String, PathBuf)> {
     let start = if project.is_dir() {
         project
     } else {
@@ -497,7 +523,11 @@ fn resolved_solid_version(project: &Path) -> Option<(Option<solid_dialect::Versi
         // and the caller falls back to the v2 default. This is the nearest
         // `solid-js` the project would import; a resolvable-but-unclassifiable
         // install is an answer, not an absence.
-        return Some((solid_dialect::Version::for_solid_js(&version), manifest));
+        return Some((
+            solid_dialect::Version::for_solid_js(&version),
+            version,
+            manifest,
+        ));
     }
     None
 }
@@ -925,7 +955,7 @@ mod tests {
         );
         assert_eq!(
             solid_v2_rules::Rule::ALL.len() - 16,
-            10,
+            11,
             "the 2.0 catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );
     }
@@ -1190,8 +1220,12 @@ mod tests {
             // still names the file; only the dialect is missing.
             Detection::Unsupported {
                 version: solid_dialect::Version::V2,
+                installed,
                 manifest: read,
-            } => assert_eq!(read, manifest),
+            } => {
+                assert_eq!(read, manifest);
+                assert_eq!(installed, "2.0.0-rc.0");
+            }
             other => panic!("an installed 2.0 is a resolution: {other:?}"),
         }
 
@@ -1212,6 +1246,65 @@ mod tests {
             Detection::Defaulted { manifest: None }
         ));
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The refusal's identity is held in two places on purpose; this is what
+    /// stops them drifting.
+    ///
+    /// [`UNSUPPORTED_RUNTIME_CODE`] is what the emission actually writes, and
+    /// it cannot read a catalog because the refusal happens before a dialect
+    /// is chosen. The Solid 2 catalog is where every *consumer* resolves the
+    /// identity -- the npm rules manifest, suppression configuration, the
+    /// docs URL -- so a disagreement between them would publish a code no
+    /// adapter recognizes while the tool emitted it anyway.
+    #[cfg(feature = "dialect-v2")]
+    #[test]
+    fn the_refusal_identity_is_the_one_the_catalog_publishes() {
+        let dialect = by_id("solid-v2").expect("the 2.0 dialect is compiled in");
+        let metadata = (dialect.rule_metadata)(UNSUPPORTED_RUNTIME_RULE)
+            .unwrap_or_else(|| panic!("the 2.0 catalog must declare {UNSUPPORTED_RUNTIME_RULE}"));
+        assert_eq!(metadata.code, UNSUPPORTED_RUNTIME_CODE);
+        assert_eq!(metadata.name, UNSUPPORTED_RUNTIME_RULE);
+        assert!(
+            metadata.uncertifiable,
+            "the refusal asserts nothing about the project's source, so it is an \
+             uncertifiable result and not a violation"
+        );
+        assert_eq!(metadata.severity, "error");
+    }
+
+    /// The refusal snapshot is the *whole* result, and its shape is the claim.
+    #[test]
+    fn the_refusal_snapshot_carries_one_finding_and_measures_nothing() {
+        let snapshot = crate::diagnostics::unsupported_runtime_snapshot(
+            "1.9.14",
+            Path::new("/tmp/app/node_modules/solid-js/package.json"),
+        );
+        assert_eq!(snapshot.status, "uncertifiable");
+        assert_eq!(
+            snapshot.findings.len(),
+            1,
+            "a second finding would assert something about source that was \
+             never analyzed under the language it runs"
+        );
+        let finding = &snapshot.findings[0];
+        assert_eq!(finding.id, UNSUPPORTED_RUNTIME_CODE);
+        assert_eq!(finding.rule, UNSUPPORTED_RUNTIME_RULE);
+        assert_eq!(finding.kind, "uncertifiable");
+        assert!(
+            finding.message.contains("1.9.14"),
+            "the refusal quotes the version it read, not the classified major: {}",
+            finding.message
+        );
+        assert_eq!(
+            finding.primary_location.path, "/tmp/app/node_modules/solid-js/package.json",
+            "the deciding manifest is the location, because it is the file to change"
+        );
+        assert_eq!(
+            snapshot.metrics.files_analyzed, 0,
+            "nothing was read; reporting otherwise would overstate what happened"
+        );
+        assert!(snapshot.package_summaries.is_empty());
     }
 
     /// The step-4 hole, asserted rather than described.

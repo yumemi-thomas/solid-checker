@@ -660,15 +660,26 @@ nothing else.
 Ten commits are on `codex/phase19a-authenticated-proof-policy`, each
 individually green. What is left, in the order it has to happen:
 
-1. **Step 4's refusal — the only thing blocking step 3.** The catalog identity
-   is mechanical and written out above; the emission is the corrected
-   `main.rs:2689` seam plus guards at the other two `detect` call sites, two
-   fixtures (a 1.x-stub project expecting exactly the refusal, a 2.x project
-   unchanged), a `dialects_process` test, and a CLI test for exit status and
-   JSON shape. **The release-path correction above is the part to get right**;
-   everything else in step 4 is transcription. This work was written once and
-   deliberately reverted rather than committed half-done.
-2. **Step 3's deletion**, in the three groups the dry run measured — the
+1. ~~**Step 4's refusal**~~ — **done 2026-09-16.** `SC9013
+   unsupported-solid-runtime` is in the 2.0 catalog (27 rules), and dialect
+   detection emits it at the selection site, above the daemon branch, with
+   `resolve_dialect` and the session bench taking their own refusal for the
+   `--serve` case that skips it. Verified against the daemon path with
+   `SOLID_CHECKER_DAEMON=1`, and in all three formats. Two things checking
+   turned up and fixed: the ESLint adapter would have dropped the refusal
+   silently (its location is a `package.json` no one lints — project-scoped
+   findings now reach every linted file), and `make verify` would not have run
+   the proof (`backend_dialect_lib_tests` is `--lib` only; the new
+   `test-backend-v2-runtime-refusal` step runs it in the one arm where the
+   refusal is reachable, with an arity guard so a filter matching nothing
+   cannot pass). Full account in `docs/precision-backlog.md`.
+
+   **Still open from step 4, and both belong to step 3:** the CLI-level
+   exit-status pin, which cannot fire until the shipped binary is v2-only, and
+   the two documents that still describe two shipped dialects accurately —
+   `docs/adding-a-dialect.md` and the CLI README's supported-versions
+   statement.
+2. **Step 3's deletion — now unblocked.** In the three groups the dry run measured — the
    `solid_one_*` bulk, the one-line `DIALECT_INDEPENDENT` edit plus the
    verified dialect-pair deletion, and the six tests whose names do not say v1
    and so need their claim read. `carries_eslint_era_rules()` gets its own
