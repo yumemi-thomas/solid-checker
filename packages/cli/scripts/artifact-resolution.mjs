@@ -815,6 +815,16 @@ const ROLE_ORDER = new Map([...ROLE_DEBUG.keys()].map((value, index) => [value, 
 // about which imports are an opaque frontier.
 const CORE_RUNTIME_PACKAGES = ["solid-js", "@solidjs/signals", "@solidjs/web"];
 
+/// Whether a package *is* the built-in runtime foundation. Mirrors
+/// `solid_dialect::primitive_defining_package`.
+///
+/// `solid-js` re-exporting from `solid-js/web` is publishing its own surface,
+/// so ADR 0027's reason for dropping a core re-export -- that the package has
+/// no standing to describe a name it only forwards -- does not apply to it.
+export function coreRuntimePackage(name) {
+  return CORE_RUNTIME_PACKAGES.includes(name);
+}
+
 /// Whether a specifier names the built-in runtime foundation, or a subpath of
 /// it. Mirrors `solid_dialect::core_runtime_specifier`.
 export function coreRuntimeSpecifier(specifier) {
@@ -2063,6 +2073,29 @@ function acceptedExternalBinding(acceptedDependencies, specifier, name, axis) {
   return binding;
 }
 
+/// Whether the package being resolved is itself the runtime foundation.
+///
+/// Memoized on the resolution cache: the manifest is read once per package
+/// root, and a root whose manifest cannot be read answers `false`, which keeps
+/// the ordinary drop rather than widening a surface on a missing file.
+function ownPackageIsCore(packageRoot, cache) {
+  if (!cache) return false;
+  cache.ownCorePackage ??= new Map();
+  const memo = cache.ownCorePackage;
+  const key = String(packageRoot);
+  if (!memo.has(key)) {
+    let answer = false;
+    try {
+      const manifest = JSON.parse(readFileSync(join(key, "package.json"), "utf8"));
+      answer = typeof manifest.name === "string" && coreRuntimePackage(manifest.name);
+    } catch {
+      answer = false;
+    }
+    memo.set(key, answer);
+  }
+  return memo.get(key);
+}
+
 function bindExport(
   path,
   name,
@@ -2096,6 +2129,17 @@ function bindExport(
   }
   const externalDirect = description.externalDirect.get(name);
   if (externalDirect) {
+    // Before the lookup, not after it. A graph lane supplies `solid-js/web` as
+    // an accepted dependency node whenever the graph contains one, and the
+    // lookup then *succeeds* -- so the same package kept `isServer` on its
+    // surface as a graph node and dropped it standalone, and the two censuses
+    // disagreed by exactly one name. ADR 0027 is not conditional on what the
+    // graph happens to contain: core has no package contract by design, so a
+    // node for it is not one either.
+    if (!ownPackageIsCore(packageRoot, cache) && coreRuntimeSpecifier(externalDirect.specifier)) {
+      visiting.delete(identity);
+      return undefined;
+    }
     const result = acceptedExternalBinding(
       acceptedDependencies,
       externalDirect.specifier,
@@ -2117,10 +2161,6 @@ function bindExport(
       // no binding (`if (!runtimeTarget || !declarationTarget) continue`), so
       // every other export survives. ADR 0027's "missing native behavior stays
       // unknown", not a claim that the export does not exist.
-      if (coreRuntimeSpecifier(externalDirect.specifier)) {
-        visiting.delete(identity);
-        return undefined;
-      }
       fail(
         "accepted-dependency-binding",
         `accepted dependency ${externalDirect.specifier} has no exact ${axis} binding for export ${externalDirect.name}`
