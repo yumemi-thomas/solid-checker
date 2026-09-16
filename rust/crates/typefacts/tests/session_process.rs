@@ -1739,6 +1739,28 @@ fn public_session_owns_the_retained_process_lifecycle() {
     session.close().unwrap();
 }
 
+/// A producer killed before `analyze` is restarted, replayed, and re-asked.
+///
+/// **Which crash this catches depends on the machine, which is worth knowing
+/// before trusting a green run.** `kill -9` returns as soon as the signal is
+/// queued, so where the teardown lands inside `analyze` is a scheduling
+/// outcome:
+///
+/// - Idle: the producer is gone before the analyze exchange, so `exchange`'s
+///   own restart-and-replay covers it. That is the path this test takes
+///   essentially always on an unloaded host.
+/// - Loaded: the analyze exchange completes first and the producer dies during
+///   the `Operation::Symbols` phase that follows. Those exchanges cannot
+///   re-send themselves -- they carry the analysis's `state_token` -- so
+///   recovery is the transport-failure arm of `analyze_groups`, which restarts
+///   and redoes the analysis.
+///
+/// The second path had no recovery at all until 2026-09-17, and this test went
+/// green on every idle run while missing it. Reproducing it needs real
+/// contention: six concurrent copies of this target on a 14-core host failed
+/// **28 of 84 runs** before the fix and 0 of 180 after. A single idle run
+/// proves only the first path, so exercise the target under load before
+/// concluding the recovery works.
 #[cfg(unix)]
 #[test]
 fn analyze_restarts_the_producer_and_replays_updates_after_a_crash() {

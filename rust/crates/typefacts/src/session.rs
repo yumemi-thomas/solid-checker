@@ -897,6 +897,41 @@ impl Session {
                 self.retain_all_groups(groups);
                 Ok(table)
             }
+            // A producer that died *after* answering the analyze request, while
+            // the symbol phase was still talking to it.
+            //
+            // `exchange` restarts and replays around one failed request, and
+            // that covers the analyze exchange itself. It cannot cover the
+            // `Operation::Symbols` exchanges that follow, and those deliberately
+            // use `exchange_once`: each carries the `state_token` and the
+            // `release_analysis`/`reference_changes` flags of the analysis that
+            // just ran, so re-sending one to a freshly spawned producer would
+            // name retained state that process never had. Recovery has to redo
+            // the analysis, not the request -- which is why it belongs here,
+            // where the demand set is still known, rather than inside
+            // `close_symbols`.
+            //
+            // Reaching this arm therefore means nothing has recovered yet: the
+            // analyze exchange's own restart either was not entered or already
+            // succeeded. So restart, replay the update history, and re-ask for
+            // the complete demand set against the new process -- the same shape
+            // the `state-mismatch` arm uses, plus the restart it does not need.
+            //
+            // Exactly once. The re-ask is not wrapped again, so a producer that
+            // keeps dying surfaces its failure instead of being retried
+            // forever.
+            Err(error) if error.is_transport_failure() => {
+                self.restart_and_replay()?;
+                Self::reject_foreign_locations(groups)?;
+                let complete = groups
+                    .iter()
+                    .flat_map(|group| group.demands().iter().cloned())
+                    .collect::<Vec<_>>();
+                let table =
+                    self.analyze_exchange(complete, Vec::new(), true, &reference_locations, true)?;
+                self.retain_all_groups(groups);
+                Ok(table)
+            }
             Ok(table) => {
                 self.retain_changed_groups(&changed, &removed);
                 Ok(table)
