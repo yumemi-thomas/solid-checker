@@ -18,6 +18,13 @@ exact `solid-js@2.0.0-rc.3`, `@solidjs/web@2.0.0-rc.3`, and
 `@solidjs/signals@2.0.0-rc.3` cases. Environment selection is explicit; the
 consumer never guesses a browser, node, development, or production branch.
 
+The `solid-v1` material survives the Solid 1.x retirement (ADR 0110) and is
+kept deliberately. It records what published 1.x *artifacts* do, and that is
+still true of those bytes; ADR 0110 § 4 makes the same call for the accepted
+tier. Nothing here is reachable from analysis — this checker refuses a 1.x
+project with `SC9013` before a rule runs — so read it as audit history, never
+as a claim that a Solid 1.x project is supported.
+
 Ordinary analysis uses the built-in Solid dialect for `solid-js`,
 `@solidjs/signals`, and `@solidjs/web`; core contracts cannot override that
 model. External packages still require independently accepted contracts.

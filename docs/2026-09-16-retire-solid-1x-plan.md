@@ -466,6 +466,40 @@ step proposed. Resolved 2026-09-16.**
   fails until it is re-pinned deliberately, rather than silently reporting
   improved coverage. The 1.x-era numbers (`ownerRequirement: 31`, 599 of 1,940
   sites) stay as the frozen baseline ADR 0110 § 5 names.
+- **Sub-step 5's deletion is refused, on ADR 0110 § 4's own argument.**
+  `pkg/contracts/bundled/solid-v1/` (19 documents) and
+  `benchmarks/package-contract-v2/phase14/solid-v1-authority/` (19 documents
+  plus `authority-index.json`) are audit records of *published package
+  artifacts* — exact `solid-js@1.9.14`, `@solid-primitives/scheduled@1.5.3`,
+  `@solid-primitives/debounce@1.3.0`, `@solid-primitives/rootless@1.5.4` — and
+  § 4 already decided that class survives: a contract describes bytes that
+  invoke what they invoke, which this checker's scope does not change.
+  Three checked facts, not judgement:
+
+  - **Neither directory is an analyzer input.** Both bundle indexes are
+    `contracts: []`, `EMBEDDED_BUNDLES` and `EMBEDDED_SOLID1_BUNDLES` are
+    empty, and `bundled_first_party_contract_index` — the seam whose
+    `"solid-v1"` arm reads the authority — has no caller in the workspace at
+    all. ADR 0027 retired it before this plan existed.
+  - **They are live gate inputs.** `solid1_bundles_with_measurements` decodes,
+    normalizes and closure-digest-checks all 19 authority documents against
+    the index (returning no bundles: policy 2 retired them, it did not retire
+    the census), `scripts/package-contract-v2-phase0.mjs` measures four of the
+    bundled documents, and `runtime-lock.json` records the audited closure.
+    That is conformance evidence about 1.x artifacts, which nothing else
+    reproduces.
+  - **Two of them are test fixtures for dialect-neutral code.**
+    `debounce-root-default.json` and `solid-root-node.json` reach
+    `solid-checker-wasm` and `policy2_receipt/tests.rs` through
+    `include_bytes!` as real stable-v1 documents. Deleting them would cost
+    those tests their input and buy nothing, since neither test asserts
+    anything about Solid 1.x.
+
+  What *is* dead here and was left alone deliberately: the `"solid-v1"` arm of
+  that uncalled seam. Removing it is ADR 0027 cleanup, not retirement work —
+  it was already unreachable before this plan, and AGENTS.md forbids widening
+  a semantic change into one.
+
 - **Still open, and independent of the retirement:** sub-step 4's blocker — the
   Solid 2 `creates` census refuses callees resolved into
   `solid-js/types/client/hydration.d.ts` (seen on
