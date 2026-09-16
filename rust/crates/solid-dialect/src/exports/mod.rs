@@ -4,14 +4,13 @@
 //! separated because conflating them under-reports. The vocabulary earns a name
 //! a place only when the checker models a reactive obligation for it, so
 //! `Portal` is not in it — but `import { Portal } from "solid-js"` is still an
-//! import from the wrong module, and answering that out of the vocabulary means
-//! ten of 1.x's `solid-js/web` names cannot be checked at all.
+//! import from the wrong module, and answering that out of the vocabulary would
+//! leave every name the checker models no obligation for unanswerable.
 //!
 //! These frozen declaration indices are audited against the same exact
 //! published package authorities as the receipt-issued bundles. They contain
 //! no contract semantics; behavior stays in normalized contracts.
 
-pub mod solid_v1_solid_js;
 pub mod solid_v2_solid_js;
 pub mod solid_v2_solidjs_web;
 

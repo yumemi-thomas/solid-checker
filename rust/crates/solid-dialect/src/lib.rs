@@ -2515,8 +2515,6 @@ mod tests {
     #[test]
     fn the_generated_export_index_is_sorted() {
         for (label, table) in [
-            ("1.x values", exports::solid_v1_solid_js::VALUES),
-            ("1.x types", exports::solid_v1_solid_js::TYPES),
             ("2.0 values", exports::solid_v2_solid_js::VALUES),
             ("2.0 types", exports::solid_v2_solid_js::TYPES),
             ("web values", exports::solid_v2_solidjs_web::VALUES),
