@@ -56,9 +56,7 @@ const ACTIVE_JSON_FILES = new Set([
   "fixtures/ownership-cases/migration-ledger.json",
   "fixtures/tsc-oracle/packages.json",
   "fixtures/tsc-oracle/rule-cases.json",
-  "packages/cli/lib/rules-solid-v1.json",
   "packages/cli/lib/rules-solid-v2.json",
-  "rust/dialects/solid-v1/dialect.json",
   "rust/dialects/solid-v2/dialect.json",
   "scripts/ecosystem-benchmark/manifest.json"
 ]);
@@ -187,12 +185,10 @@ const STABLE_BOUNDARY_TESTS = [
 ];
 
 const INDEPENDENT_JSON_VERSIONS = [
-  ["packages/cli/lib/rules-solid-v1.json", "schemaVersion", 1],
   ["packages/cli/lib/rules-solid-v2.json", "schemaVersion", 1],
   ["scripts/ecosystem-benchmark/manifest.json", "schemaVersion", 1],
   ["fixtures/ownership-cases/cases.json", "schemaVersion", 1],
   ["fixtures/ownership-cases/migration-ledger.json", "schemaVersion", 1],
-  ["rust/dialects/solid-v1/dialect.json", "schemaVersion", 2],
   ["rust/dialects/solid-v2/dialect.json", "schemaVersion", 2]
 ];
 

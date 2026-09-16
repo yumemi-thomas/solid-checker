@@ -141,12 +141,17 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // under which a consumer looks through a wrapper at the primitive its
       // argument calls, and so the only way to reach
       // `Dialect::returns_reactive_tuple` from a fixture.
-      // 194 adds package-repeated-open-claim's main document. It is the
+      // 194 added package-repeated-open-claim's main document. It is the
       // `package-unknown-callback-consumer` stub again, under a second
       // fixture that imports one export from two files: the pin that a
       // package-contract obligation raised at an *import* collapses to one
       // finding per `(package, export, claims)` and carries its other sites.
-      stableMainDocuments: 194,
+      //
+      // 187 on 2026-09-16: the Solid 1.x retirement (ADR 0110) deleted seven
+      // tracked main documents with the fixtures that carried a 1.9.14 stub.
+      // This pin counts tracked `*.json` via `git ls-files`, so it moves with
+      // the fixture tree and not with any analysis answer.
+      stableMainDocuments: 187,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

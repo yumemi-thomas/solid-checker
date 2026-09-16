@@ -41,7 +41,6 @@ test("each table row claims its own owner's paths", () => {
     ["rust/crates/solid-facts/src/lib.rs", ["facts-lib"]],
     ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "coverage"]],
     ["rust/crates/solid-facts-backend/src/diagnostics.rs", ["backend-process", "coverage"]],
-    ["rust/dialects/solid-v1/src/rules.rs", ["contract-process", "conformance"]],
     [
       "pkg/contracts/bundled/solid-v2/solid-js.json",
       ["contract-process", "conformance", "coverage", "ownership-gate"],

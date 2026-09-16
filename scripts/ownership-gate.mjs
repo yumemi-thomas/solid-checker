@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -115,11 +116,16 @@ const ledger = JSON.parse(readFileSync(LEDGER_PATH, "utf8"));
 // written that way -- each naming an upstream rule the checker deliberately
 // does not carry -- and every one of them asserted nothing. Recorded in
 // docs/precision-backlog.md, 2026-09-16.
+//
+// Discovered rather than named, so retiring or adding a dialect is a change to
+// the shipped manifests and not to this gate. Naming them cost a `make verify`
+// failure the day the 1.x catalog was retired.
 const catalogRules = Object.fromEntries(
-  ["solid-v1", "solid-v2"].map((dialect) => {
-    const document = JSON.parse(
-      readFileSync(join(ROOT, `packages/cli/lib/rules-${dialect}.json`), "utf8")
-    );
+  readdirSync(join(ROOT, "packages/cli/lib"))
+    .filter((file) => /^rules-solid-v\d+\.json$/.test(file))
+    .map((file) => {
+    const dialect = file.replace(/^rules-|\.json$/g, "");
+    const document = JSON.parse(readFileSync(join(ROOT, "packages/cli/lib", file), "utf8"));
     const rules = Array.isArray(document) ? document : (document.rules ?? document);
     const names = Array.isArray(rules)
       ? rules.map((rule) => (typeof rule === "string" ? rule : rule.name))
@@ -127,6 +133,9 @@ const catalogRules = Object.fromEntries(
     return [dialect, new Set(names)];
   })
 );
+if (Object.keys(catalogRules).length === 0) {
+  throw new Error("no rules-solid-v*.json catalogs found; the absent-clause guard would be vacuous");
+}
 const failures = [];
 
 if (manifest.schemaVersion !== 1) fail(failures, "cases.json: schemaVersion must be 1");

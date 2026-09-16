@@ -36,10 +36,9 @@ export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // installs they resolve against.
 export const CASE_ROOT = join(ROOT, "rust/target/tsc-oracle-cases");
 
-export const DIALECTS = ["v1", "v2"];
+export const DIALECTS = ["v2"];
 
 export const catalogEntries = [
-  ...JSON.parse(readFileSync(join(ROOT, "packages/cli/lib/rules-solid-v1.json"), "utf8")).rules,
   ...JSON.parse(readFileSync(join(ROOT, "packages/cli/lib/rules-solid-v2.json"), "utf8")).rules,
 ];
 export const catalogByName = new Map(catalogEntries.map((rule) => [rule.name, rule]));
