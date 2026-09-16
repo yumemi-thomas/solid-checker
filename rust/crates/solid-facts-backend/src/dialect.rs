@@ -9,7 +9,7 @@
 //! the wasm request, or [`detect`] when a request names none — and never
 //! names a dialect crate directly.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use solid_facts::compiler::CompilerFactsProvider;
 use solid_reactive_ir::{Finding, Program, RuleMetadata, SolveTimings};
@@ -326,6 +326,15 @@ impl Dialect {
     }
 }
 
+/// The stable id and nothing else. A dialect is function pointers, a `&dyn`
+/// vocabulary table and a rule catalog; the id is the only part of it that
+/// means anything in a diagnostic, and it is the part that keys every cache.
+impl std::fmt::Debug for Dialect {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_tuple("Dialect").field(&self.id).finish()
+    }
+}
+
 /// Every dialect the checker can run with. A new dialect registers here and
 /// becomes selectable by id everywhere a dialect can be named.
 pub static ALL: &[&Dialect] = &[
@@ -363,6 +372,45 @@ pub fn by_version(version: solid_dialect::Version) -> Option<&'static Dialect> {
         .find(|dialect| dialect.vocabulary.version() == version)
 }
 
+/// What the dialect walk found, and where it found it.
+///
+/// [`detect`] collapses this to a single dialect for callers that only need
+/// one. The three cases are kept apart here because they are **not** the same
+/// answer, and a caller that must refuse an unsupported runtime cannot tell
+/// them apart from a dialect alone:
+///
+/// - an installed `solid-js` whose major this build carries,
+/// - an installed `solid-js` whose major this build has **no** dialect for,
+/// - nothing installed, or a version naming no released major.
+///
+/// Each case that read a manifest carries the exact path it read, because a
+/// refusal has to say *which* `package.json` decided it — the walk is
+/// unbounded and the deciding file is frequently not the one beside the
+/// project.
+#[derive(Clone, Debug)]
+pub enum Detection {
+    /// The nearest installed `solid-js` names a released major this build
+    /// carries a dialect for.
+    Installed {
+        dialect: &'static Dialect,
+        version: solid_dialect::Version,
+        manifest: PathBuf,
+    },
+    /// The nearest installed `solid-js` names a released major this build has
+    /// no dialect for. **Never a dialect**: there is no correct one to pick,
+    /// and picking the default would analyze the project under a language it
+    /// does not run. The caller refuses.
+    Unsupported {
+        version: solid_dialect::Version,
+        manifest: PathBuf,
+    },
+    /// Nothing resolved, or the nearest manifest names no released major
+    /// (`workspace:*`, `0.5.0`, `3.0.0`). `manifest` is that unclassifiable
+    /// manifest when the walk stopped at one, and `None` when no
+    /// `node_modules/solid-js` was found at all.
+    Defaulted { manifest: Option<PathBuf> },
+}
+
 /// Resolves the dialect a project speaks from the `solid-js` it would
 /// actually import: the nearest `node_modules/solid-js/package.json` above
 /// the project file, walked the way a bundler resolves.
@@ -373,14 +421,53 @@ pub fn by_version(version: solid_dialect::Version) -> Option<&'static Dialect> {
 /// a non-version like `workspace:*`, or a major nobody has released), which
 /// is what every request without an installed solid-js got before detection
 /// existed.
+///
+/// **This collapses [`Detection::Unsupported`] onto the default dialect, and
+/// that is a hole, not a design.** It is unreachable in a build carrying every
+/// released major's dialect, and it is reachable today in the
+/// `--no-default-features --features dialect-v2` arm `scripts/verify.sh` runs:
+/// there, a 1.x project is analyzed under the 2.0 catalog and told nothing.
+/// Retiring the 1.x dialect makes that the *only* build, which is why step 4
+/// of `docs/2026-09-16-retire-solid-1x-plan.md` must land with step 3 and not
+/// after it. Callers that can emit a finding should read [`detect_detailed`]
+/// and refuse `Unsupported` rather than calling this.
 #[must_use]
 pub fn detect(project: &Path) -> &'static Dialect {
-    resolved_solid_version(project)
-        .and_then(by_version)
-        .unwrap_or_else(default_dialect)
+    match detect_detailed(project) {
+        Detection::Installed { dialect, .. } => dialect,
+        Detection::Unsupported { .. } | Detection::Defaulted { .. } => default_dialect(),
+    }
 }
 
-fn resolved_solid_version(project: &Path) -> Option<solid_dialect::Version> {
+/// [`detect`] with its reasoning intact. See [`Detection`].
+#[must_use]
+pub fn detect_detailed(project: &Path) -> Detection {
+    let Some((version, manifest)) = resolved_solid_version(project) else {
+        return Detection::Defaulted { manifest: None };
+    };
+    let Some(version) = version else {
+        return Detection::Defaulted {
+            manifest: Some(manifest),
+        };
+    };
+    match by_version(version) {
+        Some(dialect) => Detection::Installed {
+            dialect,
+            version,
+            manifest,
+        },
+        None => Detection::Unsupported { version, manifest },
+    }
+}
+
+/// The nearest installed `solid-js`, as `(classification, manifest path)`.
+///
+/// The outer `Option` is "did the walk find a manifest carrying a version
+/// string at all"; the inner one is whether that string names a released
+/// major. They are separate answers and the caller needs both: a missing
+/// install and an install spelled `workspace:*` both default, but only the
+/// second can name the file that decided it.
+fn resolved_solid_version(project: &Path) -> Option<(Option<solid_dialect::Version>, PathBuf)> {
     let start = if project.is_dir() {
         project
     } else {
@@ -410,7 +497,7 @@ fn resolved_solid_version(project: &Path) -> Option<solid_dialect::Version> {
         // and the caller falls back to the v2 default. This is the nearest
         // `solid-js` the project would import; a resolvable-but-unclassifiable
         // install is an answer, not an absence.
-        return solid_dialect::Version::for_solid_js(&version);
+        return Some((solid_dialect::Version::for_solid_js(&version), manifest));
     }
     None
 }
@@ -970,14 +1057,35 @@ mod tests {
         .unwrap();
         let project = root.join("src/tsconfig.json");
         std::fs::write(&project, "{}").unwrap();
-        assert_eq!(detect(&project).id, "solid-v1");
+        // The classification, not the dialect id: a 1.x install resolves to
+        // `Version::V1` in every build, and only a build carrying the 1.x
+        // dialect can turn that into one.
+        assert!(matches!(
+            detect_detailed(&project),
+            Detection::Installed {
+                version: solid_dialect::Version::V1,
+                ..
+            } | Detection::Unsupported {
+                version: solid_dialect::Version::V1,
+                ..
+            }
+        ));
 
         std::fs::write(
             package.join("package.json"),
             r#"{"name":"solid-js","version":"2.0.0-rc.0"}"#,
         )
         .unwrap();
-        assert_eq!(detect(&project).id, "solid-v2");
+        assert!(matches!(
+            detect_detailed(&project),
+            Detection::Installed {
+                version: solid_dialect::Version::V2,
+                ..
+            } | Detection::Unsupported {
+                version: solid_dialect::Version::V2,
+                ..
+            }
+        ));
 
         // No resolvable version answers the default rather than guessing.
         std::fs::write(
@@ -1010,10 +1118,30 @@ mod tests {
 
         // Unparseable JSON and a version-less manifest are both the walk
         // continuing, exactly like an unreadable file.
+        //
+        // Asserted as *which manifest the walk selected*, which is the claim.
+        // Reading it off a dialect id instead made this test depend on the 1.x
+        // dialect being compiled in, and it failed in the
+        // `--features dialect-v2` arm for a reason that has nothing to do with
+        // the walk.
+        let selected = |detection: Detection| match detection {
+            Detection::Installed { manifest, .. } | Detection::Unsupported { manifest, .. } => {
+                manifest
+            }
+            Detection::Defaulted { manifest } => {
+                panic!("the outer 1.x install is a resolution, not a default: {manifest:?}")
+            }
+        };
         std::fs::write(inner.join("package.json"), "{ not json").unwrap();
-        assert_eq!(detect(&project).id, "solid-v1");
+        assert_eq!(
+            selected(detect_detailed(&project)),
+            outer.join("package.json")
+        );
         std::fs::write(inner.join("package.json"), r#"{"name":"solid-js"}"#).unwrap();
-        assert_eq!(detect(&project).id, "solid-v1");
+        assert_eq!(
+            selected(detect_detailed(&project)),
+            outer.join("package.json")
+        );
 
         // A parseable version that classifies stops the walk at the nearest
         // manifest, masking the outer 1.x -- resolution order, not breakage.
@@ -1022,7 +1150,120 @@ mod tests {
             r#"{"name":"solid-js","version":"2.0.0-rc.0"}"#,
         )
         .unwrap();
-        assert_eq!(detect(&project).id, "solid-v2");
+        assert_eq!(
+            selected(detect_detailed(&project)),
+            inner.join("package.json")
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The three outcomes `detect` collapses, kept apart -- and the manifest
+    /// path a refusal has to name. The walk is unbounded, so the deciding
+    /// `package.json` is frequently not the one beside the project, and a
+    /// refusal that cannot say which file decided it is not actionable.
+    #[test]
+    fn detection_separates_an_install_from_a_default_and_names_the_manifest() {
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-dialect-detection-{}",
+            std::process::id()
+        ));
+        let package = root.join("node_modules/solid-js");
+        std::fs::create_dir_all(&package).unwrap();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        let manifest = package.join("package.json");
+        let project = root.join("src/tsconfig.json");
+        std::fs::write(&project, "{}").unwrap();
+
+        std::fs::write(&manifest, r#"{"name":"solid-js","version":"2.0.0-rc.0"}"#).unwrap();
+        match detect_detailed(&project) {
+            Detection::Installed {
+                dialect,
+                version,
+                manifest: read,
+            } => {
+                assert_eq!(dialect.id, "solid-v2");
+                assert_eq!(version, solid_dialect::Version::V2);
+                // Named from two directories up, not from beside the project.
+                assert_eq!(read, manifest);
+            }
+            // A build without the 2.0 dialect still resolves the install and
+            // still names the file; only the dialect is missing.
+            Detection::Unsupported {
+                version: solid_dialect::Version::V2,
+                manifest: read,
+            } => assert_eq!(read, manifest),
+            other => panic!("an installed 2.0 is a resolution: {other:?}"),
+        }
+
+        // Resolvable but unclassifiable: a default that can still say which
+        // file it read, which is what separates it from nothing installed.
+        std::fs::write(&manifest, r#"{"name":"solid-js","version":"workspace:*"}"#).unwrap();
+        match detect_detailed(&project) {
+            Detection::Defaulted {
+                manifest: Some(read),
+            } => assert_eq!(read, manifest),
+            other => panic!("an unclassifiable version defaults, and names its file: {other:?}"),
+        }
+
+        // Nothing installed anywhere above: a default with no file to name.
+        std::fs::remove_dir_all(root.join("node_modules")).unwrap();
+        assert!(matches!(
+            detect_detailed(&project),
+            Detection::Defaulted { manifest: None }
+        ));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The step-4 hole, asserted rather than described.
+    ///
+    /// A build carrying every released major's dialect can never answer
+    /// `Unsupported`, so this asserts the *reachable* half: with the 1.x
+    /// dialect compiled in, a 1.x install is `Installed`. The
+    /// `--no-default-features --features dialect-v2` arm compiles the other
+    /// half, where the same tree answers `Unsupported` and `detect` collapses
+    /// it onto the 2.0 default -- a 1.x project analyzed under the 2.0 catalog
+    /// and told nothing. Retiring the 1.x dialect makes that the only build,
+    /// which is why the refusal has to land in the same slice as the deletion.
+    #[test]
+    fn a_one_x_install_is_supported_exactly_while_its_dialect_is_compiled_in() {
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-dialect-unsupported-{}",
+            std::process::id()
+        ));
+        let package = root.join("node_modules/solid-js");
+        std::fs::create_dir_all(&package).unwrap();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(
+            package.join("package.json"),
+            r#"{"name":"solid-js","version":"1.9.14"}"#,
+        )
+        .unwrap();
+        let project = root.join("src/tsconfig.json");
+        std::fs::write(&project, "{}").unwrap();
+
+        let detection = detect_detailed(&project);
+        #[cfg(feature = "dialect-v1")]
+        {
+            assert!(
+                matches!(&detection, Detection::Installed { dialect, .. } if dialect.id == "solid-v1"),
+                "with the 1.x dialect compiled in, a 1.x install is an installation: {detection:?}"
+            );
+        }
+        #[cfg(not(feature = "dialect-v1"))]
+        {
+            assert!(
+                matches!(
+                    &detection,
+                    Detection::Unsupported {
+                        version: solid_dialect::Version::V1,
+                        ..
+                    }
+                ),
+                "without the 1.x dialect, a 1.x install is unsupported, not a 2.0 project: {detection:?}"
+            );
+            // And this is the hole: `detect` answers the 2.0 default anyway.
+            assert_eq!(detect(&project).id, "solid-v2");
+        }
         std::fs::remove_dir_all(&root).unwrap();
     }
 }

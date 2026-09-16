@@ -22301,3 +22301,75 @@ follow for the rest of the retirement:
 `eslint-compat` and `package-structured-unresolved`, ported in the same slice,
 are unaffected: both carry non-empty snapshots, both moved, and both movements
 were reviewed finding by finding.
+
+### The single-dialect builds were checked, never tested — and five tests were broken in them (2026-09-16)
+
+`scripts/verify.sh` runs four single-dialect arms, and all four are
+`cargo check`: `check-backend-v1`, `check-backend-v2`, `check-wasm-v1`,
+`check-wasm-v2`. They prove those configurations **compile**. Nothing has ever
+run their tests, so `make verify` is green while
+`cargo test -p solid-facts-backend --lib --no-default-features --features dialect-v2`
+fails. That matters more than it looks: the v2-only configuration is exactly
+what retiring the 1.x dialect makes the *only* build.
+
+Found while adding `Detection` (below). Five tests were failing, in three
+classes:
+
+- **Three asserted a dialect id that only some builds carry.**
+  `detection_reads_the_resolved_solid_js_version` and
+  `a_broken_nearer_manifest_does_not_mask_an_installation_higher_up` read
+  `detect(..).id == "solid-v1"` / `"solid-v2"`. Neither test is about which
+  dialect the build carries — the first is about what a version string
+  classifies to, the second about *which manifest the unbounded walk selected*.
+  Both now assert that directly through `detect_detailed`, and are dialect
+  independent as a result. The second is the clearer lesson: it was reading a
+  resolution result off a dialect id, and broke for a reason with nothing to do
+  with resolution.
+- **One iterated `RULE_ALIASES` and demanded every alias target load.** An alias
+  names a rule in one catalog; a single-dialect build compiles one. It now
+  skips a target no compiled-in catalog declares.
+- **Two are differential by construction** —
+  `structural_accessors_follow_the_selected_vocabulary_and_export_modules`
+  compares the *same source* under both vocabularies, and
+  `semantic_demand_plan_is_complete_for_downstream_consumers` reads both
+  catalogs' demands. A single-dialect build has no pair, so both are now
+  `#[cfg(all(feature = "dialect-v1", feature = "dialect-v2"))]`. Note this
+  places them beside the three differential assertions in `dialects_process.rs`
+  recorded above: **five tests in total lose their subject when the 1.x dialect
+  is deleted, not just the three.**
+
+Both arms now pass in full: 541 (v1-only) and 545 (v2-only), with
+`CERTIFICATION_ENV` set — without the pins three probe-harness tests fail in
+every configuration, which is the documented bare-`cargo test` footgun and not
+this.
+
+**The gap itself is not fixed.** Upgrading two of those `check` steps to `test`
+would cost `make verify` roughly 150 s per arm, which is a real trade and the
+maintainer's call — but until something runs them, the configuration the
+retirement produces is unverified by the handoff authority.
+
+### `detect` cannot express a refusal, so `Detection` was added (2026-09-16)
+
+Step 4 of the retirement plan needs a 1.x project to receive one explicit
+`uncertifiable` result naming the `package.json` that decided it. `detect`
+returns `&'static Dialect` — nowhere to put a refusal — and
+`resolved_solid_version` collapsed three different outcomes into one
+`Option<Version>`: an install whose major this build carries, an install whose
+major it does not, and nothing resolving at all. The manifest path, which a
+refusal has to name because the walk is unbounded and the deciding file is
+frequently not the one beside the project, was a local in the loop.
+
+`Detection` (`Installed` / `Unsupported` / `Defaulted`) now carries all three
+plus the path, behind `detect_detailed`. **No behaviour changed**: `detect`
+collapses it exactly as before, and every gate is unmoved — coverage 97
+projects / 556 findings, contract corpus 100 fixtures with identical totals.
+
+What did change is that the hole is now asserted rather than described.
+`a_one_x_install_is_supported_exactly_while_its_dialect_is_compiled_in` proves
+both halves: with the 1.x dialect compiled in a 1.x install is `Installed`, and
+without it the same tree is `Unsupported` **while `detect` still answers
+`solid-v2`** — a 1.x project analyzed under the 2.0 catalog and told nothing.
+That arm is reachable today in `--features dialect-v2`, and retiring 1.x makes
+it the only build. The emission side (an `SC9013`-class refusal at the three
+`detect` call sites — `daemon.rs`, `main.rs`, `solid-checker-session-bench.rs`)
+is still to do, and must land in the same slice as the deletion.
