@@ -21952,10 +21952,21 @@ installs disagree, whose lockfile states no integrity, or whose declared
 conditions do not cover the case admits nothing and is unchanged. The project's
 own catalogs always win. `--no-bundled-contracts` removes the tier.
 
-**Remaining fail-closed and uncertifiable cases, exactly.** The daemon path and
-the WASM adapter never see the tier (neither performs artifact admission at
-all). `installed_package_integrity` reads npm lockfiles only, so pnpm, bun and
-yarn projects admit nothing. The six bundled packages are not the top of the
+**Remaining fail-closed and uncertifiable cases, exactly.** The WASM adapter
+never sees the tier: `packages/wasm` loads contracts through
+`load_external_contract_index`, which performs no artifact admission.
+`installed_package_integrity` reads npm, Bun and pnpm lockfiles; **Yarn** is the
+one it cannot read, and a project whose only lock is `yarn.lock` states no
+integrity and admits nothing. The six bundled packages are not the top of the
 demand census — `@kobalte/utils` (942 sites) and `@solid-primitives/utils` (820)
 publish their catalogs at `./src/*.ts` entrypoints no consumer names, which is
 the § 27/§ 29 blocker and not this one.
+
+**The daemon reached it a day late, and that is the part worth remembering.**
+`daemon::enabled()` defaults on in a release build, so the daemon — not the
+one-shot path — is what an ordinary user runs, and it had its own older contract
+acquisition with no artifact admission at all. The tier measured green on the
+debug binary and was invisible on the release one. Fixed by giving the analysis,
+`contract check` and the daemon one `project_accepted_contracts`; the daemon
+also gained case-set discovery and lockfiles as cache inputs, both of which it
+had been missing for the *local* tier since before this one existed.

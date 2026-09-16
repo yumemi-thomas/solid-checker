@@ -916,6 +916,82 @@ pub fn admitted_project_artifacts(
     .map_err(|error| BackendError::Contract(error.to_string()))
 }
 
+/// The accepted-contract index ordinary analysis reads, from every tier this
+/// project can reach.
+///
+/// One function because the *order* is the rule, and three callers had to agree
+/// on it: the analysis, `contract check`, and the daemon. Project catalogs
+/// first, the compiled-in tier below them, and the missing-evidence markers
+/// last -- a project that certified a package itself keeps its own answer, a
+/// package this build carries a contract for stops raising an obligation the
+/// user cannot discharge, and everything else still raises one. Artifact
+/// admission runs project-first for the same reason.
+///
+/// Callers still resolve `catalogs` and `trust` themselves, because how a
+/// catalog is *selected* genuinely differs between them (an explicit `--catalog`
+/// overrides discovery; the emission path supplies neither). What must not
+/// differ is what happens afterwards.
+pub fn project_accepted_contracts(
+    directory: &Path,
+    catalogs: &[PathBuf],
+    trust: Option<&crate::contract_certification::Policy2TrustConfiguration>,
+    bundled: bool,
+    conditions: &std::collections::BTreeSet<String>,
+    facts: &solid_facts::ProjectFacts,
+    requirements: AcceptedContractIndex,
+) -> Result<AcceptedContractIndex, BackendError> {
+    let mut contracts = AcceptedContractIndex::default();
+    for path in catalogs {
+        contracts =
+            crate::contract_interface::read_external_contract_catalog_with_trust(path, trust)
+                .map_err(|error| BackendError::Contract(error.to_string()))?
+                .with_fallback(contracts);
+    }
+    if bundled {
+        contracts = contracts.with_fallback(
+            crate::accepted_bundles::compiled_in_accepted_contracts()
+                .map_err(|error| BackendError::Contract(error.to_string()))?,
+        );
+    }
+    let contracts = contracts.with_fallback(requirements);
+    // An acceptance is issued for the file that imported the package during
+    // certification. Admit the specifier project-wide when *this* project's
+    // installed artifact is the one that acceptance names -- same integrity,
+    // entrypoint and declared conditions. With no declared conditions this
+    // admits nothing, because conditions select the artifact and the analyzer
+    // has no facts of its own about them.
+    let mut admitted = admitted_project_artifacts(catalogs, trust, directory, conditions, facts)?;
+    if bundled {
+        admitted.extend(admitted_bundled_artifacts(directory, conditions, facts)?);
+    }
+    Ok(if admitted.is_empty() {
+        contracts
+    } else {
+        contracts.with_admitted_artifacts(admitted)
+    })
+}
+
+/// Every lockfile [`project_accepted_contracts`] can consult when it decides
+/// whether an acceptance applies here.
+///
+/// Artifact admission recomputes the acceptance root from the *installed*
+/// tarball integrity, and the integrity comes from whichever lockfile the
+/// project's package manager wrote. A host that caches an answer across runs
+/// has to treat these as inputs, or an install that repacks a dependency at the
+/// same version keeps serving the previous verdict. Paths are returned whether
+/// or not they exist, so that a lockfile appearing is a change too.
+#[must_use]
+pub fn admission_input_paths(project_directory: &Path) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    for ancestor in project_directory.ancestors() {
+        paths.push(ancestor.join("package-lock.json"));
+        paths.push(ancestor.join("node_modules").join(".package-lock.json"));
+        paths.push(ancestor.join("bun.lock"));
+        paths.push(ancestor.join("pnpm-lock.yaml"));
+    }
+    paths
+}
+
 /// The specifiers this project may import under a contract compiled into the
 /// checker.
 ///

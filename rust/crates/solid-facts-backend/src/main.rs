@@ -3227,62 +3227,24 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 read_policy2_trust_configuration(Path::new(&request.receipt_trust_configuration))
             })
             .transpose()?;
-        let mut contracts = solid_reactive_ir::contract_semantics::AcceptedContractIndex::default();
-        for path in &catalogs {
-            contracts = read_external_contract_catalog_with_trust(path, trust.as_ref())?
-                .with_fallback(contracts);
-        }
-        // The compiled-in accepted-contract tier, folded in *below* the
-        // project's own catalogs and *above* the missing-evidence markers: a
-        // project that certified a package itself keeps its own answer, and a
-        // package this build carries a contract for stops raising an obligation
-        // the user cannot discharge. Nothing here is import-keyed — a bundle
-        // reaches this analysis only through artifact admission below.
-        let contracts = if request.bundled_contracts {
-            contracts.with_fallback(solid_facts_backend::compiled_in_accepted_contracts()?)
-        } else {
-            contracts
-        };
-        let contracts = contracts.with_fallback(requirements);
-        // The same artifact admission the analysis performs. Without it this
-        // report answered `missing` -- "run contract generate", telling the user
-        // to redo work already done -- for a contract the analysis was about to
-        // accept and diagnose with. A report that disagrees with the analyzer
-        // about whether a contract applies is worse than no report.
-        let admitted = solid_facts_backend::admitted_project_artifacts(
+        // Every tier, in the one order they are folded in. The *selected*
+        // condition set, not the raw `--runtime-condition` list:
+        // `selected_conditions` folds in `--runtime-target`, `--runtime-build`
+        // and `--rendering`, which is what a Solid app with SSR actually knows
+        // about itself. An app resolves different runtime files on the server
+        // and in the browser, and what its author can state is the environment,
+        // not the export-condition names the package happens to use. Declaring
+        // nothing still admits nothing, so the zero-configuration path is
+        // unchanged.
+        let contracts = solid_facts_backend::project_accepted_contracts(
+            directory,
             &catalogs,
             trust.as_ref(),
-            directory,
-            // The *selected* set, not the raw `--runtime-condition` list:
-            // `selected_conditions` folds in `--runtime-target`,
-            // `--runtime-build` and `--rendering`, which is what a Solid app
-            // with SSR actually knows about itself. An app resolves different
-            // runtime files on the server and in the browser, and the thing its
-            // author can state is the environment, not the export-condition
-            // names the package happens to use. Declaring nothing still yields
-            // nothing, so the zero-configuration path is unchanged.
+            request.bundled_contracts,
             &request.runtime.selected_conditions(),
             &facts,
+            requirements,
         )?;
-        // The project's own acceptances first: `with_admitted_artifacts` keeps
-        // the first answer for a specifier, and a contract this project
-        // certified must never be displaced by one this build happens to carry.
-        let admitted = if request.bundled_contracts {
-            let mut admitted = admitted;
-            admitted.extend(solid_facts_backend::admitted_bundled_artifacts(
-                directory,
-                &request.runtime.selected_conditions(),
-                &facts,
-            )?);
-            admitted
-        } else {
-            admitted
-        };
-        let contracts = if admitted.is_empty() {
-            contracts
-        } else {
-            contracts.with_admitted_artifacts(admitted)
-        };
         let _ = &catalog;
         let statuses = accepted_package_contract_statuses(dialect, project, &facts, &contracts)?;
         let actionable = statuses
@@ -3375,71 +3337,24 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 read_policy2_trust_configuration(Path::new(&request.receipt_trust_configuration))
             })
             .transpose()?;
-        let mut contracts = solid_reactive_ir::contract_semantics::AcceptedContractIndex::default();
-        for path in &discovered_catalogs {
-            contracts = read_external_contract_catalog_with_trust(path, trust.as_ref())?
-                .with_fallback(contracts);
-        }
-        // The compiled-in accepted-contract tier, folded in *below* the
-        // project's own catalogs and *above* the missing-evidence markers: a
-        // project that certified a package itself keeps its own answer, and a
-        // package this build carries a contract for stops raising an obligation
-        // the user cannot discharge. Nothing here is import-keyed — a bundle
-        // reaches this analysis only through artifact admission below.
-        let contracts = if request.bundled_contracts {
-            contracts.with_fallback(solid_facts_backend::compiled_in_accepted_contracts()?)
-        } else {
-            contracts
-        };
-        let contracts = contracts.with_fallback(requirements);
-        // Artifact admission, the same call the contract-emission loop above
-        // makes. It was wired there only, so an acceptance issued against one
-        // project's importer never applied to another project analysing the
-        // same installed artifact -- which is the whole point of the artifact
-        // identity. Measured against `@kobalte/utils@0.9.2`: a receipt whose
-        // `artifactAcceptanceRoot` recomputes exactly from the consumer's
-        // installed integrity still left all 471 of its SC9005 findings at
-        // "no receipt-accepted contract matches this exact import".
-        //
-        // An empty condition set still admits nothing; conditions select the
-        // artifact and the analyzer has no condition facts of its own.
-        // Admission is per catalog, and a case set holds one per artifact case:
-        // the case that matches this project's installed artifact is the one
-        // whose acceptance root recomputes, and the others simply admit nothing.
-        let admitted = solid_facts_backend::admitted_project_artifacts(
+        // Every tier, in the one order they are folded in. The *selected*
+        // condition set, not the raw `--runtime-condition` list:
+        // `selected_conditions` folds in `--runtime-target`, `--runtime-build`
+        // and `--rendering`, which is what a Solid app with SSR actually knows
+        // about itself. An app resolves different runtime files on the server
+        // and in the browser, and what its author can state is the environment,
+        // not the export-condition names the package happens to use. Declaring
+        // nothing still admits nothing, so the zero-configuration path is
+        // unchanged.
+        let contracts = solid_facts_backend::project_accepted_contracts(
+            directory,
             &discovered_catalogs,
             trust.as_ref(),
-            directory,
-            // The *selected* set, not the raw `--runtime-condition` list:
-            // `selected_conditions` folds in `--runtime-target`,
-            // `--runtime-build` and `--rendering`, which is what a Solid app
-            // with SSR actually knows about itself. An app resolves different
-            // runtime files on the server and in the browser, and the thing its
-            // author can state is the environment, not the export-condition
-            // names the package happens to use. Declaring nothing still yields
-            // nothing, so the zero-configuration path is unchanged.
+            request.bundled_contracts,
             &request.runtime.selected_conditions(),
             &facts,
+            requirements,
         )?;
-        // The project's own acceptances first: `with_admitted_artifacts` keeps
-        // the first answer for a specifier, and a contract this project
-        // certified must never be displaced by one this build happens to carry.
-        let admitted = if request.bundled_contracts {
-            let mut admitted = admitted;
-            admitted.extend(solid_facts_backend::admitted_bundled_artifacts(
-                directory,
-                &request.runtime.selected_conditions(),
-                &facts,
-            )?);
-            admitted
-        } else {
-            admitted
-        };
-        let contracts = if admitted.is_empty() {
-            contracts
-        } else {
-            contracts.with_admitted_artifacts(admitted)
-        };
         let contracts = if request.proposal_dependency_catalog.is_empty() {
             contracts
         } else {

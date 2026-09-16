@@ -1483,3 +1483,77 @@ the consumer-rule and closure work, and it was unreachable until now.
 runs `scripts/*.test.mjs` under vitest, where that import throws before a single
 test registers — so the census gate's own tests never ran in `make verify` from
 the commit that added them (687e5d6e) until now. Both files import `vitest`.
+
+## 34. Correction to § 33, and the daemon: the tier now reaches a real user
+
+Two of § 33's "what this does not reach" bullets were wrong, and one of them
+meant the whole tier was invisible to anyone actually running the checker.
+
+### The daemon is the ordinary path, not an editor-only one
+
+`daemon::enabled()` defaults to `!cfg!(debug_assertions)` — **on in a release
+build** — and `daemon::eligible()` is true for any whole-project analysis with
+no `--sources`, no `--emit-contract` and no `--check-contracts`. That is the
+ordinary run. § 33 described the daemon as "the editor path"; it is the default
+path, and every measurement in § 33 was taken with the *debug* binary, where the
+daemon is off.
+
+Measured on the release binary, same project, same bundle:
+
+| | finding context |
+| --- | --- |
+| `SOLID_CHECKER_DAEMON=1` (the release default) | `no receipt-accepted contract matches this exact import` |
+| `SOLID_CHECKER_DAEMON=0` | `unknown-contract-claims:reactiveReads,returns,ownerRequirements` |
+
+So C shipped invisible. The daemon had its own, older contract acquisition —
+one `.solid-checker/accepted-contracts.json`, no case-set discovery, no artifact
+admission at all — which had already been silently costing the *local* tier a
+case set and every cross-file acceptance, well before this tier existed.
+
+**Fixed by giving the three callers one function.** `project_accepted_contracts`
+owns the tier order (project catalogs, then the compiled-in tier, then the
+missing-evidence markers) and the project-first admission, and the analysis,
+`contract check` and the daemon all call it. The order is the rule, and three
+copies of a rule is how one of them ends up different — which is exactly what
+had happened.
+
+Three daemon-specific consequences, each now pinned by a test:
+
+- **The switch crosses the socket.** One daemon serves every client for a
+  project and both settings are eligible for it, so `bundledContracts` is part
+  of `CheckRequest` and of the cached answer's identity. An omitted field is the
+  *on* state: `#[serde(default)]` on a bool would have turned the tier off for
+  every request that did not mention it.
+- **Lockfiles are cache inputs.** Admission recomputes the acceptance root from
+  the installed tarball integrity, which lives in a lockfile the daemon
+  previously never looked at. `admission_input_paths` names them whether or not
+  they exist, because a lockfile *appearing* changes what is admitted.
+  Demonstrated: rewriting the integrity of the same version flips the answer
+  back to the acceptance gate within one generation, and restoring it flips back.
+- **Absence is a state, not an error.** `contract_files` hashed every path and
+  failed the check if one was missing, so a deleted catalog took the daemon down
+  rather than invalidating its cache. A missing file now hashes to zero.
+
+The daemon's cache still hits: first run `cacheHit:false`, every run after
+`cacheHit:true`.
+
+### npm-only was wrong: only Yarn is missing
+
+§ 33 said `installed_package_integrity` "reads only `package-lock.json` and npm's
+hidden lockfile", and called that "the single largest limit on who this reaches".
+That was read off the 2026-09-14 spike and off the first half of the function.
+The function also reads **`bun.lock`** and, through
+`PublishedGraphLockSelection::from_pnpm_lock`, **`pnpm-lock.yaml`**. Verified by
+running the same consumer with the npm hidden lockfile removed and a real
+`bun.lock` in its place: admitted, contract read.
+
+**Yarn is the one that is missing** (`yarn.lock` is not a format anything here
+parses), and it is a much smaller claim than the one § 33 made.
+
+### What § 33's remaining bullets still say
+
+WASM is unchanged — `packages/wasm` loads contracts through
+`load_external_contract_index` and never sees the tier. And six packages is
+still not the demand list: `@kobalte/utils` (942 sites) and
+`@solid-primitives/utils` (820) publish their catalogs only at `./src/*.ts`
+entrypoints no consumer names, which is the § 27 and § 29 blocker.

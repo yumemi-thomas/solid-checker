@@ -167,10 +167,10 @@ pub use diagnostics::{
     DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, PackageContractStatus,
     PackageSummary, RequestedRuleEnablement, Snapshot, SnapshotEvidence, SnapshotFinding,
     SnapshotFix, SnapshotTextEdit, SourceLocation, accepted_package_contract_statuses,
-    admitted_bundled_artifacts, admitted_project_artifacts, analysis_metrics,
-    analyze_project_accepted_measured_with_enablement, discovered_contract_paths,
-    discovered_rule_options_path, imported_package_roots, semantic_demand_options_for_enablement,
-    source_location,
+    admission_input_paths, admitted_bundled_artifacts, admitted_project_artifacts,
+    analysis_metrics, analyze_project_accepted_measured_with_enablement, discovered_contract_paths,
+    discovered_rule_options_path, imported_package_roots, project_accepted_contracts,
+    semantic_demand_options_for_enablement, source_location,
 };
 pub use evidence_sidecars::{
     EVIDENCE_SIDECAR_VERSION, EnvironmentIdentity, EvidenceCatalog, EvidenceSidecarDocuments,
