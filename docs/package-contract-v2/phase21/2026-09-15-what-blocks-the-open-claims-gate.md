@@ -1306,3 +1306,81 @@ still cannot be addressed. What changed is the *consequence*: those claims are
 now withdrawn from the document instead of destroying it. That is the right
 outcome, and it is not a proof — the contract says less, and says that it says
 less.
+
+## 32. Correction to § 25: one rule, three places, two clauses
+
+§ 25 said the core-runtime fix had to be symmetric across **three censuses** —
+the emitted document, the JS resolver's `bindExport`, and Rust's `bind_exports`.
+That framing was wrong twice over, and `822c2287` shipped on it.
+
+Running `make ecosystem-regression` for the first time after that commit found
+six certified rows that had stopped certifying. Fixing them one refusal at a
+time looked like divergence — each census aligned exposed another — and I
+proposed reverting the whole change. That was the wrong read. The chase
+converged as soon as the actual invariant was stated:
+
+> **A package's export surface is computed in three places — the emitter
+> (`export_binds_core_runtime`), the JS resolver (`bindExport`), and the archive
+> replay (`exported_names`). Each drops a name re-exported straight from the
+> built-in runtime foundation, *unless the package is itself the foundation*.**
+
+`822c2287` implemented the first clause in two of the three places and the
+second clause nowhere. Every "new census" was one of those three missing half
+the rule:
+
+| symptom | which half was missing |
+| --- | --- |
+| `@solid-primitives/utils`: `replayedOnly ["isServer"]` | the replay had neither clause |
+| `@solidjs/start`: `replayedOnly ["mount"]` | the replay did not follow a *local* re-export chain into core (`export { mount } from "./mount.js"`, and that file re-exports `hydrate` from `solid-js/web`) |
+| `corvu`, `@corvu/popover`: 13 of `solid-js`'s own exports dropped | the replay had clause one but not clause two — I introduced this while fixing the row above |
+| `@tanstack/solid-db`, `motion-solidjs`, `@corvu/drawer`: `suppliedOnly ["isServer"]` | the resolver ran the core check *after* the accepted-dependency lookup, and a graph lane supplies `solid-js/web` as an accepted node whenever the graph contains one, so the lookup succeeded first |
+| `solid-js` `./web`: 72 replayed vs 59 supplied | the resolver had no clause two |
+
+`bind_exports` — the third place in § 25's list — is not a fourth computation.
+It is a *consistency check* on the other three, deliberately strict, and it
+never needed changing.
+
+A sixth symptom was not a census at all: `solid-js` and `@solidjs/web` stopped
+being *queued* for certification, because removing their unsatisfiable
+core-binding refusals removed the `dependency-composition` class that was their
+only route into the benchmark's certification queue. Once every surface agreed,
+they certified through the ordinary route and the symptom disappeared with the
+others.
+
+### Dependency composition was a real gap, in the other feature
+
+One of the six was not the core fix at all. `authenticate_dependency_receipt`
+re-derives a dependency's weakening from its accepted candidate and compares
+digests; it knew only about withheld *closures*, so a dependency that had also
+withdrawn an **operation** (§ 31) produced a digest for a document it never
+certified. The withheld operations now travel the edge beside the closures and
+are re-derived first, in the order the node applied them. That gap was created
+by § 31 and found by this gate.
+
+### The result
+
+`make ecosystem-regression`, against the 2026-09-14 pinned baseline:
+
+| | baseline | after |
+| --- | ---: | ---: |
+| certified rows | 381 | **388** |
+| receipts lost | — | **0** |
+| receipts gained | — | **+7** |
+| wall | 10.5 min | 11.7 min |
+
+The seven gained include `solid-js@1.9.14`, `solid-js@2.0.0-rc.3` and
+`@solidjs/web@2.0.0-rc.3` — the three the fix had cost — plus
+`@solid-primitives/flux-store`, `intersection-observer`, `local-store`, `until`
+and `@solidjs/router`.
+
+### Two things worth keeping
+
+**Run `ecosystem-regression` after a change to the certifier, the producer, the
+generator or the runner.** Its own header says so, and every gate I did run
+after `822c2287` — coverage, the contract corpus, every Rust suite — was green
+while six receipts were gone. The three-row corpus cannot see a receipt lost
+elsewhere.
+
+**"Each fix reveals another" is not evidence of divergence.** It is evidence the
+invariant has not been stated yet. Five symptoms, one rule, two clauses; the
+right move was to name the rule, not to revert the change.
