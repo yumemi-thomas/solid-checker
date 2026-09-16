@@ -22496,3 +22496,38 @@ Corpus at 308 cases (271 v1, 37 v2), ledger 465 rows, coverage unmoved at 97
 projects / 556 findings. When step 3 deletes the 1.x halves the invariant keeps
 its pin, which is the point of authoring these before the deletion rather than
 after.
+
+### Two of the three "differential" backend tests were not differential (2026-09-16)
+
+Recorded above as three assertions that "lose their subject" when the 1.x
+dialect goes, each needing an explicit decision. Reading them narrows that to
+one, and settles the one.
+
+`component_ref_callbacks_are_setup_time_outputs_in_both_dialects` and
+`returned_event_handler_factories_preserve_deferred_execution` loop
+`["solid-v1", "solid-v2"]` asserting the **same** property under each. That is
+a dialect-*independence* claim, not a differential: the list is the claim's
+scope, not part of the property. Retiring 1.x narrows the scope and keeps the
+claim intact. Both now iterate a named `DIALECT_INDEPENDENT` constant whose doc
+comment says exactly that, so step 3 is a one-line edit rather than a judgement
+call at deletion time.
+
+`the_dialect_pair_reports_different_findings_from_identical_sources` is the
+real differential — its subject *is* the difference between two fixture
+projects whose sources are byte-identical, so it has nothing to narrow to and
+goes with the 1.x fixture half. **What it costs is the contrast and nothing
+else**, which is now verified rather than assumed: every v2-side assertion in
+it is already pinned span for span by
+`fixtures/findings-snapshots/reactive-ir__dialect-solid-2.json` — the six
+`SC7001` rows it checks (five violations at 1340, 1981, 2029, 2097, 2166 and
+the uncertifiable at 2718) and the absence of `SC3001` among the snapshot's 14
+findings. So step 3 deletes it outright, with no counterpart to author.
+
+One weakness noted in passing and left as it is:
+`returned_event_handler_factories_preserve_deferred_execution` asserts
+`findings.is_empty()`, which is the same shape as the vacuous ownership
+negatives above — an empty result is worth something only if the project was
+analyzed. Here `project_snapshot_findings` fails on a non-zero exit, so a
+fixture that stopped compiling cannot reach the assertion quietly; a comment
+now records why that is the separating fact rather than leaving a reader to
+wonder.

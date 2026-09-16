@@ -6,6 +6,24 @@ use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
+/// The dialects a *dialect-independent* assertion is run against.
+///
+/// The tests below that loop this list are not differentials: each asserts the
+/// **same** property holds under every dialect, so the list is the claim's
+/// scope and not part of the property. Retiring the 1.x dialect narrows the
+/// scope rather than removing the claim — drop `"solid-v1"` here and both
+/// tests keep asserting exactly what they assert today, for the one dialect
+/// that remains.
+///
+/// Distinct from
+/// [`the_dialect_pair_reports_different_findings_from_identical_sources`],
+/// which is differential by construction: its subject *is* the difference
+/// between the pair, so it has nothing to narrow to and is deleted with the
+/// 1.x fixture half. What that test pins about 2.0 is already pinned by
+/// `fixtures/findings-snapshots/reactive-ir__dialect-solid-2.json`, so the
+/// deletion costs the contrast and nothing else.
+const DIALECT_INDEPENDENT: &[&str] = &["solid-v1", "solid-v2"];
+
 fn dialect_pair_findings(fixture: &str) -> Vec<(String, String, String, u64)> {
     dialect_snapshot_findings(fixture)
         .iter()
@@ -371,7 +389,7 @@ fn component_ref_callbacks_are_setup_time_outputs_in_both_dialects() {
     }
     let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/component-ref/tsconfig.json");
-    for dialect in ["solid-v1", "solid-v2"] {
+    for dialect in DIALECT_INDEPENDENT {
         let findings = project_snapshot_findings(project.clone(), Some(dialect));
         assert!(
             findings
@@ -390,8 +408,13 @@ fn returned_event_handler_factories_preserve_deferred_execution() {
     }
     let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/returned-handler-factory/tsconfig.json");
-    for dialect in ["solid-v1", "solid-v2"] {
+    for dialect in DIALECT_INDEPENDENT {
         let findings = project_snapshot_findings(project.clone(), Some(dialect));
+        // An empty result is only worth something if the project was analyzed.
+        // `project_snapshot_findings` already fails on a non-zero exit, which
+        // is what separates "traced the handler and found nothing" from "never
+        // opened the file"; a fixture that stopped compiling would not reach
+        // here quietly.
         assert!(
             findings.is_empty(),
             "{dialect} should trace the returned inner handler to the JSX event: {findings:#?}"
