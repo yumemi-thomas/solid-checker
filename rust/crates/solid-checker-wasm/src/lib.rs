@@ -32,6 +32,48 @@ struct CheckRequest {
     /// uncertifiable; this boundary has no name-only compatibility path.
     #[serde(default)]
     accepted_contracts: Vec<HostAcceptedContract>,
+    /// What the host resolved each imported specifier to, in its own installed
+    /// tree. Only the compiled-in accepted contracts use it, and only to decide
+    /// whether one of them is about *this* project's artifact.
+    ///
+    /// The host states this exactly as it states `type_facts`: there is no
+    /// filesystem here to read a lockfile from, and this adapter checks nothing
+    /// against one. What is not weakened is the acceptance itself -- an
+    /// identity that does not reproduce a bundle's signed
+    /// `artifactAcceptanceRoot` admits nothing, so a wrong or invented entry
+    /// yields no contract rather than the wrong one. A host that cannot state a
+    /// package exactly should omit it.
+    #[serde(default)]
+    installed_packages: Vec<HostInstalledPackage>,
+    /// The export conditions the host resolved under. Empty admits nothing,
+    /// exactly as on the native side: conditions select the artifact, and
+    /// guessing one is how a contract proven under `import` reaches a `require`
+    /// consumer.
+    #[serde(default)]
+    export_conditions: Vec<String>,
+    /// Whether the contracts compiled into this build may be applied.
+    #[serde(default = "enabled")]
+    bundled_contracts: bool,
+}
+
+const fn enabled() -> bool {
+    true
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct HostInstalledPackage {
+    /// The specifier as written in the source, which is what an import states
+    /// and what admission is keyed by.
+    specifier: String,
+    name: String,
+    version: String,
+    /// The registry tarball's subresource integrity, from the host's lockfile.
+    integrity: String,
+    /// The file this specifier resolves to, relative to the installed package
+    /// root -- `dist/index.js` or `dist/index.d.ts`. It is what selects between
+    /// two acceptances that share a declaration file.
+    resolved_target: String,
 }
 
 #[derive(Deserialize)]
@@ -203,6 +245,50 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
                 import,
             }
         }))?;
+    // The compiled-in accepted-contract tier. Host-supplied contracts above
+    // stay importer-keyed -- `load_external_contract_index` states no artifact
+    // identity for them -- so this adds acceptances and displaces none.
+    let contracts = if request.bundled_contracts {
+        let installed = |specifier: &str| {
+            request
+                .installed_packages
+                .iter()
+                .find(|package| package.specifier == specifier)
+                .map(|package| {
+                    (
+                        package.name.clone(),
+                        package.version.clone(),
+                        package.integrity.clone(),
+                    )
+                })
+        };
+        let resolved_target = |specifier: &str| {
+            request
+                .installed_packages
+                .iter()
+                .find(|package| package.specifier == specifier)
+                .map(|package| package.resolved_target.clone())
+        };
+        let conditions = request
+            .export_conditions
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        let admitted = solid_facts_backend::admitted_bundle_artifacts(
+            &conditions,
+            &installed,
+            &resolved_target,
+        )?;
+        let contracts =
+            contracts.with_fallback(solid_facts_backend::compiled_in_accepted_contracts()?);
+        if admitted.is_empty() {
+            contracts
+        } else {
+            contracts.with_admitted_artifacts(admitted)
+        }
+    } else {
+        contracts
+    };
     let (analysis, _) = analyze_project_accepted_measured_with_enablement(
         dialect,
         Path::new(&request.project_id),
@@ -212,6 +298,56 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
         Default::default(),
     )?;
     Ok(serde_json::to_string(&analysis.snapshot)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CheckRequest;
+
+    /// The fields a host must state before a compiled-in contract can apply,
+    /// and what their absence means.
+    ///
+    /// Absence is the whole safety property here. This adapter has no
+    /// filesystem: it cannot read a lockfile, cannot resolve a specifier, and
+    /// cannot check anything the host says against a tree. So a request that
+    /// says nothing must admit nothing -- not fall back to a guess -- and the
+    /// serde defaults are the only thing enforcing that.
+    #[test]
+    fn a_host_that_states_no_installed_tree_admits_no_bundled_contract() {
+        let minimal: CheckRequest = serde_json::from_str(
+            r#"{"projectId":"/p/tsconfig.json","generation":1,"sources":[],
+                "typeFacts":{"schema":2,"generation":1,"projectId":"/p/tsconfig.json",
+                "sources":[],"entities":[],"symbols":[],"files":[]}}"#,
+        )
+        .expect("the minimal request still decodes");
+        assert!(minimal.installed_packages.is_empty());
+        assert!(
+            minimal.export_conditions.is_empty(),
+            "conditions select the artifact; an empty set admits nothing rather than assuming \
+             `import`"
+        );
+        assert!(
+            minimal.bundled_contracts,
+            "the tier is on by default, and turning it off is what has to be written down"
+        );
+    }
+
+    #[test]
+    fn an_installed_package_states_every_field_admission_recomputes() {
+        let stated: CheckRequest = serde_json::from_str(
+            r#"{"projectId":"/p/tsconfig.json","generation":1,"sources":[],
+                "typeFacts":{"schema":2,"generation":1,"projectId":"/p/tsconfig.json",
+                "sources":[],"entities":[],"symbols":[],"files":[]},
+                "exportConditions":["import"],
+                "installedPackages":[{"specifier":"@scope/pkg","name":"@scope/pkg",
+                "version":"1.0.0","integrity":"sha512-x","resolvedTarget":"dist/index.js"}]}"#,
+        )
+        .expect("a stated installed tree decodes");
+        let package = &stated.installed_packages[0];
+        assert_eq!(package.specifier, "@scope/pkg");
+        assert_eq!(package.resolved_target, "dist/index.js");
+        assert_eq!(stated.export_conditions, ["import"]);
+    }
 }
 
 /// Testable internal seam for the future atomic policy-2 cut. It is not a

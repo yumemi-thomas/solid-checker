@@ -21988,3 +21988,31 @@ gap a parser can close. Reading it as an empty classic file would have reported
 `from_lockfile` — the *certification* dispatch table — deliberately does not
 name `yarn.lock`. Its readers are paired with a subset the acquisition side
 implements too, and a Yarn project still cannot certify.
+
+### The WASM adapter can apply a compiled-in contract, if its host states the tree (2026-09-16)
+
+`CheckRequest` gains `installedPackages`, `exportConditions` and
+`bundledContracts`. With them, a compiled-in accepted contract applies in the
+WASM build exactly as it does natively: admission recomputes the bundle's signed
+artifact root from the stated name, version, integrity and entrypoint and
+applies it only on equality.
+
+**The asymmetry is the price of having no filesystem, and it is bounded.**
+Natively the analyzer reads the project's lockfile itself; here the host asserts
+it, as it already asserts `typeFacts` and the sources. What the host cannot
+assert is the acceptance: the document and its receipt are compiled in. So a
+wrong or invented `installedPackages` entry yields *no* contract rather than the
+wrong one — the stated identity simply fails to reproduce any bundle's root.
+
+**Fail-closed by absence**, which is the whole safety property here and is
+pinned by a test: no `installedPackages` admits nothing, an empty
+`exportConditions` admits nothing (conditions select the artifact, and guessing
+`import` is how a contract proven under `import` would reach a `require`
+consumer), and contracts passed in `acceptedContracts` stay keyed by their own
+importer and are never displaced.
+
+**Not exercised end to end.** `packages/wasm`'s tests run against a built
+`.wasm` that is gitignored and that `make verify` does not build — verify only
+`cargo check`s the crate under each dialect feature. The new fields are covered
+by request-decoding tests in the crate; the admission logic they feed is the
+same `admitted_bundle_artifacts` the native tier tests cover directly.
