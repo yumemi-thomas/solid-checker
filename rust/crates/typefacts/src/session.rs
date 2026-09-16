@@ -651,6 +651,29 @@ impl Drop for Connection {
     }
 }
 
+/// What [`Session::close`] found when it said goodbye.
+///
+/// Closing is not the same question as whether the producer was still there to
+/// hear it, and this separates them. Every variant means the session is closed:
+/// `close` marks it closed and terminates the child on every path it can take.
+///
+/// Deliberately not `#[must_use]`: a caller that simply wants the session shut
+/// down is right not to inspect this, and the enclosing `Result` already forces
+/// a real failure to be handled. Requiring every `close()` to bind the outcome
+/// would add noise to the ~28 call sites that correctly do not care.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CloseOutcome {
+    /// The producer acknowledged the close request.
+    Acknowledged,
+    /// The producer was already gone -- it had died, or it did not answer
+    /// within the bound -- so the child was terminated without a goodbye.
+    ///
+    /// Not a failure. Nothing is left behind either way: the child is killed
+    /// and its reader joined by `Connection::terminate`, and a shared
+    /// transition arena is removed by its own `Drop` on this side of the pipe.
+    ProducerAlreadyGone,
+}
+
 /// A retained Type Facts session.
 ///
 /// Framing, request identities, handshake validation, Wire table transitions,
@@ -1350,9 +1373,29 @@ impl Session {
         })
     }
 
-    pub fn close(&mut self) -> Result<(), SessionError> {
+    /// Closes the session, returning what the producer did about it.
+    ///
+    /// **A producer that is already gone is not a failure to close it.**
+    /// Everything `close` promises has happened before this returns, on every
+    /// path: the session is marked closed and the child is terminated whether
+    /// or not the goodbye was acknowledged. A transport failure here says the
+    /// process died before it could answer -- which is the state `close` was
+    /// asking it to reach -- and the 250 ms bound means the same thing, because
+    /// the connection is torn down regardless of which wins.
+    ///
+    /// Reporting that as `Err` said "close failed" about a close that had
+    /// succeeded, and it was the only place in this API where a producer death
+    /// the session can absorb is an error: everywhere else the restart
+    /// machinery recovers one and answers `Ok`. The information is still worth
+    /// having, so it comes back as [`CloseOutcome`] rather than as a failure.
+    ///
+    /// Narrow on purpose: only transport failures become
+    /// [`CloseOutcome::ProducerAlreadyGone`]. A service-level refusal is the
+    /// producer answering and declining, which is a real answer and still
+    /// propagates.
+    pub fn close(&mut self) -> Result<CloseOutcome, SessionError> {
         if self.closed {
-            return Ok(());
+            return Ok(CloseOutcome::Acknowledged);
         }
         let mut close = request(Operation::Close, &self.project_id, self.generation);
         let result = self
@@ -1370,7 +1413,11 @@ impl Session {
         if let Some(mut connection) = self.connection.take() {
             connection.terminate();
         }
-        result.map(|_| ())
+        match result {
+            Ok(_) => Ok(CloseOutcome::Acknowledged),
+            Err(error) if error.is_transport_failure() => Ok(CloseOutcome::ProducerAlreadyGone),
+            Err(error) => Err(error),
+        }
     }
 
     fn analyze_exchange(

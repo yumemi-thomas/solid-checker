@@ -10,10 +10,11 @@ use std::{
 use sha2::{Digest as _, Sha256};
 use typefacts::{
     AnalysisDemand, ArgumentBindingDisposition, ArrayShape, CallKind, Callability,
-    CertificationInvocationContext, ConstantValue, ConstantValueKind, Constructability,
-    ConstructionWitness, DemandGroup, FinitePartitionAxis, InvocationDemand, InvocationDomain,
-    Location, ModuleGraphDemand, ModuleResolution, PrimitiveValueDomain, Producer, ReferenceSpace,
-    ResolvedCallValidity, RuntimeValueDomain, Session, SessionError, SourceHash,
+    CertificationInvocationContext, CloseOutcome, ConstantValue, ConstantValueKind,
+    Constructability, ConstructionWitness, DemandGroup, FinitePartitionAxis, InvocationDemand,
+    InvocationDomain, Location, ModuleGraphDemand, ModuleResolution, PrimitiveValueDomain,
+    Producer, ReferenceSpace, ResolvedCallValidity, RuntimeValueDomain, Session, SessionError,
+    SourceHash,
     v3::{EntityDemand, FileChange},
 };
 
@@ -161,7 +162,19 @@ fn close_is_bounded_when_the_producer_exits_between_requests() {
     thread::sleep(Duration::from_millis(100));
 
     let started = Instant::now();
-    assert!(session.close().is_err());
+    // Two claims, and the first is what keeps the second honest. `close` still
+    // sends its goodbye and waits for it, so reaching
+    // `ProducerAlreadyGone` proves it went through the send/wait path and
+    // *observed* the dead producer rather than short-circuiting somewhere
+    // earlier -- without which the timing bound below could pass on a `close`
+    // that never attempted the exchange at all.
+    //
+    // This assertion used to be `is_err()`. The outcome is the same
+    // observation; what changed is that a producer which is already gone is no
+    // longer reported as a failure to close it, because the session is closed
+    // and the child terminated on every path out of `close`. See
+    // `CloseOutcome`.
+    assert_eq!(session.close().unwrap(), CloseOutcome::ProducerAlreadyGone);
     assert!(
         started.elapsed() < Duration::from_secs(1),
         "close waited {:?} after the producer had already exited",
