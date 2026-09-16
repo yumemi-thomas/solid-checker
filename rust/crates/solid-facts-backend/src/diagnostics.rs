@@ -789,6 +789,16 @@ pub fn accepted_package_contract_statuses(
                 .contains(&core_package);
             statuses.push(PackageContractStatus {
                 name: module,
+                // `unsupported-runtime` is retained deliberately although a
+                // build carrying only the Solid 2 vocabulary cannot produce
+                // it: v2's `primitive_defining_packages` is the whole union
+                // across dialects, so every core package it can see is
+                // modelled. It is kept for the same reason `Version::V1` is --
+                // the seam has to exist before the next dialect needs it, and
+                // a status silently dropped from `--check-contracts` output
+                // and from the certification-blocking set is harder to
+                // reinstate than one that was never removed. See ADR 0110 and
+                // the retirement plan's step-3 notes.
                 status: if modeled { "builtin" } else { "unsupported-runtime" }.into(),
                 installed_integrity: None,
                 detail: Some(if modeled {

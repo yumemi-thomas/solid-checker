@@ -710,9 +710,9 @@ mod tests {
             .filter(|entry| !entry.is_empty())
             .collect::<std::collections::BTreeSet<_>>();
 
-        let owned = [solid_dialect::Version::V1, solid_dialect::Version::V2]
-            .into_iter()
-            .flat_map(|version| version.dialect().primitive_defining_packages())
+        let owned = solid_dialect::DIALECTS
+            .iter()
+            .flat_map(|dialect| dialect.primitive_defining_packages())
             .map(|name| (*name).to_owned())
             .collect::<std::collections::BTreeSet<_>>();
 
