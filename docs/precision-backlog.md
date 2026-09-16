@@ -21970,3 +21970,21 @@ debug binary and was invisible on the release one. Fixed by giving the analysis,
 `contract check` and the daemon one `project_accepted_contracts`; the daemon
 also gained case-set discovery and lockfiles as cache inputs, both of which it
 had been missing for the *local* tier since before this one existed.
+
+### Yarn classic reaches artifact admission; Yarn Berry cannot (2026-09-16)
+
+`installed_package_integrity` now reads `yarn.lock` v1 through
+`PublishedGraphLockSelection::from_yarn_lock`, so a Yarn-classic project admits
+a compiled-in or certified contract exactly as an npm, Bun or pnpm one does.
+Verified end to end on a consumer importing `@solid-primitives/keyed@1.5.3`.
+
+**Berry is refused as a format, permanently.** A v2+ `yarn.lock` records
+`checksum:`, a hash of the package's zip in Yarn's own cache, not the registry
+tarball's subresource integrity. It does not carry the fact admission needs, so
+a Berry project states no integrity and admits nothing — fail-closed, and not a
+gap a parser can close. Reading it as an empty classic file would have reported
+"no entry", which reads as a missing package rather than an unsupported format.
+
+`from_lockfile` — the *certification* dispatch table — deliberately does not
+name `yarn.lock`. Its readers are paired with a subset the acquisition side
+implements too, and a Yarn project still cannot certify.

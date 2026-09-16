@@ -1035,6 +1035,7 @@ mod tests {
             "/project/app/node_modules/.package-lock.json",
             "/project/app/bun.lock",
             "/project/app/pnpm-lock.yaml",
+            "/project/app/yarn.lock",
             "/project/package-lock.json",
         ] {
             assert!(

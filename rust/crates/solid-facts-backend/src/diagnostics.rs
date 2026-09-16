@@ -988,6 +988,7 @@ pub fn admission_input_paths(project_directory: &Path) -> Vec<PathBuf> {
         paths.push(ancestor.join("node_modules").join(".package-lock.json"));
         paths.push(ancestor.join("bun.lock"));
         paths.push(ancestor.join("pnpm-lock.yaml"));
+        paths.push(ancestor.join("yarn.lock"));
     }
     paths
 }
@@ -1309,20 +1310,24 @@ pub(crate) fn installed_package_integrity(
         }
     }
     if found.is_none() {
-        found = pnpm_installed_package_integrity(project_directory, package_directory)?;
+        found = manifest_keyed_lockfile_integrity(project_directory, package_directory)?;
     }
     Ok(found)
 }
 
-/// The pnpm arm of the search above.
+/// The pnpm and Yarn-classic arm of the search above.
 ///
-/// Separate from the ancestor walk because pnpm needs the installed package's
-/// own name and version to form its lock key -- its store path
-/// (`.pnpm/<name>@<version>_<peers>/node_modules/<name>`) is not one -- and
-/// because its `packages:` keys are unique, so there is no per-path
-/// disambiguation to fold into the loop. Consulted only when no npm or Bun
-/// lockfile answered, so an npm-installed tree keeps its existing answer.
-fn pnpm_installed_package_integrity(
+/// Separate from the ancestor walk because neither lockfile is keyed by install
+/// path. pnpm's store path (`.pnpm/<name>@<version>_<peers>/node_modules/…`) is
+/// not a key, and Yarn classic is keyed by *descriptor* (`name@range`), several
+/// of which share one entry. Both are therefore selected by the installed
+/// manifest's own name and version, which means there is no per-path
+/// disambiguation to fold into the loop.
+///
+/// Consulted only when no npm or Bun lockfile answered, so an npm-installed
+/// tree keeps its existing answer. Within an ancestor, pnpm is asked first for
+/// the same reason: an established answer must not move.
+fn manifest_keyed_lockfile_integrity(
     project_directory: &Path,
     package_directory: &Path,
 ) -> Result<Option<String>, BackendError> {
@@ -1342,26 +1347,34 @@ fn pnpm_installed_package_integrity(
     ) else {
         return Ok(None);
     };
+    type Reader = fn(&[u8], String, &str, &str) -> Option<String>;
+    let pnpm: Reader = |data, locator, name, version| {
+        crate::contract_certification::PublishedGraphLockSelection::from_pnpm_lock(
+            data, locator, name, version,
+        )
+        .ok()
+        .map(|selection| selection.integrity().to_owned())
+    };
+    let yarn: Reader = |data, locator, name, version| {
+        crate::contract_certification::PublishedGraphLockSelection::from_yarn_lock(
+            data, locator, name, version,
+        )
+        .ok()
+        .map(|selection| selection.integrity().to_owned())
+    };
     for ancestor in project_directory.ancestors() {
-        let candidate = ancestor.join("pnpm-lock.yaml");
-        let data = match fs::read(&candidate) {
-            Ok(data) => data,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
-            Err(error) => return Err(error.into()),
-        };
-        // A lockfile this checker cannot read is not a malformed *contract* and
-        // must not fail the run, exactly as for the npm arm.
-        let Ok(selection) =
-            crate::contract_certification::PublishedGraphLockSelection::from_pnpm_lock(
-                &data,
-                format!("{name}@{version}"),
-                name,
-                version,
-            )
-        else {
-            return Ok(None);
-        };
-        return Ok(Some(selection.integrity().to_owned()));
+        for (file, read) in [("pnpm-lock.yaml", pnpm), ("yarn.lock", yarn)] {
+            let data = match fs::read(ancestor.join(file)) {
+                Ok(data) => data,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error.into()),
+            };
+            // A lockfile this checker cannot read is not a malformed *contract*
+            // and must not fail the run, exactly as for the npm arm. A Yarn
+            // Berry lockfile lands here: it records a cache checksum rather than
+            // the registry integrity, so it states no fact and admits nothing.
+            return Ok(read(&data, format!("{name}@{version}"), name, version));
+        }
     }
     Ok(None)
 }
@@ -1520,6 +1533,117 @@ mod tests {
         )
     }
 
+    /// Yarn classic states the registry integrity; Yarn Berry cannot.
+    ///
+    /// Both halves are the point. A v1 lockfile carries the tarball's
+    /// subresource integrity and is keyed by descriptor, so several entries can
+    /// reach one installed copy and they have to agree. Berry's `checksum:` is
+    /// a hash of the package's zip in Yarn's own cache, which is not the fact
+    /// artifact admission needs -- so a Berry project must state nothing rather
+    /// than state something that will never reproduce an acceptance root.
+    #[test]
+    fn yarn_states_an_integrity_only_where_the_format_carries_one() {
+        let root = scratch("yarn-integrity");
+        let project = root.join("app");
+        let package = project.join("node_modules/@scope/pkg");
+        std::fs::create_dir_all(&package).unwrap();
+        std::fs::write(
+            package.join("package.json"),
+            r#"{ "name": "@scope/pkg", "version": "1.0.0" }"#,
+        )
+        .unwrap();
+        let yarn = project.join("yarn.lock");
+        let write = |body: &str| std::fs::write(&yarn, body).unwrap();
+        // Real SHA-512 SRI values, because this reader goes through
+        // `PublishedGraphLockSelection`, which validates the shape. The npm arm
+        // reads its integrity straight out of JSON and does not, which is why
+        // the test above can use a placeholder and this one cannot.
+
+        // Two descriptors share one entry, which is the ordinary v1 shape.
+        write(concat!(
+            "# THIS IS AN AUTOGENERATED FILE\n",
+            "# yarn lockfile v1\n",
+            "\n",
+            "\"@scope/pkg@^1.0.0\", \"@scope/pkg@~1.0.0\":\n",
+            "  version \"1.0.0\"\n",
+            "  resolved \"https://registry.yarnpkg.com/@scope/pkg/-/pkg-1.0.0.tgz#abc\"\n",
+            "  integrity sha512-e8jH4SHIsKZrfxbOqcFlhtmvZTmN8kDtn5STzePihkjB9e2JGwBet9s14tcPSCl4hucoKEPpRI/PshjSzpvDvA==\n",
+            "  dependencies:\n",
+            "    version \"^9.9.9\"\n",
+        ));
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            Some("sha512-e8jH4SHIsKZrfxbOqcFlhtmvZTmN8kDtn5STzePihkjB9e2JGwBet9s14tcPSCl4hucoKEPpRI/PshjSzpvDvA==".to_owned()),
+            "a dependency literally named `version` sits at four spaces and is not a field"
+        );
+
+        // Two entries reaching the same installed copy must agree.
+        write(concat!(
+            "# yarn lockfile v1\n",
+            "\n",
+            "\"@scope/pkg@^1.0.0\":\n",
+            "  version \"1.0.0\"\n",
+            "  integrity sha512-e8jH4SHIsKZrfxbOqcFlhtmvZTmN8kDtn5STzePihkjB9e2JGwBet9s14tcPSCl4hucoKEPpRI/PshjSzpvDvA==\n",
+            "\n",
+            "\"@scope/pkg@~1.0.0\":\n",
+            "  version \"1.0.0\"\n",
+            "  integrity sha512-SDYM9+5CDQbpn73xotxh2JVn3K9xKVAhCBZxyB+Oqa+wQfndYGUs86G3v6Ln0Dn6QB32gt3ReqcmaG1HVZuskA==\n",
+        ));
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            None
+        );
+
+        // A git dependency has no registry tarball and so no integrity.
+        write(concat!(
+            "# yarn lockfile v1\n",
+            "\n",
+            "\"@scope/pkg@git+ssh://git@github.com/scope/pkg.git#abc\":\n",
+            "  version \"1.0.0\"\n",
+            "  resolved \"git+ssh://git@github.com/scope/pkg.git#abc\"\n",
+        ));
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            None,
+            "the `@` inside the URL is not the descriptor separator either"
+        );
+
+        // Berry. Refused as a format, not read as an empty classic file.
+        write(concat!(
+            "__metadata:\n",
+            "  version: 8\n",
+            "  cacheKey: 10c0\n",
+            "\n",
+            "\"@scope/pkg@npm:1.0.0\":\n",
+            "  version: 1.0.0\n",
+            "  resolution: \"@scope/pkg@npm:1.0.0\"\n",
+            "  checksum: 10c0/not-a-registry-integrity\n",
+        ));
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            None
+        );
+
+        // An npm lockfile beside it still wins: an established answer must not
+        // move because a second reader was added.
+        write(concat!(
+            "# yarn lockfile v1\n",
+            "\n",
+            "\"@scope/pkg@^1.0.0\":\n",
+            "  version \"1.0.0\"\n",
+            "  integrity sha512-e8jH4SHIsKZrfxbOqcFlhtmvZTmN8kDtn5STzePihkjB9e2JGwBet9s14tcPSCl4hucoKEPpRI/PshjSzpvDvA==\n",
+        ));
+        std::fs::write(
+            project.join("package-lock.json"),
+            lockfile(3, "node_modules/@scope/pkg", Some("sha512-npm")),
+        )
+        .unwrap();
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            Some("sha512-npm".to_owned())
+        );
+    }
+
     /// The lockfile read is the whole basis of integrity enforcement, and every
     /// way it can fail to produce a fact must produce *no* fact — never a
     /// verdict. `None` here means the contract keeps applying on version
@@ -1532,7 +1656,8 @@ mod tests {
         let package = project.join("node_modules/pkg");
         std::fs::create_dir_all(&package).unwrap();
 
-        // No lockfile at all: pnpm, Yarn, or a fresh checkout.
+        // No lockfile at all: a fresh checkout, or a manager none of these
+        // readers covers.
         assert_eq!(
             installed_package_integrity(&project, &package).unwrap(),
             None

@@ -508,6 +508,66 @@ impl PublishedGraphLockSelection {
         )
     }
 
+    /// Replays an exact Yarn **classic** (v1) lock selection.
+    ///
+    /// Keyed by `name@version` rather than by an install path, like the pnpm
+    /// reader and unlike the npm and Bun ones. A v1 lockfile is keyed by
+    /// *descriptor* (`name@range`), several descriptors share one entry, and no
+    /// entry names where the package was installed -- so the installed
+    /// manifest's own name and version are the only usable key, and two entries
+    /// reaching that same name and version must agree or nothing is stated.
+    ///
+    /// **Yarn Berry (v2+) is refused, and widening this reader cannot support
+    /// it.** Berry's `checksum:` is a Yarn-internal hash over the package's zip
+    /// in Yarn's own cache, not the registry tarball's subresource integrity,
+    /// so a Berry lockfile does not carry the fact this reader exists to
+    /// recover. A Berry project states no integrity, which is the fail-closed
+    /// answer and not a gap a parser can close.
+    ///
+    /// Not named by [`Self::from_lockfile`]: that table is the *certification*
+    /// dispatch, and its readers are paired with a subset the acquisition side
+    /// (`published-contract-graph.mjs`) implements too. This reader has no such
+    /// counterpart yet, and a lockfile format certification can half-read is
+    /// worse than one it refuses. Consumer-side artifact admission uses it
+    /// directly.
+    pub fn from_yarn_lock(
+        lockfile: &[u8],
+        locator: impl Into<String>,
+        package_name: impl Into<String>,
+        package_version: impl Into<String>,
+    ) -> Result<Self, super::ArtifactSnapshotError> {
+        if lockfile.len() > 8 * 1024 * 1024 {
+            return Err(super::ArtifactSnapshotError::ResourceLimit(
+                "lockfile bytes exceed graph policy limit".into(),
+            ));
+        }
+        let locator = locator.into();
+        let package_name = package_name.into();
+        let package_version = package_version.into();
+        let source = std::str::from_utf8(lockfile).map_err(|_| {
+            super::ArtifactSnapshotError::InvalidProvenance(
+                "Yarn lockfile is not valid UTF-8".into(),
+            )
+        })?;
+        let text = source.replace("\r\n", "\n");
+        let exact = format!("{package_name}@{package_version}");
+        if locator != exact {
+            return Err(super::ArtifactSnapshotError::InvalidProvenance(format!(
+                "Yarn lock locator {locator:?} is not the exact key {exact:?}"
+            )));
+        }
+        require_yarn_classic(&text)?;
+        let integrity = yarn_classic_integrity(&text, &package_name, &package_version)?;
+        Self::new(
+            "yarn",
+            format!("sha256:{:x}", Sha256::digest(lockfile)),
+            locator,
+            package_name,
+            package_version,
+            integrity,
+        )
+    }
+
     /// Dispatches to the reader for the package manager that wrote this
     /// lockfile, named by the file's own name.
     ///
@@ -563,6 +623,173 @@ impl PublishedGraphLockSelection {
         super::validate_integrity_shape(&value.integrity)?;
         Ok(value)
     }
+}
+
+/// Refuses anything that is not a Yarn classic lockfile.
+///
+/// Both directions matter. A Berry lockfile parsed as classic would find no
+/// `integrity` field and could only ever say "no entry", which reads as a
+/// missing package rather than an unsupported format. A file with no header at
+/// all is not a Yarn lockfile and must not be guessed at.
+fn require_yarn_classic(text: &str) -> Result<(), super::ArtifactSnapshotError> {
+    if text.lines().any(|line| {
+        line.trim_end() == "__metadata:" || line.trim_start().starts_with("resolution:")
+    }) {
+        return Err(super::ArtifactSnapshotError::InvalidProvenance(
+            "Yarn Berry lockfiles record a cache checksum rather than the registry integrity"
+                .into(),
+        ));
+    }
+    if !text
+        .lines()
+        .take(8)
+        .any(|line| line.trim() == "# yarn lockfile v1")
+    {
+        return Err(super::ArtifactSnapshotError::InvalidProvenance(
+            "yarn.lock does not declare the classic v1 format".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// The integrity every classic entry reaching `name@version` agrees on.
+fn yarn_classic_integrity(
+    text: &str,
+    name: &str,
+    version: &str,
+) -> Result<String, super::ArtifactSnapshotError> {
+    let refuse = |message: String| super::ArtifactSnapshotError::InvalidProvenance(message);
+    let mut entries: Vec<YarnEntry> = Vec::new();
+    for raw in text.lines() {
+        let line = raw.trim_end();
+        if line.is_empty() || line.trim_start().starts_with('#') {
+            continue;
+        }
+        if !line.starts_with(' ') && !line.starts_with('\t') {
+            let header = line.strip_suffix(':').ok_or_else(|| {
+                refuse(format!(
+                    "yarn.lock has a top-level line that is not an entry header: {line:?}"
+                ))
+            })?;
+            entries.push(YarnEntry {
+                names: yarn_descriptor_names(header)?,
+                version: None,
+                integrity: None,
+            });
+            continue;
+        }
+        // Exactly two spaces is an entry field. Four or more is inside a nested
+        // block -- `dependencies:` lists, whose keys are package names, and one
+        // of those may legitimately be called `version`.
+        if line.len() - line.trim_start().len() != 2 {
+            continue;
+        }
+        let Some(entry) = entries.last_mut() else {
+            return Err(refuse(
+                "yarn.lock states a field before any entry header".into(),
+            ));
+        };
+        let field = line.trim_start();
+        if let Some(rest) = field.strip_prefix("version ") {
+            entry.version = Some(yarn_scalar(rest));
+        } else if let Some(rest) = field.strip_prefix("integrity ") {
+            entry.integrity = Some(yarn_scalar(rest));
+        }
+    }
+    let mut selected: Option<&str> = None;
+    for entry in &entries {
+        if entry.version.as_deref() != Some(version) || !entry.names.iter().any(|it| it == name) {
+            continue;
+        }
+        let integrity = entry.integrity.as_deref().ok_or_else(|| {
+            refuse(format!(
+                "yarn.lock states no integrity for {name}@{version}; a git, file or link \
+                 dependency has no registry tarball"
+            ))
+        })?;
+        match selected {
+            None => selected = Some(integrity),
+            Some(existing) if existing != integrity => {
+                return Err(refuse(format!(
+                    "yarn.lock states two integrities for {name}@{version}"
+                )));
+            }
+            Some(_) => {}
+        }
+    }
+    selected
+        .map(str::to_owned)
+        .ok_or_else(|| refuse(format!("yarn.lock has no entry selecting {name}@{version}")))
+}
+
+struct YarnEntry {
+    names: Vec<String>,
+    version: Option<String>,
+    integrity: Option<String>,
+}
+
+/// The package names an entry header selects, one per descriptor.
+fn yarn_descriptor_names(header: &str) -> Result<Vec<String>, super::ArtifactSnapshotError> {
+    let mut names = Vec::new();
+    for descriptor in yarn_header_descriptors(header) {
+        let descriptor = yarn_scalar(&descriptor);
+        let name = yarn_descriptor_name(&descriptor).ok_or_else(|| {
+            super::ArtifactSnapshotError::InvalidProvenance(format!(
+                "yarn.lock entry key {descriptor:?} is not a name@range descriptor"
+            ))
+        })?;
+        names.push(name);
+    }
+    Ok(names)
+}
+
+/// Splits `"a@^1", "b@^2"` on the commas between descriptors, not on commas
+/// inside a quoted range.
+fn yarn_header_descriptors(header: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut quoted = false;
+    for character in header.chars() {
+        match character {
+            '"' => {
+                quoted = !quoted;
+                current.push(character);
+            }
+            ',' if !quoted => {
+                parts.push(std::mem::take(&mut current));
+            }
+            _ => current.push(character),
+        }
+    }
+    parts.push(current);
+    parts
+        .into_iter()
+        .map(|part| part.trim().to_owned())
+        .filter(|part| !part.is_empty())
+        .collect()
+}
+
+/// The name half of a `name@range` descriptor, exactly.
+///
+/// Not the last `@`: a v1 range can be a URL that contains one
+/// (`foo@git+ssh://git@host/x.git#ref`). A scoped name's leading `@` is not a
+/// separator, so the separator is the first `@` after it.
+fn yarn_descriptor_name(descriptor: &str) -> Option<String> {
+    let (offset, rest) = descriptor
+        .strip_prefix('@')
+        .map_or((0, descriptor), |rest| (1, rest));
+    let at = rest.find('@')?;
+    let name = &descriptor[..offset + at];
+    (!name.is_empty()).then(|| name.to_owned())
+}
+
+fn yarn_scalar(value: &str) -> String {
+    let value = value.trim();
+    value
+        .strip_prefix('"')
+        .and_then(|rest| rest.strip_suffix('"'))
+        .unwrap_or(value)
+        .to_owned()
 }
 
 fn normalize_json_trailing_commas(source: &str) -> String {
