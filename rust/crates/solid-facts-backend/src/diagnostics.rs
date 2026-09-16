@@ -380,16 +380,34 @@ fn snapshot_with_package_summaries(
 }
 
 fn accepted_package_summaries(contracts: &AcceptedContractIndex) -> Vec<PackageSummary> {
+    let summary = |package: &solid_reactive_ir::contract_semantics::PackageIdentity,
+                   digest: &str| PackageSummary {
+        name: package.name.clone(),
+        version: package.version.clone(),
+        contract_hash: digest.into(),
+        evidence: "accepted".into(),
+        exports_analyzed: 0,
+    };
     let mut summaries = contracts
         .semantic_identity()
         .iter()
-        .map(|binding| PackageSummary {
-            name: binding.semantics.package.name.clone(),
-            version: binding.semantics.package.version.clone(),
-            contract_hash: binding.semantics.semantic_digest.as_str().into(),
-            evidence: "accepted".into(),
-            exports_analyzed: 0,
+        .map(|binding| {
+            summary(
+                &binding.semantics.package,
+                binding.semantics.semantic_digest.as_str(),
+            )
         })
+        // An acceptance admitted by artifact identity -- a project catalog
+        // certified from another file, or a contract compiled into this
+        // checker -- is one the analysis reads from. Reporting only the
+        // importer-keyed ones said a project that analysed against a bundled
+        // contract had accepted nothing.
+        .chain(contracts.admitted_contracts().map(|(_, contract)| {
+            summary(
+                contract.package(),
+                contract.semantic_identity().semantic_digest.as_str(),
+            )
+        }))
         .collect::<Vec<_>>();
     summaries.sort_by(|left, right| {
         (&left.name, &left.version, &left.contract_hash).cmp(&(
@@ -884,48 +902,9 @@ pub fn admitted_project_artifacts(
     conditions: &std::collections::BTreeSet<String>,
     facts: &solid_facts::ProjectFacts,
 ) -> Result<Vec<(String, String)>, BackendError> {
-    let installed = |specifier: &str| -> Option<(String, String, String)> {
-        let module = package_name_of_specifier(specifier)?;
-        let (directory, manifest) =
-            installed_package_manifest(project_directory, &module).ok()??;
-        let integrity = installed_package_integrity(project_directory, &directory).ok()??;
-        Some((module, manifest.version, integrity))
-    };
-    // What this project resolved the specifier to, relative to the installed
-    // package root -- the fact that lets an acceptance be bound to this project
-    // without the host having to declare export conditions it usually does not
-    // know. `None` whenever the project cannot state one exactly: an unresolved
-    // import, a specifier no importer reached, or two importers that disagree
-    // (a nested install), each of which admits nothing rather than picking.
-    let resolved_target = |specifier: &str| -> Option<String> {
-        let module = package_name_of_specifier(specifier)?;
-        let (directory, _) = installed_package_manifest(project_directory, &module).ok()??;
-        let root = fs::canonicalize(&directory).ok()?;
-        let attested = facts.resolved_imports.as_ref()?;
-        let mut selected: Option<String> = None;
-        for (_, import) in attested.iter() {
-            if import.text.as_str() != specifier
-                || import.resolution == solid_facts::ImportResolution::Unresolved
-            {
-                continue;
-            }
-            let resolved = fs::canonicalize(Path::new(import.resolved_path.as_ref())).ok()?;
-            let relative = resolved
-                .strip_prefix(&root)
-                .ok()?
-                .to_string_lossy()
-                .replace('\\', "/");
-            if relative.is_empty() {
-                return None;
-            }
-            match &selected {
-                Some(existing) if existing != &relative => return None,
-                Some(_) => {}
-                None => selected = Some(relative),
-            }
-        }
-        selected
-    };
+    let installed = |specifier: &str| installed_artifact_identity(project_directory, specifier);
+    let resolved_target =
+        |specifier: &str| resolved_target_identity(project_directory, facts, specifier);
     crate::contract_interface::admitted_project_artifacts(
         catalogs,
         trust,
@@ -935,6 +914,74 @@ pub fn admitted_project_artifacts(
         &resolved_target,
     )
     .map_err(|error| BackendError::Contract(error.to_string()))
+}
+
+/// The specifiers this project may import under a contract compiled into the
+/// checker.
+///
+/// The same two installed-tree facts answer both tiers, because the question is
+/// the same one: did *this* project resolve the artifact that acceptance was
+/// proven about. Only the source of the acceptances differs.
+pub fn admitted_bundled_artifacts(
+    project_directory: &Path,
+    conditions: &std::collections::BTreeSet<String>,
+    facts: &solid_facts::ProjectFacts,
+) -> Result<Vec<(String, String)>, BackendError> {
+    let installed = |specifier: &str| installed_artifact_identity(project_directory, specifier);
+    let resolved_target =
+        |specifier: &str| resolved_target_identity(project_directory, facts, specifier);
+    crate::accepted_bundles::admitted_bundle_artifacts(conditions, &installed, &resolved_target)
+        .map_err(|error| BackendError::Contract(error.to_string()))
+}
+
+fn installed_artifact_identity(
+    project_directory: &Path,
+    specifier: &str,
+) -> Option<(String, String, String)> {
+    let module = package_name_of_specifier(specifier)?;
+    let (directory, manifest) = installed_package_manifest(project_directory, &module).ok()??;
+    let integrity = installed_package_integrity(project_directory, &directory).ok()??;
+    Some((module, manifest.version, integrity))
+}
+
+/// What this project resolved the specifier to, relative to the installed
+/// package root -- the fact that lets an acceptance be bound to this project
+/// without the host having to declare export conditions it usually does not
+/// know. `None` whenever the project cannot state one exactly: an unresolved
+/// import, a specifier no importer reached, or two importers that disagree
+/// (a nested install), each of which admits nothing rather than picking.
+fn resolved_target_identity(
+    project_directory: &Path,
+    facts: &solid_facts::ProjectFacts,
+    specifier: &str,
+) -> Option<String> {
+    let module = package_name_of_specifier(specifier)?;
+    let (directory, _) = installed_package_manifest(project_directory, &module).ok()??;
+    let root = fs::canonicalize(&directory).ok()?;
+    let attested = facts.resolved_imports.as_ref()?;
+    let mut selected: Option<String> = None;
+    for (_, import) in attested.iter() {
+        if import.text.as_str() != specifier
+            || import.resolution == solid_facts::ImportResolution::Unresolved
+        {
+            continue;
+        }
+        let resolved = fs::canonicalize(Path::new(import.resolved_path.as_ref())).ok()?;
+        let relative = resolved
+            .strip_prefix(&root)
+            .ok()?
+            .to_string_lossy()
+            .replace('\\', "/");
+        if relative.is_empty() {
+            return None;
+        }
+        match &selected {
+            Some(existing) if existing != &relative => return None,
+            Some(_) => {}
+            None => selected = Some(relative),
+        }
+    }
+    selected
 }
 
 fn package_name_of_specifier(specifier: &str) -> Option<String> {

@@ -72,7 +72,7 @@ RC3_ARCHIVE_ENV = SOLID_CHECKER_RC3_ARCHIVE_ROOT="$(CURDIR)/rust/target/tsc-orac
 # `solid-js@1.9.14` bundles from the `v1` oracle install the same way.
 RC3_ARCHIVE_ENV += SOLID_CHECKER_SOLID1_ARCHIVE_ROOT="$(CURDIR)/rust/target/tsc-oracle/v1/node_modules"
 
-.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-probe-harness test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit phase19-audit phase20-ledger phase21-ledger compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
+.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-probe-harness test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit phase19-audit phase20-ledger phase21-ledger compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update accepted-bundles tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
 
 build: build-rust
 
@@ -90,7 +90,8 @@ build-rust: build-typefacts
 # the packaged checker under bin/ untouched.
 build-checker-debug: build-typefacts
 	$(CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) \
-	  -p solid-facts-backend --bin solid-checker-rust --bin solid-contract-authorize
+	  -p solid-facts-backend --bin solid-checker-rust --bin solid-contract-authorize \
+	  --bin solid-contract-bundle
 
 # A fresh optimized checker for performance measurements. Like the debug gate
 # build, this leaves the checked-in packaged binary under bin/ untouched.
@@ -372,6 +373,20 @@ contract-coverage-census: build-checker-release
 	$(BUN) scripts/contract-coverage-census.mjs \
 	  --run "$(CURDIR)/rust/target/coverage-census/run.json"
 
-.PHONY: contract-coverage-census
+# Regenerates the compiled-in accepted-contract tier from the same run the
+# census measured. Delivery and measurement come from one certification: a
+# bundle set built from a different run than the pinned numbers would ship
+# contracts nobody counted.
+#
+# Deliberately a separate target. The census is a measurement and is safe to
+# re-run; this writes `pkg/contracts/accepted/**` and the generated
+# `include_bytes!` list, which are reviewed artifacts. Run it, read the diff,
+# rebuild, and check the Rust tier's own pin
+# (`every_bundle_this_build_carries_authenticates`) still passes.
+accepted-bundles: build-checker-debug
+	$(BUN) scripts/bundle-accepted-contracts.mjs \
+	  --run "$(CURDIR)/rust/target/coverage-census/run.json"
+
+.PHONY: contract-coverage-census accepted-bundles
 
 .PHONY: ecosystem-discover ecosystem-benchmark-test ecosystem-sentinel ecosystem-benchmark ecosystem-regression

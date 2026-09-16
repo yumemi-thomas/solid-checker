@@ -136,6 +136,15 @@ impl AcceptedContractIndex {
         }
         let mut external = self.clone();
         external.imports.retain(|key, values| retain(key, values));
+        let external_package = |contract: &AcceptedContract| {
+            !solid_dialect::primitive_defining_package(&contract.package().name)
+        };
+        external
+            .by_artifact
+            .retain(|_, values| values.iter().all(external_package));
+        external
+            .admitted
+            .retain(|specifier, contract| !core_specifier(specifier) && external_package(contract));
         external.identity.retain(|identity| {
             external
                 .imports
@@ -145,6 +154,39 @@ impl AcceptedContractIndex {
             .uncertifiable_imports
             .retain(|(_, specifier), _| !core_specifier(specifier));
         std::borrow::Cow::Owned(external)
+    }
+
+    /// Acceptances a project never imported by name: each one is reachable
+    /// only through the artifact it was proven about.
+    ///
+    /// This is the compiled-in tier's shape. A bundle has no importer in this
+    /// project — the file that imported it during certification is on another
+    /// machine — so putting it in `imports` would key it on a path that cannot
+    /// occur here, and would make every report that enumerates
+    /// `semantic_identity` claim the project accepted a contract it never
+    /// reached. Artifact admission is the whole match, exactly as it is for a
+    /// catalog entry whose importer does not match either.
+    #[must_use]
+    pub fn from_artifact_acceptances(
+        inputs: impl IntoIterator<Item = (String, AcceptedContract)>,
+    ) -> Self {
+        let mut by_artifact = BTreeMap::<String, Vec<AcceptedContract>>::new();
+        for (identity, contract) in inputs {
+            by_artifact.entry(identity).or_default().push(contract);
+        }
+        by_artifact.retain(|_, contracts| {
+            contracts.len() == 1
+                || contracts
+                    .windows(2)
+                    .all(|pair| pair[0].semantic_identity() == pair[1].semantic_identity())
+        });
+        Self {
+            imports: BTreeMap::new(),
+            by_artifact,
+            admitted: BTreeMap::new(),
+            uncertifiable_imports: BTreeMap::new(),
+            identity: Vec::new(),
+        }
     }
 
     pub fn new(
@@ -293,7 +335,7 @@ impl AcceptedContractIndex {
     #[must_use]
     pub fn cache_fingerprint(&self) -> [u8; 32] {
         let mut hash = Sha256::new();
-        hash.update(b"solid-checker-accepted-contract-index-v2");
+        hash.update(b"solid-checker-accepted-contract-index-v3");
         hash.update((self.identity.len() as u64).to_be_bytes());
         for binding in &self.identity {
             hash_text(&mut hash, &binding.importer);
@@ -321,6 +363,25 @@ impl AcceptedContractIndex {
                     hash_text(&mut hash, authentication.policy_digest.as_str());
                     hash_text(&mut hash, authentication.trust_store_digest.as_str());
                     hash.update(authentication.revocation_epoch.to_be_bytes());
+                }
+                None => hash.update([0]),
+            }
+        }
+        hash.update((self.admitted.len() as u64).to_be_bytes());
+        for (specifier, contract) in &self.admitted {
+            hash_text(&mut hash, specifier);
+            let semantic = contract.semantic_identity();
+            hash_text(&mut hash, &semantic.package.name);
+            hash_text(&mut hash, &semantic.package.version);
+            hash_text(&mut hash, &semantic.package.integrity);
+            hash_text(&mut hash, &semantic.artifact_case);
+            hash_text(&mut hash, semantic.semantic_digest.as_str());
+            hash_text(&mut hash, semantic.closed_claims_root.as_str());
+            match &semantic.authentication {
+                Some(authentication) => {
+                    hash.update([1]);
+                    hash_text(&mut hash, authentication.receipt_digest.as_str());
+                    hash_text(&mut hash, authentication.trust_store_digest.as_str());
                 }
                 None => hash.update([0]),
             }
@@ -440,6 +501,21 @@ impl AcceptedContractIndex {
                 .or_insert_with(|| contract.clone());
         }
         self
+    }
+
+    /// The acceptances this project reaches by artifact rather than by
+    /// importer.
+    ///
+    /// `semantic_identity` answers "what did this project import under a
+    /// contract certified from one of its own files", which is the wrong
+    /// question for an acceptance admitted from an installed-tree match — and
+    /// the only question that had an answer while every acceptance was also
+    /// importer-keyed. A report that enumerates what the analysis used has to
+    /// ask both.
+    pub fn admitted_contracts(&self) -> impl Iterator<Item = (&str, &AcceptedContract)> {
+        self.admitted
+            .iter()
+            .map(|(specifier, contract)| (specifier.as_str(), contract))
     }
 
     #[must_use]

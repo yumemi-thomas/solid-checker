@@ -219,11 +219,11 @@ fn verify_evidence_content(
     }
 }
 
-fn sha256_digest(bytes: &[u8]) -> String {
+pub(crate) fn sha256_digest(bytes: &[u8]) -> String {
     format!("sha256:{:x}", Sha256::digest(bytes))
 }
 
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum ContractFailure {
     #[error("contract document exceeds the {limit}-byte resource limit")]
     DocumentTooLarge { limit: usize },
@@ -596,6 +596,97 @@ fn read_catalog_with_trust(
         ))
 }
 
+/// One authenticated policy-2 catalog entry, in the shape the compiled-in
+/// accepted-contract tier needs to re-issue it as a bundle.
+///
+/// Maintainer-tool surface, not a product one: `read_catalog_with_trust` above
+/// is what ordinary analysis uses, and it deliberately hands back semantics
+/// rather than bytes. Bundling needs the bytes — it re-issues a receipt over the
+/// same canonical main — and it must not reimplement the catalog format to get
+/// them, because a second reader is a second place for the digest and binding
+/// checks to disagree.
+#[doc(hidden)]
+pub struct AuthenticatedCatalogEntry {
+    pub canonical_main: Vec<u8>,
+    pub bindings: Policy2ReceiptBindings,
+    pub import: ResolvedImport,
+    pub export_conditions: Vec<String>,
+}
+
+/// Reads a published catalog and returns every entry whose receipt
+/// authenticates against `trust`.
+///
+/// An entry that does not authenticate is an error rather than a skip: this
+/// runs on material a maintainer is about to compile into the checker, and
+/// silently dropping one is how an empty bundle set ships looking full.
+#[doc(hidden)]
+pub fn authenticated_catalog_entries(
+    path: &Path,
+    trust: &Policy2TrustConfiguration,
+) -> Result<Vec<AuthenticatedCatalogEntry>, ContractFailure> {
+    let (catalog, base) = decode_accepted_contract_catalog(path)?;
+    let mut entries = Vec::with_capacity(catalog.contracts.len());
+    for mut entry in catalog.contracts {
+        let provenance = match entry.status {
+            AcceptedCatalogStatus::ObsoletePolicy1 => {
+                return Err(ContractFailure::ReceiptAuthenticationRequired);
+            }
+            AcceptedCatalogStatus::Policy2PersistentLocal => {
+                Policy2ReceiptProvenance::PersistentLocal {
+                    trust_store: trust.trust_store(),
+                    scope: trust
+                        .persistent_local_scope()
+                        .ok_or(ContractFailure::ReceiptAuthenticationRequired)?,
+                }
+            }
+            AcceptedCatalogStatus::Policy2Portable => Policy2ReceiptProvenance::Portable {
+                trust_store: trust.trust_store(),
+            },
+        };
+        let document = read_boundary_file(
+            &catalog_member_path(&base, &entry.document)?,
+            MAX_CONTRACT_DOCUMENT_BYTES,
+            "contract",
+            false,
+        )?;
+        let receipt_path = entry
+            .receipt
+            .as_deref()
+            .ok_or_else(|| catalog_field("policy-2 entry has no receipt path"))
+            .and_then(|path| catalog_member_path(&base, path))?;
+        let receipt = read_boundary_file(&receipt_path, MAX_RECEIPT_BYTES, "receipt", true)?;
+        let bindings = entry
+            .bindings
+            .clone()
+            .ok_or_else(|| catalog_field("policy-2 entry has no receipt bindings"))?;
+        verify_catalog_digest(
+            &document,
+            entry.document_digest.as_deref(),
+            "documentDigest",
+        )?;
+        verify_catalog_digest(&receipt, entry.receipt_digest.as_deref(), "receiptDigest")?;
+        rebase_catalog_import(&base, &mut entry.import)?;
+        // The ordinary loader, so a bundle candidate is exactly what this
+        // project would have accepted from the catalog on disk.
+        load_authenticated_policy2_contract(
+            &document,
+            &receipt,
+            &entry.import,
+            &bindings,
+            provenance,
+        )?;
+        entries.push(AuthenticatedCatalogEntry {
+            canonical_main: canonicalize_policy2_main(&document).map_err(authentication_error)?,
+            bindings,
+            import: entry.import,
+            export_conditions: entry
+                .export_conditions
+                .unwrap_or_else(|| vec!["import".to_owned()]),
+        });
+    }
+    Ok(entries)
+}
+
 /// The receipt's importer-free artifact identity, but only when this
 /// acceptance was issued under the default single `import` condition.
 ///
@@ -650,6 +741,29 @@ pub type InstalledArtifactIdentity<'a> = dyn Fn(&str) -> Option<(String, String,
 /// `conditions` is the host's declaration, not a guess: the analyzer has no
 /// condition facts of its own, and conditions select the artifact, so an empty
 /// set admits nothing rather than assuming `import`.
+/// The host's declared export conditions, plus the module format the analyzer
+/// actually resolved with.
+///
+/// `--runtime-target browser` describes an *environment*; it says nothing about
+/// `import` versus `require`, and every export map splits on that first.
+/// Without this an SSR app declaring its target derived `{browser}`, no case's
+/// `["import"]` was a subset of it, and declaring the environment made things
+/// *worse* than declaring nothing — measured.
+///
+/// `import` is added only when the host named neither format itself: a project
+/// that explicitly declares `require` is describing a build whose resolution
+/// this analyzer did not perform, and overriding that would be inventing a
+/// fact. An empty declaration stays empty, because an empty set admits nothing
+/// rather than assuming a condition.
+pub(crate) fn declared_conditions(conditions: &std::collections::BTreeSet<String>) -> Vec<String> {
+    let mut declared = conditions.iter().cloned().collect::<Vec<_>>();
+    if !declared.is_empty() && !declared.iter().any(|it| it == "import" || it == "require") {
+        declared.push("import".to_owned());
+    }
+    declared.sort();
+    declared
+}
+
 pub fn admitted_project_artifacts(
     catalogs: &[PathBuf],
     trust: Option<&Policy2TrustConfiguration>,
@@ -659,21 +773,7 @@ pub fn admitted_project_artifacts(
     resolved_target: &ResolvedTargetIdentity,
 ) -> Result<Vec<(String, String)>, ContractFailure> {
     let _ = (project_directory, trust);
-    // The host's set, plus the module format the analyzer actually resolved
-    // with. `--runtime-target browser` describes an *environment*; it says
-    // nothing about `import` versus `require`, and every export map splits on
-    // that first. Without this an SSR app declaring its target derived
-    // `{browser}`, no case's `["import"]` was a subset of it, and declaring the
-    // environment made things *worse* than declaring nothing — measured.
-    //
-    // Added only when the host named neither format itself: a project that
-    // explicitly declares `require` is describing a build whose resolution this
-    // analyzer did not perform, and overriding that would be inventing a fact.
-    let mut declared = conditions.iter().cloned().collect::<Vec<_>>();
-    if !declared.is_empty() && !declared.iter().any(|it| it == "import" || it == "require") {
-        declared.push("import".to_owned());
-    }
-    declared.sort();
+    let declared = declared_conditions(conditions);
     // Every authentic case, across every catalog. A case set publishes one
     // catalog *per case*, so a per-catalog decision would never see two cases
     // of the same package together and could not tell an unambiguous artifact
@@ -779,7 +879,7 @@ pub fn admitted_project_artifacts(
 ///   must still match a case certified under `node, import`, and a host
 ///   declaring `require` must not match one certified under `import` however
 ///   many declaration files the two branches share.
-fn select_case<'a>(
+pub(crate) fn select_case<'a>(
     reaching: &[&'a AuthenticCase],
     declared: &[String],
 ) -> Option<&'a AuthenticCase> {
@@ -808,8 +908,8 @@ fn select_case<'a>(
 
 /// One acceptance that reproduced its signed artifact root against this
 /// project's installed bytes.
-struct AuthenticCase {
-    identity: String,
+pub(crate) struct AuthenticCase {
+    pub(crate) identity: String,
     /// The runtime file the contract was proven about, package-relative.
     runtime_target: String,
     /// The declaration file paired with it, package-relative. Empty when the
@@ -819,6 +919,23 @@ struct AuthenticCase {
 }
 
 impl AuthenticCase {
+    /// A case whose package-relative targets the caller already holds — the
+    /// compiled-in tier's shape, where there is no local package root to strip
+    /// and the generator recorded the relative spelling instead.
+    pub(crate) fn from_relative(
+        identity: String,
+        runtime_target: String,
+        declaration_target: String,
+        conditions: Vec<String>,
+    ) -> Self {
+        Self {
+            identity,
+            runtime_target,
+            declaration_target,
+            conditions,
+        }
+    }
+
     /// Both sides of the comparison are absolute paths on different machines,
     /// so the package-relative spelling is the only comparable part.
     fn new(
@@ -845,7 +962,7 @@ impl AuthenticCase {
     /// about. The analyzer resolves TypeScript's answer, which is the
     /// declaration file; the runtime spelling is accepted too, so a host that
     /// resolves the runtime target directly is not excluded.
-    fn reaches(&self, target: &str) -> bool {
+    pub(crate) fn reaches(&self, target: &str) -> bool {
         self.runtime_target == target || self.declaration_target == target
     }
 }

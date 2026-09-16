@@ -4,9 +4,15 @@
 #[cfg(not(any(feature = "dialect-v1", feature = "dialect-v2")))]
 compile_error!("solid-facts-backend requires at least one dialect feature");
 
+mod accepted_bundles;
+pub use accepted_bundles::{admitted_bundle_artifacts, compiled_in_accepted_contracts};
+
 mod artifact_resolution;
 mod bounded_json;
 mod cache;
+mod contract_bundling;
+pub use contract_bundling::{BUILT_IN_SCOPE, BundledAcceptance, bundle_published_catalog};
+
 mod contract_certification;
 pub use contract_certification::report_certification_timing;
 
@@ -129,8 +135,9 @@ pub use contract_certification::{
     decode_policy2_trust_configuration, encode_policy2_trust_configuration,
     issue_builtin_policy2_receipt, issue_policy2_receipt, plan_certification,
     plan_published_contract_graph, policy2_artifact_acceptance_root,
-    policy2_main_closed_claims_root, policy2_main_semantic_digest, policy2_policy_digest,
-    policy2_resolved_import_root, policy2_trust_configuration_for_issuer, publish_policy2_catalog,
+    policy2_artifact_acceptance_root_for_identity, policy2_main_closed_claims_root,
+    policy2_main_semantic_digest, policy2_policy_digest, policy2_resolved_import_root,
+    policy2_trust_configuration_for_issuer, publish_policy2_catalog,
 };
 #[cfg(feature = "dialect-v2")]
 pub use contract_certification::{
@@ -160,7 +167,7 @@ pub use diagnostics::{
     DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, PackageContractStatus,
     PackageSummary, RequestedRuleEnablement, Snapshot, SnapshotEvidence, SnapshotFinding,
     SnapshotFix, SnapshotTextEdit, SourceLocation, accepted_package_contract_statuses,
-    admitted_project_artifacts, analysis_metrics,
+    admitted_bundled_artifacts, admitted_project_artifacts, analysis_metrics,
     analyze_project_accepted_measured_with_enablement, discovered_contract_paths,
     discovered_rule_options_path, imported_package_roots, semantic_demand_options_for_enablement,
     source_location,

@@ -62,6 +62,10 @@ name = "solid-contract-authorize"
 path = "src/bin/solid-contract-authorize.rs"
 
 [[bin]]
+name = "solid-contract-bundle"
+path = "src/bin/solid-contract-bundle.rs"
+
+[[bin]]
 name = "solid-contract-phase16-bench"
 path = "src/bin/solid-contract-phase16-bench.rs"
 

@@ -81,9 +81,9 @@ pub use policy2_receipt::{
     RECEIPT_WITNESS_FAMILIES, ReceiptIssuerKind, ReceiptPublicationError,
     authenticate_policy2_receipt, canonicalize_policy2_main, decode_policy2_trust_configuration,
     encode_policy2_trust_configuration, issue_builtin_policy2_receipt, issue_policy2_receipt,
-    policy2_artifact_acceptance_root, policy2_main_closed_claims_root,
-    policy2_main_semantic_digest, policy2_policy_digest, policy2_resolved_import_root,
-    policy2_trust_configuration_for_issuer, publish_policy2_catalog,
+    policy2_artifact_acceptance_root, policy2_artifact_acceptance_root_for_identity,
+    policy2_main_closed_claims_root, policy2_main_semantic_digest, policy2_policy_digest,
+    policy2_resolved_import_root, policy2_trust_configuration_for_issuer, publish_policy2_catalog,
 };
 pub use probe_gates::{ProbeGate, ProbeGateError, ProbeGateSchedule, VerifiedProbeGateBatch};
 pub use probe_harness::{ProbeHarnessConfiguration, ProbeHarnessError};

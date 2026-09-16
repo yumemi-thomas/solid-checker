@@ -65,6 +65,13 @@ struct Request {
     certify: bool,
     #[serde(default)]
     check_contracts: bool,
+    /// Whether the contracts compiled into this checker may be applied to this
+    /// project. On by default: a project that installed the exact artifact one
+    /// of them was proven about gets its claims without certifying anything
+    /// itself. `--no-bundled-contracts` turns the tier off for a run that must
+    /// depend on nothing but its own catalogs.
+    #[serde(default = "enabled")]
+    bundled_contracts: bool,
     #[serde(default)]
     validate_contract_paths: Vec<String>,
     #[serde(default)]
@@ -175,6 +182,11 @@ fn producer_arguments(arguments: &[String]) -> Vec<String> {
 
 fn json_format() -> String {
     "json".into()
+}
+
+/// Serde default for a switch whose off state has to be written down.
+const fn enabled() -> bool {
+    true
 }
 
 #[derive(Clone, Deserialize)]
@@ -3220,6 +3232,17 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             contracts = read_external_contract_catalog_with_trust(path, trust.as_ref())?
                 .with_fallback(contracts);
         }
+        // The compiled-in accepted-contract tier, folded in *below* the
+        // project's own catalogs and *above* the missing-evidence markers: a
+        // project that certified a package itself keeps its own answer, and a
+        // package this build carries a contract for stops raising an obligation
+        // the user cannot discharge. Nothing here is import-keyed — a bundle
+        // reaches this analysis only through artifact admission below.
+        let contracts = if request.bundled_contracts {
+            contracts.with_fallback(solid_facts_backend::compiled_in_accepted_contracts()?)
+        } else {
+            contracts
+        };
         let contracts = contracts.with_fallback(requirements);
         // The same artifact admission the analysis performs. Without it this
         // report answered `missing` -- "run contract generate", telling the user
@@ -3241,6 +3264,20 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             &request.runtime.selected_conditions(),
             &facts,
         )?;
+        // The project's own acceptances first: `with_admitted_artifacts` keeps
+        // the first answer for a specifier, and a contract this project
+        // certified must never be displaced by one this build happens to carry.
+        let admitted = if request.bundled_contracts {
+            let mut admitted = admitted;
+            admitted.extend(solid_facts_backend::admitted_bundled_artifacts(
+                directory,
+                &request.runtime.selected_conditions(),
+                &facts,
+            )?);
+            admitted
+        } else {
+            admitted
+        };
         let contracts = if admitted.is_empty() {
             contracts
         } else {
@@ -3343,6 +3380,17 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             contracts = read_external_contract_catalog_with_trust(path, trust.as_ref())?
                 .with_fallback(contracts);
         }
+        // The compiled-in accepted-contract tier, folded in *below* the
+        // project's own catalogs and *above* the missing-evidence markers: a
+        // project that certified a package itself keeps its own answer, and a
+        // package this build carries a contract for stops raising an obligation
+        // the user cannot discharge. Nothing here is import-keyed — a bundle
+        // reaches this analysis only through artifact admission below.
+        let contracts = if request.bundled_contracts {
+            contracts.with_fallback(solid_facts_backend::compiled_in_accepted_contracts()?)
+        } else {
+            contracts
+        };
         let contracts = contracts.with_fallback(requirements);
         // Artifact admission, the same call the contract-emission loop above
         // makes. It was wired there only, so an acceptance issued against one
@@ -3373,6 +3421,20 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             &request.runtime.selected_conditions(),
             &facts,
         )?;
+        // The project's own acceptances first: `with_admitted_artifacts` keeps
+        // the first answer for a specifier, and a contract this project
+        // certified must never be displaced by one this build happens to carry.
+        let admitted = if request.bundled_contracts {
+            let mut admitted = admitted;
+            admitted.extend(solid_facts_backend::admitted_bundled_artifacts(
+                directory,
+                &request.runtime.selected_conditions(),
+                &facts,
+            )?);
+            admitted
+        } else {
+            admitted
+        };
         let contracts = if admitted.is_empty() {
             contracts
         } else {
@@ -3502,6 +3564,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut format = "default".to_owned();
     let mut certify = false;
     let mut check_contracts = false;
+    let mut bundled_contracts = true;
     let mut validate_contract_paths = Vec::new();
     let mut emit_contract = String::new();
     let mut emit_contract_batch = String::new();
@@ -3756,6 +3819,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             "--format" => format = args.next().ok_or("--format needs a value")?,
             "--certify" => certify = true,
             "--check-contracts" => check_contracts = true,
+            "--no-bundled-contracts" => bundled_contracts = false,
             "--serve" => serve = true,
             "--help" | "-h" => help = true,
             "--validate-contract" => {
@@ -3939,6 +4003,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         format,
         certify,
         check_contracts,
+        bundled_contracts,
         validate_contract_paths,
         emit_contract,
         emit_contract_batch,

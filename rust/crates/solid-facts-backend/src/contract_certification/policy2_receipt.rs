@@ -767,6 +767,33 @@ pub fn policy2_artifact_acceptance_root(
     resolved
         .validate()
         .map_err(|error| Policy2ReceiptError::ResolvedImport(error.to_string()))?;
+    Ok(policy2_artifact_acceptance_root_for_identity(
+        &resolved.package_name,
+        &resolved.package_version,
+        &resolved.package_integrity,
+        &resolved.requested_entrypoint,
+        export_conditions,
+    ))
+}
+
+/// The same root, computed from the five identity fields alone.
+///
+/// A resolved import is how a certifier and an installed-tree consumer state
+/// this identity, and both should keep using
+/// [`policy2_artifact_acceptance_root`] so the resolution is validated. The
+/// compiled-in accepted-contract tier has no resolved import to validate: a
+/// bundle is a published artifact, described by exactly these five fields, and
+/// the absolute paths a `ResolvedImport` carries belong to the machine that
+/// certified it. Sharing the hash rather than restating it is what keeps the
+/// two tiers matchable against each other.
+#[must_use]
+pub fn policy2_artifact_acceptance_root_for_identity(
+    package_name: &str,
+    package_version: &str,
+    package_integrity: &str,
+    requested_entrypoint: &str,
+    export_conditions: &[String],
+) -> String {
     let mut conditions = export_conditions.to_vec();
     conditions.sort();
     conditions.dedup();
@@ -778,15 +805,15 @@ pub fn policy2_artifact_acceptance_root(
         hash.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_be_bytes());
         hash.update(value.as_bytes());
     };
-    field(&resolved.package_name);
-    field(&resolved.package_version);
-    field(&resolved.package_integrity);
-    field(&resolved.requested_entrypoint);
+    field(package_name);
+    field(package_version);
+    field(package_integrity);
+    field(requested_entrypoint);
     field(&conditions.len().to_string());
     for condition in &conditions {
         field(condition);
     }
-    Ok(format!("sha256:{:x}", hash.finalize()))
+    format!("sha256:{:x}", hash.finalize())
 }
 
 #[must_use]
