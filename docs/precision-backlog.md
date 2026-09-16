@@ -20411,6 +20411,38 @@ pin moved.
 - `@solid-primitives/visibility-observer@2.0.1`: recorded above (artifact-case
   declaration selection); open.
 
+### A certified contract can now be weaker by one *operation*, and says so (2026-09-16)
+
+The entry below covers a dropped *closure*. Certification can now also withdraw
+a whole **operation** — `ExportSemantics::withhold_operations`, reached when a
+positive fact the operation states cannot be verified and there is no closure
+candidate left to give up.
+
+**Direction of the error is the same: under-claiming.** The operation is removed
+and the domain that listed it is *opened*, because a shorter list still marked
+closed would assert an absence the census never established. A domain emptied by
+the withdrawal becomes `Unknown`, never an empty `Partial`, which the wire
+format refuses outright. Consumers therefore fail closed on the withdrawn claim
+exactly as they do on an open domain.
+
+**It is accounted for, which is the whole point of the entry below.**
+`solid-checker:withheld-operation=` on the native stdout, `withheldOperations`
+in the CLI audit, beside `withheldClosures`. A catalog reader can tell "the
+census refused this" from "nobody asked".
+
+**What is still lost.** The two shapes that provoked it stay unprovable:
+
+- a read rooted in a parameter the body reassigns (`@kobalte/utils`'
+  `scrollIntoViewport`), because Type Facts publishes no write/read ordering
+  that separates "written somewhere" from "written before this read";
+- a value path below a *nested* union (`opts?.containingElement?.scrollIntoView`),
+  because a `CallablePathFact` carries one alternative — the root's — so no
+  member below a second union is addressable at all.
+
+Both were previously artifact-case refusals, which cost every *other* export of
+the entrypoint as well. `@kobalte/utils`' `.` went from no contract to 59
+exports, 942 consumer call sites from 0% to 33.1% stating an operation.
+
 ### A certified contract can be weaker than the proposal it came from, silently (2026-09-10, fixed)
 
 **Was a product-visible defect; fixed the same day — see the end of this entry.** Certification can drop a proposed closure
