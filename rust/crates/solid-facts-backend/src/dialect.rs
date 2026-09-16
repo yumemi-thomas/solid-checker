@@ -601,6 +601,7 @@ mod tests {
                 module: "sample-package".into(),
                 export: "sampleExport".into(),
                 reexported: false,
+                site: solid_reactive_ir::ContractDefectSite::Import,
             },
             StaticDefectKind::MissingEffectFunction,
             StaticDefectKind::ReactiveSourceUncaptured {

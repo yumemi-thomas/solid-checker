@@ -22059,3 +22059,31 @@ acquisition path was just consolidated around.
 Not a regression: this predates the compiled-in tier and is unchanged by it.
 What changed is that the undeclared path now reaches contracts regularly, so the
 approximation is worth closing rather than noting.
+
+### Repeated import obligations collapse; per-call ones do not (2026-09-16)
+
+Delivering contracts turned one finding into many. Measured on a five-file
+project importing four `@kobalte/utils` exports under a bundled contract: with
+no accepted contract it reported **1** finding (the acceptance gate's
+per-package collapse, § 21); with one, **35**.
+
+Twenty of those 35 were one sentence per file at the import binding — the
+message names the package, the export and the open domains and nothing about
+the site. Those now collapse to one finding per `(package, export, claims)`,
+carrying every other site in `related_locations`: 35 → 19, nothing dropped.
+
+**The other 15 stay, and getting that wrong is the interesting part.** An
+obligation raised at an exact argument of an exact call is about that call.
+`analysis_context` cannot distinguish the two —
+`unknown-contract-claims:callbacks` is emitted both by
+`push_unknown_contract_claims` at a binding and by `interproc` at one argument —
+so the producer now records it (`ContractDefectSite`) and the projection reads
+it. A first version grouped by `(module, export, context)` alone and took
+`package-callback-arguments-consumer` from four findings to two, merging a
+descriptor absorbed by a rest parameter with one observed through an
+`arguments` object: exactly the distinction that fixture exists to pin. The
+policy-2 corpus pin caught it (10 SC9005 → 8) before it could ship.
+
+Pinned by `fixtures/reactive-ir/package-repeated-open-claim` (one export, two
+importers, one finding) with `package-unknown-callback-consumer` as the negative
+control (two exports, one import span, two findings).

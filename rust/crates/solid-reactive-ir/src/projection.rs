@@ -73,6 +73,7 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             module,
             export,
             reexported,
+            ..
         } => {
             if defect.analysis_context.starts_with("obsolete-policy1-receipt:") {
                 (
@@ -715,40 +716,98 @@ pub fn suppress_findings_owned_by_enabled_rules(
 /// same locations reach the same consumers, grouped by the thing that would fix
 /// them.
 ///
-/// Only the acceptance gate collapses. `unknown-contract-claims:`,
-/// `unbound-contract-claims:` and `obsolete-policy1-receipt:` each say
-/// something specific about *that* export, so they stay per site, and a package
-/// with a single unaccepted site keeps its exact original wording.
+/// The claim gates collapse too, one level finer, and for the same reason —
+/// but only where they were raised at an *import*.
+/// `unknown-contract-claims:` does say something specific about *that export* —
+/// which is why it is not folded into the package — but at an import binding it
+/// says nothing specific about the *site*: the message names the package, the
+/// export and the open domains, and nothing else. Repeating it at every import
+/// of that export is the same non-information the acceptance gate used to emit
+/// per site.
+///
+/// At an *argument* it is a different finding, and `analysis_context` cannot
+/// tell the two apart: `unknown-contract-claims:callbacks` is emitted both by
+/// `push_unknown_contract_claims` at a binding and by `interproc` at one exact
+/// call argument. So the producer records it — [`ContractDefectSite`] — and
+/// this reads it. Getting that wrong is not theoretical: grouping argument
+/// sites by export collapsed `package-callback-arguments-consumer` from four
+/// findings to two, merging a rest parameter that absorbs a descriptor with an
+/// `arguments` object that observes one, which is the distinction that fixture
+/// exists to pin.
+///
+/// Measured while bundling: a five-file project importing four `@kobalte/utils`
+/// exports produced 35 findings that were 7 distinct sentences, each repeated
+/// five times with an empty `related_locations`. The same project with no
+/// accepted contract produced 1. Delivering contracts must not cost a reader
+/// that trade.
+///
+/// So the rule is: defects whose projected finding would be identical except
+/// for its location become one finding. For the acceptance gate that is the
+/// whole package, because no export-specific claim has been read yet; for a
+/// claim gate it is the exact `(package, export, claims)`. A group of one keeps
+/// its exact original wording either way.
 fn collapse_unaccepted_contract_defects(
     defects: &[StaticDefect],
     catalog: &impl CatalogWording,
 ) -> Vec<Finding> {
-    /// The gate whose defects are interchangeable within one package: the
-    /// import matched no accepted contract at all, so no export-specific claim
-    /// has been read yet.
-    fn is_acceptance_gate(defect: &StaticDefect) -> Option<&str> {
-        let StaticDefectKind::PackageContractExportMissing { module, .. } = &defect.kind else {
+    /// What makes two of these defects interchangeable.
+    #[derive(Clone, Copy, Eq, Hash, PartialEq)]
+    enum Interchangeable<'a> {
+        /// The acceptance gate: the import matched no accepted contract at all,
+        /// so no export-specific claim has been read yet and every site in the
+        /// package has the same answer.
+        Package(&'a str),
+        /// A claim gate: an accepted contract leaves these exact domains open
+        /// for this exact export. Different exports, and different open
+        /// domains, are different findings.
+        Claim(&'a str, &'a str, &'a str),
+    }
+
+    fn interchangeable(defect: &StaticDefect) -> Option<Interchangeable<'_>> {
+        let StaticDefectKind::PackageContractExportMissing {
+            module,
+            export,
+            site,
+            ..
+        } = &defect.kind
+        else {
             return None;
         };
+        // An obligation raised at an exact argument of an exact call keeps its
+        // own finding: the site *is* the content there. Only a name entering a
+        // file -- a binding, a namespace member, a re-export specifier --
+        // produces the identical sentence twice.
+        if *site == crate::ContractDefectSite::Argument {
+            return None;
+        }
         // The exact context, not "not one of the specific prefixes": a defect
         // raised because an *accepted* contract has no summary for this export
         // is about that export, and collapsing it under the package would say
         // the package has no contract when it does.
-        (defect.analysis_context == crate::contracts::UNACCEPTED_IMPORT_CONTEXT)
-            .then_some(module.as_str())
+        Some(
+            if defect.analysis_context == crate::contracts::UNACCEPTED_IMPORT_CONTEXT {
+                Interchangeable::Package(module.as_str())
+            } else {
+                Interchangeable::Claim(
+                    module.as_str(),
+                    export.as_str(),
+                    defect.analysis_context.as_str(),
+                )
+            },
+        )
     }
 
     // First-seen order, so the anchor of each group is the first site the
     // analysis reached and the output order does not depend on a hash.
-    let mut order: Vec<&str> = Vec::new();
-    let mut grouped: std::collections::HashMap<&str, Vec<&StaticDefect>> =
+    let mut order: Vec<Interchangeable<'_>> = Vec::new();
+    let mut grouped: std::collections::HashMap<Interchangeable<'_>, Vec<&StaticDefect>> =
         std::collections::HashMap::new();
     let mut findings = Vec::new();
     for defect in defects {
-        match is_acceptance_gate(defect) {
-            Some(module) => {
-                let group = grouped.entry(module).or_insert_with(|| {
-                    order.push(module);
+        match interchangeable(defect) {
+            Some(key) => {
+                let group = grouped.entry(key).or_insert_with(|| {
+                    order.push(key);
                     Vec::new()
                 });
                 group.push(defect);
@@ -757,9 +816,21 @@ fn collapse_unaccepted_contract_defects(
             None => findings.push(project_finding(FindingSeed::StaticDefect(defect), catalog)),
         }
     }
-    for module in order {
-        let group = &grouped[module];
+    for key in order {
+        let group = &grouped[&key];
         let mut finding = project_finding(FindingSeed::StaticDefect(group[0]), catalog);
+        let Interchangeable::Package(module) = key else {
+            // A claim group keeps the message it already has -- it names the
+            // package, the export and the open domains, which is the whole
+            // content -- and gains the other sites.
+            if group.len() > 1 {
+                finding
+                    .related_locations
+                    .extend(group[1..].iter().map(|defect| defect.location.clone()));
+            }
+            findings.push(finding);
+            continue;
+        };
         if group.len() > 1 {
             let mut exports = group
                 .iter()

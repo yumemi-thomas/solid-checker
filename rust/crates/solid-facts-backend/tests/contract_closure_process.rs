@@ -437,7 +437,16 @@ fn the_catalog_bearing_fixtures_mint_a_policy_2_corpus() {
     // a snapshot update is made.
     assert_eq!(
         (minted.len(), unminted.len(), proven, uncertifiable),
-        (14, 2, 32, 10),
+        // Unminted moved 2 -> 3 on 2026-09-16 with
+        // `fixtures/reactive-ir/package-repeated-open-claim`, a catalog-bearing
+        // fixture that pins the per-`(package, export, claims)` collapse and
+        // does not mint, exactly as its `package-unknown-callback-consumer`
+        // sibling does not. The other three numbers are unchanged, which is the
+        // check that mattered: an earlier version of that collapse grouped
+        // *argument* sites by export too and took this to 8, merging
+        // `package-callback-arguments-consumer`'s four distinct callback shapes
+        // into two.
+        (14, 3, 32, 10),
         "policy-2 corpus composition moved; review before repinning"
     );
 

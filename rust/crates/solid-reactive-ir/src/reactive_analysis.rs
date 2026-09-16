@@ -329,6 +329,7 @@ mod tests {
                 module: "reactive-package".into(),
                 export: "mapValue".into(),
                 reexported: false,
+                site: crate::ContractDefectSite::Argument,
             },
             location: location.clone(),
             analysis_context: "unbound-contract-claims:callback arguments".into(),
@@ -377,6 +378,7 @@ mod tests {
             module: "partial-package".into(),
             export: "withValue".into(),
             reexported: false,
+            site: crate::ContractDefectSite::Argument,
         };
         assert_eq!(
             generation.family(),

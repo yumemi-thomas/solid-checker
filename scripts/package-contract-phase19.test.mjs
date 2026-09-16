@@ -141,7 +141,12 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // under which a consumer looks through a wrapper at the primitive its
       // argument calls, and so the only way to reach
       // `Dialect::returns_reactive_tuple` from a fixture.
-      stableMainDocuments: 193,
+      // 194 adds package-repeated-open-claim's main document. It is the
+      // `package-unknown-callback-consumer` stub again, under a second
+      // fixture that imports one export from two files: the pin that a
+      // package-contract obligation raised at an *import* collapses to one
+      // finding per `(package, export, claims)` and carries its other sites.
+      stableMainDocuments: 194,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
@@ -151,7 +156,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       checkedCorpusShortcuts: 0,
       callerProofIssuancePaths: 0,
       automaticCertificationWorkflows: 1,
-      obsoletePolicy1Catalogs: 21,
+      // 22 with package-repeated-open-claim, whose catalog is deliberately
+      // `obsolete-policy1` like its sibling's: the collapse is about how
+      // repeated obligations are reported, not about which gate raised them.
+      obsoletePolicy1Catalogs: 22,
       proofVersion: 2,
       receiptVersion: 2,
       policyStatus: "active",

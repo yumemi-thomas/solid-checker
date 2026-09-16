@@ -514,6 +514,22 @@ pub struct StaticDefect {
     pub uncertain: bool,
 }
 
+/// Where a package-contract obligation was raised.
+///
+/// [`ContractDefectSite::Import`] messages name the package, the export and the
+/// open claims and nothing else, so two of them differ only in which file did
+/// the importing -- repetition a reader cannot act on separately.
+/// [`ContractDefectSite::Argument`] messages are about one exact argument of one
+/// exact call, where the site *is* the content: a descriptor absorbed by a rest
+/// parameter and one observed through an `arguments` object are different facts
+/// about different code, and must stay separate findings.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ContractDefectSite {
+    Import,
+    Argument,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "kind")]
 pub enum StaticDefectKind {
@@ -529,6 +545,11 @@ pub enum StaticDefectKind {
         module: String,
         export: String,
         reexported: bool,
+        /// Where this was raised, which is what decides whether two of them are
+        /// interchangeable. The producer knows; the projection must not have to
+        /// infer it, because one `analysis_context` -- `unknown-contract-claims:
+        /// callbacks` -- is emitted from both kinds of site.
+        site: ContractDefectSite,
     },
     /// A package export has different certified summaries for different
     /// conditional runtime targets. The current project analysis has no
