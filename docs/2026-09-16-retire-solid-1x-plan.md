@@ -880,75 +880,82 @@ v2-side assertion in it is already pinned span for span by
 `SC7001` rows and the absence of `SC3001`). Step 3 loses the contrast and
 nothing else.
 
-## Remaining and still unblocked (as of 2026-09-16)
+## Remaining (refreshed 2026-09-17)
 
-Ten commits are on `codex/phase19a-authenticated-proof-policy`, each
-individually green. What is left, in the order it has to happen:
+**Steps 0, 1, 3 and 4 are done, and step 2 is resolved.** Twenty-four commits
+carry the retirement, `08360f56` (the ADR) to `0854fdd7`; `make verify` is green
+at the tip. The previous version of this section is superseded -- it still
+described step 3 as in progress and step 2 as undecided, and listed three loose
+ends that have since closed. What actually closed them:
 
-1. ~~**Step 4's refusal**~~ — **done 2026-09-16.** `SC9013
-   unsupported-solid-runtime` is in the 2.0 catalog (27 rules), and dialect
-   detection emits it at the selection site, above the daemon branch, with
-   `resolve_dialect` and the session bench taking their own refusal for the
-   `--serve` case that skips it. Verified against the daemon path with
-   `SOLID_CHECKER_DAEMON=1`, and in all three formats. Two things checking
-   turned up and fixed: the ESLint adapter would have dropped the refusal
-   silently (its location is a `package.json` no one lints — project-scoped
-   findings now reach every linted file), and `make verify` would not have run
-   the proof (`backend_dialect_lib_tests` is `--lib` only; the new
-   `test-backend-v2-runtime-refusal` step runs it in the one arm where the
-   refusal is reachable, with an arity guard so a filter matching nothing
-   cannot pass). Full account in `docs/precision-backlog.md`.
+- **Step 2** was mostly withdrawn by ADR 0110 §§ 4-5 (see the step 2 section).
+  What it really needed landed as `3fc4302b`: the coverage census runs
+  `--solid 2` and refuses to compare across the retirement boundary.
+- **Step 4's two documentation loose ends are done.** `docs/adding-a-dialect.md`
+  no longer mentions 1.x at all, and the CLI README documents the `SC9013`
+  refusal and says the `v1/`-prefixed rule names went with the 1.x catalog.
+- **The `test-backend-v1` question answered itself.** Step 3 deleted the
+  configuration, so the arm is gone from `scripts/verify.sh`.
 
-   **Still open from step 4, and both belong to step 3:** the CLI-level
-   exit-status pin, which cannot fire until the shipped binary is v2-only, and
-   the two documents that still describe two shipped dialects accurately —
-   `docs/adding-a-dialect.md` and the CLI README's supported-versions
-   statement.
-2. **Step 3's deletion — in progress.** The preparation is done (see
-   "Step 3 progress" below); what remains is the atomic deletion itself. In the
-   three groups the dry run measured — the
-   `solid_one_*` bulk, the one-line `DIALECT_INDEPENDENT` edit plus the
-   verified dialect-pair deletion, and the six tests whose names do not say v1
-   and so need their claim read. `carries_eslint_era_rules()` gets its own
-   slice and its own coverage run, because resolving its four surviving call
-   sites to their v2 branch can move findings.
-3. **Four package-contract v2 counterparts to author**, not port. Revised
-   2026-09-16 after looking at each: it is **two**, one is done, and one needs
-   nothing.
+What is left, in recommended order:
 
-   - `callback-untracked-wrapper` — **authored 2026-09-16**, in the corpus at
-     95 fixtures. Four of its five exports transcribed unchanged (`untrack`,
-     `createRoot`, `runWithOwner` — callback still at index 1 — and
-     `onCleanup`); only `trackedWrapper` moved, onto 2.0's two-function
-     `createEffect`. It carries one withheld owner requirement and two
-     `dialect-silent` `creates` declines, all three documented in its README.
-   - `callback-slot-props-forwarding` — **needs nothing.** Its own README said
-     its 2.0 twins are `callback-slot-derived-store` and
-     `callback-slot-derived-store-server`; both survive and both are in the
-     corpus, so the defect and its guard are already pinned on the 2.0 side.
-     What the deletion lost is the *contrast* with a dialect that had no
-     compute form at all, and a divergence pair needs two dialects. The
-     surviving twin's README now states the defect in place instead of
-     pointing at the deleted file.
-   - `callback-deferred-untracked-chain` — still to author. Built on `onMount`,
-     which 2.0 removes, and its claims cite `solid-js@1.9.14`'s `dist/solid.js`
-     line numbers. Its `unestablishedScheduleShape` is cited by
-     `interproc.rs`' `primitive_callback_execution` as the pin that a missing
-     row makes the wrapper chain refuse; that comment now says the pin is
-     absent.
-   - `escaping-private-helper` — still to author, and the expensive one: an
-     `@solidjs/web` stub and a `jsxImportSource` arrangement across thirty JSX
-     files, because 2.0 moves `namespace JSX` out of `solid-js` and `For` gains
-     a `keyed: false` overload that inverts its children callback. Seven arms
-     of `unresolved-dispatch-reachability`'s README name it as pinning the
-     call-site enumeration; that README now says those arms are unpinned.
+1. **`some_audit_denies_primitive` matches on export and domain, never on
+   `row.package`** -- the only remaining item that could be a *correctness*
+   issue rather than lost coverage, and the reason it is first.
 
-   These are independent of steps 3 and 4 and can be done in any order.
-4. **Step 2**, the contract-data retarget, whose accepted-tier sub-step still
-   has no default.
+   The proposal generator therefore reads `@solidjs/signals`' `createSignal`
+   row as covering `solid-js`' re-declaration, which the dialect withholds on
+   purpose (§ 7.4: the `node`/`worker`/`deno` body reaches `ctx.serialize`).
+   Its doc comment argues this is safe because a proposal is only ever proven
+   later against authenticated bytes, and that argument was checked on
+   2026-09-16 and holds -- `census_dialect_axiom` is archive-bound and refuses
+   it. But it is the same package-blind name match whose *cross-dialect* form
+   was a real bug before the retirement, so it wants a deliberate look rather
+   than an inherited one. Bounded: one function, one doc comment, and a test
+   that pins whichever answer is right.
 
-One open decision, and it is a judgement call rather than a blocker: whether to
-keep `test-backend-v1` in `scripts/verify.sh`. It is 130 s of a 516 s
-`make verify` and it verifies a configuration step 3 deletes. Kept for now
-because the transition window is exactly when a v1-only regression could land;
-it goes away on its own with step 3.
+2. **`callback-deferred-untracked-chain`** -- authoring, not porting, and it
+   needs audited 2.0 facts that do not exist yet. Three of its exports have no
+   mechanical counterpart: `mountShape`/`mountShapeArrow` transcribe 1.x's
+   `onMount`, which 2.0 removes; `mergePropsShape` depends on `mergeProps`
+   wrapping function-valued sources in a memo, and `Solid2` does not model
+   `MergeProps` as a callback-taking primitive at all; and
+   `unestablishedScheduleShape` rests on 1.x's `createSignal(fn)` *storing* the
+   function, where 2.0's is the derived form that invokes it. `memoShape` and
+   `renderEffectShape` additionally claim eagerness (`inline`) from cited 1.x
+   runtime bytes, so the 2.0 claims need their own citations rather than a
+   translation.
+
+   `interproc.rs`' `primitive_callback_execution` cites this fixture's
+   `unestablishedScheduleShape` as the pin that a missing row makes the wrapper
+   chain refuse; that comment currently says the pin is absent.
+
+3. **`escaping-private-helper`** -- the biggest remaining hole, and the
+   expensive one. Its claim is dialect-neutral and strong (the call graph's
+   answer is fail-closed or exact: every way of entering a function is one of
+   the call sites it enumerated, or emission marks every export), and seven
+   arms of `unresolved-dispatch-reachability`'s README name it as the pin for
+   that enumeration. Those arms are currently unpinned.
+
+   Cost, checked against the audited rc.3 install on 2026-09-17 rather than
+   assumed: `namespace JSX` is in `@solidjs/web/types/jsx.d.ts` only, and
+   `solid-js` ships no `jsx-runtime` subpath, so the fixture needs an
+   `@solidjs/web` stub and a `jsxImportSource` arrangement across its thirty
+   JSX files. `For` is also not a straight transcription -- 2.0 gives it
+   **three** overloads (`keyed?: true`, `keyed: false`, `keyed: (item) => key`),
+   and only the first keeps 1.x's `(item, index)` raw-value shape; `keyed:
+   false` hands the callback an accessor and the predicate form hands it
+   accessors for both arguments.
+
+4. **The CLI-level exit-status pin for `SC9013`** -- genuinely blocked rather
+   than forgotten. It cannot fire until the shipped `bin/solid-checker-rust` is
+   v2-only, and that binary still predates the retirement commits. A release
+   step, not a code one. The refusal itself is already pinned at the Rust
+   process boundary (`dialects_process`) and through the ESLint adapter
+   (`packages/cli/test/adapter.test.mjs`).
+
+Out of this plan, and tracked separately: the negative-authority table is not
+condition-aware, which is why `solid-js`' `createSignal`, `createEffect` and
+their nine `./client/hydration.js` siblings can carry no `creates` statement at
+all. That is an open item in ADR 0007, recorded in `docs/precision-backlog.md`,
+and it is the honest reason the first `solid2` census has the hole it has.
