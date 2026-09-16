@@ -718,7 +718,22 @@ runtime now returns a findings snapshot rather than a contract report. That is
 the intended fail-closed behaviour — reporting package status under a language
 the project does not run is the silent wrong-language answer ADR 0110 forbids —
 but it is a **shape change for that mode**, and it was accidental rather than
-designed. Pin it deliberately when the CLI surface work lands.
+designed.
+
+**Pinned deliberately 2026-09-16, and it was hiding a defect.** The shape is
+kept — an absent report, not an empty one — because
+`packages/cli/scripts/generate-missing-contracts.mjs` read `report.packages`
+through `Array.isArray(…) ? … : []`, which turned the refusal snapshot into
+"no package needs a contract" and reported nothing to generate for a project
+that was never analyzed. Exit code could not catch it either: the report exits
+1 when a package needs action, so the sweep accepts 0 and 1, and the refusal
+exits 0. Teaching the native side to emit `{ packages: [] }` with a flag beside
+it would have moved the same false negative one layer down, for every consumer
+that does not read the flag. So the consumer refuses a document that is not a
+report, quoting the refusal's own message and hint, and both sides are pinned:
+`a_refused_runtime_answers_check_contracts_with_the_refusal_not_a_report`
+(`dialects_process`) and "the contract sweep refuses a document that is not a
+contract report" (`packages/cli/test/contract-workflow.test.mjs`).
 
 ### A product consequence the plan did not anticipate
 

@@ -3980,3 +3980,52 @@ test("a graph lane's closure records keep the node that carries them", () => {
   assert.equal(certifiedClosuresFromNativeOutput(""), null);
   assert.equal(closureCandidatesFromNativeOutput(""), null);
 });
+
+test("the contract sweep refuses a document that is not a contract report", async () => {
+  const { contractReportPackages } = await import("../scripts/generate-missing-contracts.mjs");
+
+  // The ordinary report, including the legitimately empty one: a project with
+  // no external Solid package needs no contract, and that answer is a report.
+  assert.deepEqual(contractReportPackages({ missing: [], packages: [], stale: [] }), []);
+  assert.deepEqual(
+    contractReportPackages({ packages: [{ name: "@solid-primitives/debounce", status: "missing" }] }),
+    [{ name: "@solid-primitives/debounce", status: "missing" }]
+  );
+
+  // What `--check-contracts` actually emits when the installed runtime is one
+  // this build has no dialect for: the findings snapshot, not a report, at
+  // exit 0. Read as a report it says "no package needs a contract" about a
+  // project that was never analyzed, which is the false negative this refuses.
+  assert.throws(
+    () =>
+      contractReportPackages({
+        status: "uncertifiable",
+        findings: [
+          {
+            id: "SC9013",
+            rule: "unsupported-solid-runtime",
+            kind: "uncertifiable",
+            message: "solid-js 1.9.14 is installed, and this build of solid-checker carries no dialect for it; the project was not analyzed",
+            hint: "Upgrade the project to Solid 2.0, or use a checker release carrying the dialect for this runtime."
+          }
+        ],
+        packageSummaries: []
+      }),
+    error => {
+      assert.match(error.message, /did not produce a contract report/);
+      assert.match(error.message, /SC9013/);
+      assert.match(error.message, /was not analyzed/, "the refusal's own words reach the operator");
+      assert.match(error.message, /Upgrade the project to Solid 2\.0/, "including what to do about it");
+      return true;
+    }
+  );
+
+  // A document that is neither, with no refusal to quote, still fails closed.
+  for (const shape of [{}, { packages: {} }, { packages: null }, null]) {
+    assert.throws(
+      () => contractReportPackages(shape),
+      /names no `packages`/,
+      `an empty answer must not be read out of ${JSON.stringify(shape)}`
+    );
+  }
+});

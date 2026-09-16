@@ -648,6 +648,37 @@ fn unsupported_runtime_refusal_replaces_the_analysis() {
     }
 }
 
+/// `--check-contracts` under a refused runtime answers with the refusal, and
+/// specifically *not* with a contract report.
+///
+/// The two documents are unrelated shapes: a report is
+/// `{missing, packages, stale}`, the refusal is the ordinary findings
+/// snapshot. That difference is load bearing rather than incidental, because
+/// the sweep in `packages/cli/scripts/generate-missing-contracts.mjs` reads
+/// `report.packages` -- and an empty `packages` there means "no package needs
+/// a contract", which is the opposite of what an unanalyzed project knows. The
+/// report must therefore be absent, not empty, and this pins that.
+#[test]
+fn a_refused_runtime_answers_check_contracts_with_the_refusal_not_a_report() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let (code, document) = run_checker("unsupported-runtime-v1", &["--check-contracts"]);
+
+    assert!(
+        document.get("packages").is_none(),
+        "an absent report is the honest answer; an empty one reads as complete coverage: {document}"
+    );
+    assert!(document.get("missing").is_none() && document.get("stale").is_none());
+    assert_eq!(finding_ids(&document), vec!["SC9013".to_owned()]);
+    assert_eq!(document["status"], "uncertifiable");
+    assert_eq!(
+        code, 0,
+        "the contract report exits 1 when a package needs action, and this is not that; \
+         the sweep's own status guard accepts 0 and 1, so the shape is what has to carry it"
+    );
+}
+
 /// `--dialect` is the documented escape hatch, and it overrides the refusal
 /// too: the tree analyzes under the named dialect in every build.
 #[test]
