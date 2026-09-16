@@ -22302,6 +22302,76 @@ follow for the rest of the retirement:
 are unaffected: both carry non-empty snapshots, both moved, and both movements
 were reviewed finding by finding.
 
+### The ownership corpus is upstream's, and upstream is a Solid 1.x plugin (2026-09-16)
+
+Step 1.4 of the Solid 1.x retirement plan says the 271 `solid-v1` cases in
+`fixtures/ownership-cases/cases.json` "are ported the same way" as the fixtures,
+with renamed ids so a silent id collision cannot drop one. Measuring them says
+they are not portable at all, and the reason is structural rather than
+mechanical.
+
+**254 of the 271 are `upstream/*`** — eslint-plugin-solid 0.14.5's own
+`__valid__NN` / `__invalid__NN` test cases, transcribed. That plugin targets
+Solid 1.x. Re-pointing its cases at the 2.0 catalog would assert that upstream's
+1.x-defined expectations hold for a language version upstream does not support,
+which is not parity with upstream; it is a new claim wearing upstream's name.
+
+**179 of the 271 are negatives** (169 of those upstream), so the
+`array-shape-v1` lesson recorded above applies at scale: porting a negative and
+watching the gate stay green proves nothing about whether the case still
+exercises anything.
+
+The repository's own design already says this. The 35 `solid-v2` cases contain
+**no** `upstream/*` id — they are one product-owned case per v2 rule. Upstream
+parity is a v1-only concern here, and product-owned cases are authored per
+dialect.
+
+So the 254 go with the v1 catalog in step 3, and the consequence has to be
+stated rather than discovered: **retiring Solid 1.x deletes the entire
+eslint-plugin-solid parity corpus.** AGENTS.md currently instructs that
+"retained behavior and intentional divergences must be pinned in
+fixtures/ownership-cases/cases.json" and that upstream_compat ports upstream
+"byte-faithfully" at commit 6d3bc311. Once the corpus and the ESLint-era rule
+surface are gone, that instruction has nothing left to bind, and AGENTS.md's
+"Known traps" entry needs rewriting in the same step — the plan does not
+currently say so.
+
+The 17 product-owned v1 cases are individually reviewable; four already have a
+v2 case in the same rule family (`reactive-handler-frozen`,
+`primitive-in-directive-application`, `no-destructure`, `prefer-for`). Two are
+worth deliberate attention rather than deletion because they encode the
+absolute rule rather than a dialect's behaviour:
+`react-prop/typescript-owned/001` and `innerhtml/typescript-owned/001`, both
+negatives pinning that TypeScript owns the diagnostic and the checker stays
+silent. Both need a v2 case *authored* — they cannot be ported by measurement,
+being negatives.
+
+### The backend dialect tests name the dialect; no stub swap reaches them (2026-09-16)
+
+The nine 1.x fixtures under `rust/crates/solid-facts-backend/tests/fixtures/`
+carry no `node_modules/solid-js` stub. `dialects_process.rs` passes
+`--dialect solid-v1` explicitly (26 call sites), so dialect selection there is a
+flag, not detection — the module header says so: "the dialect chosen by
+detection, never by a flag" describes the *fixtures under test*, not this
+harness.
+
+Two consequences for step 3, neither currently in the plan:
+
+- Removing the v1 dialect makes `--dialect solid-v1` invalid, so all 26 sites
+  fail rather than silently degrading. That is the good case.
+- Three assertions are **differential by construction**:
+  `dialect_pair_findings` (3 uses) compares byte-identical sources across the
+  pair, and `component_ref_callbacks_are_setup_time_outputs_in_both_dialects`
+  and `returned_event_handler_factories_preserve_deferred_execution` both loop
+  `for dialect in ["solid-v1", "solid-v2"]`. Deleting v1 does not leave a
+  narrower version of these tests; it removes the comparison that *is* the test.
+  Each needs an explicit decision: rewrite as a single-dialect assertion and
+  accept the weaker claim, or delete and record the loss.
+
+`preferences-v1-enabled` / `preferences-v1-disabled` already have
+`preferences-v2` / `preferences-v2-disabled` beside them, so that pair is a
+straightforward step-3 deletion.
+
 ### The single-dialect builds were checked, never tested — and five tests were broken in them (2026-09-16)
 
 `scripts/verify.sh` runs four single-dialect arms, and all four are
