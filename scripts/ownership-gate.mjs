@@ -217,6 +217,18 @@ for (const [index, testCase] of (manifest.cases ?? []).entries()) {
   if ((expected?.length ?? 0) === 0 && (absent?.length ?? 0) === 0 && !silent) {
     fail(failures, `${label}: a negative case must name at least one absent rule or family, or set "silent": true`);
   }
+  // Case-level TypeScript ownership: the diagnostic is TypeScript's and the
+  // checker carries **no rule at all** for the shape. The per-finding
+  // `typescript-owned` form cannot say that -- it needs a rule and a code to
+  // name the finding that must not be emitted, and inventing one (a rule no
+  // catalog declares, under a fabricated code) would put a fiction in a corpus
+  // whose whole point is exactness. Paired with `silent: true` this asserts
+  // both halves without naming anything that does not exist.
+  for (const [diagnosticIndex, diagnostic] of (testCase.expect?.typescript ?? []).entries()) {
+    const diagnosticLabel = `${label} typescript[${diagnosticIndex}]`;
+    if (!/^TS\d+$/.test(diagnostic.code ?? "")) fail(failures, `${diagnosticLabel}: code must be TS<number>`);
+    spanOf(testCase, diagnostic.span, diagnosticLabel);
+  }
   const findingSpans = [];
   for (const [findingIndex, expectation] of (expected ?? []).entries()) {
     const findingLabel = `${label} finding[${findingIndex}]`;
@@ -409,6 +421,13 @@ for (const value of resolved.values()) {
     const ownEnd = ownStart + byteLength(testCase.source.text);
     if (!claimed.has(index) && finding.primaryLocation.startByte < ownEnd && ownStart < finding.primaryLocation.endByte) fail(failures, `${label}: unclaimed ${finding.rule}/${finding.id} at ${finding.primaryLocation.startByte}..${finding.primaryLocation.endByte}`);
   });
+  for (const [diagnosticIndex, expected] of (testCase.expect.typescript ?? []).entries()) {
+    const diagnosticLabel = `${label} typescript[${diagnosticIndex}]`;
+    const span = spanOf(testCase, expected.span, diagnosticLabel);
+    if (!diagnostics.some((diagnostic) => diagnostic.code === expected.code && diagnostic.start === span.start && diagnostic.end === span.end)) {
+      fail(failures, `${diagnosticLabel}: missing ${expected.code} at ${span.start}..${span.end}`);
+    }
+  }
   if (testCase.expect.silent === true && actual.length) {
     fail(
       failures,

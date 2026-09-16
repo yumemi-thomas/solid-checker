@@ -22459,3 +22459,40 @@ retirement deletes. The trade, if the number is unacceptable:
 Kept both for now: the window in which a v1-only regression can land is exactly
 the window this retirement occupies, and that is when the corpus is being
 edited most heavily. The number is recorded here so the choice is a choice.
+
+### The absolute rule now has a Solid 2 pin, and it asserts both halves (2026-09-16)
+
+`react-prop/typescript-owned/001` and `innerhtml/typescript-owned/001` carry the
+project's central invariant — TypeScript owns the diagnostic, the checker stays
+silent — and existed only for the 1.x dialect, which this retirement deletes.
+Authoring the v2 counterparts turned out to need a small gate extension first.
+
+The per-finding `typescript-owned` shape asserts both halves properly: the
+checker emits no finding matching `(rule, code, span)`, **and** TypeScript emits
+each declared diagnostic at its declared span. Five v2 cases already use it. But
+it needs a rule and a code to name the finding that must not be emitted, and
+these two cases are precisely the ones where the checker carries **no rule at
+all**. Naming `no-react-specific-props` under a fabricated `SC0000` would put a
+fiction in a corpus whose entire point is exactness — a rule no catalog declares
+and a code that is not a code.
+
+So `expect.typescript` is now a case-level array of `{code, span}`, asserted
+exactly like the per-finding diagnostics, and paired with `silent: true` it
+states both halves without naming anything that does not exist:
+
+- TypeScript really does report `TS2322` at `className` (33..42) and at
+  `dangerouslySetInnerHTML` (31..54) — confirmed against the audited oracle for
+  **both** dialects, which report identical codes and byte ranges;
+- and the checker emits nothing anywhere in the source, which is broader than
+  "not rule X".
+
+Four cases now: the two v1 halves strengthened from `silent`-only to both
+halves, and `…/typescript-owned/002` authored for `solid-v2`. Three negative
+controls confirm the assertions are live — a wrong diagnostic code, a wrong
+span, and (for the `absent` hardening above) a reintroduced undeclared clause
+each fail the gate, and removing them each clears it.
+
+Corpus at 308 cases (271 v1, 37 v2), ledger 465 rows, coverage unmoved at 97
+projects / 556 findings. When step 3 deletes the 1.x halves the invariant keeps
+its pin, which is the point of authoring these before the deletion rather than
+after.

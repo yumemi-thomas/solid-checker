@@ -951,7 +951,41 @@
    "expect": {
     "findings": [],
     "absent": [],
-    "silent": true
+    "silent": true,
+    "typescript": [
+     {
+      "code": "TS2322",
+      "span": {
+       "marker": "className"
+      }
+     }
+    ]
+   },
+   "note": "TypeScript owns this diagnostic (TS2322: the prop does not exist on the element's attribute type) and the checker deliberately carries no rule for it. The expectation asserts both halves: TypeScript really does report it at this span, and no checker finding is emitted there. `silent` keeps the broader claim that nothing else fires either."
+  },
+  {
+   "id": "react-prop/typescript-owned/002",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "export const Case = () => <label className=\"field\">Email</label>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [],
+    "silent": true,
+    "typescript": [
+     {
+      "code": "TS2322",
+      "span": {
+       "marker": "className"
+      }
+     }
+    ]
    },
    "note": "TypeScript owns this diagnostic (TS2322: the prop does not exist on the element's attribute type) and the checker deliberately carries no rule for it. The expectation asserts both halves: TypeScript really does report it at this span, and no checker finding is emitted there. `silent` keeps the broader claim that nothing else fires either."
   },
@@ -969,7 +1003,41 @@
    "expect": {
     "findings": [],
     "absent": [],
-    "silent": true
+    "silent": true,
+    "typescript": [
+     {
+      "code": "TS2322",
+      "span": {
+       "marker": "dangerouslySetInnerHTML"
+      }
+     }
+    ]
+   },
+   "note": "TypeScript owns this diagnostic (TS2322: the prop does not exist on the element's attribute type) and the checker deliberately carries no rule for it. The expectation asserts both halves: TypeScript really does report it at this span, and no checker finding is emitted there. `silent` keeps the broader claim that nothing else fires either."
+  },
+  {
+   "id": "innerhtml/typescript-owned/002",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "export const Case = () => <div dangerouslySetInnerHTML={{ __html: \"x\" }} />;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [],
+    "silent": true,
+    "typescript": [
+     {
+      "code": "TS2322",
+      "span": {
+       "marker": "dangerouslySetInnerHTML"
+      }
+     }
+    ]
    },
    "note": "TypeScript owns this diagnostic (TS2322: the prop does not exist on the element's attribute type) and the checker deliberately carries no rule for it. The expectation asserts both halves: TypeScript really does report it at this span, and no checker finding is emitted there. `silent` keeps the broader claim that nothing else fires either."
   },
