@@ -21,7 +21,11 @@ fn core_runtime_model_needs_no_contract_and_is_not_reported_as_certified() {
     let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
-    for fixture_name in ["dialect-solid-1x", "dialect-solid-2"] {
+    // ADR 0027 is not a per-dialect claim: core has no package contract *by
+    // design*, so the fixture list is this assertion's scope and not part of
+    // the property. Retiring the 1.x dialect narrows the scope and keeps the
+    // claim, exactly as `DIALECT_INDEPENDENT` does in `dialects_process`.
+    for fixture_name in ["dialect-solid-2"] {
         let fixture = root().join("fixtures/reactive-ir").join(fixture_name);
         let output = checker()
             .args([
@@ -195,7 +199,11 @@ fn missing_core_contract_objects_cannot_change_ordinary_findings() {
             .unwrap()
             .is_empty()
     );
-    for fixture_name in ["dialect-solid-1x", "dialect-solid-2"] {
+    // ADR 0027 is not a per-dialect claim: core has no package contract *by
+    // design*, so the fixture list is this assertion's scope and not part of
+    // the property. Retiring the 1.x dialect narrows the scope and keeps the
+    // claim, exactly as `DIALECT_INDEPENDENT` does in `dialects_process`.
+    for fixture_name in ["dialect-solid-2"] {
         let project = root()
             .join("fixtures/reactive-ir")
             .join(fixture_name)

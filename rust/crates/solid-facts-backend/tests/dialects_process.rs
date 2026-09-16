@@ -10,19 +10,14 @@ use std::process::Command;
 ///
 /// The tests below that loop this list are not differentials: each asserts the
 /// **same** property holds under every dialect, so the list is the claim's
-/// scope and not part of the property. Retiring the 1.x dialect narrows the
-/// scope rather than removing the claim — drop `"solid-v1"` here and both
-/// tests keep asserting exactly what they assert today, for the one dialect
-/// that remains.
+/// scope and not part of the property. Retiring the 1.x dialect narrowed the
+/// scope and kept every claim intact — which is exactly what this constant was
+/// introduced to make a one-line edit.
 ///
-/// Distinct from
-/// [`the_dialect_pair_reports_different_findings_from_identical_sources`],
-/// which is differential by construction: its subject *is* the difference
-/// between the pair, so it has nothing to narrow to and is deleted with the
-/// 1.x fixture half. What that test pins about 2.0 is already pinned by
-/// `fixtures/findings-snapshots/reactive-ir__dialect-solid-2.json`, so the
-/// deletion costs the contrast and nothing else.
-const DIALECT_INDEPENDENT: &[&str] = &["solid-v1", "solid-v2"];
+/// It stays a list of one rather than collapsing into the call sites: the next
+/// dialect this checker carries re-widens it here, and a looped assertion says
+/// "for every dialect" in a way a hard-coded `"solid-v2"` does not.
+const DIALECT_INDEPENDENT: &[&str] = &["solid-v2"];
 
 fn dialect_pair_findings(fixture: &str) -> Vec<(String, String, String, u64)> {
     dialect_snapshot_findings(fixture)
@@ -202,57 +197,6 @@ fn preferences_are_default_on_with_explicit_disables_winning() {
         v2_disabled.is_empty(),
         "explicit v2 disables must win over catalog defaults: {v2_disabled:#?}"
     );
-
-    let enabled = preference_findings(project_snapshot_findings_with(
-        fixture_root.join("preferences-v1-enabled/tsconfig.json"),
-        Some("solid-v1"),
-        &[],
-    ));
-    assert_eq!(
-        enabled
-            .iter()
-            .filter(|finding| finding["id"] == "SC8014")
-            .count(),
-        2,
-        "v1 reports only receivers Type Facts prove are arrays: {enabled:#?}"
-    );
-    assert_eq!(
-        enabled
-            .iter()
-            .filter(|finding| finding["id"] == "SC8015")
-            .count(),
-        3,
-        "v1 preferences must not promote uncertain prop backing into proof: {enabled:#?}"
-    );
-    assert!(enabled.iter().all(|finding| finding["kind"] == "violation"));
-    let v1_for_fix_texts = enabled
-        .iter()
-        .filter(|finding| finding["rule"] == "v1/prefer-for")
-        .flat_map(|finding| finding["fixes"].as_array().into_iter().flatten())
-        .flat_map(|fix| fix["edits"].as_array().into_iter().flatten())
-        .filter_map(|edit| edit["newText"].as_str())
-        .collect::<Vec<_>>();
-    assert!(!v1_for_fix_texts.is_empty());
-    assert!(
-        v1_for_fix_texts
-            .iter()
-            .all(|text| !text.contains("keyed={false}"))
-    );
-    assert!(
-        v1_for_fix_texts
-            .iter()
-            .any(|text| text.contains("import { For as __SolidCheckerFor"))
-    );
-
-    let v1_disabled = preference_findings(project_snapshot_findings_with(
-        fixture_root.join("preferences-v1-disabled/tsconfig.json"),
-        Some("solid-v1"),
-        &[],
-    ));
-    assert!(
-        v1_disabled.is_empty(),
-        "explicit v1 disables must win over catalog defaults: {v1_disabled:#?}"
-    );
 }
 
 #[test]
@@ -348,18 +292,18 @@ fn project_rule_options_disable_one_exact_catalog_rule() {
     let findings = project_snapshot_findings(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures/rule-options-enablement/tsconfig.json"),
-        Some("solid-v1"),
+        Some("solid-v2"),
     );
     assert!(
         findings
             .iter()
-            .any(|finding| finding["rule"] == "v1/missing-owner"),
+            .any(|finding| finding["rule"] == "missing-owner"),
         "the enabled control rule should still report: {findings:#?}"
     );
     assert!(
         findings
             .iter()
-            .all(|finding| finding["rule"] != "v1/reactive-write-in-owned-scope"),
+            .all(|finding| finding["rule"] != "reactive-write-in-owned-scope"),
         "the exact disabled rule still reported: {findings:#?}"
     );
 }
@@ -383,7 +327,7 @@ fn solid_one_merge_props_function_sources_are_tracked() {
 }
 
 #[test]
-fn component_ref_callbacks_are_setup_time_outputs_in_both_dialects() {
+fn component_ref_callbacks_are_setup_time_outputs() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
@@ -423,7 +367,7 @@ fn returned_event_handler_factories_preserve_deferred_execution() {
 }
 
 #[test]
-fn component_identity_combines_type_facts_with_dialect_compatibility() {
+fn component_identity_comes_from_type_facts() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
@@ -435,7 +379,13 @@ fn component_identity_combines_type_facts_with_dialect_compatibility() {
         .map(|pattern| u64::try_from(source.find(pattern).unwrap()).unwrap())
         .to_vec();
     component_prop_patterns.sort_unstable();
-    for (dialect, expected) in [("solid-v2", vec![typed_offset]), ("solid-v1", vec![])] {
+    // Was a differential: 2.0 proves the write at `setCount(1)` is in an owned
+    // scope and 1.x proved nothing there, so the pair contrasted dialect
+    // compatibility. With one dialect left there is no contrast to draw, and
+    // what survives is the claim the name now states — component identity is
+    // decided by Type Facts, which the SC2001 offset and the exact SC1003 set
+    // below both measure.
+    for (dialect, expected) in [("solid-v2", vec![typed_offset])] {
         let findings = project_snapshot_findings(fixture.join("tsconfig.json"), Some(dialect));
         let mut writes = findings
             .iter()
@@ -1476,7 +1426,7 @@ fn solid_one_cyclic_adapter_invocations_terminate_and_classify() {
 }
 
 #[test]
-fn run_with_owner_distinguishes_null_definite_and_nullable_owners_in_both_dialects() {
+fn run_with_owner_distinguishes_null_definite_and_nullable_owners() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
@@ -1501,7 +1451,10 @@ fn run_with_owner_distinguishes_null_definite_and_nullable_owners_in_both_dialec
         .map(|offset| nullable_effect + 1 + offset as u64)
         .unwrap();
 
-    for dialect in ["solid-v1", "solid-v2"] {
+    // One property, asserted for every dialect this build carries; the name no
+    // longer says "in both dialects" because the scope is the list, not the
+    // claim. See `DIALECT_INDEPENDENT`.
+    for dialect in DIALECT_INDEPENDENT.iter().copied() {
         let findings = project_snapshot_findings(fixture.join("tsconfig.json"), Some(dialect));
         let owners = findings
             .iter()

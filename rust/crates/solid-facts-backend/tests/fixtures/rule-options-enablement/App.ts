@@ -4,6 +4,9 @@ const [count, setCount] = createSignal(0);
 
 count();
 
-createEffect(() => {
-  setCount(count() + 1);
-});
+createEffect(
+  () => {
+    setCount(count() + 1);
+  },
+  () => {}
+);
