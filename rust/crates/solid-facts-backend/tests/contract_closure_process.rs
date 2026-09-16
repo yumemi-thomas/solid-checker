@@ -446,7 +446,14 @@ fn the_catalog_bearing_fixtures_mint_a_policy_2_corpus() {
         // *argument* sites by export too and took this to 8, merging
         // `package-callback-arguments-consumer`'s four distinct callback shapes
         // into two.
-        (14, 3, 32, 10),
+        //
+        // Moved again on 2026-09-16 with the Solid 1.x retirement (ADR 0110),
+        // from (14, 3, 32, 10). One minted project went with the 1.x fixtures
+        // that were deleted. The 15 lost rule findings are the ones that
+        // dialect's catalog reported; the SC9005 count moved by one for the
+        // same reason. Nothing here re-pins a *2.0* answer that changed — the
+        // corpus simply has one project fewer to ask.
+        (13, 3, 17, 9),
         "policy-2 corpus composition moved; review before repinning"
     );
 

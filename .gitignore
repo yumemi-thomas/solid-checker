@@ -22,22 +22,10 @@ fixtures/upstream-parity/.staging/
 # Contract integration tests use small, hand-written packages as fixtures.
 !fixtures/reactive-ir/package-*/node_modules/
 !fixtures/reactive-ir/package-*/node_modules/**
-!fixtures/reactive-ir/upstream-divergences/node_modules/
-!fixtures/reactive-ir/upstream-divergences/node_modules/**
-!fixtures/reactive-ir/array-shape-v1/node_modules/
-!fixtures/reactive-ir/array-shape-v1/node_modules/**
-!fixtures/reactive-ir/v1-reactivity/node_modules/
-!fixtures/reactive-ir/v1-reactivity/node_modules/**
-!fixtures/reactive-ir/v1-write-scope/node_modules/
-!fixtures/reactive-ir/v1-write-scope/node_modules/**
-!fixtures/package-contracts/props-split-vocabulary-v1/node_modules/
-!fixtures/package-contracts/props-split-vocabulary-v1/node_modules/**
 !fixtures/package-contracts/props-split-vocabulary/node_modules/
 !fixtures/package-contracts/props-split-vocabulary/node_modules/**
 !fixtures/package-contracts/external-reexport/node_modules/
 !fixtures/package-contracts/external-reexport/node_modules/**
-!fixtures/package-contracts/dialect-detection/node_modules/
-!fixtures/package-contracts/dialect-detection/node_modules/**
 !fixtures/package-contracts/class-expression-kind/node_modules/
 !fixtures/package-contracts/class-expression-kind/node_modules/**
 !fixtures/package-contracts/carried-value-kind/node_modules/
@@ -45,12 +33,6 @@ fixtures/upstream-parity/.staging/
 # The bundled-contract consumer resolves a real package name; its stub is the
 # only thing that makes the installed-version and callback-timing proofs
 # reproducible from a clean checkout.
-!fixtures/reactive-ir/bundled-scheduled-consumer/node_modules/
-!fixtures/reactive-ir/bundled-scheduled-consumer/node_modules/**
-!fixtures/reactive-ir/bundled-contract-solid1-consumer/node_modules/
-!fixtures/reactive-ir/bundled-contract-solid1-consumer/node_modules/**
-!fixtures/reactive-ir/bundled-rootless-consumer/node_modules/
-!fixtures/reactive-ir/bundled-rootless-consumer/node_modules/**
 !fixtures/package-contracts/shorthand-block-scope/node_modules/
 !fixtures/package-contracts/shorthand-block-scope/node_modules/**
 !fixtures/package-contracts/composed-operation-provenance/node_modules/
@@ -68,12 +50,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/jsx-nested-children-attribute-*/node_modules/**
 !fixtures/reactive-ir/eslint-compat/node_modules/
 !fixtures/reactive-ir/eslint-compat/node_modules/**
-!fixtures/reactive-ir/store-subpath/node_modules/
-!fixtures/reactive-ir/store-subpath/node_modules/**
 !fixtures/reactive-ir/shared-reactivity-v2/node_modules/
 !fixtures/reactive-ir/shared-reactivity-v2/node_modules/**
-!fixtures/reactive-ir/no-owner-v1/node_modules/
-!fixtures/reactive-ir/no-owner-v1/node_modules/**
 !fixtures/reactive-ir/namespace-import-v2/node_modules/
 !fixtures/reactive-ir/namespace-import-v2/node_modules/**
 !fixtures/reactive-ir/solid2-precision/node_modules/
@@ -85,22 +63,10 @@ fixtures/upstream-parity/.staging/
 # solid-1x-sources selects the 1.x catalog from this stub. Without the
 # exception the stub is untracked, the fixture falls back to the 2.0 default in
 # CI, and its 1.x-only source factories stop being exercised at all.
-!fixtures/reactive-ir/solid-1x-sources/node_modules/
-!fixtures/reactive-ir/solid-1x-sources/node_modules/**
-!fixtures/reactive-ir/import-location/node_modules/
-!fixtures/reactive-ir/import-location/node_modules/**
-!fixtures/engine/eslint-reactivity-v1/node_modules/
-!fixtures/engine/eslint-reactivity-v1/node_modules/**
-!fixtures/reactive-ir/eslint-plugin-corpus-v1/node_modules/
-!fixtures/reactive-ir/eslint-plugin-corpus-v1/node_modules/**
-!fixtures/reactive-ir/summary-callback-extent/node_modules/
-!fixtures/reactive-ir/summary-callback-extent/node_modules/**
 !fixtures/package-contracts/solid-reexport/node_modules/
 !fixtures/package-contracts/solid-reexport/node_modules/**
 !fixtures/package-contracts/callback-reactive-arguments/node_modules/
 !fixtures/package-contracts/callback-reactive-arguments/node_modules/**
-!fixtures/package-contracts/callback-slot-props-forwarding/node_modules/
-!fixtures/package-contracts/callback-slot-props-forwarding/node_modules/**
 !fixtures/package-contracts/callback-slot-derived-store/node_modules/
 !fixtures/package-contracts/callback-slot-derived-store/node_modules/**
 !fixtures/package-contracts/callback-slot-derived-store-server/node_modules/
@@ -150,8 +116,6 @@ fixtures/upstream-parity/.staging/
 # `uncharted-helpers` contract, which is what makes its callee uncontracted.
 !fixtures/package-contracts/arrow-export-attribution/node_modules/
 !fixtures/package-contracts/arrow-export-attribution/node_modules/**
-!fixtures/package-contracts/escaping-private-helper/node_modules/
-!fixtures/package-contracts/escaping-private-helper/node_modules/**
 !fixtures/package-contracts/export-identity-join/node_modules/
 !fixtures/package-contracts/export-identity-join/node_modules/**
 !fixtures/package-contracts/parameter-member-forwarded/node_modules/
@@ -174,10 +138,6 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/conditional-returns-divergence/node_modules/**
 !fixtures/package-contracts/conditional-returns-divergence-both/node_modules/
 !fixtures/package-contracts/conditional-returns-divergence-both/node_modules/**
-!fixtures/package-contracts/callback-untracked-wrapper/node_modules/
-!fixtures/package-contracts/callback-untracked-wrapper/node_modules/**
-!fixtures/package-contracts/callback-deferred-untracked-chain/node_modules/
-!fixtures/package-contracts/callback-deferred-untracked-chain/node_modules/**
 !fixtures/package-contracts/multi-role-callback-parameter/node_modules/
 !fixtures/package-contracts/multi-role-callback-parameter/node_modules/**
 packages/wasm/browser.js

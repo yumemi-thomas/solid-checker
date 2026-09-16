@@ -17294,8 +17294,10 @@ mod tests {
         }));
         assert!(inner_call_is_executed(&implementation));
 
-        // `createEffect(fn, initialValue)` at slot 1 is the initial value, not a
-        // callback, and the dialect gate already says so.
+        // `createEffect(compute, apply)` at slot 1 is the deferred apply
+        // callback in 2.0 -- 1.x's second argument was an initial value, and
+        // while both dialects were compiled in the disagreement kept this slot
+        // closed. The dialect gate now answers it.
         let slot_one = invoking_argument_implementation(json!({
             "target": "symbol:createEffect",
             "targetName": "createEffect",
@@ -17306,7 +17308,7 @@ mod tests {
                 "locations": [{"path": "/project/index.js", "startByte": 20, "endByte": 80}]
             }]
         }));
-        assert!(!inner_call_is_executed(&slot_one));
+        assert!(inner_call_is_executed(&slot_one));
 
         // A locally defined `createMemo` shadowing the import is a different
         // function with the same name. The module gate is what refuses it.
@@ -18165,18 +18167,40 @@ mod tests {
         );
         assert!(argument_slot_is_proven_invoking(&timer.calls[0], 1));
 
+        // And slot 1 of the two-argument form is the deferred apply callback,
+        // so it discharges the same way. This is the assertion the retirement
+        // moved: with 1.x also compiled in the two dialects disagreed about
+        // that slot — 2.0's apply callback against 1.x's initial value — so no
+        // answer was unanimous and the premise was refused below.
+        let apply = implementation(json!([{
+            "parameter": 1, "strong": true,
+            "requires": [premise("solid-js", "createEffect", 1, 2)]
+        }]));
+        let mut apply_sites = Vec::new();
+        require_parameter_callback_flow(
+            &apply,
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut apply_sites,
+        )
+        .expect("`createEffect` slot 1 is the apply callback in 2.0");
+        assert!(argument_slot_is_proven_invoking(&apply.calls[0], 1));
+
         // Every refusal is a refusal of the *premise*, decided here rather than
         // believed from the wire: another package's function is not a dialect
-        // primitive however it is named; `createEffect`'s second argument is a
-        // callback in 2.0 and absent in 1.x, so no dialect answer is unanimous
-        // and the slot stays open; and a claim that defers nothing is malformed
-        // rather than unconditional — the unconditional claims travel in the
-        // index lists.
+        // primitive however it is named, and a claim that defers nothing is
+        // malformed rather than unconditional — the unconditional claims travel
+        // in the index lists.
+        //
+        // `premise("solid-js", "createEffect", 1, 2)` used to belong in this
+        // list: 2.0 calls that slot the deferred apply callback and 1.x called
+        // it an initial value, so no dialect answer was unanimous and the slot
+        // stayed open. With one vocabulary it is answered, and it is asserted
+        // as discharged above rather than deleted.
         for refusal in [
             json!([{"parameter": 1, "strong": true,
                     "requires": [premise("@solid-primitives/timer", "createEffect", 0, 1)]}]),
-            json!([{"parameter": 1, "strong": true,
-                    "requires": [premise("solid-js", "createEffect", 1, 2)]}]),
             json!([{"parameter": 1, "strong": true, "requires": []}]),
             json!([{"parameter": 0, "strong": true,
                     "requires": [premise("solid-js", "createEffect", 0, 1)]}]),
@@ -24652,13 +24676,13 @@ mod tests {
             serde_json::from_value::<typefacts::ExportImplementationTranscript>(value).unwrap()
         };
 
-        // `mergeDefaultProps(defaults, props) { return mergeProps(defaults, props) }`
+        // `mergeDefaultProps(defaults, props) { return merge(defaults, props) }`
         // -- argument 1 is the export's parameter 1, and nothing else is rooted.
         let sites = census_merged_props_returns_transcript(
-            &transcript("mergeProps", vec![None, Some(1)], true, true),
+            &transcript("merge", vec![None, Some(1)], true, true),
             1,
         )
-        .expect("the 1.x spelling over one whole parameter certifies");
+        .expect("a merge over one whole parameter certifies");
         assert_eq!(
             sites,
             vec![
@@ -24666,16 +24690,20 @@ mod tests {
                 "census-returns-merged-props-total:1:1".to_owned(),
             ]
         );
-        // The 2.0 spelling of the same primitive is the same claim.
-        census_merged_props_returns_transcript(
-            &transcript("merge", vec![None, Some(1)], true, true),
+        // `mergeProps` is 1.x's spelling of this primitive and is not 2.0
+        // vocabulary, so the census does not trace it to a props merge at all.
+        // It used to certify identically; that it no longer does is the
+        // retirement showing through, not a lost claim.
+        let one_x = census_merged_props_returns_transcript(
+            &transcript("mergeProps", vec![None, Some(1)], true, true),
             1,
         )
-        .expect("the 2.0 spelling certifies identically");
+        .expect_err("mergeProps is not a primitive this build models");
+        assert!(one_x.contains("does not trace to a props merge"), "{one_x}");
 
         // The proposal must name the parameter the census found, not another.
         let wrong = census_merged_props_returns_transcript(
-            &transcript("mergeProps", vec![None, Some(1)], true, true),
+            &transcript("merge", vec![None, Some(1)], true, true),
             0,
         )
         .expect_err("a proposal naming a different parameter is not this claim");
@@ -24686,7 +24714,7 @@ mod tests {
 
         // Two whole-parameter sources: a claim this shape cannot spell.
         let ambiguous = census_merged_props_returns_transcript(
-            &transcript("mergeProps", vec![Some(0), Some(1)], true, true),
+            &transcript("merge", vec![Some(0), Some(1)], true, true),
             1,
         )
         .expect_err("two parameter-rooted sources refuse rather than pick");
@@ -24697,11 +24725,9 @@ mod tests {
 
         // No parameter-rooted source at all: the claim names one and there is
         // none, so the merged object carries nothing of the caller's.
-        let rootless = census_merged_props_returns_transcript(
-            &transcript("mergeProps", vec![None], true, true),
-            0,
-        )
-        .expect_err("a merge of the export's own literals carries no caller reactivity");
+        let rootless =
+            census_merged_props_returns_transcript(&transcript("merge", vec![None], true, true), 0)
+                .expect_err("a merge of the export's own literals carries no caller reactivity");
         assert!(
             rootless.contains("no parameter-rooted source"),
             "{rootless}"
@@ -24717,7 +24743,7 @@ mod tests {
 
         // The producer traced nothing. Silence is never "therefore a merge".
         let untraced = census_merged_props_returns_transcript(
-            &transcript("mergeProps", vec![None, Some(1)], true, false),
+            &transcript("merge", vec![None, Some(1)], true, false),
             1,
         )
         .expect_err("an empty sources list is the producer's silence");
@@ -24729,7 +24755,7 @@ mod tests {
         // A valueless completion yields `undefined`, which contradicts the
         // claim outright — that is ADR 0035's empty closure, not this one.
         let bare = census_merged_props_returns_transcript(
-            &transcript("mergeProps", vec![None, Some(1)], false, false),
+            &transcript("merge", vec![None, Some(1)], false, false),
             1,
         )
         .expect_err("a bare completion is not a merged props object");

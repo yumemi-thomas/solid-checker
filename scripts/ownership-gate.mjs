@@ -268,8 +268,22 @@ for (const [index, row] of (ledger.cases ?? []).entries()) {
 if (requireComplete && ledger.cases.some((row) => row.disposition === "pending")) fail(failures, "migration ledger still contains pending rows");
 if (requireRetained) {
   const retained = new Set(["reactivity", "no-destructure", "components-return-once", "jsx-no-duplicate-props", "prefer-classlist", "prefer-for", "prefer-show", "jsx-no-undef"]);
-  const pending = ledger.cases.filter((row) => retained.has(row.upstreamCase.split("__")[0]) && row.disposition !== "migrated");
-  if (pending.length) fail(failures, `${pending.length} retained-rule ledger rows are not migrated`);
+  // A retained-rule case must be migrated, or dropped for a reason this gate
+  // recognizes. The guard exists to stop a case being dropped *silently*, not
+  // to forbid dropping one: eslint-plugin-solid targets Solid 1.x, so retiring
+  // the 1.x dialect (ADR 0110) made every upstream case unanalyzable by this
+  // build at once. Each such row now carries that reason, and any other
+  // disposition still fails here.
+  const RETIREMENT_REASON = "retired (ADR 0110)";
+  const unexplained = ledger.cases.filter(
+    (row) =>
+      retained.has(row.upstreamCase.split("__")[0]) &&
+      row.disposition !== "migrated" &&
+      !(row.disposition === "dropped" && (row.reason ?? "").includes(RETIREMENT_REASON))
+  );
+  if (unexplained.length) {
+    fail(failures, `${unexplained.length} retained-rule ledger rows are neither migrated nor dropped for a recorded reason`);
+  }
 }
 
 if (failures.length) {

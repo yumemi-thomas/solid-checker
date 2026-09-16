@@ -453,7 +453,8 @@ const DEPRECATED_RULE_KEYS = [
   ["component-props-destructure", "no-destructure"],
   ["component-returns-conditionally", "components-return-once"],
   ["expected-function-got-expression", "reactive-handler-frozen"],
-  ["v1/expected-function-got-expression", "v1/reactive-handler-frozen"],
+  // The `v1/` alias went with the 1.x catalog (ADR 0110): a deprecation alias
+  // can only delegate to a rule that still exists, and its target does not.
   ["resolve-in-reactive-scope", "resolve-in-tracked-scope"],
   ["sync-node-received-async", "sync-computation-received-async"]
 ];

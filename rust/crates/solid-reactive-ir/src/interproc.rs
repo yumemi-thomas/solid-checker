@@ -6411,17 +6411,6 @@ mod tests {
             primitive_callback_execution(Some(Primitive::CreateEffect), 2, 2, &solid2),
             None
         );
-
-        let solid1x = solid_dialect::Solid1x;
-        assert_eq!(
-            primitive_callback_execution(Some(Primitive::CreateEffect), 0, 2, &solid1x),
-            Some("tracked")
-        );
-        // 1.x's second argument is a seed value, not a callback.
-        assert_eq!(
-            primitive_callback_execution(Some(Primitive::CreateEffect), 1, 2, &solid1x),
-            None
-        );
     }
 
     /// The table above answers "how would a callback here run"; this answers
@@ -6431,7 +6420,6 @@ mod tests {
     #[test]
     fn a_primitive_slot_roots_an_invoke_claim_only_with_its_premises() {
         use typefacts::Callability as C;
-        let solid1x = solid_dialect::Solid1x;
         let solid2 = solid_dialect::Solid2;
         let roots =
             |dialect: &dyn solid_dialect::Dialect, primitive, argument, count, callability| {
@@ -6462,54 +6450,6 @@ mod tests {
             0,
             1,
             Some(C::Unknown)
-        ));
-        assert!(roots(&solid1x, Primitive::CreateMemo, 0, 1, None));
-
-        // `mergeProps` memoizes a merge source only *if* it is a function, so an
-        // unproven callability is the missing premise -- the `@solidjs/meta`
-        // `Stylesheet` and `@solidjs/router` `A`/`Route` shape. A parameter the
-        // types prove callable still roots the claim.
-        for argument in [0, 1] {
-            assert!(!roots(
-                &solid1x,
-                Primitive::MergeProps,
-                argument,
-                2,
-                Some(C::Unknown)
-            ));
-            assert!(!roots(&solid1x, Primitive::MergeProps, argument, 2, None));
-            assert!(roots(
-                &solid1x,
-                Primitive::MergeProps,
-                argument,
-                2,
-                Some(C::Callable)
-            ));
-        }
-
-        // 1.x's `createStore(store?, options?)` has no compute form at all, and
-        // its own slot table says so. This is `createFluxStore` under 0.1.1.
-        assert!(!roots(
-            &solid1x,
-            Primitive::CreateStore,
-            0,
-            1,
-            Some(C::Callable)
-        ));
-        assert!(!roots(
-            &solid1x,
-            Primitive::CreateStore,
-            0,
-            2,
-            Some(C::Callable)
-        ));
-        // 1.x `createSignal(() => value)` stores the function as the value.
-        assert!(!roots(
-            &solid1x,
-            Primitive::CreateSignal,
-            0,
-            1,
-            Some(C::Callable)
         ));
 
         // 2.0's store and signal pairs are separated by callability and by
@@ -6559,14 +6499,6 @@ mod tests {
             assert!(!roots(&solid2, primitive, 0, 1, None));
             assert!(!roots(&solid2, primitive, 0, 1, Some(C::Unknown)));
         }
-        // 1.x carries neither optimistic primitive, so its slot table refuses
-        // them even for a provably callable argument.
-        for primitive in [
-            Primitive::CreateOptimistic,
-            Primitive::CreateOptimisticStore,
-        ] {
-            assert!(!roots(&solid1x, primitive, 0, 2, Some(C::Callable)));
-        }
 
         // `UntypedCallable` -- the signature-less `Function` supertype -- is a
         // *positive* callability proof with nothing to read from the
@@ -6574,10 +6506,6 @@ mod tests {
         // `Callable` does. This is the answer an artifact whose declaration
         // types the slot `Function` yields.
         for (dialect, primitive) in [
-            (
-                &solid1x as &dyn solid_dialect::Dialect,
-                Primitive::MergeProps,
-            ),
             (
                 &solid2 as &dyn solid_dialect::Dialect,
                 Primitive::CreateStore,
@@ -6589,19 +6517,6 @@ mod tests {
         ] {
             assert!(roots(dialect, primitive, 0, 2, Some(C::UntypedCallable)));
         }
-        // `Mixed` is the opposite: a *proven* union holding both a callable and
-        // a non-callable constituent -- a real `Partial<P> | (() => Partial<P>)`
-        // merge source. The runtime invokes it on one side of that union and
-        // copies it on the other, so no `invoke` claim is proven and the
-        // conditional slots withdraw. The unconditional slots keep it, because
-        // premise 1 only ever refuses a *proven non-callable* value.
-        assert!(!roots(
-            &solid1x,
-            Primitive::MergeProps,
-            0,
-            2,
-            Some(C::Mixed)
-        ));
         assert!(!roots(
             &solid2,
             Primitive::CreateStore,
@@ -6659,11 +6574,6 @@ mod tests {
             primitive_callback_execution(Some(Primitive::CreateRoot), 0, 1, &dialect),
             Some("inline")
         );
-        let solid1x = solid_dialect::Solid1x;
-        assert_eq!(
-            primitive_callback_execution(Some(Primitive::CreateResource), 1, 2, &solid1x),
-            Some("inline")
-        );
         assert_eq!(
             primitive_callback_execution(Some(Primitive::RunWithOwner), 1, 2, &dialect),
             Some("inline")
@@ -6673,20 +6583,6 @@ mod tests {
             None
         );
         assert_eq!(primitive_callback_execution(None, 0, 0, &dialect), None);
-
-        let solid1x = solid_dialect::Solid1x;
-        assert_eq!(
-            primitive_callback_execution(Some(Primitive::On), 0, 2, &solid1x),
-            Some("deferred")
-        );
-        assert_eq!(
-            primitive_callback_execution(Some(Primitive::On), 1, 2, &solid1x),
-            Some("deferred")
-        );
-        assert_eq!(
-            primitive_callback_execution(Some(Primitive::MergeProps), 3, 4, &solid1x),
-            Some("tracked")
-        );
     }
 
     /// The composition rule, innermost wrapper first. Each row is a real shape

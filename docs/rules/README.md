@@ -1,12 +1,18 @@
 # Rules
 
-solid-checker has two dialect-owned catalogs: 18 rules for Solid 1.x and 27
-for Solid 2.0. Solid 1.x findings keep a `v1/` prefix; Solid 2.0 findings are
-unprefixed. The checker detects the installed `solid-js` major, with
-`--dialect solid-v1` and `--dialect solid-v2` available for unusual layouts.
+solid-checker ships one dialect-owned catalog: 27 rules for Solid 2.0, with
+unprefixed rule names. The checker detects the installed `solid-js` major and
+**refuses** a project whose runtime it has no vocabulary for
+([`unsupported-solid-runtime`](unsupported-solid-runtime.md)) rather than
+analyzing it under the wrong language; `--dialect solid-v2` is available for
+unusual layouts. The Solid 1.x catalog was retired on 2026-09-16 — see
+[ADR 0110](../adr/0110-the-checker-analyzes-solid-2-only.md), and
+[the catalog migration note](../rule-catalog-migration.md) for mapping a `v1/`
+suppression onto its 2.0 identity.
 
-A shared `SCxxxx` code names one defect concept across dialects, while the rule
-name is the configurable external identity. Findings are either:
+An `SCxxxx` code names one defect concept and the rule name is the configurable
+external identity; the two are separate so a code can outlive a rename and a
+future second catalog can share a concept without sharing a name. Findings are either:
 
 - **violation** — semantic and execution facts prove a runtime defect;
 - **uncertifiable** — required evidence is unavailable, so correctness cannot
@@ -97,29 +103,6 @@ the missing evidence and remediation.
 `unsupported-solid-runtime` is the one identity here the rules engine never
 produces: dialect detection emits it before analysis, and it appears **alone**
 when it appears at all. See ADR 0110.
-
-## Solid 1.x catalog — 18 rules
-
-| Code | Rule | Severity | Default |
-| --- | --- | --- | --- |
-| SC1001 | [v1/strict-read-untracked](v1/strict-read-untracked.md) | warning | on |
-| SC1002 | [v1/reactive-read-after-await](v1/reactive-read-after-await.md) | error | on |
-| SC1003 | [v1/no-destructure](v1/no-destructure.md) | error | on |
-| SC1004 | [v1/components-return-once](v1/components-return-once.md) | warning | on |
-| SC1005 | [v1/uncalled-accessor](v1/uncalled-accessor.md) | warning | on |
-| SC1007 | [v1/reactive-handler-frozen](v1/reactive-handler-frozen.md) | warning | on |
-| SC2001 | [v1/reactive-write-in-owned-scope](v1/reactive-write-in-owned-scope.md) | error | on |
-| SC2003 | [v1/no-direct-mutation](v1/no-direct-mutation.md) | warning | on |
-| SC4001 | [v1/missing-owner](v1/missing-owner.md) | warning | on |
-| SC7001 | [v1/missing-effect-function](v1/missing-effect-function.md) | error | on |
-| SC8003 | [v1/jsx-no-duplicate-props](v1/jsx-no-duplicate-props.md) | error | on |
-| SC8005 | [v1/jsx-no-undef](v1/jsx-no-undef.md) | error | on |
-| SC8013 | [v1/prefer-classlist](v1/prefer-classlist.md) | warning | on |
-| SC8014 | [v1/prefer-for](v1/prefer-for.md) | error | on |
-| SC8015 | [v1/prefer-show](v1/prefer-show.md) | warning | on |
-| SC9005 | [v1/package-contract-incomplete](v1/package-contract-incomplete.md) | error | on |
-| SC9011 | [v1/reactive-source-uncaptured](v1/reactive-source-uncaptured.md) | warning | on |
-| SC9012 | [v1/reactive-dispatch-unresolved](v1/reactive-dispatch-unresolved.md) | warning | on |
 
 ## Migrating from eslint-plugin-solid
 

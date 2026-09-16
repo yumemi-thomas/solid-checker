@@ -272,17 +272,10 @@ impl SemanticDemandCapabilities {
     };
     /// Only the 2.0 catalog carries `server-function-rich-argument`, so only it
     /// pays for the library-type identities that rule reads.
-    #[cfg(feature = "dialect-v2")]
     const SOLID_2: Self = Self {
         array_map_receiver_types: true,
         async_array_map_callbacks: true,
         server_argument_library_types: true,
-    };
-    #[cfg(feature = "dialect-v1")]
-    const SOLID_1: Self = Self {
-        array_map_receiver_types: true,
-        async_array_map_callbacks: false,
-        server_argument_library_types: false,
     };
 }
 
@@ -337,12 +330,7 @@ impl std::fmt::Debug for Dialect {
 
 /// Every dialect the checker can run with. A new dialect registers here and
 /// becomes selectable by id everywhere a dialect can be named.
-pub static ALL: &[&Dialect] = &[
-    #[cfg(feature = "dialect-v2")]
-    &SOLID_V2,
-    #[cfg(feature = "dialect-v1")]
-    &SOLID_V1,
-];
+pub static ALL: &[&Dialect] = &[&SOLID_V2];
 
 /// Resolves a dialect by its stable id.
 #[must_use]
@@ -354,14 +342,7 @@ pub fn by_id(id: &str) -> Option<&'static Dialect> {
 /// nothing resolves.
 #[must_use]
 pub fn default_dialect() -> &'static Dialect {
-    #[cfg(feature = "dialect-v2")]
-    {
-        &SOLID_V2
-    }
-    #[cfg(all(not(feature = "dialect-v2"), feature = "dialect-v1"))]
-    {
-        &SOLID_V1
-    }
+    &SOLID_V2
 }
 
 /// The dialect for a Solid language version, if this build includes it.
@@ -554,30 +535,6 @@ static SOLID_V2: Dialect = Dialect {
     },
     semantic_demands: SemanticDemandCapabilities::SOLID_2,
     catalog_capabilities: solid_v2_rules::CATALOG_CAPABILITIES,
-};
-
-#[cfg(feature = "dialect-v1")]
-static SOLID_V1: Dialect = Dialect {
-    id: "solid-v1",
-    compiler_facts_identity: solid_v1_compiler::COMPILER_FACTS_IDENTITY,
-    vocabulary: &solid_dialect::Solid1x,
-    rule_count: solid_v1_rules::Rule::ALL.len(),
-    compiler: || Box::new(solid_v1_compiler::NativeCompilerFacts),
-    solve_measured: solid_v1_rules::solve_measured,
-    docs_url: solid_v1_rules::docs_url,
-    has_rule: |name| {
-        solid_v1_rules::Rule::ALL
-            .into_iter()
-            .any(|rule| rule.metadata().name == name)
-    },
-    rule_metadata: |name| {
-        solid_v1_rules::Rule::ALL
-            .into_iter()
-            .find(|rule| rule.metadata().name == name)
-            .map(solid_v1_rules::Rule::metadata)
-    },
-    semantic_demands: SemanticDemandCapabilities::SOLID_1,
-    catalog_capabilities: solid_v1_rules::CATALOG_CAPABILITIES,
 };
 
 #[cfg(test)]
@@ -861,16 +818,6 @@ mod tests {
     #[test]
     fn every_catalog_identity_resolves_to_its_metadata() {
         for dialect in ALL {
-            #[cfg(feature = "dialect-v1")]
-            if dialect.id == "solid-v1" {
-                for rule in solid_v1_rules::Rule::ALL {
-                    assert_eq!(
-                        (dialect.rule_metadata)(rule.metadata().name),
-                        Some(rule.metadata())
-                    );
-                }
-            }
-            #[cfg(feature = "dialect-v2")]
             if dialect.id == "solid-v2" {
                 for rule in solid_v2_rules::Rule::ALL {
                     assert_eq!(
@@ -880,84 +827,6 @@ mod tests {
                 }
             }
         }
-    }
-
-    #[cfg(all(feature = "dialect-v1", feature = "dialect-v2"))]
-    #[test]
-    fn all_style_preferences_are_default_enabled_preset_members() {
-        let expected = HashSet::from([
-            "v1/prefer-classlist",
-            "v1/prefer-for",
-            "v1/prefer-show",
-            "prefer-for",
-            "prefer-show",
-        ]);
-        let observed = solid_v1_rules::Rule::ALL
-            .into_iter()
-            .map(|rule| rule.metadata())
-            .chain(
-                solid_v2_rules::Rule::ALL
-                    .into_iter()
-                    .map(|rule| rule.metadata()),
-            )
-            .filter_map(|metadata| {
-                assert!(
-                    metadata.default_enabled,
-                    "{} unexpectedly remains default-disabled",
-                    metadata.name
-                );
-                (metadata.presets == ["preferences"]).then_some(metadata.name)
-            })
-            .collect::<HashSet<_>>();
-        assert_eq!(observed, expected);
-    }
-
-    /// The documentation and suppression model both depend on this exact
-    /// ownership split. Keep it derived from the two catalogs rather than
-    /// maintaining an unaudited second list in prose. The one test that must
-    /// see both catalogs at once; every other test asks the registry, so
-    /// single-dialect feature builds still compile the suite.
-    #[cfg(all(feature = "dialect-v1", feature = "dialect-v2"))]
-    #[test]
-    fn rule_catalogs_keep_the_shared_and_version_only_split() {
-        let v1 = solid_v1_rules::Rule::ALL
-            .into_iter()
-            .map(|rule| rule.metadata().code)
-            .collect::<HashSet<_>>();
-        let v2 = solid_v2_rules::Rule::ALL
-            .into_iter()
-            .map(|rule| rule.metadata().code)
-            .collect::<HashSet<_>>();
-        let shared = v1.intersection(&v2).copied().collect::<HashSet<_>>();
-        let expected = HashSet::from([
-            "SC1001", "SC1002", "SC1003", "SC1004", "SC1005", "SC1007", "SC2001", "SC2003",
-            "SC4001", "SC7001", "SC8003", "SC8014", "SC8015", "SC9005", "SC9011", "SC9012",
-        ]);
-        assert_eq!(shared, expected);
-        assert_eq!(
-            solid_v1_rules::Rule::ALL
-                .into_iter()
-                .filter(|rule| shared.contains(rule.metadata().code))
-                .count(),
-            16
-        );
-        assert_eq!(
-            solid_v2_rules::Rule::ALL
-                .into_iter()
-                .filter(|rule| shared.contains(rule.metadata().code))
-                .count(),
-            16
-        );
-        assert_eq!(
-            solid_v1_rules::Rule::ALL.len() - 16,
-            2,
-            "the 1.x catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
-        );
-        assert_eq!(
-            solid_v2_rules::Rule::ALL.len() - 16,
-            11,
-            "the 2.0 catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
-        );
     }
 
     /// Catalogs own user-facing wording, but the generated export index still
@@ -1335,14 +1204,6 @@ mod tests {
         std::fs::write(&project, "{}").unwrap();
 
         let detection = detect_detailed(&project);
-        #[cfg(feature = "dialect-v1")]
-        {
-            assert!(
-                matches!(&detection, Detection::Installed { dialect, .. } if dialect.id == "solid-v1"),
-                "with the 1.x dialect compiled in, a 1.x install is an installation: {detection:?}"
-            );
-        }
-        #[cfg(not(feature = "dialect-v1"))]
         {
             assert!(
                 matches!(

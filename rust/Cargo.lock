@@ -252,26 +252,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dom-expressions-compiler"
-version = "0.1.0"
-source = "git+https://github.com/yumemi-thomas/solid-1x-compiler?rev=ca3bbfae7d1e00e28ef73f9af58bdb46e248b512#ca3bbfae7d1e00e28ef73f9af58bdb46e248b512"
-dependencies = [
- "html5ever",
- "htmlize",
- "markup5ever_rcdom",
- "napi-build",
- "oxc_allocator 0.118.0",
- "oxc_ast 0.118.0",
- "oxc_ast_visit 0.118.0",
- "oxc_codegen 0.118.0",
- "oxc_parser 0.118.0",
- "oxc_semantic 0.118.0",
- "oxc_span 0.118.0",
- "oxc_syntax 0.118.0",
- "serde",
-]
-
-[[package]]
 name = "dragonbox_ecma"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -895,27 +875,6 @@ dependencies = [
 
 [[package]]
 name = "oxc_codegen"
-version = "0.118.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2eae3ef8d9968d0597f74851563a8188925bc99bcc42ad67f687ba987b1743a0"
-dependencies = [
- "bitflags",
- "cow-utils",
- "dragonbox_ecma",
- "itoa",
- "oxc_allocator 0.118.0",
- "oxc_ast 0.118.0",
- "oxc_data_structures 0.118.0",
- "oxc_index 4.1.0",
- "oxc_semantic 0.118.0",
- "oxc_sourcemap 6.1.1",
- "oxc_span 0.118.0",
- "oxc_syntax 0.118.0",
- "rustc-hash",
-]
-
-[[package]]
-name = "oxc_codegen"
 version = "0.144.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f8a30cbe510caef092aa75fe29e8d37576ca8eb2ab3e9ab34a453a92863e7f0"
@@ -928,7 +887,7 @@ dependencies = [
  "oxc_ecmascript 0.144.0",
  "oxc_index 5.0.0",
  "oxc_semantic 0.144.0",
- "oxc_sourcemap 8.1.2",
+ "oxc_sourcemap",
  "oxc_span 0.144.0",
  "oxc_str 0.144.0",
  "oxc_syntax 0.144.0",
@@ -1158,19 +1117,6 @@ dependencies = [
  "rustc-hash",
  "self_cell",
  "smallvec",
-]
-
-[[package]]
-name = "oxc_sourcemap"
-version = "6.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d378eb8bad20e89d66276aebab51f6a5408571092cac94abdd3eabb773713d6"
-dependencies = [
- "base64-simd",
- "json-escape-simd",
- "rustc-hash",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -1710,8 +1656,6 @@ dependencies = [
  "solid-dialect",
  "solid-facts",
  "solid-reactive-ir",
- "solid-v1-compiler",
- "solid-v1-rules",
  "solid-v2-compiler",
  "solid-v2-rules",
  "tar",
@@ -1730,23 +1674,6 @@ dependencies = [
  "solid-facts",
  "thiserror",
  "typefacts",
-]
-
-[[package]]
-name = "solid-v1-compiler"
-version = "0.1.0"
-dependencies = [
- "dom-expressions-compiler",
- "serde_json",
- "solid-facts",
- "solidjs-compiler",
-]
-
-[[package]]
-name = "solid-v1-rules"
-version = "0.1.0"
-dependencies = [
- "solid-reactive-ir",
 ]
 
 [[package]]
@@ -1778,7 +1705,7 @@ dependencies = [
  "oxc_allocator 0.144.0",
  "oxc_ast 0.144.0",
  "oxc_ast_visit 0.144.0",
- "oxc_codegen 0.144.0",
+ "oxc_codegen",
  "oxc_parser 0.144.0",
  "oxc_semantic 0.144.0",
  "oxc_span 0.144.0",

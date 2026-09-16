@@ -1,7 +1,7 @@
 //! Rust-led orchestration of Oxc AST facts, Solid execution facts, and
 //! TypeScript-Go semantic facts.
 
-#[cfg(not(any(feature = "dialect-v1", feature = "dialect-v2")))]
+#[cfg(not(feature = "dialect-v2"))]
 compile_error!("solid-facts-backend requires at least one dialect feature");
 
 mod accepted_bundles;
@@ -2333,8 +2333,6 @@ mod tests {
         );
     }
 
-    /// Reads both catalogs' demands, so it needs both compiled in.
-    #[cfg(all(feature = "dialect-v1", feature = "dialect-v2"))]
     #[test]
     fn semantic_demand_plan_is_complete_for_downstream_consumers() {
         let file = test_file_facts(
@@ -2554,45 +2552,6 @@ mod tests {
                 "only the compiler-proven JSX child map should request an array-shape query"
             );
         }
-    }
-
-    /// Differential by construction: the claim is that one source yields
-    /// *different* structural accessors under the two vocabularies, so a build
-    /// carrying one dialect has no pair to compare and nothing to assert.
-    #[cfg(all(feature = "dialect-v1", feature = "dialect-v2"))]
-    #[test]
-    fn structural_accessors_follow_the_selected_vocabulary_and_export_modules() {
-        let file = test_file_facts(
-            "src/sources.ts",
-            r#"
-                import { createResource, createProjection } from "solid-js";
-                import { createStore } from "solid-js/store";
-                const [resource] = createResource(fetcher);
-                const projection = createProjection(() => state);
-                const [store] = createStore({ count: 0 });
-            "#,
-        );
-        let names = |selected| {
-            structural_accessor_spans(selected, &file)
-                .into_iter()
-                .filter_map(|span| file.source_text(span).map(str::to_owned))
-                .collect::<HashSet<_>>()
-        };
-
-        assert_eq!(
-            names(
-                dialect::by_version(solid_dialect::Version::V1)
-                    .expect("default build includes solid-v1"),
-            ),
-            HashSet::from(["resource".to_owned(), "store".to_owned()])
-        );
-        assert_eq!(
-            names(
-                dialect::by_version(solid_dialect::Version::V2)
-                    .expect("default build includes solid-v2"),
-            ),
-            HashSet::from(["projection".to_owned()])
-        );
     }
 
     #[test]

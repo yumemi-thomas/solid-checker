@@ -3,18 +3,6 @@
   "comment": "The published archives each dialect's negative claim authority was read against, mirrored out of the Rust tables so a consumer outside this crate can ask whether an installed tree is one the authority can answer about. Pinned field by field by `audited_archives_json_mirrors_the_dialect_tables` in src/lib.rs: a re-audit that changes a tuple fails that test until this file follows. Never a proof surface -- matching a tuple here says only that the identity gate in contract_certification/type_facts.rs could be reached, never that any row denies anything.",
   "dialects": [
     {
-      "id": "solid-v1",
-      "archives": [
-        {
-          "name": "solid-js",
-          "version": "1.9.14",
-          "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
-          "manifestSha256": "52ee61ea826e59a5ec36f6ce91bafb7d38bf99ab04b3a6217993fb17af6037c0"
-        }
-      ],
-      "negativeRowCount": 16
-    },
-    {
       "id": "solid-v2",
       "archives": [
         {

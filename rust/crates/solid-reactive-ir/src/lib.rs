@@ -2274,15 +2274,17 @@ mod tests {
             PrimitiveName::new("projectSpecificHelper", &solid_dialect::Solid2),
             PrimitiveName::Other(_)
         ));
-        // The same spelling can be vocabulary in one dialect and not the
-        // other: `flush` is 2.0-only, `batch` is 1.x-only.
+        // `flush` is 2.0 vocabulary; `batch` is 1.x's and 2.0 does not have
+        // it, so the same spelling resolves in one vocabulary and not another.
+        // This used to be shown against the 1.x dialect directly; with one
+        // vocabulary it is shown the way a consumer would meet it.
         assert!(matches!(
-            PrimitiveName::new("flush", &solid_dialect::Solid1x),
-            PrimitiveName::Other(_)
+            PrimitiveName::new("flush", &solid_dialect::Solid2),
+            PrimitiveName::Known(Primitive::Flush, "flush")
         ));
         assert!(matches!(
-            PrimitiveName::new("batch", &solid_dialect::Solid1x),
-            PrimitiveName::Known(Primitive::Batch, "batch")
+            PrimitiveName::new("batch", &solid_dialect::Solid2),
+            PrimitiveName::Other(_)
         ));
     }
 

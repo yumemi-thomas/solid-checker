@@ -1345,7 +1345,7 @@ impl Dialect for Solid2 {
             // runs its invalidation callback as a leaf owner, but the
             // RC.0 runtime allocates the reaction a computation like
             // `createEffect` does, so 2.0 does not end the ownership chain
-            // there. The `dialect-solid-1x` / `dialect-solid-2` fixture
+            // there. The `dialect-solid-2` fixture
             // pair pins the difference.
             Primitive::CreateTrackedEffect | Primitive::OnSettled => &[(0, CallbackOwner::Leaf)],
             // Not a leaf (1.x's model — the `dialect-solid-2` fixture pins

@@ -8,8 +8,6 @@ members = [
   "crates/solid-checker-wasm",
   "crates/napi-build-host-aware",
   "crates/typefacts",
-  "dialects/solid-v1/compiler",
-  "dialects/solid-v1/rules",
   "dialects/solid-v2/compiler",
   "dialects/solid-v2/rules",
 ]

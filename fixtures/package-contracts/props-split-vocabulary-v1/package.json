@@ -1,9 +1,0 @@
-{
-  "name": "props-split-vocabulary-v1",
-  "version": "1.0.0",
-  "type": "module",
-  "dependencies": {
-    "solid-js": "1.9.14"
-  },
-  "exports": "./index.js"
-}

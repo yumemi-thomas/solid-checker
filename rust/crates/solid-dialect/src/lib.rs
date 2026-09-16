@@ -19,11 +19,9 @@
 #![forbid(unsafe_code)]
 
 pub mod exports;
-mod solid_1x;
 mod solid_2;
 
 pub use exports::Position as ExportPosition;
-pub use solid_1x::Solid1x;
 pub use solid_2::Solid2;
 
 /// Which Solid language version a project targets.
@@ -56,15 +54,26 @@ pub enum Version {
 /// Retiring a dialect is therefore an edit *here*, plus deleting whatever is
 /// genuinely differential. Nothing that merely happens to run over every
 /// vocabulary needs touching.
-pub const DIALECTS: &[&'static dyn Dialect] = &[&Solid1x, &Solid2];
+pub const DIALECTS: &[&'static dyn Dialect] = &[&Solid2];
 
 impl Version {
-    /// The adapter for this version.
+    /// The adapter for this version, when this build carries one.
+    ///
+    /// [`Version::V1`] answers `None`, and the variant is deliberately kept
+    /// with no vocabulary behind it. *Classifying* an installed runtime and
+    /// *analyzing* it are different questions: detection has to recognise
+    /// `1.9.14` as a released major in order to refuse it
+    /// (`SC9013 unsupported-solid-runtime`), and a build that had forgotten
+    /// 1.x existed would fall through to the default dialect and analyze a 1.x
+    /// project as 2.0 in silence — the exact outcome ADR 0110 forbids.
+    ///
+    /// Use [`DIALECTS`] to ask what the vocabularies on hand say; use this
+    /// only when a specific version's vocabulary is the question.
     #[must_use]
-    pub fn dialect(self) -> &'static dyn Dialect {
+    pub fn dialect(self) -> Option<&'static dyn Dialect> {
         match self {
-            Self::V1 => &Solid1x,
-            Self::V2 => &Solid2,
+            Self::V1 => None,
+            Self::V2 => Some(&Solid2),
         }
     }
 
@@ -1965,8 +1974,8 @@ fn callback_exports_from_bundles(
 mod tests {
     use super::*;
 
-    fn dialects() -> [&'static dyn Dialect; 2] {
-        [Version::V1.dialect(), Version::V2.dialect()]
+    fn dialects() -> &'static [&'static dyn Dialect] {
+        DIALECTS
     }
 
     /// The single archive some dialect audited under `name`, for tests that
@@ -2008,15 +2017,7 @@ mod tests {
             assert_eq!(dialect.type_role("solid-js", "ComponentProps"), None);
         }
         assert_eq!(
-            Version::V1.dialect().type_role("solid-js", "Resource"),
-            Some(TypeRole::Accessor)
-        );
-        assert_eq!(
-            Version::V1.dialect().type_role("solid-js/store", "Store"),
-            Some(TypeRole::Store)
-        );
-        assert_eq!(
-            Version::V2.dialect().type_role("solid-js", "Signal"),
+            (&Solid2 as &dyn Dialect).type_role("solid-js", "Signal"),
             Some(TypeRole::Signal)
         );
     }
@@ -2081,11 +2082,10 @@ mod tests {
     #[test]
     fn the_callback_executions_agree_with_the_bundled_contract() {
         let mut checked = 0;
-        for (version, bundle, packages) in [
-            (Version::V1, "solid-v1", &["solid-js"][..]),
-            (Version::V2, "solid-v2", &["solid-js", "@solidjs/web"][..]),
-        ] {
-            let dialect = version.dialect();
+        for (version, bundle, packages) in
+            [(Version::V2, "solid-v2", &["solid-js", "@solidjs/web"][..])]
+        {
+            let dialect = &Solid2 as &dyn Dialect;
             let contract_rows = callback_exports_from_bundles(bundle, packages);
             for (name, rows) in &contract_rows {
                 let Some(primitive) = dialect.primitive(name) else {
@@ -2128,12 +2128,19 @@ mod tests {
         }
         // A silent zero here would make the assertion above unreachable and
         // this test a no-op, which is how the sidecar protocol check rotted.
-        assert!(checked > 20, "only {checked} callbacks cross-checked");
+        //
+        // The floor was 20 while the 1.x bundle was also cross-checked, and
+        // measuring it after the retirement is how we learned that **most of
+        // that came from 1.x**: the Solid 2 bundle's own contract files carry
+        // callback rows for only four modelled primitives. The guard is
+        // re-pinned to the real 2.0 number rather than deleted, and closing
+        // that gap is contract work, not dialect work.
+        assert!(checked >= 4, "only {checked} callbacks cross-checked");
     }
 
     #[test]
     fn every_recognized_name_round_trips() {
-        for dialect in dialects() {
+        for &dialect in dialects() {
             for name in dialect_names(dialect).iter().copied() {
                 let primitive = dialect
                     .primitive(name)
@@ -2156,28 +2163,23 @@ mod tests {
 
     #[test]
     fn callback_positions_are_the_dialects_headline_difference() {
-        let one = Version::V1.dialect();
-        let two = Version::V2.dialect();
+        let two = &Solid2 as &dyn Dialect;
 
         // 1.x: createEffect(fn, value?) — the callback is first, and index 1 is
         // a seed VALUE. 2.0: createEffect(compute, apply) — index 1 is the
         // apply callback. Reading 1.x's seed as a callback is the single
         // highest-yield way to get this wrong.
-        assert_eq!(one.callback_positions(Primitive::CreateEffect), &[0]);
         assert_eq!(two.callback_positions(Primitive::CreateEffect), &[1]);
-        assert_eq!(one.callback_positions(Primitive::CreateRenderEffect), &[0]);
         assert_eq!(two.callback_positions(Primitive::CreateRenderEffect), &[1]);
 
         // Unchanged across the split.
-        assert_eq!(one.callback_positions(Primitive::CreateMemo), &[0]);
         assert_eq!(two.callback_positions(Primitive::CreateMemo), &[0]);
-        assert_eq!(one.callback_positions(Primitive::Untrack), &[0]);
         assert_eq!(two.callback_positions(Primitive::Untrack), &[0]);
     }
 
     #[test]
     fn deferred_execution_is_independent_of_callback_position() {
-        let two = Version::V2.dialect();
+        let two = &Solid2 as &dyn Dialect;
 
         // The pair that makes this a separate question. Both put a callback at
         // index 0; one defers, one tracks. A rule that inferred "deferred"
@@ -2217,18 +2219,6 @@ mod tests {
         ] {
             assert!(!two.runs_callback_deferred(primitive), "{primitive:?}");
         }
-
-        // Solid 1.x batch is synchronous and startTransition restores the
-        // captured Listener before invoking its callback. Neither explicitly
-        // clears tracking; createRoot does. (Timing caveat: the 1.9 runtime
-        // invokes the transition callback in a Promise.resolve().then()
-        // microtask, but tracking-wise it behaves like the call site, which
-        // is what this question asks.)
-        let one = Version::V1.dialect();
-        assert!(!one.runs_callback_deferred(Primitive::Batch));
-        assert!(!one.runs_callback_deferred(Primitive::StartTransition));
-        assert!(one.runs_callback_deferred(Primitive::CreateRoot));
-        assert!(!one.runs_callback_deferred(Primitive::CreateMemo));
     }
 
     /// The set every synchronous-clearing name resolves to, per dialect.
@@ -2254,13 +2244,8 @@ mod tests {
     /// forwards a callback through it, and has to be a deliberate edit here.
     #[test]
     fn the_synchronous_clearing_set_is_the_inline_half_of_the_deferred_set() {
-        let one = Version::V1.dialect();
-        let two = Version::V2.dialect();
+        let two = &Solid2 as &dyn Dialect;
 
-        assert_eq!(
-            synchronous_clearing_names(one),
-            vec!["createRoot", "runWithOwner", "untrack"]
-        );
         // `flush` earns its place on the rc runtime's own bytes, not on its
         // name: `@solidjs/signals` `flush(fn)` runs `fn()` inside a
         // `try { return fn() } finally { flush(); syncDepth-- }`, so the
@@ -2282,15 +2267,17 @@ mod tests {
         // The two halves of `runs_callback_deferred` stay separable: a
         // genuinely later callback is never synchronous, and a primitive the
         // dialect models no callback for is never either.
-        for primitive in [Primitive::OnCleanup, Primitive::CreateReaction] {
-            assert!(!one.runs_callback_synchronously(primitive), "{primitive:?}");
-        }
-        for primitive in [Primitive::OnSettled, Primitive::Action, Primitive::Lazy] {
+        for primitive in [
+            Primitive::OnCleanup,
+            Primitive::CreateReaction,
+            Primitive::OnSettled,
+            Primitive::Action,
+            Primitive::Lazy,
+        ] {
             assert!(!two.runs_callback_synchronously(primitive), "{primitive:?}");
         }
         // Inline but not listener-clearing: `batch` is transparent to its call
         // site, so it is not in this set either.
-        assert!(!one.runs_callback_synchronously(Primitive::Batch));
         assert!(!two.runs_callback_synchronously(Primitive::Latest));
     }
 
@@ -2324,30 +2311,7 @@ mod tests {
     /// a guessed schedule would ship.
     #[test]
     fn the_tracked_callback_schedule_partitions_each_dialect() {
-        let one = Version::V1.dialect();
-        let two = Version::V2.dialect();
-
-        // 1.x: everything that reaches `updateComputation` on the creating
-        // call, and `createEffect`, which pushes onto `Effects` instead.
-        // Source lines in `Solid1x::tracked_callback_timing`.
-        assert_eq!(
-            tracked_schedule_names(one, TrackedCallbackTiming::DuringCall),
-            vec![
-                "createComputed",
-                "createMemo",
-                "createRenderEffect",
-                "createResource",
-                // `solid-js/web`'s `effect`, which 1.x aliases to
-                // `createRenderEffect` (`Solid1x::ALIASES`) — the same eager
-                // primitive under a second published name.
-                "effect",
-                "mergeProps"
-            ]
-        );
-        assert_eq!(
-            tracked_schedule_names(one, TrackedCallbackTiming::AfterCall),
-            vec!["createEffect"]
-        );
+        let two = &Solid2 as &dyn Dialect;
 
         // 2.0 disagrees with 1.x on `createEffect` — `effect()` recomputes the
         // tracked compute during the call there — and its one deferring member
@@ -2368,22 +2332,6 @@ mod tests {
             vec!["createTrackedEffect"]
         );
 
-        // The refusals, named rather than merely absent. 1.x `createSignal`
-        // never invokes its argument, `children`/`createSelector` have no
-        // schedule row in contract emission, and 2.0's store pair resisted
-        // measurement.
-        for primitive in [
-            Primitive::CreateSignal,
-            Primitive::Children,
-            Primitive::CreateSelector,
-            Primitive::CreateDeferred,
-        ] {
-            assert_eq!(
-                one.tracked_callback_timing(primitive, 0, 2),
-                None,
-                "{primitive:?}"
-            );
-        }
         for primitive in [
             Primitive::CreateStore,
             Primitive::CreateOptimisticStore,
@@ -2397,85 +2345,26 @@ mod tests {
             );
         }
 
-        // A schedule is only ever stated for a callback this dialect calls
-        // `Tracked`. `createEffect`'s second argument is 1.x's seed value and
-        // 2.0's deferred apply; neither is this method's domain.
-        assert_eq!(
-            one.tracked_callback_timing(Primitive::CreateEffect, 1, 2),
-            None
-        );
         assert_eq!(
             two.tracked_callback_timing(Primitive::CreateEffect, 1, 2),
             None
         );
-        assert_eq!(one.tracked_callback_timing(Primitive::Untrack, 0, 1), None);
         assert_eq!(two.tracked_callback_timing(Primitive::Untrack, 0, 1), None);
-        // 1.x's `createResource(fetcher)` one-argument form has a deferred
-        // fetcher at 0 and no tracked source, so the two-argument answer must
-        // not leak into it.
-        assert_eq!(
-            one.tracked_callback_timing(Primitive::CreateResource, 0, 1),
-            None
-        );
-        assert_eq!(
-            one.tracked_callback_timing(Primitive::CreateResource, 0, 2),
-            Some(TrackedCallbackTiming::DuringCall)
-        );
     }
 
     #[test]
     fn the_async_boundary_is_a_role_not_a_name() {
-        let one = Version::V1.dialect();
-        let two = Version::V2.dialect();
+        let two = &Solid2 as &dyn Dialect;
 
-        assert_eq!(one.boundary_kind("Suspense"), Some(Boundary::Async));
         assert_eq!(two.boundary_kind("Loading"), Some(Boundary::Async));
-        assert_eq!(one.boundary_kind("ErrorBoundary"), Some(Boundary::Error));
 
         // Each dialect refuses the other's spelling.
-        assert_eq!(one.boundary_kind("Loading"), None);
         assert_eq!(two.boundary_kind("Suspense"), None);
     }
 
     #[test]
-    fn names_absent_from_solid_1_are_not_recognized() {
-        // docs/adr — the 1.x API surface was extracted from solid-js 1.9.14 and
-        // each of these was verified as 0 occurrences in the published package.
-        let absent = [
-            "ownedWrite",
-            "onSettled",
-            "createTrackedEffect",
-            "createProjection",
-            "createOptimistic",
-            "createOptimisticStore",
-            "flush",
-            "affects",
-            "refresh",
-            "isPending",
-            "Repeat",
-            "Loading",
-            "Reveal",
-            "action",
-            "createOwner",
-            "merge",
-            "omit",
-            "deep",
-            "snapshot",
-            "createAsync",
-        ];
-        let one = Version::V1.dialect();
-        for name in absent {
-            assert_eq!(
-                one.primitive(name),
-                None,
-                "{name} does not exist in Solid 1.x"
-            );
-        }
-    }
-
-    #[test]
     fn names_removed_in_solid_2_are_not_recognized() {
-        let two = Version::V2.dialect();
+        let two = &Solid2 as &dyn Dialect;
         for name in ["batch", "createComputed", "createResource", "Suspense"] {
             assert_eq!(two.primitive(name), None, "{name} is gone in Solid 2.0");
         }
@@ -2511,11 +2400,7 @@ mod tests {
             }
         }
         assert_eq!(
-            Version::V1.dialect().boundary_name(Boundary::Async),
-            "Suspense"
-        );
-        assert_eq!(
-            Version::V2.dialect().boundary_name(Boundary::Async),
+            (&Solid2 as &dyn Dialect).boundary_name(Boundary::Async),
             "Loading"
         );
     }
@@ -2546,41 +2431,12 @@ mod tests {
             }
         }
 
-        // The headline split. In 1.x these live under a subpath; 2.0 folded
-        // them into core and has no subpath to fold them out of.
-        let one = Version::V1.dialect();
-        assert_eq!(
-            one.export_modules("createStore", ExportPosition::Value),
-            ["solid-js/store"]
-        );
-        assert_eq!(
-            one.export_modules("createSignal", ExportPosition::Value),
-            ["solid-js"]
-        );
-        let two = Version::V2.dialect();
+        // 2.0 folded the store and DOM APIs into core and has no subpath to
+        // fold them out of; 1.x kept them under `solid-js/store`.
+        let two = &Solid2 as &dyn Dialect;
         assert_eq!(
             two.export_modules("createStore", ExportPosition::Value),
             ["solid-js"]
-        );
-
-        // A name exported from two modules resolves from either, and the
-        // single-module predecessor could only ever name one of them.
-        assert_eq!(
-            one.export_modules("Show", ExportPosition::Value),
-            ["solid-js", "solid-js/web"]
-        );
-
-        // Types are a position, not a separate namespace. `Store` is 1.x's
-        // store type and no value at all; a value-position lookup finds
-        // nothing, which is what keeps `import { Store }` -- already a
-        // TypeScript error -- from being reported twice.
-        assert_eq!(
-            one.export_modules("Store", ExportPosition::Type),
-            ["solid-js/store"]
-        );
-        assert!(
-            one.export_modules("Store", ExportPosition::Value)
-                .is_empty()
         );
 
         // A name the dialect does not export has no module, which is not the
@@ -2590,42 +2446,34 @@ mod tests {
             two.export_modules("createResource", ExportPosition::Value)
                 .is_empty()
         );
-        assert!(
-            one.export_modules("flush", ExportPosition::Value)
-                .is_empty()
-        );
     }
 
-    /// The three per-argument questions are independent, and each has at least
-    /// one primitive where the two dialects answer differently.
+    /// The per-argument questions are independent, and the 2.0 answer to each
+    /// is pinned here.
     ///
-    /// Every one of these pairs was a single hardcoded list in the engine, and
-    /// in every case the list held 2.0's answer.
+    /// This was a differential against the 1.x vocabulary, and every pair in
+    /// it had been a single hardcoded list in the engine holding 2.0's answer.
+    /// The contrast is gone with the 1.x dialect; the 2.0 half is kept in
+    /// full, because these are exactly the API shapes the checker must not
+    /// drift from — `createEffect(compute, apply)`, `createMemo(compute,
+    /// options)`, `createStore(value, options)`.
     #[test]
-    fn the_dialects_disagree_about_where_and_when_arguments_are() {
-        let one = Version::V1.dialect();
-        let two = Version::V2.dialect();
+    fn the_argument_questions_are_independent_and_pinned_to_the_two_zero_api() {
+        let two = &Solid2 as &dyn Dialect;
 
-        // createEffect: 1.x's second argument is a seed, 2.0's is the apply
-        // callback. A read in a 1.x seed was reported as running in an "apply
-        // callback" 1.x does not have.
-        assert_eq!(
-            one.callback_executions(Primitive::CreateEffect),
-            [(0, Execution::Tracked)]
-        );
+        // createEffect takes a tracked compute arm and a deferred apply arm.
+        // 1.x's second argument was a seed, and a read in it was once reported
+        // as running in an "apply callback" 1.x did not have.
         assert_eq!(
             two.callback_executions(Primitive::CreateEffect),
             [(0, Execution::Tracked), (1, Execution::Deferred)]
         );
 
-        // createMemo's options: 1.x `(fn, value?, options?)`, 2.0
-        // `(compute, options?)`.
-        assert_eq!(one.options_argument(Primitive::CreateMemo), Some(2));
+        // createMemo is `(compute, options?)` — 1.x's positional `value`
+        // parameter is gone, so the options slot moved from 2 to 1.
         assert_eq!(two.options_argument(Primitive::CreateMemo), Some(1));
-        assert!(!one.supports_sync_option(Primitive::CreateMemo));
         assert!(two.supports_sync_option(Primitive::CreateMemo));
-        // And createStore's, the other way round.
-        assert_eq!(one.options_argument(Primitive::CreateStore), Some(1));
+        // createStore keeps a value parameter, so its options slot is 2.
         assert_eq!(two.options_argument(Primitive::CreateStore), Some(2));
         // The store family has an options slot but no `sync` routing: rc.0
         // rebuilds projection node options with only `loadingValue`/`name`,
@@ -2634,26 +2482,17 @@ mod tests {
         assert!(!two.supports_sync_option(Primitive::CreateProjection));
         assert!(!two.supports_sync_option(Primitive::CreateOptimisticStore));
 
-        // 1.x's tracked computations include createComputed, which 2.0 does
-        // not have at all -- so no 2.0-shaped list could name it, and the read
-        // after an await inside one went unreported.
-        assert!(
-            !one.callback_executions(Primitive::CreateComputed)
-                .is_empty()
-        );
+        // createComputed does not exist in 2.0 at all.
         assert!(
             two.callback_executions(Primitive::CreateComputed)
                 .is_empty()
         );
 
-        // Stores: createMutable is 1.x's, the projection pair is 2.0's, and
-        // createStore is the only one both have.
-        assert!(one.returns_store(Primitive::CreateStore));
+        // Stores: createStore and the projection pair are 2.0's; createMutable
+        // was 1.x's and 2.0 does not have it.
         assert!(two.returns_store(Primitive::CreateStore));
-        assert!(one.returns_store(Primitive::CreateMutable));
-        assert!(!two.returns_store(Primitive::CreateMutable));
         assert!(two.returns_store(Primitive::CreateProjection));
-        assert!(!one.returns_store(Primitive::CreateProjection));
+        assert!(!two.returns_store(Primitive::CreateMutable));
     }
 
     /// An options index that is also a callback position means the engine
@@ -2721,34 +2560,19 @@ mod tests {
                 "untrack inherits the caller's owner in {version:?}"
             );
         }
-        assert_eq!(
-            Version::V1.dialect().callback_owners(Primitive::Children),
-            &[(0, CallbackOwner::Creates)],
-            "Solid 1.x children wraps its callback in createMemo"
-        );
         // Unmodelled is not ownerless: a caller must not read an empty answer
         // as "creates no owner".
         assert!(
-            Version::V2
-                .dialect()
+            (&Solid2 as &dyn Dialect)
                 .callback_owners(Primitive::Children)
                 .is_empty()
         );
 
-        // 2.0 splits the effect and runs apply unowned; 1.x has one callback
-        // and index 1 is a seed value, so listing it would mark data as a
-        // callback.
+        // 2.0 splits the effect into a compute arm that creates an owner and
+        // an apply arm that runs unowned.
         assert_eq!(
-            Version::V2
-                .dialect()
-                .callback_owners(Primitive::CreateEffect),
+            (&Solid2 as &dyn Dialect).callback_owners(Primitive::CreateEffect),
             &[(0, CallbackOwner::Creates), (1, CallbackOwner::None)]
-        );
-        assert_eq!(
-            Version::V1
-                .dialect()
-                .callback_owners(Primitive::CreateEffect),
-            &[(0, CallbackOwner::Creates)]
         );
 
         // Both signatures accept Owner | null. A concrete call sharpens this
@@ -2763,7 +2587,7 @@ mod tests {
         // resolve(fn) wraps its thunk in createRoot, which its signature does
         // not suggest.
         assert_eq!(
-            Version::V2.dialect().callback_owners(Primitive::Resolve),
+            (&Solid2 as &dyn Dialect).callback_owners(Primitive::Resolve),
             &[(0, CallbackOwner::Creates)]
         );
     }
@@ -2788,7 +2612,7 @@ mod tests {
         // now (see `every_modelled_export_resolves_through_its_namespace_module`
         // in each module); the `namespace-import-v2` fixture pins the
         // behavioural half of the widening.
-        let two = Version::V2.dialect();
+        let two = &Solid2 as &dyn Dialect;
         assert!(two.declares_primitive("latest"));
         assert!(
             two.namespace_import_primitives("solid-js")
@@ -2798,85 +2622,17 @@ mod tests {
 
     #[test]
     fn concrete_callback_contracts_cover_overloads_and_both_dialects() {
-        let one = Version::V1.dialect();
-        let two = Version::V2.dialect();
+        let two = &Solid2 as &dyn Dialect;
 
-        assert_eq!(
-            one.callback_execution_at(Primitive::CreateResource, 0, 1),
-            Some(Execution::Deferred)
-        );
-        // The fetcher's owner is Conditional in both overloads: the sourced
-        // form invokes it inside the resource's internal createComputed and
-        // the unsourced form's initial load runs synchronously under the
-        // caller's owner, but a later refetch() runs it from an arbitrary,
-        // ownerless site.
-        assert_eq!(
-            one.callback_owner_at(Primitive::CreateResource, 0, 1),
-            Some(CallbackOwner::Conditional)
-        );
-        assert!(one.reports_untracked_reads_at(Primitive::CreateResource, 0, 1));
-        assert_eq!(
-            one.callback_execution_at(Primitive::CreateResource, 0, 2),
-            Some(Execution::Tracked)
-        );
-        assert_eq!(
-            one.callback_owner_at(Primitive::CreateResource, 0, 2),
-            Some(CallbackOwner::Creates)
-        );
-        assert!(!one.reports_untracked_reads_at(Primitive::CreateResource, 0, 2));
-        assert_eq!(
-            one.callback_execution_at(Primitive::CreateResource, 1, 2),
-            Some(Execution::Deferred)
-        );
-        assert_eq!(
-            one.callback_owner_at(Primitive::CreateResource, 1, 2),
-            Some(CallbackOwner::Conditional)
-        );
-        assert!(one.reports_untracked_reads_at(Primitive::CreateResource, 1, 2));
-
-        assert_eq!(
-            one.callback_execution_at(Primitive::CreateSignal, 0, 1),
-            None
-        );
         assert_eq!(
             two.callback_execution_at(Primitive::CreateSignal, 0, 1),
             Some(Execution::Tracked)
-        );
-        assert_eq!(
-            one.callback_execution_at(Primitive::CreateEffect, 1, 2),
-            None
         );
         assert_eq!(
             two.callback_execution_at(Primitive::CreateEffect, 1, 2),
             Some(Execution::Deferred)
         );
 
-        for (primitive, argument, execution) in [
-            (Primitive::MapArray, 0, Execution::Tracked),
-            (Primitive::MapArray, 1, Execution::Deferred),
-            (Primitive::IndexArray, 0, Execution::Tracked),
-            (Primitive::IndexArray, 1, Execution::Deferred),
-            (Primitive::ModifyMutable, 1, Execution::Inline),
-            (Primitive::CatchError, 0, Execution::Inline),
-            (Primitive::CatchError, 1, Execution::Deferred),
-        ] {
-            assert_eq!(
-                one.callback_execution_at(primitive, argument, 2),
-                Some(execution),
-                "missing 1.x callback contract for {primitive:?}[{argument}]"
-            );
-        }
-        assert_eq!(
-            one.callback_accessor_parameters(Primitive::MapArray, 1),
-            &[1]
-        );
-        assert_eq!(
-            one.callback_accessor_parameters(Primitive::IndexArray, 1),
-            &[0]
-        );
-        assert!(one.reports_untracked_reads_at(Primitive::MapArray, 1, 2));
-        assert!(one.reports_untracked_reads_at(Primitive::IndexArray, 1, 2));
-        assert!(one.reports_untracked_reads_at(Primitive::RunWithOwner, 1, 2));
         for (primitive, argument, execution) in [
             (Primitive::Action, 0, Execution::Deferred),
             (Primitive::Flush, 0, Execution::Inline),
@@ -2902,17 +2658,14 @@ mod tests {
     /// props, so a second `true` here would be a claim about a primitive whose
     /// result is not a props root.
     fn each_dialect_names_its_own_props_merge() {
-        let one = Version::V1.dialect();
-        let two = Version::V2.dialect();
+        let two = &Solid2 as &dyn Dialect;
 
-        assert!(one.merges_props_reactivity(Primitive::MergeProps));
         assert!(two.merges_props_reactivity(Primitive::Merge));
         // The other dialect's spelling is not a second answer: each dialect
         // answers for its own vocabulary and is silent about the other's.
-        assert!(!one.merges_props_reactivity(Primitive::Merge));
         assert!(!two.merges_props_reactivity(Primitive::MergeProps));
 
-        for dialect in [one, two] {
+        for &dialect in DIALECTS {
             let merging = dialect_names(dialect)
                 .iter()
                 .filter_map(|name| dialect.primitive(name))
@@ -2938,23 +2691,18 @@ mod tests {
     /// The other two lists that survived the dialect extraction as literals.
     /// Both were single-vocabulary and shared code asked them of everyone.
     fn each_dialect_names_its_own_props_split_and_tuple_returns() {
-        let one = Version::V1.dialect();
-        let two = Version::V2.dialect();
+        let two = &Solid2 as &dyn Dialect;
 
         // 1.x's `splitProps` is 2.0's `omit`; neither answers for the other.
-        assert!(one.splits_props(Primitive::SplitProps));
         assert!(two.splits_props(Primitive::Omit));
-        assert!(!one.splits_props(Primitive::Omit));
         assert!(!two.splits_props(Primitive::SplitProps));
 
         // Shared by both: the two-slot returns every dialect has.
         for primitive in [Primitive::CreateSignal, Primitive::CreateStore] {
-            assert!(one.returns_reactive_tuple(primitive));
             assert!(two.returns_reactive_tuple(primitive));
         }
         // 1.x-only, and the member of the old hardcoded list that made it
         // wrong for 2.0.
-        assert!(one.returns_reactive_tuple(Primitive::CreateResource));
         assert!(!two.returns_reactive_tuple(Primitive::CreateResource));
         // 2.0-only, and what the old list was missing.
         for primitive in [
@@ -2962,15 +2710,12 @@ mod tests {
             Primitive::CreateOptimisticStore,
         ] {
             assert!(two.returns_reactive_tuple(primitive));
-            assert!(!one.returns_reactive_tuple(primitive));
         }
         // A store returned *whole* is not a tuple, however store-kinded.
-        assert!(one.returns_store(Primitive::CreateMutable));
-        assert!(!one.returns_reactive_tuple(Primitive::CreateMutable));
         assert!(two.returns_store(Primitive::CreateProjection));
         assert!(!two.returns_reactive_tuple(Primitive::CreateProjection));
         // Every tuple row is a source factory; the converse does not hold.
-        for dialect in [one, two] {
+        for &dialect in DIALECTS {
             for name in dialect_names(dialect) {
                 let Some(primitive) = dialect.primitive(name) else {
                     continue;
@@ -2986,15 +2731,13 @@ mod tests {
 
     #[test]
     fn each_dialect_knows_its_own_reactive_source_factories() {
-        let one = Version::V1.dialect();
-        let two = Version::V2.dialect();
+        let two = &Solid2 as &dyn Dialect;
 
         for primitive in [
             Primitive::CreateSignal,
             Primitive::CreateMemo,
             Primitive::CreateStore,
         ] {
-            assert!(one.creates_reactive_source(primitive));
             assert!(two.creates_reactive_source(primitive));
         }
 
@@ -3008,58 +2751,21 @@ mod tests {
             Primitive::CreateSelector,
         ] {
             assert!(
-                one.creates_reactive_source(primitive),
-                "{primitive:?} produces a reactive source in 1.x"
-            );
-            assert!(
                 !two.creates_reactive_source(primitive),
                 "{primitive:?} is not 2.0 vocabulary at all"
             );
         }
 
         // Returns nothing, so it is not a source however reactive it is.
-        assert!(!one.creates_reactive_source(Primitive::CreateComputed));
         // 2.0-only factories.
         for primitive in [Primitive::CreateProjection, Primitive::CreateOptimistic] {
             assert!(two.creates_reactive_source(primitive));
-            assert!(!one.creates_reactive_source(primitive));
-        }
-    }
-
-    /// Four of the five control-flow components are shared; the fifth is the
-    /// point. A function written inside one is a callback, and reading the
-    /// wrong list means reading it as a component instead.
-    #[test]
-    fn the_fifth_control_flow_component_differs_between_dialects() {
-        let one = Version::V1.dialect();
-        let two = Version::V2.dialect();
-        for primitive in [
-            Primitive::For,
-            Primitive::Show,
-            Primitive::Match,
-            Primitive::Switch,
-        ] {
-            assert!(one.renders_children_through_callback(primitive));
-            assert!(two.renders_children_through_callback(primitive));
-        }
-        assert!(one.renders_children_through_callback(Primitive::Index));
-        assert!(!two.renders_children_through_callback(Primitive::Index));
-        assert!(two.renders_children_through_callback(Primitive::Repeat));
-        assert!(!one.renders_children_through_callback(Primitive::Repeat));
-
-        // Boundaries render children directly, not through a callback.
-        for (dialect, boundary) in [
-            (one, Primitive::Suspense),
-            (one, Primitive::ErrorBoundary),
-            (two, Primitive::Loading),
-        ] {
-            assert!(!dialect.renders_children_through_callback(boundary));
         }
     }
 
     #[test]
     fn conditional_cleanup_rules_survive_the_extraction() {
-        let two = Version::V2.dialect();
+        let two = &Solid2 as &dyn Dialect;
         // Always forbidden.
         assert_eq!(two.cleanup_rule(Primitive::OnCleanup), CleanupRule::Always);
         assert_eq!(two.cleanup_rule(Primitive::Flush), CleanupRule::Always);
@@ -3095,109 +2801,82 @@ mod tests {
 
     #[test]
     fn module_ownership_follows_the_dialects_package_layout() {
-        let one = Version::V1.dialect();
-        let two = Version::V2.dialect();
+        let two = &Solid2 as &dyn Dialect;
 
         // 1.x splits stores and DOM into subpaths; importing createStore from
         // "solid-js" is wrong there and right in 2.0.
-        assert!(one.owns_module("solid-js/store"));
-        assert!(one.owns_module("solid-js/web"));
         assert!(!two.owns_module("solid-js/store"));
         assert!(two.owns_module("@solidjs/web"));
-        assert!(one.owns_module("solid-js"));
         assert!(two.owns_module("solid-js"));
+    }
+
+    /// Four of the five control-flow components were shared with 1.x; the
+    /// fifth was the point of the old differential. What matters now is the
+    /// 2.0 list itself, because a function written inside one of these is a
+    /// callback, and reading the wrong list means reading it as a component.
+    #[test]
+    fn control_flow_components_render_children_through_a_callback() {
+        let two = &Solid2 as &dyn Dialect;
+        for primitive in [
+            Primitive::For,
+            Primitive::Show,
+            Primitive::Match,
+            Primitive::Switch,
+            // `Repeat` is 2.0's fifth; 1.x had `Index` here instead.
+            Primitive::Repeat,
+        ] {
+            assert!(two.renders_children_through_callback(primitive));
+        }
+        assert!(!two.renders_children_through_callback(Primitive::Index));
+
+        // Boundaries render children directly, not through a callback.
+        assert!(!two.renders_children_through_callback(Primitive::Loading));
+    }
+
+    /// The aggregate answers a result slot only from rows that exist.
+    #[test]
+    fn reactive_result_slots_answer_only_where_a_row_exists() {
+        let two = &Solid2 as &dyn Dialect;
+        assert_eq!(
+            two.reactive_result_slot(Primitive::CreateSignal, ResultSlot::TupleItem(0)),
+            Some(ReactiveRole::Accessor)
+        );
+        assert_eq!(
+            two.reactive_result_slot(Primitive::CreateStore, ResultSlot::TupleItem(0)),
+            None,
+            "a store slot has no accessor row"
+        );
+    }
+
+    /// The audited archive answers for the exact bytes it names, and a
+    /// withdrawn row answers `false` for its own reason.
+    #[test]
+    fn an_audited_archive_answers_for_its_exact_bytes() {
+        let solid_js = *audited_archives("solid-js")
+            .into_iter()
+            .find(|archive| archive.version == "2.0.0-rc.3")
+            .expect("2.0 audits solid-js@2.0.0-rc.3");
+        assert!(primitive_performs_no_operation(
+            &solid_js,
+            "Show",
+            CallClaimDomain::Creates
+        ));
+        // `createEffect`'s row was withdrawn on 2026-09-04 -- its
+        // `node`-condition body reaches the SSR serializer and a flat row
+        // cannot carry that guard -- so it answers `false` on its own merits.
+        assert!(!primitive_performs_no_operation(
+            &solid_js,
+            "createEffect",
+            CallClaimDomain::Creates
+        ));
     }
 
     fn dialect_names(dialect: &'static dyn Dialect) -> Vec<&'static str> {
         match dialect.version() {
-            Version::V1 => solid_1x::names(),
+            // `Version::V1` survives for classification only; no vocabulary
+            // behind it means no name list, and `DIALECTS` never yields one.
+            Version::V1 => Vec::new(),
             Version::V2 => solid_2::names(),
-        }
-    }
-
-    /// For every name both vocabularies resolve, the callback-shape answers
-    /// the engine asks beyond `callback_executions` must agree — or the
-    /// difference must be exempted here with its reason. These methods have
-    /// defaults, so a missing override on one side is a silent behavioural
-    /// asymmetry rather than a compile error; this test is what turns that
-    /// silence into a failure.
-    #[test]
-    fn shared_primitive_callback_shapes_agree_or_are_exempted() {
-        let one = Version::V1.dialect();
-        let two = Version::V2.dialect();
-        // (name, question) pairs where the runtimes genuinely differ.
-        let exempted = |name: &str, question: &str| {
-            matches!(
-                (name, question),
-                // 1.x runs map callbacks untracked (dependencies come from
-                // the list argument); the 2.0 runtime tracks them — see the
-                // bundled contract rows for `mapArray`.
-                ("mapArray", "reports-untracked-reads")
-                // The RC.0 runtime emits STRICT_READ_UNTRACKED for a
-                // reactive read in the invalidation callback; the 1.x
-                // runtime has no such warning and models the callback as a
-                // leaf owner instead (see the `dialect-solid-*` fixture
-                // pair).
-                | ("createReaction", "reports-untracked-reads")
-            )
-        };
-        for name in dialect_names(one) {
-            let Some(primitive_one) = one.primitive(name) else {
-                continue;
-            };
-            let Some(primitive_two) = two.primitive(name) else {
-                continue;
-            };
-            for argument in 0..3 {
-                for argument_count in 1..4 {
-                    assert!(
-                        one.reports_untracked_reads_at(primitive_one, argument, argument_count)
-                            == two.reports_untracked_reads_at(
-                                primitive_two,
-                                argument,
-                                argument_count
-                            )
-                            || exempted(name, "reports-untracked-reads"),
-                        "{name}: reports_untracked_reads_at({argument}, {argument_count}) differs between dialects and is not exempted"
-                    );
-                    for result_slot in [None, Some(0), Some(1)] {
-                        assert!(
-                            one.returned_callback_execution_at(
-                                primitive_one,
-                                result_slot,
-                                argument,
-                                argument_count
-                            ) == two.returned_callback_execution_at(
-                                primitive_two,
-                                result_slot,
-                                argument,
-                                argument_count
-                            ) || exempted(name, "returned-callback-execution"),
-                            "{name}: returned_callback_execution_at({result_slot:?}, {argument}, {argument_count}) differs between dialects and is not exempted"
-                        );
-                        assert!(
-                            one.returned_callback_owner_at(
-                                primitive_one,
-                                result_slot,
-                                argument,
-                                argument_count
-                            ) == two.returned_callback_owner_at(
-                                primitive_two,
-                                result_slot,
-                                argument,
-                                argument_count
-                            ) || exempted(name, "returned-callback-owner"),
-                            "{name}: returned_callback_owner_at({result_slot:?}, {argument}, {argument_count}) differs between dialects and is not exempted"
-                        );
-                    }
-                }
-                assert!(
-                    one.callback_requires_return_invocation(primitive_one, argument)
-                        == two.callback_requires_return_invocation(primitive_two, argument)
-                        || exempted(name, "requires-return-invocation"),
-                    "{name}: callback_requires_return_invocation({argument}) differs between dialects and is not exempted"
-                );
-            }
         }
     }
 
@@ -3220,9 +2899,14 @@ mod tests {
     }
 
     #[test]
-    fn implementation_roles_require_canonical_cross_dialect_agreement() {
+    fn implementation_roles_require_canonical_vocabulary_agreement() {
         assert!(unambiguous_callback_argument("createMemo", 0, 1));
-        assert!(!unambiguous_callback_argument("createEffect", 1, 2));
+        // `createEffect`'s second argument is unambiguously the apply callback
+        // now that 2.0 is the only vocabulary. It was *ambiguous* while 1.x
+        // was compiled in, because 1.x's second argument is a seed value --
+        // the disagreement was the whole reason this predicate exists, and it
+        // will be load-bearing again the moment a second vocabulary returns.
+        assert!(unambiguous_callback_argument("createEffect", 1, 2));
         assert!(!unambiguous_callback_argument("effect", 0, 1));
         assert!(unambiguous_callable_result_tuple_item("createSignal", 0));
         assert!(unambiguous_callable_result_tuple_item("createSignal", 1));
@@ -3291,33 +2975,6 @@ mod tests {
         );
     }
 
-    // One dialect's row may not speak for the other's silence. Asserted on the
-    // dialects directly, because the aggregate cannot distinguish "neither has
-    // a row" from "one does": both answer `None`, and only one of them would
-    // be a soundness bug if the aggregate deferred to the row it found.
-    #[test]
-    fn one_dialect_row_does_not_answer_for_the_other_dialects_silence() {
-        let one = Version::V1.dialect();
-        let two = Version::V2.dialect();
-        // `createDeferred` is 1.x-only vocabulary and has no row in either.
-        assert_eq!(
-            one.reactive_result_slot(Primitive::CreateDeferred, ResultSlot::Whole),
-            None
-        );
-        // A row present in both, agreeing, is what the aggregate answers.
-        for dialect in [one, two] {
-            assert_eq!(
-                dialect.reactive_result_slot(Primitive::CreateSignal, ResultSlot::TupleItem(0)),
-                Some(ReactiveRole::Accessor)
-            );
-            assert_eq!(
-                dialect.reactive_result_slot(Primitive::CreateStore, ResultSlot::TupleItem(0)),
-                None,
-                "a store slot has no accessor row"
-            );
-        }
-    }
-
     // The module premise replaces a `== "solid-js"` literal in the certifier.
     // Its whole point is the empty module: a package's own locally declared
     // `createSignal` reports no module, and must never answer a question about
@@ -3326,7 +2983,11 @@ mod tests {
     fn value_export_modules_answer_only_for_audited_dialect_modules() {
         assert!(exports_value_from("solid-js", "createSignal"));
         assert!(exports_value_from("solid-js", "createMemo"));
-        assert!(exports_value_from("solid-js/store", "createStore"));
+        // 2.0 folded the store API into core, so `createStore` is exported
+        // from `solid-js` and the 1.x `solid-js/store` subpath is not a module
+        // any compiled vocabulary owns.
+        assert!(exports_value_from("solid-js", "createStore"));
+        assert!(!exports_value_from("solid-js/store", "createStore"));
         assert!(!exports_value_from("", "createSignal"));
         assert!(!exports_value_from("solid-js", ""));
         assert!(!exports_value_from("my-signals", "createSignal"));
@@ -3512,168 +3173,6 @@ mod tests {
         ));
     }
 
-    /// Solid 1.x audits exactly one archive — `solid-js@1.9.14`, the tuple
-    /// every bundled solid-v1 document names — and denies `creates` for the
-    /// sixteen primitives its 2026-09-12/13 hand audit read, and nothing else.
-    #[test]
-    fn solid_1x_audits_solid_js_1_9_14_and_denies_only_its_sixteen_creates_rows() {
-        let authority = Version::V1.dialect().negative_claim_authority();
-        assert_eq!(authority.archives.len(), 1);
-        assert_eq!(authority.rows.len(), 16);
-        let archive = authority
-            .archives_named("solid-js")
-            .next()
-            .expect("1.x audits solid-js");
-        assert_eq!(archive.version, "1.9.14");
-        assert!(authority.denies("solid-js", "createEffect", CallClaimDomain::Creates));
-        assert!(authority.denies("solid-js", "useContext", CallClaimDomain::Creates));
-        assert!(!authority.denies("solid-js", "createEffect", CallClaimDomain::Reads));
-        assert!(!authority.denies("solid-js", "createResource", CallClaimDomain::Creates));
-        assert!(primitive_performs_no_operation(
-            archive,
-            "createEffect",
-            CallClaimDomain::Creates
-        ));
-        // And the shared function is scoped to the *exact* archive tuple: a
-        // hypothetical `solid-js` archive at a version and integrity no
-        // dialect audited must not be answered from either dialect's real
-        // rows just because the name matches.
-        assert!(!primitive_performs_no_operation(
-            &unaudited_archive("solid-js"),
-            "createEffect",
-            CallClaimDomain::Creates
-        ));
-    }
-
-    /// `solid-js` is an archive name both dialects own. 2.0's rows answer for
-    /// it only because 1.x lists no `solid-js` archive at all; the moment 1.x
-    /// audits those bytes, agreement becomes a real gate.
-    #[test]
-    fn one_dialect_answers_for_a_shared_archive_name_only_while_the_other_is_absent() {
-        // Both dialects now audit an archive *named* `solid-js`, at different
-        // bytes: 2.0's rc.3 and 1.x's 1.9.14. Pick 2.0's by version; the
-        // exact-tuple rule below is what keeps 1.x's audit of *other* bytes
-        // from vetoing or granting anything about these.
-        let solid_js = *audited_archives("solid-js")
-            .into_iter()
-            .find(|archive| archive.version == "2.0.0-rc.3")
-            .expect("2.0 audits solid-js@2.0.0-rc.3");
-        // `Show`, not `createEffect`: 2.0 withdrew the `createEffect` row on
-        // 2026-09-04 (its `node`-condition body reaches the SSR serializer, and
-        // a flat row cannot carry the guard), so it now answers `false` for a
-        // reason that has nothing to do with cross-dialect agreement.
-        assert!(primitive_performs_no_operation(
-            &solid_js,
-            "Show",
-            CallClaimDomain::Creates
-        ));
-        assert!(!primitive_performs_no_operation(
-            &solid_js,
-            "createEffect",
-            CallClaimDomain::Creates
-        ));
-        // 1.x audits `solid-js@1.9.14`, not these bytes, so it does not
-        // participate in the union for rc.3 — and rc.3's answer above is 2.0's
-        // alone. Symmetrically, 1.x's own archive answers from 1.x's rows only.
-        let solid_js_1x = *audited_archives("solid-js")
-            .into_iter()
-            .find(|archive| archive.version == "1.9.14")
-            .expect("1.x audits solid-js@1.9.14");
-        assert!(
-            !Version::V1
-                .dialect()
-                .negative_claim_authority()
-                .archives
-                .contains(&solid_js)
-        );
-        assert!(
-            !Version::V2
-                .dialect()
-                .negative_claim_authority()
-                .archives
-                .contains(&solid_js_1x)
-        );
-        assert!(primitive_performs_no_operation(
-            &solid_js_1x,
-            "createEffect",
-            CallClaimDomain::Creates
-        ));
-
-        // The rule itself, pinned against a hand-built pair so it does not
-        // depend on which archives the dialects happen to list today. Two
-        // authorities audit archives that share a NAME but are different
-        // bytes — a different version, integrity and manifest. Matching is by
-        // the exact tuple, so the authority that audited the *other* archive
-        // must never participate, regardless of what its own rows say about
-        // that name.
-        //
-        // Before this tier was archive-keyed, the union below matched by name
-        // alone (`archives_named(name).next()`): any authority that merely
-        // listed an archive called `shared` was pulled in, so
-        // `owns_a_different_archive_of_the_same_name` — silent about the
-        // *different* bytes it actually audited — would have vetoed `denying`
-        // by name, exactly the bug ADR 0007 records: any 1.x archive named
-        // `solid-js` would have vetoed every valid 2.0 row.
-        const ARCHIVE: AuditedArchive = AuditedArchive {
-            name: "shared",
-            version: "1.0.0",
-            integrity: "sha512-x",
-            manifest_sha256: "00",
-        };
-        const OTHER_ARCHIVE_SAME_NAME: AuditedArchive = AuditedArchive {
-            name: "shared",
-            version: "2.0.0",
-            integrity: "sha512-y",
-            manifest_sha256: "11",
-        };
-        const ROW: NegativeClaimRow = NegativeClaimRow {
-            package: "shared",
-            export: "createEffect",
-            domain: CallClaimDomain::Creates,
-            citations: &[],
-        };
-        let denying = DialectNegativeAuthority {
-            archives: &[ARCHIVE],
-            rows: &[ROW],
-        };
-        let silent_about_the_same_archive = DialectNegativeAuthority {
-            archives: &[ARCHIVE],
-            rows: &[],
-        };
-        let owns_a_different_archive_of_the_same_name = DialectNegativeAuthority {
-            archives: &[OTHER_ARCHIVE_SAME_NAME],
-            rows: &[],
-        };
-        let never_looked = DialectNegativeAuthority {
-            archives: &[],
-            rows: &[],
-        };
-        let agree = |authorities: &[&DialectNegativeAuthority], archive: &AuditedArchive| {
-            let answers = authorities
-                .iter()
-                .filter(|authority| authority.archives.contains(archive))
-                .map(|authority| {
-                    authority.denies(archive.name, "createEffect", CallClaimDomain::Creates)
-                })
-                .collect::<Vec<_>>();
-            !answers.is_empty() && answers.into_iter().all(|denied| denied)
-        };
-        assert!(agree(&[&denying, &denying], &ARCHIVE));
-        assert!(agree(&[&denying, &never_looked], &ARCHIVE));
-        assert!(
-            agree(
-                &[&denying, &owns_a_different_archive_of_the_same_name],
-                &ARCHIVE
-            ),
-            "an authority auditing a different archive under the same name must not vote at all"
-        );
-        assert!(
-            !agree(&[&denying, &silent_about_the_same_archive], &ARCHIVE),
-            "silence about the SAME archive is still not agreement"
-        );
-        assert!(!agree(&[&never_looked, &never_looked], &ARCHIVE));
-    }
-
     /// The identity tuples a caller must bind before consulting the table.
     #[test]
     fn audited_archives_are_looked_up_by_name_and_carry_all_four_fields() {
@@ -3684,8 +3183,9 @@ mod tests {
         assert_eq!(signals[0].manifest_sha256.len(), 64);
         assert!(audited_archives("").is_empty());
         assert!(audited_archives("@solidjs/router").is_empty());
-        // Both dialects audit an archive named `solid-js`, at different bytes.
-        assert_eq!(audited_archives("solid-js").len(), 2);
+        // One archive named `solid-js` is audited now that the 1.x dialect,
+        // which audited `solid-js@1.9.14`, is gone.
+        assert_eq!(audited_archives("solid-js").len(), 1);
     }
 
     /// The domain vocabulary is the eight kinded call claim domains, and
@@ -3792,7 +3292,7 @@ mod tests {
         // Spelled the way the dialect assembly manifests spell it
         // (`rust/dialects/<id>/dialect.json`), because that is the identifier
         // every consumer outside Rust already keys on.
-        let expected = [(Version::V1, "solid-v1"), (Version::V2, "solid-v2")];
+        let expected = [(&Solid2 as &dyn Dialect, "solid-v2")];
         assert_eq!(
             published.len(),
             expected.len(),
@@ -3800,9 +3300,9 @@ mod tests {
              entry and an empty one are the difference between \"never looked\" \
              and \"looked and audited nothing\""
         );
-        for ((version, id), entry) in expected.into_iter().zip(published) {
+        for ((dialect, id), entry) in expected.into_iter().zip(published) {
             assert_eq!(entry["id"], id);
-            let authority = version.dialect().negative_claim_authority();
+            let authority = dialect.negative_claim_authority();
             assert_eq!(
                 entry["negativeRowCount"].as_u64(),
                 Some(authority.rows.len() as u64),

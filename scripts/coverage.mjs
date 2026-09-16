@@ -207,14 +207,11 @@ checkDialectStubs();
  * `rust/crates/solid-reactive-ir/src/findings.rs` instead.
  */
 const KEEPS_WORDING = new Set([
-  "reactive-ir/dialect-solid-1x",
   "reactive-ir/dialect-solid-2",
-  "reactive-ir/import-location",
-  "reactive-ir/jsx-census-gap-solid-1x",
   "reactive-ir/jsx-census-gap-solid-2",
-  "reactive-ir/jsx-void-child-divergence-solid-1x",
   "reactive-ir/jsx-void-child-divergence-solid-2",
-  "reactive-ir/no-owner-v1",
+  // Not a 1.x fixture despite the name: it is a 2.0 project importing four
+  // names 2.0 removed, and the removed-export *message* is the whole claim.
   "reactive-ir/solid-1x-leftovers"
 ]);
 
@@ -226,28 +223,11 @@ const KEEPS_WORDING = new Set([
  * If these stop matching, the snapshot diff between them stops meaning "the
  * dialect changed the answer" and starts meaning nothing at all.
  */
-const IDENTICAL_SOURCES = [
-  {
-    projects: ["reactive-ir/dialect-solid-1x", "reactive-ir/dialect-solid-2"],
-    files: ["App.tsx", "tsconfig.json"]
-  },
-  // The void-child divergence pair duplicates its source for the opposite
-  // reason: the mitigation policy is shared while its tag set is
-  // dialect-supplied, so the *same* source must pin each producer's answer.
-  // Their snapshots differ in exactly three rows — one reworded message (the
-  // template-root void child, which 1.x lowers and 2.0 does not) and two
-  // findings absent under 2.0 (keygen/menuitem, void only in 1.x's parity
-  // target) — and those differences are the pair's whole claim. Let the
-  // sources drift and the diff stops meaning "the producer changed the
-  // answer".
-  {
-    projects: [
-      "reactive-ir/jsx-void-child-divergence-solid-1x",
-      "reactive-ir/jsx-void-child-divergence-solid-2"
-    ],
-    files: ["App.tsx", "solid-js.d.ts", "tsconfig.json"]
-  }
-];
+// Both entries were dialect pairs, and both lost their 1.x half when the 1.x
+// dialect was retired (ADR 0110). The list is kept rather than deleted: it is
+// the mechanism for "these two projects must stay byte-identical or their
+// snapshot diff stops meaning anything", and the next divergence pair needs it.
+const IDENTICAL_SOURCES = [];
 
 /**
  * The comparable shape of one finding. Byte offsets rather than line/column so

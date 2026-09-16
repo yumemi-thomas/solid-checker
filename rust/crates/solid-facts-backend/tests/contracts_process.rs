@@ -125,48 +125,6 @@ fn an_installed_core_alias_does_not_require_a_package_contract() {
 }
 
 #[test]
-fn an_incompatible_core_package_requires_a_dialect_change_not_a_receipt() {
-    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
-        return;
-    };
-    let project = root().join("fixtures/reactive-ir/rendering-csr-selected/tsconfig.json");
-    let output = checker()
-        .args([
-            "--project",
-            &project.to_string_lossy(),
-            "--typefacts",
-            &typefacts,
-            "--dialect",
-            "solid-v1",
-            "--check-contracts",
-            "--format",
-            "json",
-        ])
-        .output()
-        .unwrap();
-    assert_eq!(
-        output.status.code(),
-        Some(1),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    let web = report["packages"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|row| row["name"] == "@solidjs/web")
-        .expect("web is reported");
-    assert_eq!(web["status"], "unsupported-runtime");
-    assert!(
-        web["remedy"]
-            .as_str()
-            .unwrap()
-            .contains("a core package contract cannot extend")
-    );
-}
-
-#[test]
 fn missing_core_contract_objects_cannot_change_ordinary_findings() {
     let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
         return;
