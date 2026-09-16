@@ -216,6 +216,48 @@ export SOLID_CHECKER_RC3_ARCHIVE_ROOT
 SOLID_CHECKER_SOLID1_ARCHIVE_ROOT="$PWD/rust/target/tsc-oracle/v1/node_modules"
 export SOLID_CHECKER_SOLID1_ARCHIVE_ROOT
 
+# The single-dialect arms checked above prove those configurations *compile*.
+# They did not run their tests, and five were failing there while `make verify`
+# stayed green: three asserting a dialect id for a claim that was about
+# resolution, one demanding every `RULE_ALIASES` target load, and two
+# differential tests with no pair to compare. Compiling is not the claim worth
+# making about a configuration the product can ship — and retiring the 1.x
+# dialect makes `dialect-v2` the only configuration there is.
+#
+# Placed here, after the oracle archive roots are exported, so these builds see
+# exactly the environment the workspace suite below does.
+#
+# `--lib` on purpose. The integration targets are fixture-driven and several
+# name `--dialect solid-v1` explicitly (`dialects_process.rs`), so running them
+# under a single-dialect build would assert something these steps are not for;
+# the `check --all-targets` arms above still compile them. The library is where
+# every `#[cfg(feature = "dialect-…")]` decision lives.
+#
+# Roughly 150 s per arm. When the 1.x dialect goes, both steps fold back into
+# the workspace run below.
+# The assignments are inside the function rather than prefixed onto the call:
+# POSIX lets a variable assignment preceding a *function* invocation persist in
+# the current shell, which a prefix on an external command never does.
+backend_dialect_lib_tests() {
+  TYPEFACTS_TEST_BIN="$PWD/bin/solid-typefacts"
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts"
+  export TYPEFACTS_TEST_BIN SOLID_TYPEFACTS_BIN
+  if [ "$rust_test_runner" = "nextest" ]; then
+    cargo +1.97 nextest run --config-file scripts/nextest.toml --profile verify \
+      --cargo-profile "$cargo_profile" --manifest-path "$rust_manifest" \
+      -p solid-facts-backend --lib --no-default-features --features "$1"
+  else
+    cargo +1.97 test --profile "$cargo_profile" --manifest-path "$rust_manifest" \
+      -p solid-facts-backend --lib --no-default-features --features "$1"
+  fi
+}
+
+step test-backend-v1
+backend_dialect_lib_tests dialect-v1
+
+step test-backend-v2
+backend_dialect_lib_tests dialect-v2
+
 step go-rust-tests
 TYPEFACTS_TEST_BIN="$PWD/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
   node scripts/verify-tests.mjs "$rust_test_runner" &

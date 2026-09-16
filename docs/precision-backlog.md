@@ -22373,3 +22373,40 @@ That arm is reachable today in `--features dialect-v2`, and retiring 1.x makes
 it the only build. The emission side (an `SC9013`-class refusal at the three
 `detect` call sites — `daemon.rs`, `main.rs`, `solid-checker-session-bench.rs`)
 is still to do, and must land in the same slice as the deletion.
+
+### The single-dialect arms now run their tests, and that doubled `make verify` (2026-09-16)
+
+Closing the gap recorded above — four `cargo check` arms proving only that the
+single-dialect configurations compile — by adding `test-backend-v1` and
+`test-backend-v2` to `scripts/verify.sh`, placed after the oracle archive roots
+are exported so they see the same environment as the workspace suite, and
+`--lib` because the integration targets are fixture-driven and several name
+`--dialect solid-v1` explicitly.
+
+`make verify` passes end to end. **The cost is not marginal:**
+
+    TOTAL              516.11 s
+    go-rust-tests      155.89 s   30.2%   (the whole workspace suite)
+    test-backend-v2    135.28 s   26.2%
+    test-backend-v1    130.53 s   25.3%
+
+Each new arm costs about what the entire workspace suite costs, and the two
+together are **51.5% of the run**; `make verify` was roughly 250 s before.
+
+That is worth stating plainly rather than filing as a win, because half of it
+buys something temporary. `test-backend-v1` verifies a configuration this
+retirement deletes. The trade, if the number is unacceptable:
+
+- **Drop `test-backend-v1`** (one step, −130 s, back to ~386 s). `dialect-v2`
+  is the configuration the product ships after step 3 and the one the gap was
+  about; `check-backend-v1` still compiles the v1 arm, and the default
+  both-dialects workspace run still exercises v1's catalog through
+  `go-rust-tests`. What is lost is a v1-only *runtime* regression during the
+  transition window — narrow, and closing in any case.
+- **Keep both** while both dialects ship, and delete `test-backend-v1` with the
+  dialect in step 3, at which point `test-backend-v2` folds into the workspace
+  run and the whole addition disappears.
+
+Kept both for now: the window in which a v1-only regression can land is exactly
+the window this retirement occupies, and that is when the corpus is being
+edited most heavily. The number is recorded here so the choice is a choice.
