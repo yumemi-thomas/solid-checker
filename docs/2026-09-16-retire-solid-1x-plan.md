@@ -443,6 +443,39 @@ before the deletion rather than after.
 
 ## Step 2 — retarget the contract data to Solid 2
 
+**Mostly superseded by ADR 0110, and the parts that survive are not what this
+step proposed. Resolved 2026-09-16.**
+
+- **Sub-steps 3 and 5 are withdrawn by ADR 0110 § 4.** No bundle binds a
+  dialect, nothing regenerates the accepted tier during verification, and a
+  contract describes runtime behaviour the checker's scope does not change. The
+  tier stays at 54 bundles.
+- **Sub-step 1 is refused by ADR 0110 § 5**, which the plan predates.
+  `SOLID_TARGETS = ["solid2"]` would drop 168 of 307 benchmark rows — 75
+  packages are solid1-only, including SolidStart itself, every
+  `@tanstack/solid-*` and all of `@corvu`. Those rows are evidence about *what
+  consumers call*, which is a fact about the ecosystem and not about which
+  language this checker analyzes. Narrowing the corpus would raise every
+  coverage percentage without proving one new statement, so the benchmark
+  manifest keeps its 1.x rows.
+- **What did have to change:** `make contract-coverage-census` ran
+  `--solid 1`, which after the retirement refuses all 18 packages with SC9013
+  and reports nothing. It is `--solid 2` now — and because that measures a
+  *narrower* corpus, the census pin records which corpus produced it and
+  **refuses to compare across the boundary**. The first `solid2` run therefore
+  fails until it is re-pinned deliberately, rather than silently reporting
+  improved coverage. The 1.x-era numbers (`ownerRequirement: 31`, 599 of 1,940
+  sites) stay as the frozen baseline ADR 0110 § 5 names.
+- **Still open, and independent of the retirement:** sub-step 4's blocker — the
+  Solid 2 `creates` census refuses callees resolved into
+  `solid-js/types/client/hydration.d.ts` (seen on
+  `@solid-primitives/scheduled@2.0.0-next.2`, `createSignal`). That is a
+  resolution defect to fix before the first `solid2` census is worth pinning,
+  not a step of this plan.
+
+### Original text, kept for the record
+
+
 1. `scripts/ecosystem-benchmark/discover.mjs`: `SOLID_TARGETS = ["solid2"]`;
    remove the `solid1` rank branch and the `dialect-authority`/`select`/
    `families`/`manifest`/`report` handling for it, including tests.

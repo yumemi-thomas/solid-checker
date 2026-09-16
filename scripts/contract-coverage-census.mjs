@@ -61,6 +61,23 @@ function fail(message) {
   process.exit(1);
 }
 
+/// Which Solid corpus this run measured, read from the run's own scope rather
+/// than from a flag, so a pin cannot claim a denominator the run did not use.
+///
+/// The benchmark records `scope.solidTargets` as the bare majors it was
+/// restricted to (`["1"]`, `["2"]`); an unrestricted run measures both and has
+/// no single denominator to pin.
+function censusTarget(run) {
+  const targets = run?.scope?.solidTargets ?? [];
+  if (targets.length !== 1) {
+    fail(
+      `this run measured ${targets.length === 0 ? "every" : targets.length} Solid target(s); ` +
+        "the census pin records one denominator, so restrict the run with a single --solid"
+    );
+  }
+  return `solid${targets[0]}`;
+}
+
 function parseArguments(argv) {
   const options = { catalogs: null, run: null, json: false, update: false, printPackages: false };
   for (let index = 0; index < argv.length; index += 1) {
@@ -291,8 +308,9 @@ function main() {
   // to run beside the repo's own `node_modules` ("probe write isolation was
   // violated") and ten of eighteen packages failed to certify at all.
   const roots = [];
+  let report = null;
   if (options.run) {
-    const report = JSON.parse(readFileSync(resolve(options.run), "utf8"));
+    report = JSON.parse(readFileSync(resolve(options.run), "utf8"));
     for (const result of report.results ?? []) {
       const directory = result.retainedArtifacts?.outputDir;
       if (directory) roots.push(directory);
@@ -324,6 +342,7 @@ function main() {
   const record = {
     format: "solid-checker-contract-coverage-census",
     censusVersion: 1,
+    solidTarget: censusTarget(report),
     demand: {
       source: "docs/package-contract-v2/phase21/2026-09-14-consumer-demand-recensus.json",
       callSites: demand.totals?.callSites ?? null,
@@ -342,6 +361,20 @@ function main() {
     pinned = JSON.parse(readFileSync(PIN, "utf8"));
   } catch {
     fail(`no pin at ${PIN}; run with --update once the numbers are intentional`);
+  }
+  // ADR 0110 s 5: a coverage percentage measured after the Solid 1.x
+  // retirement is not comparable to one measured before unless the denominator
+  // is held. The pinned baseline was measured over the `solid1` corpus; a
+  // `solid2` run measures a *narrower* one, which raises every percentage
+  // without proving a single new statement. Refuse the comparison rather than
+  // report a green run that compared two different questions.
+  const pinnedTarget = pinned.solidTarget ?? "solid1";
+  if (pinnedTarget !== record.solidTarget) {
+    fail(
+      `the pin was measured over the ${pinnedTarget} corpus and this run measured ${record.solidTarget}. ` +
+        "Those denominators differ, so the comparison would be meaningless (ADR 0110 s 5). " +
+        "Re-pin deliberately with --update, and record the new baseline beside the old one rather than as a continuation of it."
+    );
   }
   const regressions = compare(pinned, result);
   if (regressions.length > 0) {

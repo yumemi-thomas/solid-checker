@@ -1,6 +1,7 @@
 {
   "format": "solid-checker-contract-coverage-census",
   "censusVersion": 1,
+  "solidTarget": "solid1",
   "demand": {
     "source": "docs/package-contract-v2/phase21/2026-09-14-consumer-demand-recensus.json",
     "callSites": 2585,

@@ -367,11 +367,21 @@ ecosystem-regression: build-checker-release
 # Not in `make verify`, for `ecosystem-regression`'s reasons: it needs the
 # registry and minutes of compute. Run it when a change could move what a
 # contract *says*, as opposed to whether it certifies at all.
+#
+# `--solid 2` since 2026-09-16. It was `--solid 1`, and after the Solid 1.x
+# retirement (ADR 0110) that run would refuse every package with SC9013 and
+# report nothing. **The first `solid2` run is a new baseline, not a
+# continuation**: it measures a narrower corpus, so every percentage rises
+# without a single new statement being proven (ADR 0110 s 5). The census
+# refuses to compare across that boundary -- the pin records which corpus
+# measured it -- so the first run fails until it is re-pinned deliberately with
+# `--update`, and the 1.x-era numbers stay in git history as the evidence they
+# are.
 contract-coverage-census: build-checker-release
 	mkdir -p "$(CURDIR)/rust/target/coverage-census"
 	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
-	  $(BUN) scripts/ecosystem-benchmark/run.mjs --solid 1 --timeout 1800 \
+	  $(BUN) scripts/ecosystem-benchmark/run.mjs --solid 2 --timeout 1800 \
 	  --attempt-certification --recover-entrypoints \
 	  --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" --keep-temp \
 	  $$($(BUN) scripts/contract-coverage-census.mjs --print-packages \
