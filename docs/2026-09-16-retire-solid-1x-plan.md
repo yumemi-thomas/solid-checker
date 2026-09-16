@@ -899,41 +899,43 @@ ends that have since closed. What actually closed them:
 
 What is left, in recommended order:
 
-1. **`some_audit_denies_primitive` matches on export and domain, never on
-   `row.package`** — **investigated 2026-09-17; it is a real imprecision, the
-   obvious fix is wrong, and the code is unchanged.** Recorded in full in that
-   function's doc comment; the short version:
+1. ~~**`some_audit_denies_primitive` matches on export and domain, never on
+   `row.package`**~~ — **fixed 2026-09-17.** The denial lookup is now keyed on
+   the package that *declares* the callee.
 
-   - **The defect is real and was demonstrated**, on a probe package that
-     separates the two cases against the audited rc.3 install. `solid-js`
-     re-*declares* `createSignal`, `createMemo`, `createStore`,
-     `createProjection`, `createOptimistic` and `createOptimisticStore` from
-     `./client/hydration.js`, and the audit withholds rows for those six
-     implementations on purpose. They are answered out of `@solidjs/signals`'
-     rows anyway: the generator proposes a closed `creates` the audit refuses
-     to make, and emits no `dialect-silent` decline record — blinding the
-     "audit this primitive next" instrument exactly where a row is missing.
-   - **It is not a soundness hole.** The proposal still has to survive the
-     archive-bound implementation census, which refuses it, so nothing false
-     certifies. The cost is an open claim that can never close, plus the
-     missing decline record.
-   - **Passing the caller's package makes it worse, and this was measured
-     rather than argued.** The only package identity at the call site is
-     `ResolvedDeclaration::origin_module`, which is the module the *import
-     specifier* resolved to — not the archive owning the declaration. Probed
-     against the real install, a `solid-js` import of `untrack` or `createRoot`
-     reports `solid-js` there too, even though `solid-js` re-exports both from
-     `@solidjs/signals`. Keying on it declines those **ten** legitimate
-     re-exports to fix these **six** re-declarations, and
-     `fixtures/package-contracts/callback-reactive-arguments` catches the
-     regression.
-   - **What a correct fix needs:** discriminate on
-     `ResolvedDeclaration::source_file` — the file the declaration actually
-     lives in, which is what `census_dialect_axiom` already uses to bind an
-     archive. That field is not plumbed to this call site, so the work is a new
-     accessor beside `callee_origin_module` plus the decision of what the
-     decline record's `package` field should then say (it is pinned by
-     `fixtures/package-contracts/creates-decline-records`).
+   - **The defect was real**, demonstrated on a probe package built against the
+     audited rc.3 install. `solid-js` re-*declares* `createSignal`,
+     `createMemo`, `createStore`, `createProjection`, `createOptimistic` and
+     `createOptimisticStore` from `./client/hydration.js`, and the audit
+     withholds rows for those six implementations on purpose. They were
+     answered out of `@solidjs/signals`' rows anyway: the generator proposed a
+     closed `creates` the audit refuses to make, and emitted no decline record
+     to say so.
+   - **The obvious fix was wrong, and measuring caught it.**
+     `ResolvedDeclaration::origin_module` is the module the *import specifier*
+     resolved to, so it reports `solid-js` for `untrack` and `createRoot` —
+     genuine re-exports — as readily as for `createSignal`. Keying on it
+     declined ten legitimate re-exports to fix six re-declarations, and
+     `callback-reactive-arguments` caught it.
+   - **The discriminator is `ResolvedDeclaration::source_file`**, the file the
+     declaration is actually written in, reached through a new
+     `callee_declaration_source_file` accessor and mapped to its installed
+     package by the deepest `node_modules/` segment. Probed against the real
+     install: a `solid-js` import of `untrack` answers
+     `@solidjs/signals/.../core/core.d.ts`, of `createSignal`
+     `solid-js/types/client/hydration.d.ts`. An unresolved declaration denies
+     nothing, which is the safe polarity here.
+   - **Measured effect:** declined closure proposals 227 → 312, across 15
+     corpus fixtures. Every change is in one direction — **no export closed a
+     domain it had not closed before**, and no export's summary changed outside
+     the `closed`/`creates` domains. The decline record's own `package` field is
+     untouched, so `creates-decline-records` is unaffected.
+   - **It also settled a fixture that contradicted itself.**
+     `callback-reactive-arguments`' README says "the `creates` domain is not
+     closed, so the package makes no claim that it creates nothing", while its
+     snapshot closed `creates: []` — granted on `@solidjs/signals`' row, for a
+     two-line local stub that plainly does create. The snapshot now matches the
+     README.
 
 2. **`callback-deferred-untracked-chain`** -- authoring, not porting, and it
    needs audited 2.0 facts that do not exist yet. Three of its exports have no

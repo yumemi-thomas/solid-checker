@@ -713,41 +713,34 @@ pub fn canonical_primitive_name(name: &str) -> bool {
 }
 
 /// Whether **some** dialect's negative authority carries a row denying
-/// `domain` for a primitive spelled `export`, with no archive identity bound.
+/// `domain` for `package`'s export spelled `export`, with no archive identity
+/// bound.
 ///
-/// # Known imprecision: a row's package is not consulted (measured 2026-09-17)
+/// # The package is half the question
 ///
-/// A row is `(package, export, domain)` and this matches only the last two, so
-/// one package's denial answers for every package exporting that name. It has
-/// a live consequence in 2.0: `solid-js` re-*declares* `createSignal`,
-/// `createMemo`, `createStore`, `createProjection`, `createOptimistic` and
-/// `createOptimisticStore` from `./client/hydration.js` rather than
-/// re-exporting `@solidjs/signals`', and [`Solid2`]'s audit withholds rows for
-/// those six implementations on purpose (`solid_2.rs` § 7.4 — the
-/// `node`/`worker`/`deno` bodies can reach `ctx.serialize`, which *is* a
-/// create). They are nevertheless answered out of `@solidjs/signals`' rows, so
-/// the generator proposes a closed `creates` the audit refuses to make and
-/// emits **no** `dialect-silent` decline record for them — which blinds the
-/// "audit this primitive next" instrument exactly where a row is missing.
+/// A row is `(package, export, domain)`, and an export name is not an identity.
+/// 2.0's `solid-js` re-*declares* `createSignal`, `createMemo`, `createStore`,
+/// `createProjection`, `createOptimistic` and `createOptimisticStore` from
+/// `./client/hydration.js` rather than re-exporting `@solidjs/signals`', and
+/// [`Solid2`]'s audit withholds rows for those six implementations on purpose
+/// (`solid_2.rs` § 7.4 — the `node`/`worker`/`deno` bodies reach
+/// `ctx.serialize`, which *is* a create). Matching on the name alone answered
+/// all six out of `@solidjs/signals`' rows: it proposed a closed `creates` the
+/// audit refuses to make, and emitted no decline record to say which primitive
+/// still needs auditing.
 ///
-/// Not a soundness hole: the proposal still has to survive the archive-bound
-/// implementation census (`census_dialect_axiom`), which resolves the callee's
-/// declaration into a snapshot and asks [`primitive_performs_no_operation`] —
-/// so the claim never certifies. The cost is an open claim that can never
-/// close, plus the missing decline record.
+/// **`package` must be the package that declares the callee**, resolved from
+/// the declaration's source file — not the module its import specifier named.
+/// The two differ exactly where this matters: measured against the audited rc.3
+/// install, a `solid-js` import reports `solid-js` as its origin module for
+/// `untrack` and `createRoot` as readily as for `createSignal`, though the
+/// first two are re-exports of `@solidjs/signals`' own declarations. Keying on
+/// the specifier would decline those ten legitimate re-exports to fix these six
+/// re-declarations.
 ///
-/// **The obvious fix is wrong, and was tried.** Passing the caller's package
-/// makes it *worse*: the only package identity available at the call site is
-/// `ResolvedDeclaration::origin_module`, which is the module the import
-/// specifier resolved to and not the archive that owns the declaration. Probed
-/// against the audited rc.3 install, a `solid-js` import of `untrack` or
-/// `createRoot` — names `solid-js` genuinely re-exports from
-/// `@solidjs/signals` — reports `solid-js` there too. Keying on it declines
-/// those ten legitimate re-exports to fix these six re-declarations, a net
-/// precision loss that `fixtures/package-contracts/callback-reactive-arguments`
-/// catches. A correct fix has to discriminate on
-/// `ResolvedDeclaration::source_file`, the way the census already does; that
-/// field is not plumbed to this call site today.
+/// An empty `package` denies nothing. That is the safe polarity for the one
+/// caller: silence means *do not propose*, so a callee whose declaration did
+/// not resolve keeps its domain open rather than closing it on a guess.
 ///
 /// # This answers a proposal question, never a proof one
 ///
@@ -767,8 +760,8 @@ pub fn canonical_primitive_name(name: &str) -> bool {
 /// also polarity-correct: silence means *do not propose*, so an unaudited or
 /// withheld primitive keeps the domain open rather than closing it.
 #[must_use]
-pub fn some_audit_denies_primitive(export: &str, domain: CallClaimDomain) -> bool {
-    if export.is_empty() || !canonical_primitive_name(export) {
+pub fn some_audit_denies_primitive(package: &str, export: &str, domain: CallClaimDomain) -> bool {
+    if package.is_empty() || export.is_empty() || !canonical_primitive_name(export) {
         return false;
     }
     DIALECTS.iter().any(|dialect| {
@@ -776,7 +769,7 @@ pub fn some_audit_denies_primitive(export: &str, domain: CallClaimDomain) -> boo
         authority
             .rows
             .iter()
-            .any(|row| row.export == export && row.domain == domain)
+            .any(|row| row.package == package && row.export == export && row.domain == domain)
     })
 }
 
@@ -3078,6 +3071,59 @@ mod tests {
         ] {
             assert!(!core_runtime_specifier(other), "{other:?}");
         }
+    }
+
+    /// A denial belongs to one package and does not travel by export name.
+    ///
+    /// The six below are why. 2.0's `solid-js` re-*declares* them from
+    /// `./client/hydration.js`, and their rows are withheld for that
+    /// implementation on purpose (`solid_2.rs` § 7.4). Answering them out of
+    /// `@solidjs/signals`' rows proposed a closed `creates` the audit refuses
+    /// to make and swallowed the decline record naming the primitive to audit
+    /// next.
+    #[test]
+    fn a_denial_belongs_to_one_package_and_does_not_travel_by_name() {
+        for export in [
+            "createSignal",
+            "createMemo",
+            "createStore",
+            "createProjection",
+            "createOptimistic",
+            "createOptimisticStore",
+        ] {
+            assert!(
+                some_audit_denies_primitive("@solidjs/signals", export, CallClaimDomain::Creates),
+                "{export} is denied for the package whose row it is"
+            );
+            assert!(
+                !some_audit_denies_primitive("solid-js", export, CallClaimDomain::Creates),
+                "solid-js re-declares {export}, and that implementation has no row"
+            );
+        }
+
+        // The other side of the same distinction: `solid-js` re-*exports* these
+        // from `@solidjs/signals`, so a callee's declaration resolves into that
+        // package and reaches its rows. Nothing here should make a re-export
+        // look like a re-declaration.
+        for export in ["untrack", "createRoot", "onCleanup", "flush"] {
+            assert!(
+                some_audit_denies_primitive("@solidjs/signals", export, CallClaimDomain::Creates),
+                "{export} keeps its row"
+            );
+        }
+
+        // Not knowing the package must not close a domain, and a package with
+        // no rows denies nothing.
+        assert!(!some_audit_denies_primitive(
+            "",
+            "createSignal",
+            CallClaimDomain::Creates
+        ));
+        assert!(!some_audit_denies_primitive(
+            "@solid-primitives/scheduled",
+            "createSignal",
+            CallClaimDomain::Creates
+        ));
     }
 
     /// The negative authority is a *negative* authority: it can refuse and it

@@ -1001,7 +1001,38 @@ fn creates_proposal_decline<'a>(
     // silence — an unaudited dialect, a withheld row, a domain no dialect has
     // admitted — is "do not propose".
     if let Some(PrimitiveName::Known(_, spelling)) = primitive {
-        if solid_dialect::some_audit_denies_primitive(spelling, CallClaimDomain::Creates) {
+        // Ask the audits about the package that *declares* this callee, not
+        // about the name alone.
+        //
+        // A row is `(package, export, domain)` and the name is not an identity:
+        // 2.0's `solid-js` re-*declares* `createSignal`, `createMemo`,
+        // `createStore`, `createProjection`, `createOptimistic` and
+        // `createOptimisticStore` from `./client/hydration.js`, and the audit
+        // withholds rows for those six implementations on purpose (`solid_2.rs`
+        // § 7.4 -- the `node`/`worker`/`deno` bodies reach `ctx.serialize`,
+        // which is a create). Asking by name answered them out of
+        // `@solidjs/signals`' rows, proposing a closed `creates` the audit
+        // refuses to make and emitting no decline record to say so.
+        //
+        // The declaration's *source file* is the discriminator, and the only
+        // one available: `origin_module` is the module the specifier resolved
+        // to, so it reports `solid-js` for a re-export just as it does for a
+        // re-declaration, and keying on it would decline the ten names
+        // `solid-js` legitimately re-exports in order to fix these six.
+        //
+        // Not knowing the declaring package denies nothing, which is the safe
+        // polarity: silence here means "do not propose", so an unresolved
+        // callee keeps its domain open rather than closing it on a guess.
+        let declaring_package = ctx
+            .semantic_lookup
+            .callee_declaration_source_file(file, callee)
+            .map(package_of_declaration_path)
+            .unwrap_or_default();
+        if solid_dialect::some_audit_denies_primitive(
+            &declaring_package,
+            spelling,
+            CallClaimDomain::Creates,
+        ) {
             return None;
         }
         return Some(CreatesDeclineKind::DialectSilent {
@@ -1065,6 +1096,19 @@ fn creates_proposal_decline<'a>(
 ///
 /// A specifier, never a path — the input is the compiler's own
 /// `ResolvedDeclaration::origin_module`.
+/// The installed package a declaration file belongs to, by its path.
+///
+/// The *deepest* `node_modules/` wins, which is the same rule Node resolution
+/// uses: a nested copy is the one a call actually reached. An empty answer for
+/// a path outside any `node_modules/` is deliberate -- a first-party
+/// declaration is not an audited package.
+fn package_of_declaration_path(path: &str) -> String {
+    let normalized = path.replace('\\', "/");
+    normalized
+        .rsplit_once("node_modules/")
+        .map_or_else(String::new, |(_, tail)| package_of_module(tail))
+}
+
 fn package_of_module(module: &str) -> String {
     let mut parts = module.split('/');
     let Some(first) = parts.next().filter(|part| !part.is_empty()) else {

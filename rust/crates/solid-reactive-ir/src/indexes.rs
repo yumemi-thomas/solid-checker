@@ -521,6 +521,31 @@ impl<'a> SemanticLookup<'a> {
     /// spelling or from an import statement standing nearby. Used to name the
     /// package half of a [`crate::CreatesDeclineKind::DialectSilent`] record,
     /// where a wrong package would misdirect the very audit the record ranks.
+    /// The file the callee's resolved declaration is written in.
+    ///
+    /// Distinct from [`Self::callee_origin_module`], and the distinction is the
+    /// point: `origin_module` is the module the *specifier* resolved to, so it
+    /// cannot tell a re-export from a re-declaration. This resolves through the
+    /// re-export to the file that actually declares the name, which is the only
+    /// thing that identifies the package whose audited bytes a call reaches.
+    ///
+    /// Measured against the audited rc.3 install: a `solid-js` import of
+    /// `untrack` answers `@solidjs/signals/.../core/core.d.ts`, while a
+    /// `solid-js` import of `createSignal` answers
+    /// `solid-js/types/client/hydration.d.ts` -- 2.0 re-exports the first and
+    /// re-declares the second.
+    pub(super) fn callee_declaration_source_file(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<&'a str> {
+        let declaration = self
+            .resolved_callee_call(file, callee)?
+            .declaration
+            .as_ref()?;
+        (!declaration.source_file.is_empty()).then_some(declaration.source_file.as_ref())
+    }
+
     pub(super) fn callee_origin_module(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
         let declaration = self
             .resolved_callee_call(file, callee)?

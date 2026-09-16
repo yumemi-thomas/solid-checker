@@ -19,10 +19,10 @@
             "importedShorthand": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
             "namedReexportShorthand": "summary-ba2707ce1a1f01543adbccd53539700e779799dc27ace3c536dcc97b4c49e269",
             "namespaceShorthand": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
-            "scopedShorthand": "summary-b3d2fa005946a13a02c3d097e2ea2f8dc3579fca5b6316f483a1e59be1b60a2e",
+            "scopedShorthand": "summary-55cee6253eb32d639ac009d75c3ba1cf2a29183fd021dca0ea01448176ed0f45",
             "shadowedShorthand": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
-            "unprovenShorthand": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
-            "writtenShorthand": "summary-b3d2fa005946a13a02c3d097e2ea2f8dc3579fca5b6316f483a1e59be1b60a2e"
+            "unprovenShorthand": "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7",
+            "writtenShorthand": "summary-55cee6253eb32d639ac009d75c3ba1cf2a29183fd021dca0ea01448176ed0f45"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -46,6 +46,55 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
+    "summary-55cee6253eb32d639ac009d75c3ba1cf2a29183fd021dca0ea01448176ed0f45": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "object",
+              "properties": [
+                {
+                  "name": "tracked",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
     "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
       "call": {
         "callbacks": [],
@@ -220,58 +269,6 @@
       },
       "shape": "callable"
     },
-    "summary-b3d2fa005946a13a02c3d097e2ea2f8dc3579fca5b6316f483a1e59be1b60a2e": {
-      "call": {
-        "callbacks": [],
-        "closed": [
-          "callbacks",
-          "reads",
-          "creates"
-        ],
-        "creates": [],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "object",
-              "properties": [
-                {
-                  "name": "tracked",
-                  "value": {
-                    "kind": "reactive",
-                    "role": "accessor"
-                  }
-                }
-              ]
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "callbacks",
-          "reads",
-          "creates"
-        ],
-        "reads": [],
-        "returns": [
-          "return"
-        ]
-      },
-      "shape": "callable"
-    },
     "summary-ba2707ce1a1f01543adbccd53539700e779799dc27ace3c536dcc97b4c49e269": {
       "call": {
         "callbacks": [],
@@ -321,6 +318,21 @@
         "returns": [
           "return"
         ]
+      },
+      "shape": "callable"
+    },
+    "summary-be9d54973e9ec7fa4dc852846f622086f0e4809af20965eca1cfe75cef7c15b7": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
       },
       "shape": "callable"
     },

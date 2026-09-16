@@ -15,7 +15,7 @@
           "exports": {
             "getterFunction": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "getterObject": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
-            "getterResult": "summary-d89305a766ce3d69264e9865958e96b1096c69b2a858b65eed93d3090cc0d131"
+            "getterResult": "summary-c5b6fdd1cf17767811766a000f0c77b8e8431d8f0e87207209550472e0446638"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -51,14 +51,12 @@
       },
       "shape": "plain"
     },
-    "summary-d89305a766ce3d69264e9865958e96b1096c69b2a858b65eed93d3090cc0d131": {
+    "summary-c5b6fdd1cf17767811766a000f0c77b8e8431d8f0e87207209550472e0446638": {
       "call": {
         "callbacks": [],
         "closed": [
-          "callbacks",
-          "creates"
+          "callbacks"
         ],
-        "creates": [],
         "operations": [
           {
             "at": {
@@ -91,8 +89,7 @@
           }
         ],
         "proposedClosures": [
-          "callbacks",
-          "creates"
+          "callbacks"
         ],
         "returns": [
           "return"

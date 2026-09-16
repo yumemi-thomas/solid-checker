@@ -13,7 +13,7 @@
             "sha256": "9cac85e64e6a7649af44ab1afe3d06867c22dd22a3f671b34f852deb75b401d6"
           },
           "exports": {
-            "mapValue": "summary-935a22c335c6443a337b1c2fc6a8bb9c1ab459039d44df67e18a89a5befbc17a"
+            "mapValue": "summary-676426a5139a457513c23a73ef70eef2d99433fea20028c5f447ea221003528b"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -37,7 +37,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-935a22c335c6443a337b1c2fc6a8bb9c1ab459039d44df67e18a89a5befbc17a": {
+    "summary-676426a5139a457513c23a73ef70eef2d99433fea20028c5f447ea221003528b": {
       "call": {
         "callbacks": [
           {
@@ -50,10 +50,8 @@
         ],
         "closed": [
           "callbacks",
-          "reads",
-          "creates"
+          "reads"
         ],
-        "creates": [],
         "operations": [
           {
             "at": {
@@ -82,8 +80,7 @@
         ],
         "proposedClosures": [
           "callbacks",
-          "reads",
-          "creates"
+          "reads"
         ],
         "reads": []
       },

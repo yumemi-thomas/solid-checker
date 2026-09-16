@@ -2,27 +2,8 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:6d0d161544b306f829b5db182484d5e2fc1c907ae93188a3e06f04af4b83b194",
+  "semanticDigest": "sha256:2ba635327298243bce67d5bd00d23a320b63e38dff3aa1b16fa70f4b4c7390c9",
   "closureCandidates": [
-    {
-      "claimId": "claim:v1:sha256:af1c810b5efcf379dba53e24761125ed476cfc55c0173e94d626a99ee733de09",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.js",
-        "runtimeDigest": "sha256:9cac85e64e6a7649af44ab1afe3d06867c22dd22a3f671b34f852deb75b401d6",
-        "declarationsPath": "./index.js",
-        "declarationsDigest": "sha256:9cac85e64e6a7649af44ab1afe3d06867c22dd22a3f671b34f852deb75b401d6",
-        "closureDigest": "sha256:e4dcc6f3b61ad54f2b9000aedf6d3b93d0784d418c430c079838acd233b319e0"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:04c8a7b43ceb1e6b2730edf7e01f103d8a5790f91e46a13aa86cb8a637ca454d",
-        "export": "mapValue",
-        "path": {
-          "kind": "call",
-          "domain": "creates"
-        }
-      }
-    },
     {
       "claimId": "claim:v1:sha256:e27ecfabb30892dfe0b8da6f8bd1c2cd85287916632201034c2e64093621b224",
       "artifact": {
@@ -238,6 +219,25 @@
           },
           "path": [],
           "domain": "shape"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:af1c810b5efcf379dba53e24761125ed476cfc55c0173e94d626a99ee733de09",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.js",
+        "runtimeDigest": "sha256:9cac85e64e6a7649af44ab1afe3d06867c22dd22a3f671b34f852deb75b401d6",
+        "declarationsPath": "./index.js",
+        "declarationsDigest": "sha256:9cac85e64e6a7649af44ab1afe3d06867c22dd22a3f671b34f852deb75b401d6",
+        "closureDigest": "sha256:e4dcc6f3b61ad54f2b9000aedf6d3b93d0784d418c430c079838acd233b319e0"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:04c8a7b43ceb1e6b2730edf7e01f103d8a5790f91e46a13aa86cb8a637ca454d",
+        "export": "mapValue",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
         }
       }
     },

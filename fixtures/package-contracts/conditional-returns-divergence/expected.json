@@ -13,7 +13,7 @@
             "sha256": "c761a6fa07acb2dd2c3046c1591a4c72316a059d42795d260bcefaceebf8666a"
           },
           "exports": {
-            "Show": "summary-cbfa167667685bbb3cb70ab4cd42f70134db220eb37e2b43f4de6363d23b048b",
+            "Show": "summary-586acb28c45c4b78870745e3538e6cd957479f8bc2cae2fe5fffdf9bfd6b04dc",
             "Steady": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece"
           },
           "resolution": {
@@ -76,33 +76,13 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
+    "summary-586acb28c45c4b78870745e3538e6cd957479f8bc2cae2fe5fffdf9bfd6b04dc": {
       "call": {
         "callbacks": [],
         "closed": [
           "callbacks",
-          "reads",
-          "creates"
+          "reads"
         ],
-        "creates": [],
-        "proposedClosures": [
-          "callbacks",
-          "reads",
-          "creates"
-        ],
-        "reads": []
-      },
-      "shape": "callable"
-    },
-    "summary-cbfa167667685bbb3cb70ab4cd42f70134db220eb37e2b43f4de6363d23b048b": {
-      "call": {
-        "callbacks": [],
-        "closed": [
-          "callbacks",
-          "reads",
-          "creates"
-        ],
-        "creates": [],
         "operations": [
           {
             "at": {
@@ -136,13 +116,30 @@
         ],
         "proposedClosures": [
           "callbacks",
-          "reads",
-          "creates"
+          "reads"
         ],
         "reads": [],
         "returns": [
           "return"
         ]
+      },
+      "shape": "callable"
+    },
+    "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "reads": []
       },
       "shape": "callable"
     }

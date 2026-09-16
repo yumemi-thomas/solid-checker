@@ -16,7 +16,7 @@
             "contradictOnZeroOnly": "summary-eddbbcccc94909bc88dd11ddfe910f989617c926702d413aa499f4d3a6e5e4d4",
             "inlineAndReturned": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
             "inlineAndTracked": "summary-eddbbcccc94909bc88dd11ddfe910f989617c926702d413aa499f4d3a6e5e4d4",
-            "oneInlineSite": "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d",
+            "oneInlineSite": "summary-3f4a59c31bd93d1ea67d862b219efbc43b67edef823ec1e6ff6ad08a003a437f",
             "oneTrackedSite": "summary-c2117bd7fadc5baa39bbfd0dd386299c5c08f9f18e62974738d33bf592642d62",
             "twoParameters": "summary-613c0d90270a25cdccb2f82cc35b4a9d40c7d3bf41dd43fb073a4532de31e169",
             "twoTrackedSites": "summary-c2117bd7fadc5baa39bbfd0dd386299c5c08f9f18e62974738d33bf592642d62"
@@ -43,6 +43,48 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
+    "summary-3f4a59c31bd93d1ea67d862b219efbc43b67edef823ec1e6ff6ad08a003a437f": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
     "summary-613c0d90270a25cdccb2f82cc35b4a9d40c7d3bf41dd43fb073a4532de31e169": {
       "call": {
         "callbacks": [
@@ -150,51 +192,6 @@
         ],
         "reads": [],
         "returns": []
-      },
-      "shape": "callable"
-    },
-    "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d": {
-      "call": {
-        "callbacks": [
-          {
-            "from": {
-              "arg": 0,
-              "path": []
-            },
-            "operation": "callback-0"
-          }
-        ],
-        "closed": [
-          "callbacks",
-          "reads",
-          "creates"
-        ],
-        "creates": [],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "callback-0",
-            "kind": "invoke",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "callbacks",
-          "reads",
-          "creates"
-        ],
-        "reads": []
       },
       "shape": "callable"
     },

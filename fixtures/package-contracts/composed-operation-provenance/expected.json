@@ -14,12 +14,12 @@
           },
           "exports": {
             "alsoReadsUnderTwoNames": "summary-8c61f167705139d82990a01b36de363075f459575f386de37c2d45fed732641d",
-            "composesAnAmbiguouslyNamedTarget": "summary-2fb4f64b64f0b8eb3d0d3e23e1435a6cd66538b2d9614501c5410405a3e81dd5",
-            "readsItsOwnSignal": "summary-2fb4f64b64f0b8eb3d0d3e23e1435a6cd66538b2d9614501c5410405a3e81dd5",
-            "readsItsOwnSignalAndComposesTheSameShape": "summary-f517ff56c69c2c4a1eac780edd770cf4a048092a554ffbf1051fffc92bf667b4",
-            "readsThroughADirectCall": "summary-8cb699f0afa8471d1d4c3ad5c66fdec698bab439be4afb1cc9c76dbdaeea0d4f",
-            "readsThroughAPrivateHelper": "summary-2fb4f64b64f0b8eb3d0d3e23e1435a6cd66538b2d9614501c5410405a3e81dd5",
-            "readsThroughAReturnedClosure": "summary-526a54c4a1da4ec69531474fbf10d7b9bbd910dc7619c95c50a759d6146f5a92",
+            "composesAnAmbiguouslyNamedTarget": "summary-8c61f167705139d82990a01b36de363075f459575f386de37c2d45fed732641d",
+            "readsItsOwnSignal": "summary-8c61f167705139d82990a01b36de363075f459575f386de37c2d45fed732641d",
+            "readsItsOwnSignalAndComposesTheSameShape": "summary-532b7d88e547ada223b5b12f4652150796014b5604217930b2dfd7679a7fd056",
+            "readsThroughADirectCall": "summary-8fa1a2be56757584cbba5033a0ea9f2af6a51db52d2f78fc34e74aca85260b8a",
+            "readsThroughAPrivateHelper": "summary-8c61f167705139d82990a01b36de363075f459575f386de37c2d45fed732641d",
+            "readsThroughAReturnedClosure": "summary-e0a85f36421ff614ee6b9ba3ff7797c403042528759656dc3bfc3bdda47b0a2a",
             "readsUnderTwoNames": "summary-8c61f167705139d82990a01b36de363075f459575f386de37c2d45fed732641d"
           },
           "resolution": {
@@ -44,188 +44,12 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-2fb4f64b64f0b8eb3d0d3e23e1435a6cd66538b2d9614501c5410405a3e81dd5": {
-      "call": {
-        "callbacks": [],
-        "closed": [
-          "callbacks",
-          "creates"
-        ],
-        "creates": [],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "read-0",
-            "inputs": [
-              {
-                "kind": "reactive",
-                "role": "accessor"
-              }
-            ],
-            "kind": "read",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "callbacks",
-          "creates"
-        ],
-        "reads": [
-          "read-0"
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-526a54c4a1da4ec69531474fbf10d7b9bbd910dc7619c95c50a759d6146f5a92": {
-      "call": {
-        "callbacks": [],
-        "closed": [
-          "callbacks",
-          "reads",
-          "creates"
-        ],
-        "creates": [],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "reactive",
-              "role": "accessor"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "callbacks",
-          "reads",
-          "creates"
-        ],
-        "reads": [],
-        "returns": [
-          "return"
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-8c61f167705139d82990a01b36de363075f459575f386de37c2d45fed732641d": {
+    "summary-532b7d88e547ada223b5b12f4652150796014b5604217930b2dfd7679a7fd056": {
       "call": {
         "callbacks": [],
         "closed": [
           "callbacks"
         ],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "read-0",
-            "inputs": [
-              {
-                "kind": "reactive",
-                "role": "accessor"
-              }
-            ],
-            "kind": "read",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "callbacks"
-        ],
-        "reads": [
-          "read-0"
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-8cb699f0afa8471d1d4c3ad5c66fdec698bab439be4afb1cc9c76dbdaeea0d4f": {
-      "call": {
-        "callbacks": [],
-        "closed": [
-          "callbacks",
-          "creates"
-        ],
-        "creates": [],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "composedFrom": {
-              "export": "readsItsOwnSignal",
-              "operation": "read-0"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "read-0",
-            "inputs": [
-              {
-                "kind": "reactive",
-                "role": "accessor"
-              }
-            ],
-            "kind": "read",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "callbacks",
-          "creates"
-        ],
-        "reads": [
-          "read-0"
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-f517ff56c69c2c4a1eac780edd770cf4a048092a554ffbf1051fffc92bf667b4": {
-      "call": {
-        "callbacks": [],
-        "closed": [
-          "callbacks",
-          "creates"
-        ],
-        "creates": [],
         "operations": [
           {
             "at": {
@@ -279,12 +103,136 @@
           }
         ],
         "proposedClosures": [
-          "callbacks",
-          "creates"
+          "callbacks"
         ],
         "reads": [
           "read-0",
           "read-1"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-8c61f167705139d82990a01b36de363075f459575f386de37c2d45fed732641d": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks"
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-8fa1a2be56757584cbba5033a0ea9f2af6a51db52d2f78fc34e74aca85260b8a": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "composedFrom": {
+              "export": "readsItsOwnSignal",
+              "operation": "read-0"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks"
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-e0a85f36421ff614ee6b9ba3ff7797c403042528759656dc3bfc3bdda47b0a2a": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
         ]
       },
       "shape": "callable"
