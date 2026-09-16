@@ -781,6 +781,11 @@ struct DependencyGating<'a> {
     accepted_candidate: &'a NormalizedContract,
     certified_candidate: &'a NormalizedContract,
     withheld: &'a [super::WithheldClosure],
+    /// The operations the node's transaction withdrew, which separate the two
+    /// candidates exactly as `withheld` does. Composition re-derives *both*
+    /// weakenings, in the order the node applied them, or the digest it
+    /// compares is of a document the node never certified.
+    withheld_operations: &'a [super::WithheldOperation],
 }
 
 /// Opaque native graph plan. Plans are retained in canonical dependency-first
@@ -901,6 +906,7 @@ impl PublishedContractGraphPlan {
                         accepted_candidate: &planned.accepted_candidate,
                         certified_candidate: &planned.plan.selected_candidate,
                         withheld: &planned.withheld,
+                        withheld_operations: &planned.withheld_operations,
                     },
                 ))
             })
@@ -3655,16 +3661,29 @@ fn authenticate_dependency_receipt(
             expected: dependency.semantic_digest.clone(),
         });
     }
-    let certified_digest = if gating.withheld.is_empty() {
+    let certified_digest = if gating.withheld.is_empty() && gating.withheld_operations.is_empty() {
         dependency.semantic_digest.clone()
     } else {
-        let weakened = super::withheld_weakening(gating.accepted_candidate, gating.withheld)
-            .map_err(
-                |error| DependencyReceiptCompositionError::WithheldWeakening {
-                    dependency: dependency.digest().into(),
-                    reason: error.to_string(),
-                },
-            )?;
+        let weaken = |error: super::RecipeGatingError| {
+            DependencyReceiptCompositionError::WithheldWeakening {
+                dependency: dependency.digest().into(),
+                reason: error.to_string(),
+            }
+        };
+        // The node applies its operation withdrawals first, in
+        // `recipe_gated_with_operations`, and gates closures over the plan that
+        // re-planning produced. Re-deriving in the other order would compare a
+        // digest of a document the node never certified.
+        let weakened = if gating.withheld_operations.is_empty() {
+            gating.accepted_candidate.clone()
+        } else {
+            super::withheld_operation_weakening(
+                gating.accepted_candidate,
+                gating.withheld_operations,
+            )
+            .map_err(weaken)?
+        };
+        let weakened = super::withheld_weakening(&weakened, gating.withheld).map_err(weaken)?;
         if weakened.semantic_digest() != gating.certified_candidate.semantic_digest() {
             return Err(DependencyReceiptCompositionError::ReceiptMismatch {
                 field: "gated candidate digest",
@@ -3793,6 +3812,7 @@ pub(super) fn authenticate_dependency_claim_for_test(
             accepted_candidate: &dependency_plan.selected_candidate,
             certified_candidate: &dependency_plan.selected_candidate,
             withheld: &[],
+            withheld_operations: &[],
         },
         receipt,
         issuer,

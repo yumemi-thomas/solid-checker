@@ -786,7 +786,58 @@ impl ExportReplay<'_> {
         }
         let description = self.description(path, axis)?;
         let mut names = description.direct.keys().cloned().collect::<BTreeSet<_>>();
-        names.extend(description.external_direct.keys().cloned());
+        // ...unless this package *is* the foundation. `solid-js` re-exporting
+        // from `solid-js/...` is publishing its own surface, and ADR 0027's
+        // reason for dropping a core re-export -- that the package has no
+        // standing to describe a name it only forwards -- does not apply to the
+        // package the dialect takes that behavior from. Without this guard the
+        // replay dropped thirteen of `solid-js`'s own exports (`For`, `Show`,
+        // `Switch`, `Suspense`, ...) and refused every graph that composed it.
+        let foreign_core = !solid_dialect::primitive_defining_package(self.snapshot.package_name());
+        // A name re-exported straight from the built-in runtime foundation is
+        // not part of this package's surface (ADR 0027): `solid-js`,
+        // `@solidjs/signals` and `@solidjs/web` have no package contract that
+        // could ever bind it, and ordinary analysis takes their behavior from
+        // the selected dialect instead. The emitter drops it, the resolver
+        // returns it unbound, and this replay is the fourth census that has to
+        // agree — it computes the surface the supplied export map is compared
+        // against, so keeping the name here refused every package with one core
+        // re-export beside its own exports (`@solid-primitives/utils`'
+        // `isServer`, `@solidjs/start`'s `mount`).
+        names.extend(
+            description
+                .external_direct
+                .iter()
+                .filter(|(_, (specifier, _))| {
+                    !(foreign_core && solid_dialect::core_runtime_specifier(specifier))
+                })
+                .map(|(name, _)| name.clone()),
+        );
+        // A local re-export of one is the same name by another route:
+        // `@solidjs/start`'s `dist/client/index.jsx` says
+        // `export { mount } from "./mount.js"`, and that file says
+        // `export { hydrate as mount } from "solid-js/web"`. The resolver
+        // follows the chain and drops it; so must this.
+        let core_bound = description
+            .direct
+            .iter()
+            .filter(|_| foreign_core)
+            .filter(|(_, target)| target.file != path && target.name != "*")
+            .map(|(name, target)| {
+                Ok::<_, ArtifactSnapshotError>(
+                    self.binds_core_runtime(
+                        &target.file,
+                        &target.name,
+                        axis,
+                        &mut BTreeSet::new(),
+                    )?
+                    .then(|| name.clone()),
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        for name in core_bound.into_iter().flatten() {
+            names.remove(&name);
+        }
         for target in description.stars {
             names.extend(
                 self.exported_names(&target, axis, visiting)?
@@ -845,6 +896,49 @@ impl ExportReplay<'_> {
         }
         visiting.remove(&identity);
         Ok(names)
+    }
+
+    /// Whether binding `name` from `path` terminates at the built-in runtime
+    /// foundation.
+    ///
+    /// Mirrors exactly the two arms of [`Self::bind_export`] that can reach an
+    /// external specifier by an exact name — a local re-export chain and a
+    /// direct external re-export — and answers `false` for every other shape.
+    /// A star is deliberately not followed: `exported_names` already takes a
+    /// star into an external package from that dependency's own verified
+    /// exports, which a core specifier has none of, so the name never arrives
+    /// by that route in the first place.
+    ///
+    /// Answering `false` when unsure keeps a name on the surface, which is the
+    /// conservative direction here: an extra name refuses loudly at the
+    /// intersection check, where a missing one would silently shrink a
+    /// published contract.
+    fn binds_core_runtime(
+        &mut self,
+        path: &str,
+        name: &str,
+        axis: ModuleAxis,
+        visiting: &mut BTreeSet<(ModuleAxis, String, String)>,
+    ) -> Result<bool, ArtifactSnapshotError> {
+        let identity = (axis, path.into(), name.into());
+        if !visiting.insert(identity.clone()) {
+            return Ok(false);
+        }
+        let description = self.description(path, axis)?;
+        let answer = if let Some((specifier, _)) = description.external_direct.get(name) {
+            solid_dialect::core_runtime_specifier(specifier)
+        } else if let Some(direct) = description.direct.get(name) {
+            let (file, target) = (direct.file.clone(), direct.name.clone());
+            if file == path || target == "*" {
+                false
+            } else {
+                self.binds_core_runtime(&file, &target, axis, visiting)?
+            }
+        } else {
+            false
+        };
+        visiting.remove(&identity);
+        Ok(answer)
     }
 
     fn bind_export(
