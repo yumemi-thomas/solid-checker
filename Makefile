@@ -338,4 +338,40 @@ ecosystem-regression: build-checker-release
 	  --json "$(CURDIR)/rust/target/ecosystem-regression/report.json" \
 	  --markdown "$(CURDIR)/rust/target/ecosystem-regression/report.md"
 
+# The coverage census: what a consumer with contracts for the packages they
+# import actually gets told, measured against the pinned SC9005 demand sweep.
+#
+# Two halves on purpose. This target owns the slow one -- certifying every
+# package the demand names, into a catalog tree under rust/target -- and
+# `scripts/contract-coverage-census.mjs` owns the measurement, which is then
+# deterministic and re-runnable against the same tree in under a second:
+#
+#   bun scripts/contract-coverage-census.mjs --catalogs rust/target/coverage-census
+#
+# The package list is derived from the demand file rather than restated here,
+# so the denominator cannot drift away from the numerator. The run keeps its
+# temporary trees where the OS puts them and the census reads their locations
+# back out of the report: forcing TMPDIR inside the repository makes the probe
+# harness refuse every gated row ("probe write isolation was violated"), which
+# cost ten of eighteen packages on the first attempt.
+#
+# Not in `make verify`, for `ecosystem-regression`'s reasons: it needs the
+# registry and minutes of compute. Run it when a change could move what a
+# contract *says*, as opposed to whether it certifies at all.
+contract-coverage-census: build-checker-release
+	mkdir -p "$(CURDIR)/rust/target/coverage-census"
+	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
+	  $(BUN) scripts/ecosystem-benchmark/run.mjs --solid 1 --timeout 1800 \
+	  --attempt-certification --recover-entrypoints \
+	  --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" --keep-temp \
+	  $$($(BUN) scripts/contract-coverage-census.mjs --print-packages \
+	    | sed 's/^/--package /' | tr '\n' ' ') \
+	  --json "$(CURDIR)/rust/target/coverage-census/run.json" \
+	  --markdown "$(CURDIR)/rust/target/coverage-census/run.md"
+	$(BUN) scripts/contract-coverage-census.mjs \
+	  --run "$(CURDIR)/rust/target/coverage-census/run.json"
+
+.PHONY: contract-coverage-census
+
 .PHONY: ecosystem-discover ecosystem-benchmark-test ecosystem-sentinel ecosystem-benchmark ecosystem-regression
