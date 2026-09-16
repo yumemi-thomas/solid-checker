@@ -151,7 +151,11 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // tracked main documents with the fixtures that carried a 1.9.14 stub.
       // This pin counts tracked `*.json` via `git ls-files`, so it moves with
       // the fixture tree and not with any analysis answer.
-      stableMainDocuments: 187,
+      //
+      // 188 on 2026-09-16: one of those seven comes back, as the authored 2.0
+      // counterpart of `callback-untracked-wrapper` -- a clearing wrapper is
+      // `inline`, and its two negatives keep it a rule. Six remain deleted.
+      stableMainDocuments: 188,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

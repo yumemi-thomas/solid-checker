@@ -69,6 +69,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/callback-reactive-arguments/node_modules/**
 !fixtures/package-contracts/callback-slot-derived-store/node_modules/
 !fixtures/package-contracts/callback-slot-derived-store/node_modules/**
+!fixtures/package-contracts/callback-untracked-wrapper/node_modules/
+!fixtures/package-contracts/callback-untracked-wrapper/node_modules/**
 !fixtures/package-contracts/callback-slot-derived-store-server/node_modules/
 !fixtures/package-contracts/callback-slot-derived-store-server/node_modules/**
 !fixtures/package-contracts/implementation-census-creates/node_modules/

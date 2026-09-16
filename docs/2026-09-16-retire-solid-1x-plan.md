@@ -912,13 +912,38 @@ individually green. What is left, in the order it has to happen:
    and so need their claim read. `carries_eslint_era_rules()` gets its own
    slice and its own coverage run, because resolving its four surviving call
    sites to their v2 branch can move findings.
-3. **Four package-contract v2 counterparts to author**, not port:
-   `callback-slot-props-forwarding` (a new divergence pair — 2.0's
-   `createSignal(fn)` is the writable-memo form and `createStore(fn, store)`
-   exists, so both of its 1.x negatives are false), plus
-   `callback-deferred-untracked-chain`, `callback-untracked-wrapper` and
-   `escaping-private-helper`. These are independent of steps 3 and 4 and can be
-   done in any order.
+3. **Four package-contract v2 counterparts to author**, not port. Revised
+   2026-09-16 after looking at each: it is **two**, one is done, and one needs
+   nothing.
+
+   - `callback-untracked-wrapper` — **authored 2026-09-16**, in the corpus at
+     95 fixtures. Four of its five exports transcribed unchanged (`untrack`,
+     `createRoot`, `runWithOwner` — callback still at index 1 — and
+     `onCleanup`); only `trackedWrapper` moved, onto 2.0's two-function
+     `createEffect`. It carries one withheld owner requirement and two
+     `dialect-silent` `creates` declines, all three documented in its README.
+   - `callback-slot-props-forwarding` — **needs nothing.** Its own README said
+     its 2.0 twins are `callback-slot-derived-store` and
+     `callback-slot-derived-store-server`; both survive and both are in the
+     corpus, so the defect and its guard are already pinned on the 2.0 side.
+     What the deletion lost is the *contrast* with a dialect that had no
+     compute form at all, and a divergence pair needs two dialects. The
+     surviving twin's README now states the defect in place instead of
+     pointing at the deleted file.
+   - `callback-deferred-untracked-chain` — still to author. Built on `onMount`,
+     which 2.0 removes, and its claims cite `solid-js@1.9.14`'s `dist/solid.js`
+     line numbers. Its `unestablishedScheduleShape` is cited by
+     `interproc.rs`' `primitive_callback_execution` as the pin that a missing
+     row makes the wrapper chain refuse; that comment now says the pin is
+     absent.
+   - `escaping-private-helper` — still to author, and the expensive one: an
+     `@solidjs/web` stub and a `jsxImportSource` arrangement across thirty JSX
+     files, because 2.0 moves `namespace JSX` out of `solid-js` and `For` gains
+     a `keyed: false` overload that inverts its children callback. Seven arms
+     of `unresolved-dispatch-reachability`'s README name it as pinning the
+     call-site enumeration; that README now says those arms are unpinned.
+
+   These are independent of steps 3 and 4 and can be done in any order.
 4. **Step 2**, the contract-data retarget, whose accepted-tier sub-step still
    has no default.
 
