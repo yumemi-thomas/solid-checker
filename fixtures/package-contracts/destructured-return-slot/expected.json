@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "131f9ace9c789a02412c8cdaf249dc5e80cf2413927b94fd998c683d088a9884",
+            "closureSha256": "dcc17222d38cbdc9442a0036f4508d06daea72666a878052b0d15d7f43a59ed8",
             "path": "./index.ts",
-            "sha256": "e7008aaf3452aaa32e05eca1cec9287b1ebad6d3680c3ad45b5a264adfcfdd4a"
+            "sha256": "87a0ea207971f76b5048ebada6faceaa578a226f39e849d29410db9431a9b4ca"
           },
           "declarations": {
             "path": "./index.ts",
-            "sha256": "e7008aaf3452aaa32e05eca1cec9287b1ebad6d3680c3ad45b5a264adfcfdd4a"
+            "sha256": "87a0ea207971f76b5048ebada6faceaa578a226f39e849d29410db9431a9b4ca"
           },
           "exports": {
             "arraySlot": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
@@ -41,10 +41,10 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "fixture:sha256:18b9f4b63a0a9d99b9a13b76a1976a5ed2e88401b85dc833950700bc5933c9dd",
+    "integrity": "fixture:sha256:73dc3fd0d0f750afc5f2635e727716bd23095aa12e59920bc4f55b88c0498c4d",
     "manifest": {
       "path": "./package.json",
-      "sha256": "18b9f4b63a0a9d99b9a13b76a1976a5ed2e88401b85dc833950700bc5933c9dd"
+      "sha256": "73dc3fd0d0f750afc5f2635e727716bd23095aa12e59920bc4f55b88c0498c4d"
     },
     "name": "destructured-return-slot",
     "version": "1.0.0"

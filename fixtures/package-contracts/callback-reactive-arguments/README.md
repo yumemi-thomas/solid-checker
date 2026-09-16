@@ -10,5 +10,8 @@ nothing. A regression that treated the accessor argument as an uncaptured
 source read would attribute a reactivity defect to a package whose only act is
 to construct a value and pass it on.
 
-The `node_modules/solid-js` stub is 1.x, so `createSignal` is resolved through
-the v1 catalog.
+The `node_modules/solid-js` stub is 2.0.0-rc.3, so `createSignal` is resolved
+through the v2 catalog. It resolved through the v1 catalog before the Solid 1.x
+retirement and answered identically: this fixture's claim is about what the
+generator does with a resolved accessor argument, not about which vocabulary
+resolved it.

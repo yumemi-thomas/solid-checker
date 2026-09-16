@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "8c6209b71574f0faf81390fdeda6066b5f9a8fe82f503b2363d9a82c26ba6698",
+            "closureSha256": "7e0c712f2f8c86c4a72f3ad6ffbb408fa0254c4bba8ff704bde46f86422a49c4",
             "path": "./index.js",
             "sha256": "0486e6773c75be1ed84231da5d24c57b6b453438b6743b5e6c52eddc522ced1f"
           },
@@ -29,10 +29,10 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "fixture:sha256:c3e3748045b53e8127d8691ed9653a8d3e2e56789852b9f859712fd9ac4a27df",
+    "integrity": "fixture:sha256:e7206749a24091a33a745ffa3bbf800068d4e87fa1060b70dca44b3401661ce1",
     "manifest": {
       "path": "./package.json",
-      "sha256": "c3e3748045b53e8127d8691ed9653a8d3e2e56789852b9f859712fd9ac4a27df"
+      "sha256": "e7206749a24091a33a745ffa3bbf800068d4e87fa1060b70dca44b3401661ce1"
     },
     "name": "export-identity-join",
     "version": "1.0.0"

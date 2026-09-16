@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "003efc8392287a56e69f5558c31d894257b102ee261f99616cfe67869160c24f",
+            "closureSha256": "2a027b32c13ff73dd5ac2b100bd0b9f5c722a2f377ec47bce8c8187de8a2bed9",
             "path": "./index.js",
             "sha256": "cd68d93ee31ab1236cb5e7c87e84141b4d3b9d47e5040d494353d5e086979980"
           },
@@ -28,10 +28,10 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "fixture:sha256:4ec53e5e03eaf729902f7085e1e3b4a376edced4876488ad9822abd589f516ac",
+    "integrity": "fixture:sha256:d16034a0894f55cfb398d73b2b8cd476c8ab141a9c561eefce5824d72b05acfe",
     "manifest": {
       "path": "./package.json",
-      "sha256": "4ec53e5e03eaf729902f7085e1e3b4a376edced4876488ad9822abd589f516ac"
+      "sha256": "d16034a0894f55cfb398d73b2b8cd476c8ab141a9c561eefce5824d72b05acfe"
     },
     "name": "arrow-export-attribution",
     "version": "1.0.0"

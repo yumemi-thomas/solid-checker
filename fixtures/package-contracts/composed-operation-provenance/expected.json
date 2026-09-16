@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "bd8ce61b0d4724b027a2d7bf9de77c1cc6bb309a2db50d6c4dab5f764817b5b3",
+            "closureSha256": "419c085a52ceb17b282ab680e4e36f89be058f4c4de06a21eb1a6f31a9e78a48",
             "path": "./index.js",
             "sha256": "67b70606618af55b65a51fdf2d3b1626cc5007327b4eee577a0a1efb0eb8ff3f"
           },
@@ -32,10 +32,10 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "fixture:sha256:0942ba5ab743ff337a1475e2fbcffc155da98a43d377e3c9b5d3cee5b886bb12",
+    "integrity": "fixture:sha256:e2475e609d4de3ff672118da97e2e123653d0907ac0ae7ffc3d62d2794f860b0",
     "manifest": {
       "path": "./package.json",
-      "sha256": "0942ba5ab743ff337a1475e2fbcffc155da98a43d377e3c9b5d3cee5b886bb12"
+      "sha256": "e2475e609d4de3ff672118da97e2e123653d0907ac0ae7ffc3d62d2794f860b0"
     },
     "name": "composed-operation-provenance",
     "version": "1.0.0"

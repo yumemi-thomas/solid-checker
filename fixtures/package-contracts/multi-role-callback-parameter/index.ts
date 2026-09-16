@@ -7,7 +7,7 @@ import { createEffect, createMemo } from "solid-js";
 // callback claim.
 export function inlineAndTracked(handle: () => void): void {
   handle();
-  createEffect(() => handle());
+  createEffect(() => handle(), () => {});
 }
 
 // Positive: the `@solid-primitives/range` `mapRange` shape -- an inline site in
@@ -23,15 +23,15 @@ export function inlineAndReturned(step: () => number): () => number {
 // contradiction. Equivalent operations deduplicate, so this proposes one
 // queued/tracked callback operation.
 export function twoTrackedSites(handle: () => void): void {
-  createEffect(() => handle());
-  createEffect(() => handle());
+  createEffect(() => handle(), () => {});
+  createEffect(() => handle(), () => {});
 }
 
 // Negative: two *parameters* with different schedules. The axis is per
 // parameter, so nothing here is contradictory and both rows stand.
 export function twoParameters(now: () => void, later: () => void): void {
   now();
-  createEffect(() => later());
+  createEffect(() => later(), () => {});
 }
 
 // Positive locality case: parameter 0 contradicts itself while parameter 1 has
@@ -39,14 +39,14 @@ export function twoParameters(now: () => void, later: () => void): void {
 // domain rather than turning the unresolved parameter into negative proof.
 export function contradictOnZeroOnly(a: () => void, b: () => void): void {
   a();
-  createEffect(() => a());
-  createEffect(() => b());
+  createEffect(() => a(), () => {});
+  createEffect(() => b(), () => {});
 }
 
 // Negative: the single-site control, so openness cannot be blamed on
 // `createEffect` or on the export shape.
 export function oneTrackedSite(handle: () => void): void {
-  createEffect(() => handle());
+  createEffect(() => handle(), () => {});
 }
 
 // Negative: an inline site alone.

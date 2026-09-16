@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "885b61c0a92196b7cc8ba43a0755a7fc20185cde7143f1a329f89e7993b142e5",
+            "closureSha256": "aa2f7a04f597b3e7e3785e7e8233d63ccda799795389ce21dc8a22735d820ac9",
             "path": "./index.js",
             "sha256": "5a53427f064bae1f4fd98de896d0b8f84c22c7b45a3d0e917671d9e80be4f182"
           },
@@ -26,10 +26,10 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "fixture:sha256:a4a1052d65c132a9d406f4f48c51f40f1098e6d24dbd2528ab8eec06e32543a0",
+    "integrity": "fixture:sha256:36ff641587acbd0075b10a95ac5aac7bae0702523a45bf3a460021368a8f4a72",
     "manifest": {
       "path": "./package.json",
-      "sha256": "a4a1052d65c132a9d406f4f48c51f40f1098e6d24dbd2528ab8eec06e32543a0"
+      "sha256": "36ff641587acbd0075b10a95ac5aac7bae0702523a45bf3a460021368a8f4a72"
     },
     "name": "unresolved-dispatch-domains-control",
     "version": "1.0.0"

@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "8366a2755c0ec5998807699a4306f487a510cb1dfd17427fec7044cef4c5bc35",
+            "closureSha256": "64d428e8e840803c7b74c99e2d0a6c5f69e7d505183adf13d30b1c6602db89ce",
             "path": "./index.js",
             "sha256": "4a2d9b19718366f42c1c1333594cce9146ad6224fc1f19e6255edcff4a68bac9"
           },
@@ -27,10 +27,10 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "fixture:sha256:8f7f4e09b7079b8e88038ab1deb0409cae01cdd62d24b98939e6271fb888824c",
+    "integrity": "fixture:sha256:18d5b3fb64c6db3a6a01203c677f50176542ca085efbd34e640b0a6724aca869",
     "manifest": {
       "path": "./package.json",
-      "sha256": "8f7f4e09b7079b8e88038ab1deb0409cae01cdd62d24b98939e6271fb888824c"
+      "sha256": "18d5b3fb64c6db3a6a01203c677f50176542ca085efbd34e640b0a6724aca869"
     },
     "name": "composed-operation-shadowed-target",
     "version": "1.0.0"

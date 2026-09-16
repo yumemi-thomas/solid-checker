@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "268aabbe2b00a896dd1f12e6c9f75ccadd2951e12dc3feb1f13babf5256fe44e",
+            "closureSha256": "30953f5a5aa600af19447b9a5a07ab36f839fc36e5923aad337c9e3edf87717b",
             "path": "./index.js",
             "sha256": "b8a4ca8c61d895a74865ca30be94af837b3d3eeabcbb247dcc9b43d83e59611d"
           },
@@ -28,10 +28,10 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "fixture:sha256:a2aaaa565e8d06d11f13d4ce98a75845160ae9a76b283ee885e8fc9357ea62aa",
+    "integrity": "fixture:sha256:afff703559eff1922387f8e9e403a5d16caf13d096d20b66cd6a937adc03676b",
     "manifest": {
       "path": "./package.json",
-      "sha256": "a2aaaa565e8d06d11f13d4ce98a75845160ae9a76b283ee885e8fc9357ea62aa"
+      "sha256": "afff703559eff1922387f8e9e403a5d16caf13d096d20b66cd6a937adc03676b"
     },
     "name": "unresolved-dispatch-attribution",
     "version": "1.0.0"

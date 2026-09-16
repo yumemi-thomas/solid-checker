@@ -8,8 +8,8 @@ createEffect(() => setSpringValue(target()));
 return springValue;
 ```
 
-Its declared return is `Accessor<WidenSpringTarget<T>>`, and `solid-js` 1.9.14
-declares `type Accessor<T> = () => T`. The generator nonetheless published a
+Its declared return is `Accessor<WidenSpringTarget<T>>`, and `solid-js`
+declares `type Accessor<T> = () => T` (unchanged from 1.9.14 to 2.0.0-rc.3). The generator nonetheless published a
 return output byte-identical to `createSpring`'s — `{"kind": "tuple", "items":
 [{"kind": "reactive", "role": "accessor"}, "unknown"]}` — because
 `leaf_with_depth`'s binding-initializer fallback
@@ -122,11 +122,42 @@ docs/precision-backlog.md.
 
 ## Stub faithfulness
 
-`node_modules/solid-js/index.d.ts` transcribes `Accessor`, `Setter`, `Signal`
-and both `createSignal` overloads byte-faithfully from solid-js@1.9.14
-(`types/reactive/signal.d.ts:104-111`, `:138-139`) — the result side above all,
-since `Signal<T>`'s exact two-item shape is what every slot case reads.
-`SignalOptions` is reduced to its two caller-visible fields; a reduced option
-object cannot widen an argument or create a claim. `.at(0)` in `atZero` needs
-the ES2022 lib to type-check; no gate type-checks this fixture, and nothing in
-it produces a finding.
+`node_modules/solid-js/index.d.ts` transcribes `Accessor`, `SourceAccessor`,
+`Refreshable`, `Setter`, `Signal` and the `createSignal` overload set
+byte-faithfully from solid-js@2.0.0-rc.3 — `@solidjs/signals`
+`dist/types/signals.d.ts:49-50`, `:60-67`, `dist/types/core/constants.d.ts:95-97`,
+and `types/client/hydration.d.ts:246-252` — the result side above all, since
+`Signal<T>`'s exact two-item shape is what every slot case reads.
+
+2.0 brands that first item: `Signal<T> = [get: SourceAccessor<T>, set: Setter<T>]`
+where `SourceAccessor<T> = Refreshable<Accessor<T>>`. The brand is transcribed
+rather than erased, because erasing it would *widen* the item's type — and this
+fixture's whole claim is about which exact value a slot names. Every case in it
+answers identically under 1.x's unbranded `Accessor<T>` and 2.0's branded
+`SourceAccessor<T>`, which is itself worth knowing: the slot derivation reads
+the tuple's shape, not the item's nominal identity.
+
+## Why every `initial` is `Exclude<T, Function>`
+
+2.0's plain `createSignal` overload takes `value: Exclude<T, Function>`, which
+is what separates it from the function form (a writable memo). An
+*unconstrained* `<T>` cannot satisfy it — `tsc` rejects
+`createSignal<T>(initial)` with "Argument of type 'T' is not assignable to
+parameter of type 'Exclude<T, Function>'" against the real 2.0.0-rc.3 typings —
+so a generic helper that forwards a caller's value has to carry the exclusion
+in its own signature. That is a property of real 2.0 code, not of this fixture,
+and writing the fixture without it would have made every case here a shape no
+project can produce. Both source files were type-checked against the audited
+`solid-js@2.0.0-rc.3` install, not against the stub.
+
+The constraint changes no claim: every slot case answers exactly as it did
+under 1.x.
+
+`SignalOptions` and `MemoOptions` are reduced to their caller-visible fields
+and `HydrationSignalOptions` is their intersection exactly as
+`hydration.d.ts:67` declares it; a reduced option object cannot widen an
+argument or create a claim. Nothing on the argument side is loosened — the
+plain form's `Exclude<T, Function>` is what makes a non-function initializer
+provably not the compute. `.at(0)` in `atZero` needs the ES2022 lib to
+type-check; no gate type-checks this fixture, and nothing in it produces a
+finding.

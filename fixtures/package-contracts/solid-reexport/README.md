@@ -49,6 +49,12 @@ surface, and they must keep agreeing:
 
 `external-reexport` pins the unchanged half: an ordinary dependency is not
 exempt, and its re-export still refuses by name, because that contract *can* be
-supplied and was not. The `node_modules/solid-js` stub is 1.x, so this fixture
-also runs the v1 catalog; it is the fixture whose missing `.gitignore`
-exception motivated coverage's `checkDialectStubs` guard.
+supplied and was not. The `node_modules/solid-js` stub is 2.0.0-rc.3; it is the
+fixture whose missing `.gitignore` exception motivated coverage's
+`checkDialectStubs` guard.
+
+The refusal is dialect-independent, and this fixture is the proof: ported from
+the 1.x stub to 2.0.0-rc.3, the refusal text and the census sidecar came back
+**byte-identical**, with no snapshot to update. ADR 0027 withholds a contract
+for `solid-js`, `@solidjs/signals` and `@solidjs/web` by design, and "by design"
+does not mean "per dialect".

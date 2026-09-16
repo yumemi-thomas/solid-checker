@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "d8c6e549e112c42e659d1a5eb63e53349e77c73381b9ef13fd1fd19d019e6300",
+            "closureSha256": "08ab2f8f53cae6a0b550bc227b69dcf546c809729d334b5de089aee2353cb51b",
             "path": "./index.ts",
-            "sha256": "ab730c4fc65a7fc4137cd28037f5e9c6b3f9dd249f4155d57d00ce6df378e1f9"
+            "sha256": "06ef62e1294783388fb0911bae78032757d349972f28d687d44d4a9ec8545d44"
           },
           "declarations": {
             "path": "./index.ts",
-            "sha256": "ab730c4fc65a7fc4137cd28037f5e9c6b3f9dd249f4155d57d00ce6df378e1f9"
+            "sha256": "06ef62e1294783388fb0911bae78032757d349972f28d687d44d4a9ec8545d44"
           },
           "exports": {
             "contradictOnZeroOnly": "summary-791cb4c57004018a3fb0b4d95eff7e5e6d9ddfa314766fc6a3ad977a3fa3d055",
@@ -31,10 +31,10 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "fixture:sha256:4312df2be3442e76f4cb50ce134eed51db3a44fd25e5e29e244a759039d2a800",
+    "integrity": "fixture:sha256:2b392ed3104e42835e76d7954b6068933476389799833c2c64950143df394f50",
     "manifest": {
       "path": "./package.json",
-      "sha256": "4312df2be3442e76f4cb50ce134eed51db3a44fd25e5e29e244a759039d2a800"
+      "sha256": "2b392ed3104e42835e76d7954b6068933476389799833c2c64950143df394f50"
     },
     "name": "multi-role-callback-parameter",
     "version": "1.0.0"

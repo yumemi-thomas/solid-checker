@@ -23,5 +23,14 @@ set means open knowledge, never complete-negative behavior. The sibling
 proposal plan carries stable claim IDs for every local closure candidate. Only
 proof replay may close one and issue a receipt.
 
-The Solid 1.x declaration stub transcribes the primitive signatures used by
-the fixture and remains clean under `tsc --noEmit`.
+The declaration stub transcribes the solid-js@2.0.0-rc.3 signatures used by the
+fixture. `index.ts` was type-checked under `tsc --noEmit` against the audited
+`solid-js@2.0.0-rc.3` install itself, not against the stub — which is the only
+way the 2.0 `createEffect` split shows up, since the stub would have accepted
+whatever it declared.
+
+That split is why every `createEffect` here takes two arguments. 2.0's
+signature is `createEffect(compute, effectFn, options?)` and the
+single-argument form is a deprecated overload returning `never`; the tracked
+invocation site stays in the compute arm and the effect arm references no
+parameter, so every claim in this fixture is the one it made under 1.x.

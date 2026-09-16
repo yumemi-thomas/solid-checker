@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "42bff7ac25ca8c442de4a078f91cc43b478d8f5d6ddcbac9867ba31c7d638bc4",
+            "closureSha256": "03c53746c2036042c738af81af1d28a9e5f537fcede9d1fe9f8aa0bfcc24b7a5",
             "path": "./index.ts",
             "sha256": "5cf279537432a846a54692614aff221367092767a8dd6adaaa31de8eec114e03"
           },
@@ -34,10 +34,10 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "fixture:sha256:836eaca5ac3b5acaefda3fd5b949d7177a40d4ac7e89ed77b72dbe0b3c239d89",
+    "integrity": "fixture:sha256:56df696cf6082ffe912bfe5bf126f7a86ff950fd4ee579fa9a27480b0ccfc919",
     "manifest": {
       "path": "./package.json",
-      "sha256": "836eaca5ac3b5acaefda3fd5b949d7177a40d4ac7e89ed77b72dbe0b3c239d89"
+      "sha256": "56df696cf6082ffe912bfe5bf126f7a86ff950fd4ee579fa9a27480b0ccfc919"
     },
     "name": "shorthand-block-scope-package",
     "version": "1.0.0"
