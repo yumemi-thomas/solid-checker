@@ -483,7 +483,48 @@ Only after steps 1 and 2 are green and step 4 is in the same slice or
 already landed.
 
 0. Dry run: set `default = ["dialect-v2"]` in
-   `rust/crates/solid-facts-backend/Cargo.toml` and run `make verify`.
+   `rust/crates/solid-facts-backend/Cargo.toml`. **Done 2026-09-16; this is the
+   measured blast radius.** The workspace still *builds* — nothing outside the
+   backend references the v1 crate directly — and
+   `solid-facts-backend --lib` passes at 545. Four integration targets fail,
+   ~40 assertions, and they sort into three groups:
+
+   - **~33 in `dialects_process`**, almost all named `solid_one_*`: the v1
+     vocabulary and compiler-integration tests. They go with the dialect.
+   - **Three that are already prepared.**
+     `component_ref_callbacks_are_setup_time_outputs_in_both_dialects` and
+     `returned_event_handler_factories_preserve_deferred_execution` fail only
+     because `DIALECT_INDEPENDENT` still lists `"solid-v1"` — a one-line edit —
+     and `the_dialect_pair_reports_different_findings_from_identical_sources`
+     is the deletion whose loss is already verified as contrast-only.
+   - **Six that need reading, not deleting**, because their names do not say
+     v1: `component_identity_combines_type_facts_with_dialect_compatibility`,
+     `preferences_are_default_on_with_explicit_disables_winning`,
+     `project_rule_options_disable_one_exact_catalog_rule`,
+     `run_with_owner_distinguishes_null_definite_and_nullable_owners_in_both_dialects`,
+     `an_incompatible_core_package_requires_a_dialect_change_not_a_receipt`, and
+     three `cross_file_*_process` tests. Each is either a pair loop to narrow or
+     a v1 fixture to retire, and each needs the same read-the-claim treatment
+     slices 3 and 8 needed.
+
+   Nothing in the Bun gates failed in the dry run, because they select the
+   dialect from fixture stubs rather than from the build.
+
+**Step 4's emission must land before or with this step (ADR 0110 § 1), and it
+is not done.** The catalog identity is mechanical — a `Rule` variant, a
+metadata row `("SC9013", "unsupported-solid-runtime", "error", true)`, an
+`evidence` arm, `Rule::ALL` 26 -> 27, the counts in `docs/rules/README.md` and
+`rust/ARCHITECTURE.md`, a rule page, and one row in
+`packages/cli/lib/rules-solid-v2.json`. The part that needs design is the
+emission seam: the refusal has to reach the reporting path without passing
+through the rules engine, and the landing site is
+`rust/crates/solid-facts-backend/src/main.rs` immediately before
+`analyze_project_accepted_measured_with_enablement` (~line 3375), constructing
+a `diagnostics::Snapshot` with one `SnapshotFinding` whose `primary_location`
+is the deciding `package.json` and handing it to `snapshot_emission::emit`.
+The dialect selection above it switches from `detect` to `detect_detailed`.
+A rule identity with no producer is not a shippable unit, so the two land
+together.
 1. Remove `rust/dialects/solid-v1/` from `rust/Cargo.toml` workspace members
    and the backend's dialect registry; remove `solid_1x.rs` from
    `solid-dialect`; remove the two modules `solid1x_attributes.rs` and
