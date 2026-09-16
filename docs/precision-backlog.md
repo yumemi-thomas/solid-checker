@@ -22271,3 +22271,33 @@ snapshots, with no demonstrated effect on any real package today. Its value is
 that the filter now means what its documentation says, and that a v2 export
 arriving at an inline row through an earlier rung no longer silently loses a
 closure it has earned.
+
+### An empty snapshot cannot detect an un-dialected fixture (2026-09-16)
+
+While porting fixtures off their 1.x stubs, `fixtures/reactive-ir/array-shape-v1`
+was moved to `2.0.0-rc.3` and both gates stayed green — because its snapshot is
+`{"status": "certified", "findings": []}` and an empty expectation is satisfied
+by *any* dialect, including one that never reaches the rule the fixture is about.
+
+Its README had said so in advance: "The `node_modules/solid-js/package.json`
+stub pins the 1.x dialect; without it the fixture silently runs the v2 catalog."
+The fixture records the `arrayShape` distinctions used by **1.x's**
+`v1/prefer-for` (SC8014) safe-fix gate, so re-pointing the stub replaced its
+subject with the v2 gate's answer to different questions, and nothing could
+report the substitution. The port was reverted.
+
+This is the `checkDialectStubs` trap from the other side. That guard catches a
+*missing* stub; nothing catches a stub that was deliberately pinned to one
+dialect and then repointed, when the fixture's expectation is empty. Two rules
+follow for the rest of the retirement:
+
+- **A fixture whose snapshot has no findings is not portable by measurement.**
+  Green before and green after proves nothing about it. Either give it a
+  non-empty assertion first, or classify it by reading and leave it alone.
+- **Read the README for a deliberate dialect pin before touching a stub.** The
+  fixtures that state "this stub pins the 1.x dialect" mean it, and they are the
+  ones a passing gate will not defend.
+
+`eslint-compat` and `package-structured-unresolved`, ported in the same slice,
+are unaffected: both carry non-empty snapshots, both moved, and both movements
+were reviewed finding by finding.
