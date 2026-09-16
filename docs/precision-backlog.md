@@ -22016,3 +22016,46 @@ importer and are never displaced.
 `cargo check`s the crate under each dialect feature. The new fields are covered
 by request-decoding tests in the crate; the admission logic they feed is the
 same `admitted_bundle_artifacts` the native tier tests cover directly.
+
+### Known approximation: undeclared-condition case selection compares paths, not claims (2026-09-16)
+
+`contract_interface::select_case` has two regimes. With declared export
+conditions it applies Node's own selection semantics and is exact. With **no**
+declaration — the ESLint and Oxlint case, which is the common one — it admits
+when every reaching candidate was proven about the *same runtime file*, on the
+stated ground that "they then describe the same bytes, and which branch reached
+them changes nothing about what is true of them".
+
+**That ground is not sufficient, and this is now a productive path.** A contract
+describes the export surface of an entry file, but the semantics depend on the
+whole module closure, and conditions select that closure. Two cases can share
+`dist/index.js` and still resolve a dependency to different files with different
+behavior. The rule compares where a case came from, not what it says.
+
+**Measured, and currently harmless.** `@kobalte/utils@0.9.2` certifies two `.`
+cases, under `["import"]` and `["import","solid"]`. Both resolve
+`dist/index.js`, their documents differ (`sha256:a29011b3…` vs
+`sha256:01463173…`), their `semanticDigest` and `closedClaimsRoot` differ — and
+all **59 exports have byte-identical summaries**. So the undeclared path picks
+one of two answers that happen to agree, on a justification that does not
+establish that they agree.
+
+**Why the obvious tightening is wrong.** Neither `semanticDigest` nor
+`closedClaimsRoot` nor the document digest is a usable "says the same thing"
+comparator: all three are domain-separated by artifact-case identity, so the
+kobalte pair differs in all of them while agreeing on every claim. Refusing on
+any of them would drop the most-imported package in the corpus from the
+undeclared path to buy a hazard that is not present.
+
+**The fix is to compare the claims.** `ExportSemantics` is `Eq`, so
+`artifact_case().exports` is a direct comparator. The clean shape puts it in
+`AcceptedContractIndex::with_admitted_artifacts`, which already holds the
+contracts: admission would hand it every reaching candidate rather than a
+pre-made selection, and the index — the one place that has the semantics —
+would admit only when they agree. That keeps one rule for both the project
+catalogs and the compiled-in tier, which is the property the rest of this
+acquisition path was just consolidated around.
+
+Not a regression: this predates the compiled-in tier and is unchanged by it.
+What changed is that the undeclared path now reaches contracts regularly, so the
+approximation is worth closing rather than noting.
