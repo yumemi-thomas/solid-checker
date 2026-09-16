@@ -349,6 +349,34 @@ impl CompactIds {
     }
 }
 
+/// The content address this encoder would give one export's claims.
+///
+/// Exactly the `summary-<sha256>` the document writes: `compact_summary`
+/// renders the export in the document's *local* operation spelling
+/// (`callback-0`), so the address depends on what the export claims and on
+/// nothing about where it was found. Two certifications of one published
+/// artifact therefore share it whenever they agree, which is the question
+/// artifact admission has to answer when a host declares no export conditions
+/// and two cases reach the file it resolved.
+///
+/// Reusing the encoder rather than restating it is the point. The in-memory
+/// form cannot be compared with `==`: decoding qualifies every operation id
+/// with the artifact-case id (`IdScope::operation_in`), so two contracts that
+/// claim the same thing differ in every `OperationId` they carry. Measured on
+/// `@kobalte/utils@0.9.2`, whose two `.` cases differ in exactly that and in
+/// nothing else, for 13 of 59 exports.
+pub(crate) fn export_claims_address(
+    artifact_case: &ArtifactCase,
+    public_name: &str,
+    export: &ExportSemantics,
+) -> Result<String, ContractFailure> {
+    let wire_case_id = compact_artifact_case_id(artifact_case)?;
+    let ids = CompactIds::new(&artifact_case.id, &wire_case_id, public_name);
+    let summary = compact_summary(export, &ids)?;
+    let key = serde_json::to_vec(&summary).map_err(document_decode)?;
+    Ok(format!("summary-{:x}", Sha256::digest(&key)))
+}
+
 fn compact_artifact_case_id(artifact_case: &ArtifactCase) -> Result<String, ContractFailure> {
     let trace = if artifact_case.resolution_trace.is_empty() {
         Vec::new()
@@ -3454,6 +3482,73 @@ mod tests {
         env!("CARGO_MANIFEST_DIR"),
         "/../../../fixtures/package-contracts/composed-operation-provenance/expected.json"
     ));
+
+    /// The property artifact admission leans on: the address this computes for
+    /// an export is the very `summary-…` id the encoder writes for it.
+    ///
+    /// That is what makes it a valid comparator between two *different*
+    /// certifications of one published artifact. The encoder hashes the compact
+    /// form, whose operation spelling is local (`callback-0`) because
+    /// `CompactIds` strips the artifact-case qualification back off — so the
+    /// address depends on what the export claims and on nothing about where it
+    /// was found. The decoded form cannot be compared directly at all:
+    /// `IdScope::operation_in` qualifies every operation id with the
+    /// artifact-case id, which is what `@kobalte/utils@0.9.2`'s two `.` cases
+    /// differ in, for 13 of their 59 exports and in nothing else.
+    ///
+    /// Asserted against the *encoded* document rather than the fixture bytes:
+    /// these fixtures name their summaries by hand (`"signal-pair"`), and it is
+    /// the encoder's id this has to reproduce.
+    #[test]
+    fn an_export_claims_address_is_the_summary_id_the_encoder_writes() {
+        for bytes in [SIGNAL, CONDITIONAL, COMPOSED] {
+            let decoded = decode(bytes).unwrap();
+            let sidecars = decoded.sidecar_digests().unwrap();
+            let contract = decoded.normalize().unwrap();
+            let encoded = encode(&contract, &sidecars, false).unwrap();
+            let wire: serde_json::Value = serde_json::from_slice(&encoded).unwrap();
+            let case = &contract.artifact_cases()[0];
+            let stated = wire["entrypoints"][&case.entrypoint].clone();
+            let exports = stated
+                .get("cases")
+                .and_then(|cases| cases.get(0))
+                .unwrap_or(&stated)["exports"]
+                .clone();
+            assert!(!case.exports.is_empty());
+            for (name, export) in &case.exports {
+                let reference = &exports[name];
+                // An experimental export states `{summary, stability}`; every
+                // other one states the id directly.
+                let stated_id = reference
+                    .get("summary")
+                    .unwrap_or(reference)
+                    .as_str()
+                    .expect("the encoded document names this export's summary");
+                assert_eq!(
+                    export_claims_address(case, name, export).unwrap(),
+                    stated_id,
+                    "{name} must re-derive the address the encoder wrote"
+                );
+            }
+        }
+    }
+
+    /// And it moves when the claim moves, or admission would apply one of two
+    /// contracts that say different things about one artifact.
+    #[test]
+    fn an_export_claims_address_changes_with_the_claim() {
+        let contract = normalized(SIGNAL);
+        let case = &contract.artifact_cases()[0];
+        let (name, export) = case.exports.iter().next().expect("an export");
+        let before = export_claims_address(case, name, export).unwrap();
+        let mut altered = export.clone();
+        altered.shape = ValueShape::Unknown;
+        assert_ne!(
+            export_claims_address(case, name, &altered).unwrap(),
+            before,
+            "a different shape is a different claim"
+        );
+    }
 
     fn normalized(bytes: &[u8]) -> NormalizedContract {
         decode(bytes).unwrap().normalize().unwrap()

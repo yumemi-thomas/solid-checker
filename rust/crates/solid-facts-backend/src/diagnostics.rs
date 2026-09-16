@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     fs, io,
     path::{Path, PathBuf},
     sync::Arc,
@@ -953,22 +953,105 @@ pub fn project_accepted_contracts(
                 .map_err(|error| BackendError::Contract(error.to_string()))?,
         );
     }
-    let contracts = contracts.with_fallback(requirements);
+    let mut contracts = contracts.with_fallback(requirements);
     // An acceptance is issued for the file that imported the package during
     // certification. Admit the specifier project-wide when *this* project's
     // installed artifact is the one that acceptance names -- same integrity,
     // entrypoint and declared conditions. With no declared conditions this
     // admits nothing, because conditions select the artifact and the analyzer
     // has no facts of its own about them.
-    let mut admitted = admitted_project_artifacts(catalogs, trust, directory, conditions, facts)?;
-    if bundled {
-        admitted.extend(admitted_bundled_artifacts(directory, conditions, facts)?);
+    //
+    // One call per tier, in precedence order. `with_admitted_artifacts` keeps
+    // the first tier to claim a specifier, and it requires the identities
+    // *within* one call to agree -- which a project's own catalog and a
+    // contract compiled into this build have no reason to do, and no reason to
+    // be asked to.
+    let project = admitted_project_artifacts(catalogs, trust, directory, conditions, facts)?;
+    let project = agreed_admissions(&contracts, project);
+    if !project.is_empty() {
+        contracts = contracts.with_admitted_artifacts(project);
     }
-    Ok(if admitted.is_empty() {
-        contracts
-    } else {
-        contracts.with_admitted_artifacts(admitted)
-    })
+    if bundled {
+        let bundles = admitted_bundled_artifacts(directory, conditions, facts)?;
+        let bundles = agreed_admissions(&contracts, bundles);
+        if !bundles.is_empty() {
+            contracts = contracts.with_admitted_artifacts(bundles);
+        }
+    }
+    Ok(contracts)
+}
+
+/// Keeps one acceptance per specifier, and only where every candidate for it
+/// claims the same thing.
+///
+/// `admissible_cases` narrows to a single case whenever the host declared its
+/// export conditions. It cannot when the host declared none — the ESLint and
+/// Oxlint case — and then it hands over every case that reaches the file this
+/// project resolved. That used to be decided by admitting when all candidates
+/// named the same *runtime file*, on the ground that they therefore describe
+/// the same bytes; a contract describes an entry file's export surface while
+/// its semantics depend on the whole module closure, and conditions select that
+/// closure, so agreeing on a path is not agreeing on a claim.
+///
+/// The comparison is the document's own content address for each export's
+/// claims ([`contract_document::export_claims_address`]), because the in-memory
+/// form cannot be compared directly: decoding qualifies every operation id with
+/// the artifact-case id, so two contracts that agree completely still differ in
+/// every `OperationId`. Measured on `@kobalte/utils@0.9.2`, whose two `.` cases
+/// -- `["import"]` and `["import","solid"]` -- differ in exactly that and in
+/// nothing else, for 13 of its 59 exports.
+///
+/// A candidate whose address cannot be computed answers nothing, so the
+/// specifier is dropped: this must add acceptances on proof, never on the
+/// absence of a comparison.
+fn agreed_admissions(
+    contracts: &AcceptedContractIndex,
+    candidates: Vec<(String, String)>,
+) -> Vec<(String, String)> {
+    let claims = |identity: &str| -> Option<BTreeMap<String, String>> {
+        let contract = contracts.contract_for_artifact(identity)?;
+        let case = contract.artifact_case();
+        case.exports
+            .iter()
+            .map(|(name, export)| {
+                crate::contract_document::export_claims_address(case, name, export)
+                    .ok()
+                    .map(|address| (name.clone(), address))
+            })
+            .collect()
+    };
+    let mut grouped: Vec<(String, Vec<String>)> = Vec::new();
+    for (specifier, identity) in candidates {
+        match grouped.iter_mut().find(|(name, _)| *name == specifier) {
+            Some((_, identities)) => identities.push(identity),
+            None => grouped.push((specifier, vec![identity])),
+        }
+    }
+    let mut admitted = Vec::new();
+    for (specifier, identities) in grouped {
+        let [first, rest @ ..] = identities.as_slice() else {
+            continue;
+        };
+        if rest.is_empty() {
+            // One candidate needs no comparison, but it still has to be an
+            // acceptance this index can serve, so that what comes back is
+            // exactly what will be admitted.
+            if contracts.contract_for_artifact(first).is_some() {
+                admitted.push((specifier, first.clone()));
+            }
+            continue;
+        }
+        let Some(expected) = claims(first) else {
+            continue;
+        };
+        if rest
+            .iter()
+            .all(|identity| claims(identity).is_some_and(|other| other == expected))
+        {
+            admitted.push((specifier, first.clone()));
+        }
+    }
+    admitted
 }
 
 /// Every lockfile [`project_accepted_contracts`] can consult when it decides
@@ -1508,7 +1591,83 @@ mod tests {
     use solid_facts::{ProjectFacts, TypeScriptTable};
     use solid_reactive_ir::{RuntimeEnvironment, contract_semantics::AcceptedContractIndex};
 
-    use super::{DiagnosticSession, installed_package_integrity, retain_enabled};
+    use super::{
+        DiagnosticSession, agreed_admissions, installed_package_integrity, retain_enabled,
+    };
+
+    const MINIMAL: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../benchmarks/package-contract-v2/phase6/minimal-unknown.json"
+    ));
+
+    fn acceptance_from(bytes: &[u8]) -> solid_reactive_ir::contract_semantics::AcceptedContract {
+        let contract = crate::contract_document::decode(bytes)
+            .unwrap()
+            .normalize()
+            .unwrap();
+        let case = contract.artifact_cases()[0].id.clone();
+        solid_reactive_ir::contract_semantics::proof::project_untrusted_proposal_for_generation(
+            contract, &case,
+        )
+        .unwrap()
+    }
+
+    fn acceptance() -> solid_reactive_ir::contract_semantics::AcceptedContract {
+        acceptance_from(MINIMAL)
+    }
+
+    /// A host that declares no export conditions cannot narrow two acceptances
+    /// of one artifact to one, so both arrive here and this decides.
+    ///
+    /// It decides on what they *claim*. The rule this replaced admitted when
+    /// every candidate named the same runtime file, which compares where a case
+    /// came from: a contract describes an entry file's export surface while its
+    /// semantics depend on the whole module closure, and conditions select that
+    /// closure.
+    #[test]
+    fn two_candidates_for_one_specifier_are_admitted_only_when_they_agree() {
+        let both = || {
+            vec![
+                ("pkg".to_owned(), "left".to_owned()),
+                ("pkg".to_owned(), "right".to_owned()),
+            ]
+        };
+        let agreeing = AcceptedContractIndex::from_artifact_acceptances([
+            ("left".to_owned(), acceptance()),
+            ("right".to_owned(), acceptance()),
+        ]);
+        assert_eq!(
+            agreed_admissions(&agreeing, both()),
+            [("pkg".to_owned(), "left".to_owned())],
+            "two certifications that claim the same thing are one answer"
+        );
+
+        // One of them states a different export surface. Which describes what
+        // this project runs is exactly the question nothing here can answer, so
+        // neither may be applied.
+        let divergent = String::from_utf8(MINIMAL.to_vec())
+            .unwrap()
+            .replace(r#""version": "plain-value""#, r#""release": "plain-value""#);
+        assert_ne!(divergent.as_bytes(), MINIMAL, "the variant must differ");
+        let disagreeing = AcceptedContractIndex::from_artifact_acceptances([
+            ("left".to_owned(), acceptance()),
+            ("right".to_owned(), acceptance_from(divergent.as_bytes())),
+        ]);
+        assert!(
+            agreed_admissions(&disagreeing, both()).is_empty(),
+            "two different answers about one artifact must admit neither"
+        );
+
+        // One candidate needs no comparison, and an identity the index does not
+        // carry answers nothing.
+        assert_eq!(
+            agreed_admissions(&agreeing, vec![("pkg".to_owned(), "left".to_owned())]),
+            [("pkg".to_owned(), "left".to_owned())]
+        );
+        assert!(
+            agreed_admissions(&agreeing, vec![("pkg".to_owned(), "absent".to_owned())]).is_empty()
+        );
+    }
 
     fn scratch(label: &str) -> std::path::PathBuf {
         let path = std::env::temp_dir().join(format!(

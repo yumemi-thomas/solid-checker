@@ -487,6 +487,14 @@ impl AcceptedContractIndex {
     ///
     /// Importer-keyed acceptances still win: `contract` consults them first, so
     /// a catalog entry naming an exact file is never displaced by this.
+    ///
+    /// One identity per specifier. Where a project's own resolution cannot
+    /// narrow the candidates to one -- a host that declares no export
+    /// conditions, which is every ESLint and Oxlint run -- the caller decides
+    /// whether the candidates claim the same thing before calling this, because
+    /// deciding needs the document's own content address for a claim and this
+    /// crate cannot compute one. See
+    /// `solid-facts-backend`'s `agreed_admissions`.
     #[must_use]
     pub fn with_admitted_artifacts(
         mut self,

@@ -850,46 +850,61 @@ pub fn admitted_project_artifacts(
             .iter()
             .filter(|case| case.reaches(&target))
             .collect::<Vec<_>>();
-        let Some(selected) = select_case(&reaching, &declared) else {
-            continue;
-        };
-        admitted.push((specifier, selected.identity.clone()));
+        admitted.extend(
+            admissible_cases(&reaching, &declared)
+                .into_iter()
+                .map(|case| (specifier.clone(), case.identity.clone())),
+        );
     }
     Ok(admitted)
 }
 
-/// Chooses which acceptance applies to this project, among those certified
-/// about a file it actually resolved.
+/// Which acceptances can apply to this project, among those certified about a
+/// file it actually resolved.
 ///
 /// Two regimes, because the honest answer differs:
 ///
+/// - **A declaration** — authoritative, with Node's own selection semantics. A
+///   case applies when every condition it was certified under is one this host
+///   declares, and the most specific such case wins, so exactly one comes back.
+///   Set *equality* would be wrong in both directions: a host declaring
+///   `node, import, development` must still match a case certified under
+///   `node, import`, and a host declaring `require` must not match one
+///   certified under `import` however many declaration files the two branches
+///   share.
 /// - **No declaration** — the linter case. ESLint and Oxlint hosts do not know
 ///   their export conditions, and a wrong guess is worse than none: the guess
 ///   this replaced was the constant `["import"]`, which refused every project
 ///   that declared its real conditions and admitted only ones that declared
-///   that exact set. With nothing declared, admit only when every candidate was
-///   proven about the *same runtime file* — they then describe the same bytes,
-///   and which branch reached them changes nothing about what is true of them.
-///   Candidates that disagree cannot both be what this project runs, and
-///   nothing here can choose, so refuse.
-/// - **A declaration** — authoritative, with Node's own selection semantics. A
-///   case applies when every condition it was certified under is one this host
-///   declares, and the most specific such case wins. Set *equality* would be
-///   wrong in both directions: a host declaring `node, import, development`
-///   must still match a case certified under `node, import`, and a host
-///   declaring `require` must not match one certified under `import` however
-///   many declaration files the two branches share.
-pub(crate) fn select_case<'a>(
+///   that exact set. So **every** reaching candidate comes back, and the
+///   acceptance index decides — see
+///   [`AcceptedContractIndex::with_admitted_artifacts`].
+///
+/// That second regime used to decide here, by admitting when every candidate
+/// was proven about the same *runtime file*, on the ground that they then
+/// describe the same bytes. They do not: a contract describes an entry file's
+/// export surface, but its semantics depend on the whole module closure, and
+/// conditions select that closure. The rule compared where a case came from
+/// rather than what it says, and nothing available here can say it — this
+/// module reads catalog metadata and never opens a document. The index holds
+/// the semantics, so the index is where the comparison belongs, and handing it
+/// the candidates is all this can soundly do.
+pub(crate) fn admissible_cases<'a>(
+    reaching: &[&'a AuthenticCase],
+    declared: &[String],
+) -> Vec<&'a AuthenticCase> {
+    if declared.is_empty() {
+        return reaching.to_vec();
+    }
+    select_declared_case(reaching, declared)
+        .into_iter()
+        .collect()
+}
+
+fn select_declared_case<'a>(
     reaching: &[&'a AuthenticCase],
     declared: &[String],
 ) -> Option<&'a AuthenticCase> {
-    let first = reaching.first()?;
-    if declared.is_empty() {
-        return reaching
-            .iter()
-            .all(|case| case.runtime_target == first.runtime_target)
-            .then_some(*first);
-    }
     let applicable = reaching
         .iter()
         .filter(|case| case.conditions.iter().all(|it| declared.contains(it)))
@@ -1604,13 +1619,27 @@ mod tests {
         }
     }
 
-    fn selected(cases: &[AuthenticCase], declared: &[&str]) -> Option<String> {
+    fn admissible(cases: &[AuthenticCase], declared: &[&str]) -> Vec<String> {
         let reaching = cases.iter().collect::<Vec<_>>();
         let declared = declared
             .iter()
             .map(|it| (*it).to_owned())
             .collect::<Vec<_>>();
-        select_case(&reaching, &declared).map(|case| case.identity.clone())
+        admissible_cases(&reaching, &declared)
+            .into_iter()
+            .map(|case| case.identity.clone())
+            .collect()
+    }
+
+    /// A declaration narrows to one case, so the old single-answer shape is
+    /// still the right one to assert against.
+    fn selected(cases: &[AuthenticCase], declared: &[&str]) -> Option<String> {
+        let mut admissible = admissible(cases, declared);
+        assert!(
+            admissible.len() <= 1,
+            "a declaration must narrow to at most one case: {admissible:?}"
+        );
+        admissible.pop()
     }
 
     /// The defect this replaced: `artifactAcceptanceRoot` is a digest over a
@@ -1652,30 +1681,31 @@ mod tests {
     /// The linter case. ESLint and Oxlint hosts do not know their export
     /// conditions, so requiring a declaration would make delivery a no-op for
     /// them -- silently, which is the worst failure mode a linter can have.
+    ///
+    /// With nothing declared this yields **every** candidate the project could
+    /// have resolved and decides nothing. It used to decide, by admitting when
+    /// all candidates named the same runtime file; that compared where a case
+    /// came from rather than what it says, and this module cannot say what a
+    /// case says -- it reads catalog metadata and never opens a document.
+    /// `AcceptedContractIndex::with_admitted_artifacts` holds both contracts
+    /// and makes the call; see
+    /// `an_undeclared_host_admits_only_when_the_candidates_agree`.
     #[test]
-    fn no_declaration_admits_only_an_unambiguous_artifact() {
+    fn no_declaration_hands_every_reachable_candidate_to_the_index() {
         let same = [
             case("root-import", "dist/index.js", &["import"]),
             case("root-node", "dist/index.js", &["node", "import"]),
         ];
-        assert_eq!(
-            selected(&same, &[]).as_deref(),
-            Some("root-import"),
-            "candidates proven about the same runtime file describe the same bytes"
-        );
-        // One `.d.ts` shared by branches that run *different* files is exactly
-        // where a guess would be unsound, and there is nothing here to choose
-        // with.
+        assert_eq!(admissible(&same, &[]), ["root-import", "root-node"]);
+        // One `.d.ts` shared by branches that run *different* files. Both are
+        // still candidates here: whether they can both apply depends on whether
+        // they claim the same thing, which is not knowable from these records.
         let differing = [
             case("root-import", "dist/index.js", &["import"]),
             case("root-require", "dist/index.cjs", &["require"]),
         ];
-        assert_eq!(
-            selected(&differing, &[]),
-            None,
-            "candidates that disagree about the runtime file must refuse"
-        );
-        // With a declaration the same pair is decidable.
+        assert_eq!(admissible(&differing, &[]), ["root-import", "root-require"]);
+        // With a declaration the same pair is decided here, and exactly.
         assert_eq!(
             selected(&differing, &["require"]).as_deref(),
             Some("root-require")
@@ -1708,18 +1738,19 @@ mod tests {
             Some("server"),
             "a host declaring more than the case needs still matches it"
         );
-        assert_eq!(
-            selected(&cases, &[]),
-            None,
-            "two real artifacts and no declaration is not something to guess at"
-        );
+        // Two real artifacts and no declaration is not something *this* can
+        // decide, so both travel on. A server bundle and a browser bundle
+        // usually state different claims, and the index refuses them then; if
+        // they state identical claims, applying either is applying the same
+        // answer. Which of those it is cannot be read off a path.
+        assert_eq!(admissible(&cases, &[]), ["server", "client"]);
     }
 
     /// Nothing resolved, or nothing certified about what was resolved.
     #[test]
     fn no_candidate_admits_nothing() {
-        assert_eq!(selected(&[], &[]), None);
-        assert_eq!(selected(&[], &["import"]), None);
+        assert!(admissible(&[], &[]).is_empty());
+        assert!(admissible(&[], &["import"]).is_empty());
     }
 
     /// Both spellings are read. The older one only takes *precedence*.

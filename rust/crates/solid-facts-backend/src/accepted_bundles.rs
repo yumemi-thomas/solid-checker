@@ -46,7 +46,7 @@ use crate::{
     },
     contract_interface::{
         AuthenticCase, ContractFailure, InstalledArtifactIdentity, ResolvedTargetIdentity,
-        declared_conditions, load_authenticated_policy2_embedded_contract, select_case,
+        admissible_cases, declared_conditions, load_authenticated_policy2_embedded_contract,
     },
 };
 
@@ -302,10 +302,11 @@ fn admitted_from(
             .iter()
             .filter(|case| case.reaches(&target))
             .collect::<Vec<_>>();
-        let Some(selected) = select_case(&reaching, &declared) else {
-            continue;
-        };
-        admitted.push((specifier, selected.identity.clone()));
+        admitted.extend(
+            admissible_cases(&reaching, &declared)
+                .into_iter()
+                .map(|case| (specifier.clone(), case.identity.clone())),
+        );
     }
     admitted
 }

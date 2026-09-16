@@ -22047,18 +22047,31 @@ kobalte pair differs in all of them while agreeing on every claim. Refusing on
 any of them would drop the most-imported package in the corpus from the
 undeclared path to buy a hazard that is not present.
 
-**The fix is to compare the claims.** `ExportSemantics` is `Eq`, so
-`artifact_case().exports` is a direct comparator. The clean shape puts it in
-`AcceptedContractIndex::with_admitted_artifacts`, which already holds the
-contracts: admission would hand it every reaching candidate rather than a
-pre-made selection, and the index — the one place that has the semantics —
-would admit only when they agree. That keeps one rule for both the project
-catalogs and the compiled-in tier, which is the property the rest of this
-acquisition path was just consolidated around.
+**Fixed the same day.** `admissible_cases` now returns every reaching candidate
+when the host declares nothing, and `agreed_admissions` keeps the specifier only
+when they claim the same thing. One rule serves both the project catalogs and
+the compiled-in tier; each tier is narrowed separately, so a project's own
+catalog is never asked to agree with a bundled contract.
 
-Not a regression: this predates the compiled-in tier and is unchanged by it.
-What changed is that the undeclared path now reaches contracts regularly, so the
-approximation is worth closing rather than noting.
+**The comparator is the document's own content address, and two cheaper ones
+are wrong.** `ExportSemantics` is `Eq`, but comparing it directly fails:
+`ExportIdentity` records where the export was *found*, and decoding qualifies
+every `OperationId` with the artifact-case id (`IdScope::operation_in`).
+Measured on `@kobalte/utils@0.9.2`'s two `.` cases: 13 of 59 exports differ, in
+the operation id and in nothing else — same kind, trigger, tracking, cardinality
+and claims. And every digest in the bindings is domain-separated by artifact
+case, so none of them answers the question either.
+
+What does answer it is already written: the encoder addresses each summary as
+`summary-<sha256>` over the *compact* form, whose operation spelling is local
+(`callback-0`). `contract_document::export_claims_address` re-derives exactly
+that, so "these say the same thing" is the encoder's own notion rather than a
+second one — the same discipline `inherited_export_projection` follows. Pinned
+by `an_export_claims_address_is_the_summary_id_the_encoder_writes`.
+
+Measured end to end: a consumer importing four `@kobalte/utils` exports with no
+declared conditions — the ESLint case — reads the contract, and does so because
+both candidates are proven to agree rather than because they share a path.
 
 ### Repeated import obligations collapse; per-call ones do not (2026-09-16)
 
