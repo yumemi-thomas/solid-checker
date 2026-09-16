@@ -517,14 +517,41 @@ metadata row `("SC9013", "unsupported-solid-runtime", "error", true)`, an
 `rust/ARCHITECTURE.md`, a rule page, and one row in
 `packages/cli/lib/rules-solid-v2.json`. The part that needs design is the
 emission seam: the refusal has to reach the reporting path without passing
-through the rules engine, and the landing site is
-`rust/crates/solid-facts-backend/src/main.rs` immediately before
-`analyze_project_accepted_measured_with_enablement` (~line 3375), constructing
-a `diagnostics::Snapshot` with one `SnapshotFinding` whose `primary_location`
-is the deciding `package.json` and handing it to `snapshot_emission::emit`.
-The dialect selection above it switches from `detect` to `detect_detailed`.
-A rule identity with no producer is not a shippable unit, so the two land
-together.
+through the rules engine.
+
+**Correction (2026-09-16, same day): the landing site first recorded here was
+wrong, and the way it was wrong is the design constraint.** It said
+`main.rs` immediately before `analyze_project_accepted_measured_with_enablement`
+(~line 3375). That line is unreachable for the most common released path.
+`detect` has **three** call sites, not one:
+
+- `main.rs:2689`, the one-shot process path;
+- `daemon.rs:127` (`resolve_dialect`), the retained per-project daemon;
+- `bin/solid-checker-session-bench.rs:77`, the benchmark harness.
+
+`daemon::enabled()` defaults to **true whenever `debug_assertions` is off**, and
+`daemon::eligible` is satisfied by exactly the ordinary project check
+(no `--sources`, no contract emission, no probe plan, `default`/`json`/`text`
+format). So a release CLI checking a 1.x project takes the branch at
+`main.rs:2818`, `daemon::check` returns `Ok(code)`, and **the function returns
+at 2820 without ever reaching 3375** — while the daemon's own `resolve_dialect`
+called plain `detect` and silently collapsed the 1.x install to v2. A refusal
+placed at 3375 would be correct in debug, absent in release, and no gate here
+runs a release binary against a 1.x stub.
+
+The refusal therefore belongs at the **selection** site, `main.rs:2689`, which
+precedes the daemon branch — construct a `diagnostics::Snapshot` with one
+`SnapshotFinding` whose `primary_location` is the deciding `package.json`, hand
+it to `snapshot_emission::emit`, and return before the daemon is consulted at
+all. `detect` becomes `detect_detailed` there. The other two sites need their
+own guard rather than the same one, and neither is a user-facing report path:
+`resolve_dialect` already returns `Result` and errors on an unknown dialect id,
+so `Detection::Unsupported` fits that shape for a direct `--serve`, and the
+bench can fail the same way. Pin the release path specifically — a test that
+only ever runs a debug binary cannot see this.
+
+A rule identity with no producer is not a shippable unit, so the catalog entry
+and the emission land together.
 1. Remove `rust/dialects/solid-v1/` from `rust/Cargo.toml` workspace members
    and the backend's dialect registry; remove `solid_1x.rs` from
    `solid-dialect`; remove the two modules `solid1x_attributes.rs` and
@@ -628,4 +655,37 @@ v2-side assertion in it is already pinned span for span by
 `SC7001` rows and the absence of `SC3001`). Step 3 loses the contrast and
 nothing else.
 
-Remaining and still unblocked
+## Remaining and still unblocked (as of 2026-09-16)
+
+Ten commits are on `codex/phase19a-authenticated-proof-policy`, each
+individually green. What is left, in the order it has to happen:
+
+1. **Step 4's refusal — the only thing blocking step 3.** The catalog identity
+   is mechanical and written out above; the emission is the corrected
+   `main.rs:2689` seam plus guards at the other two `detect` call sites, two
+   fixtures (a 1.x-stub project expecting exactly the refusal, a 2.x project
+   unchanged), a `dialects_process` test, and a CLI test for exit status and
+   JSON shape. **The release-path correction above is the part to get right**;
+   everything else in step 4 is transcription. This work was written once and
+   deliberately reverted rather than committed half-done.
+2. **Step 3's deletion**, in the three groups the dry run measured — the
+   `solid_one_*` bulk, the one-line `DIALECT_INDEPENDENT` edit plus the
+   verified dialect-pair deletion, and the six tests whose names do not say v1
+   and so need their claim read. `carries_eslint_era_rules()` gets its own
+   slice and its own coverage run, because resolving its four surviving call
+   sites to their v2 branch can move findings.
+3. **Four package-contract v2 counterparts to author**, not port:
+   `callback-slot-props-forwarding` (a new divergence pair — 2.0's
+   `createSignal(fn)` is the writable-memo form and `createStore(fn, store)`
+   exists, so both of its 1.x negatives are false), plus
+   `callback-deferred-untracked-chain`, `callback-untracked-wrapper` and
+   `escaping-private-helper`. These are independent of steps 3 and 4 and can be
+   done in any order.
+4. **Step 2**, the contract-data retarget, whose accepted-tier sub-step still
+   has no default.
+
+One open decision, and it is a judgement call rather than a blocker: whether to
+keep `test-backend-v1` in `scripts/verify.sh`. It is 130 s of a 516 s
+`make verify` and it verifies a configuration step 3 deletes. Kept for now
+because the transition window is exactly when a v1-only regression could land;
+it goes away on its own with step 3.
