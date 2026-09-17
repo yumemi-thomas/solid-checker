@@ -377,10 +377,9 @@ mod policy2_receipt_tests {
 
     use super::authenticate_policy2_contract_for_wasm;
 
-    const MAIN: &[u8] =
-        include_bytes!("../../../../pkg/contracts/bundled/solid-v1/debounce-root-default.json");
+    const MAIN: &[u8] = include_bytes!("../../../../pkg/contracts/bundled/solid-v2/solid-js.json");
     const OTHER: &[u8] =
-        include_bytes!("../../../../pkg/contracts/bundled/solid-v1/solid-root-node.json");
+        include_bytes!("../../../../pkg/contracts/bundled/solid-v2/solidjs-signals.json");
 
     fn root(value: u8) -> String {
         format!("sha256:{value:064x}")

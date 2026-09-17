@@ -1,1 +1,0 @@
-function createEffect(fn, value) {}

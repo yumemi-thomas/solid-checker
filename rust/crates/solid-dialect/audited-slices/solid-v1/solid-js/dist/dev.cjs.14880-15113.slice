@@ -1,4 +1,0 @@
-function onCleanup(fn) {
-  if (Owner === null) console.warn("cleanups created outside a `createRoot` or `render` will never be run");else if (Owner.cleanups === null) Owner.cleanups = [fn];else Owner.cleanups.push(fn);
-  return fn;
-}

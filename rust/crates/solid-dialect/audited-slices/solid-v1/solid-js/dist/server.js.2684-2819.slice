@@ -1,6 +1,0 @@
-function onCleanup(fn) {
-  if (Owner) {
-    if (!Owner.cleanups) Owner.cleanups = [fn];else Owner.cleanups.push(fn);
-  }
-  return fn;
-}

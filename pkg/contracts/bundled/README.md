@@ -5,25 +5,19 @@ documents are proposals and conformance history, not active receipt-issued
 inputs to ordinary analysis. The matching review location is
 `rust/crates/solid-dialect/contracts/`.
 
-The historical `solid-v1` material comes from the published-artifact audit under
-`benchmarks/package-contract-v2/phase14/solid-v1-authority/`. It covers exact
-`solid-js@1.9.14`, `@solid-primitives/scheduled@1.5.3`,
-`@solid-primitives/debounce@1.3.0`, and
-`@solid-primitives/rootless@1.5.4` artifact cases. Two JSX subpaths have no
-common runtime/declaration value bindings; they remain in the package census
-without an accepted semantic case.
-
 The historical `solid-v2` material comes from the RC.3 conformance audit. It covers
 exact `solid-js@2.0.0-rc.3`, `@solidjs/web@2.0.0-rc.3`, and
 `@solidjs/signals@2.0.0-rc.3` cases. Environment selection is explicit; the
 consumer never guesses a browser, node, development, or production branch.
 
-The `solid-v1` material survives the Solid 1.x retirement (ADR 0110) and is
-kept deliberately. It records what published 1.x *artifacts* do, and that is
-still true of those bytes; ADR 0110 § 4 makes the same call for the accepted
-tier. Nothing here is reachable from analysis — this checker refuses a 1.x
-project with `SC9013` before a rule runs — so read it as audit history, never
-as a claim that a Solid 1.x project is supported.
+The `solid-v1` directory is down to three files and is **not** an audit
+inventory any more. Sixteen historical 1.x documents were deleted on 2026-09-17
+to keep the repository free of Solid 1.x artifacts; what is left is
+`bundle-index.json`, which the bundle walker requires of any `solid-v*`
+directory, and two stable-v1 documents that `policy2_receipt`'s tests compile in
+as fixtures. Those two are inputs to dialect-neutral receipt logic, not
+statements about Solid 1.x, and retargeting them onto 2.0 documents needs that
+test's closure-identity fixture rebuilt rather than substituted.
 
 Ordinary analysis uses the built-in Solid dialect for `solid-js`,
 `@solidjs/signals`, and `@solidjs/web`; core contracts cannot override that

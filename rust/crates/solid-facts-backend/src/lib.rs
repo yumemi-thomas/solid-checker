@@ -181,7 +181,7 @@ pub use evidence_sidecars::{
 };
 pub use first_party_bundles::{
     BundleSelector, FirstPartyBundle, FirstPartyBundleError, bundled_first_party_contract_index,
-    solid1_bundles, solid2_rc3_bundles,
+    solid2_rc3_bundles,
 };
 pub use package_requirements::external_package_contract_requirements;
 pub use phase16_benchmark::phase16_benchmark_report;

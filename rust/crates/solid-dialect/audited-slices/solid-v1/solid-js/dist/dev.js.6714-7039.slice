@@ -1,8 +1,0 @@
-function createEffect(fn, value, options) {
-  runEffects = runUserEffects;
-  const c = createComputation(fn, value, false, STALE, options ),
-    s = SuspenseContext && useContext(SuspenseContext);
-  if (s) c.suspense = s;
-  if (!options || !options.render) c.user = true;
-  Effects ? Effects.push(c) : updateComputation(c);
-}

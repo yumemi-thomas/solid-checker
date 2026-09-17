@@ -1,4 +1,0 @@
-function useContext(context) {
-  let value;
-  return Owner && Owner.context && (value = Owner.context[context.id]) !== undefined ? value : context.defaultValue;
-}

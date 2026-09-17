@@ -1,8 +1,0 @@
-function mapArray(list, mapFn, options = {}) {
-  const items = list();
-  let s = [];
-  if (items && items.length) {
-    for (let i = 0, len = items.length; i < len; i++) s.push(mapFn(items[i], () => i));
-  } else if (options.fallback) s = [options.fallback()];
-  return () => s;
-}
