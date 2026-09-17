@@ -24,6 +24,7 @@ import {
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { loadDialectManifests } from "../dialect-manifests.mjs";
 import {
   oracleCompilerOptions,
   oracleProject,
@@ -36,11 +37,19 @@ export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // installs they resolve against.
 export const CASE_ROOT = join(ROOT, "rust/target/tsc-oracle-cases");
 
-export const DIALECTS = ["v2"];
+// Read from the assembly manifests rather than written down: a `solid-vN`
+// directory is dialect N, and `loadDialectManifests` already refuses an id
+// that does not match its directory. A second dialect added to
+// `rust/dialects/` therefore arrives here -- in the case-validation set, in
+// both gates' cache tree lists, and in the catalog every rule is checked
+// against -- with no edit in this file.
+const MANIFESTS = loadDialectManifests({ projectRoot: ROOT });
 
-export const catalogEntries = [
-  ...JSON.parse(readFileSync(join(ROOT, "packages/cli/lib/rules-solid-v2.json"), "utf8")).rules,
-];
+export const DIALECTS = MANIFESTS.map((manifest) => manifest.id.slice("solid-".length));
+
+export const catalogEntries = MANIFESTS.flatMap(
+  (manifest) => JSON.parse(readFileSync(join(ROOT, manifest.ruleManifest), "utf8")).rules
+);
 export const catalogByName = new Map(catalogEntries.map((rule) => [rule.name, rule]));
 
 export const canonicalRule = (testCase) => testCase.rule;

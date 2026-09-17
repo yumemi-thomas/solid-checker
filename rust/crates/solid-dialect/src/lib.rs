@@ -30,7 +30,12 @@ pub use solid_2::Solid2;
 /// v2, the execution-facts protocol, and `solid-reactivity.json` all carry
 /// version numbers of their own that have nothing to do with the Solid
 /// version — see ADR 0006, trap 1.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
+/// Variants are declared in ascending Solid-version order and `Ord` follows
+/// that declaration, so "the newest major this build knows about" is a
+/// `max` rather than a literal somebody has to remember to change.
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Version {
     /// Solid 1.x — `Suspense`, `createResource`, `createEffect(fn)`.

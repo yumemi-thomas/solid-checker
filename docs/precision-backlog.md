@@ -22878,3 +22878,64 @@ and `lib.rs`, and to the ADR 0111 audit list in `owners.rs`, `static_api.rs`,
 `cleanup.rs` and `indexes.rs`: each needs a per-site decision about whether it
 is dispatch on identity (legitimate) or role knowledge a future dialect could
 answer differently, and that review has not been done.
+
+### The gate scripts said they enumerate dialects; nothing could tell (2026-09-17)
+
+Eight scripts claimed to read `rust/dialects/*/dialect.json` and several
+actually named `solid-v2`. With one dialect shipping, those are the same green
+run — which is how the drift happened in the first place. Four were
+generalized, two were decided against, and the claim now has a test that can
+fail.
+
+`scripts/lib/tsc-oracle-case.mjs` was the highest-leverage one: `DIALECTS` was
+the literal `["v2"]` and `catalogEntries` read `rules-solid-v2.json` by path.
+Both come from `loadDialectManifests()` now, and because `tsc-oracle-gate.mjs`
+and `ownership-gate.mjs` take their accepted case dialects and their gate-cache
+tree lists from `DIALECTS`, that one derivation carries a new dialect into
+three gates. `ownership-gate.mjs`'s `dialectShort` followed.
+
+`scripts/package-contract-phase18.mjs` listed `rules-solid-v2.json` and
+`rust/dialects/solid-v2/dialect.json` in both `ACTIVE_JSON_FILES` and
+`INDEPENDENT_JSON_VERSIONS`. A second dialect's documents would have been
+*outside* the namespace separation that gate exists to hold, and nothing would
+have said so. Both lists are per-dialect now; the gate's own numbers are
+unchanged (136 mains, 164 independent versioned documents, 633 JSON files).
+
+**`default_dialect()` was a literal and is now a property.** It returns the
+newest dialect in `ALL`, which needs `Version: Ord` — declaration order, which
+is already ascending. The failure mode a literal has is specific: the day a
+newer dialect is added, a project with no installed `solid-js` keeps getting
+the *older* catalog, silently and correctly-compiling. Its test asserts the
+property rather than `id == "solid-v2"`, because the assertion that would need
+changing on that day is the assertion that would be wrong on that day. A const
+assertion holds `ALL` non-empty so the `max` has no runtime `None` arm.
+
+**Decided against, with reasons.**
+`scripts/check-compiler-facts-identity.mjs` verifies 2.0's adapter, and the
+digest it recomputes has `solid-checker:solid-v2-compiler-source-manifest:v1`
+*inside the hashed string*. Generalizing it would change the digest it exists
+to pin. A second compiler fork is a second identity document and a second
+check; `docs/adding-a-dialect.md` now says so as its own checklist step.
+`solid-contract-bundles.rs` pairs `"solid-v2"` with `solid2_rc3_bundles()`,
+whose corpus is `include_bytes!` of 2.0's own artifacts — the id is not the
+coupling there, the generator is. `package-contract-v2-phase0.mjs`'s three
+bundled-contract paths pin a historical audit cut, which is the point of a
+ledger.
+
+**The smoke gate is the part that makes any of this stay true.**
+`scripts/second-dialect.test.mjs` assembles a synthetic `solid-v3` — manifest,
+rule manifest, a `3.0.0` fixture stub — in a throwaway tree and demands that
+the manifest loader, the two gates' dialect sets, the oracle's rule catalog,
+the ESLint adapter's `rules-solid-vN.json` discovery pattern, and coverage's
+stub-major check all pick it up with no edit anywhere. The stub assertion runs
+in both directions, because `[]` is also what a check that found no stub would
+return.
+
+**What it does not cover, stated rather than implied.** Registering the dialect
+in `ALL`, adding the `Version` variant and implementing the vocabulary are
+compile-time decisions, and `docs/adding-a-dialect.md` says deliberately that
+their omissions should fail compilation. Proving those end to end needs a
+test-only stub dialect crate compiled into the workspace, which is a larger
+change than this one and was not made. So: the half where an omission fails
+*nothing* is now covered, and the half where an omission fails the build is
+not — which is the right way round, but it is half.

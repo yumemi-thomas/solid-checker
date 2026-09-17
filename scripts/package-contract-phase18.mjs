@@ -14,6 +14,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { loadDialectManifests } from "./dialect-manifests.mjs";
+
 export const MAIN_FORMAT = "solid-reactivity-contract";
 export const MAIN_SCHEMA_VERSION = 1;
 export const SEMANTIC_MODEL_VERSION = 1;
@@ -50,15 +52,24 @@ const ACTIVE_JSON_PREFIXES = [
   "schema/"
 ];
 
+// Each dialect contributes two documents to the inventory: its assembly
+// manifest and the rule manifest that manifest names. Read from
+// `rust/dialects/*/dialect.json` rather than listed, because a second dialect
+// whose documents this gate did not inventory would be *unchecked* here and
+// nothing would say so.
+const DIALECT_JSON_FILES = loadDialectManifests().flatMap((manifest) => [
+  manifest.source,
+  manifest.ruleManifest
+]);
+
 const ACTIVE_JSON_FILES = new Set([
   "fixtures/module-emission/cases.json",
   "fixtures/ownership-cases/cases.json",
   "fixtures/ownership-cases/migration-ledger.json",
   "fixtures/tsc-oracle/packages.json",
   "fixtures/tsc-oracle/rule-cases.json",
-  "packages/cli/lib/rules-solid-v2.json",
-  "rust/dialects/solid-v2/dialect.json",
-  "scripts/ecosystem-benchmark/manifest.json"
+  "scripts/ecosystem-benchmark/manifest.json",
+  ...DIALECT_JSON_FILES
 ]);
 
 const FORBIDDEN_ACTIVE_PATHS = [
@@ -189,12 +200,17 @@ const STABLE_BOUNDARY_TESTS = [
   }
 ];
 
+// Per-dialect documents again, for the same reason: a rule manifest or
+// assembly manifest whose version this gate never asserted would be outside
+// the namespace separation the gate exists to hold.
 const INDEPENDENT_JSON_VERSIONS = [
-  ["packages/cli/lib/rules-solid-v2.json", "schemaVersion", 1],
   ["scripts/ecosystem-benchmark/manifest.json", "schemaVersion", 1],
   ["fixtures/ownership-cases/cases.json", "schemaVersion", 1],
   ["fixtures/ownership-cases/migration-ledger.json", "schemaVersion", 1],
-  ["rust/dialects/solid-v2/dialect.json", "schemaVersion", 2]
+  ...loadDialectManifests().flatMap((manifest) => [
+    [manifest.ruleManifest, "schemaVersion", 1],
+    [manifest.source, "schemaVersion", 2]
+  ])
 ];
 
 const INDEPENDENT_SOURCE_VERSIONS = [

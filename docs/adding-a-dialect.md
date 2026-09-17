@@ -42,9 +42,14 @@ bun scripts/dialect-manifests.mjs validate
    against accepted exact exports and must refuse incompatible same-spelling
    semantics.
 7. Register one `solid_facts_backend::dialect::Dialect` value in
-   `rust/crates/solid-facts-backend/src/dialect.rs`, add it to `ALL`, map its
-   `Version`, and make an explicit default/detection decision. The bundle
-   loader reads the manifest's indexes; do not add a parallel legacy decoder.
+   `rust/crates/solid-facts-backend/src/dialect.rs` and add it to `ALL`. The
+   bundle loader reads the manifest's indexes; do not add a parallel legacy
+   decoder. Two things follow from `ALL` and need no decision:
+   `default_dialect()` is the newest dialect it carries, and detection answers
+   `Installed` for the new major instead of refusing it with `SC9013`. What
+   still needs one is the `Version` variant — declare it **after** the existing
+   ones, because `Ord` follows declaration order and that ordering is what
+   `default_dialect()` reads.
 8. Generate `packages/cli/lib/rules-<id>.json`. Its identity fields are
    `dialect`, compatibility `config`, and optional rule-name `namespace`.
    `SOLID_RULES_UPDATE=1 cargo test -p <id>-rules` writes the artifact; the
@@ -53,9 +58,48 @@ bun scripts/dialect-manifests.mjs validate
    semantic difference. Include exact-artifact refusal, local partial/open
    behavior, a consumer query, and a real-typings TypeScript oracle for each new
    package model.
-10. Update `rust/ARCHITECTURE.md`, rule documentation, runtime locks, and
+10. Give the compiler adapter its own identity document and identity check.
+    `scripts/check-compiler-facts-identity.mjs` verifies *2.0's* adapter
+    against `docs/package-contract-v2/phase4/compiler-identity.json`, and the
+    digest it recomputes has `solid-v2-compiler-source-manifest` inside the
+    hashed string — so it cannot be generalized without changing the digest it
+    exists to pin. A second compiler fork is a second document and a second
+    check, not a loop over the first.
+11. Update `rust/ARCHITECTURE.md`, rule documentation, runtime locks, and
     package-facing READMEs. If a payload may omit the dialect, expose and test a
     Cargo feature so its compiler and bundle are unreachable.
+
+## Audit the shared code the new dialect passes through (ADR 0111)
+
+Adding a dialect is also the moment the *other* dialect's assumptions become
+visible. Every site in shared code that switches on a dialect id, a `Version`,
+or a primitive **name** is one of two things, and each needs a decision rather
+than a default:
+
+- **dispatch on identity** — the code is reaching a specific dialect's compiled
+  artifacts (`include_bytes!` corpora, a per-dialect compiler adapter). A match
+  on the id is correct there. Keep it exhaustive or fail closed on an unknown
+  id; never `_ => &[]`, which reports an empty answer as if it were a checked
+  one.
+- **role knowledge** — the code is asking what a runtime *does*, and a
+  different dialect could answer differently. That belongs behind a `Dialect`
+  question, and the question should be named for the property, not for the
+  primitive that happens to have it today (`untracked_read_is_strict`, not
+  `is_create_optimistic`).
+
+Sites known to still need this decision are listed in
+`docs/precision-backlog.md` (2026-09-17): `server_rules.rs` and
+`project_server_rendering` hard-code `@solidjs/web` subpaths and export names,
+and `owners.rs`, `static_api.rs`, `cleanup.rs` and `indexes.rs` have not been
+reviewed. Read them before assuming shared code is dialect-neutral.
+
+**Codes are shared deliberately; names are not.** Two catalogs may give one
+concept the same `SCxxxx` so a suppression comment survives a migration
+(`SC1001` is `strict-read-untracked` in every catalog that has the concept).
+What must never happen is one code naming different rules in different
+catalogs, because then a suppression means two things.
+`scripts/second-dialect.test.mjs` asserts that, over the real catalogs and over
+a synthetic second one.
 
 ## Verification
 
@@ -66,7 +110,18 @@ bun scripts/dialect-manifests.mjs validate
 make contracts
 make contract-conformance
 bun run --cwd packages/cli test
+bun packages/cli/node_modules/vitest/vitest.mjs run \
+  --config packages/cli/vitest.config.mjs scripts/second-dialect.test.mjs
 ```
+
+The last one is the check that a new dialect *arrives* where the enumerators
+claim it does. It assembles a synthetic `solid-v3` in a throwaway tree and
+demands that the manifest loader, the oracle and ownership gates' dialect sets,
+the rule catalog every oracle case is checked against, the ESLint adapter's
+discovery pattern, and coverage's fixture-stub major check all pick it up with
+no edit. It covers the JavaScript half only: a missing `Version` variant, `ALL`
+entry or vocabulary fails compilation, which is the intended way for those to
+fail.
 
 Finish with `make verify`. It checks Rust formatting/lints/tests, findings and
 parity snapshots, TypeScript oracles, bundle byte/receipt identity, registry
@@ -89,3 +144,10 @@ maps. Shared code owns those deep seams and enumerates manifests. Rust still
 names dialects at the composition root and in closed `Version` matches because
 those are typed integration decisions whose omissions should fail compilation
 or tests.
+
+One `Version` match is worth knowing about before it surprises you:
+`solid-reactive-ir`'s `effect_api.rs` refuses to guess where a dialect puts
+`createEffect`'s apply slot. It is exhaustive on purpose, so adding a variant
+breaks the build *there*, and until the new arm is written it fails closed —
+`Uncertain` for the missing-effect proof and for owner registration. That is
+the shape every such match should have.

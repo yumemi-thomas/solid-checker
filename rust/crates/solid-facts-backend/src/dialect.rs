@@ -372,6 +372,11 @@ impl std::fmt::Debug for Dialect {
 /// becomes selectable by id everywhere a dialect can be named.
 pub static ALL: &[&Dialect] = &[&SOLID_V2];
 
+// `default_dialect` below has no honest answer for an empty registry, and a
+// build that carried no dialect could not analyze anything anyway. Say so at
+// compile time rather than at the first request.
+const _: () = assert!(!ALL.is_empty(), "a build must carry at least one dialect");
+
 /// Resolves a dialect by its stable id.
 #[must_use]
 pub fn by_id(id: &str) -> Option<&'static Dialect> {
@@ -379,10 +384,21 @@ pub fn by_id(id: &str) -> Option<&'static Dialect> {
 }
 
 /// The dialect entry points fall back to when a request names none and
-/// nothing resolves.
+/// nothing resolves: **the newest one [`ALL`] carries**.
+///
+/// Read from the registry rather than named by a literal. A `Defaulted`
+/// detection is an absence — no installed `solid-js`, or a manifest whose
+/// version field is not a version — and the language a project that states no
+/// version most likely means is the current one. A literal would have gone on
+/// answering the *older* default the day a newer dialect was added, and
+/// nothing would have said so; `Version`'s ordering is declaration order, so
+/// this follows the registry instead.
 #[must_use]
 pub fn default_dialect() -> &'static Dialect {
-    &SOLID_V2
+    ALL.iter()
+        .copied()
+        .max_by_key(|dialect| dialect.vocabulary.version())
+        .expect("the const assertion above holds ALL non-empty")
 }
 
 /// The dialect for a Solid language version, if this build includes it.
@@ -832,6 +848,26 @@ mod tests {
             !(character.is_alphanumeric() || matches!(character, '_' | '$'))
         })
         .any(|identifier| identifier == expected)
+    }
+
+    /// The default is read from the registry, not named.
+    ///
+    /// With one dialect this cannot fail, which is exactly why it is written
+    /// as a property rather than as `assert_eq!(default_dialect().id,
+    /// "solid-v2")`: the assertion that would have to change on the day a
+    /// newer dialect is added is the assertion that would be wrong that day.
+    #[test]
+    fn the_default_is_the_newest_dialect_the_registry_carries() {
+        let newest = ALL
+            .iter()
+            .map(|dialect| dialect.vocabulary.version())
+            .max()
+            .expect("ALL is non-empty");
+        assert_eq!(default_dialect().vocabulary.version(), newest);
+        assert!(
+            ALL.iter().any(|dialect| dialect.id == default_dialect().id),
+            "the default must be a registered dialect, not a value beside the registry"
+        );
     }
 
     #[test]

@@ -38,7 +38,13 @@ const normalizedStrings = (value = []) => [...new Set(value)].sort();
 const byteLength = (value) => Buffer.byteLength(value, "utf8");
 const overlaps = (a, b) => a.start < b.end && b.start < a.end;
 const safeName = (id) => id.replace(/[^a-zA-Z0-9._-]+/g, "__");
-const dialectShort = (dialect) => dialect === "solid-v2" ? "v2" : null;
+// `solid-v2` -> `v2`, for every dialect the build assembles. A case naming an
+// id no manifest declares gets `null` and fails validation, which is the same
+// answer the two-literal version gave and one a new dialect does not need an
+// edit here to change.
+const DIALECT_IDS = new Set(DIALECTS.map((short) => `solid-${short}`));
+const dialectShort = (dialect) =>
+  DIALECT_IDS.has(dialect) ? dialect.slice("solid-".length) : null;
 
 const fail = (failures, message) => failures.push(message);
 
@@ -186,7 +192,7 @@ for (const [index, testCase] of (manifest.cases ?? []).entries()) {
   else if (ids.has(testCase.id)) fail(failures, `${label}: duplicate id`);
   else ids.add(testCase.id);
   const short = dialectShort(testCase.dialect);
-  if (!short) fail(failures, `${label}: dialect must be solid-v2`);
+  if (!short) fail(failures, `${label}: dialect must be one of ${[...DIALECT_IDS].join(', ')}`);
   const extension = testCase.source?.extension;
   if (![".ts", ".tsx"].includes(extension)) fail(failures, `${label}: source.extension must be .ts or .tsx`);
   if (typeof testCase.source?.prelude !== "string" || typeof testCase.source?.text !== "string") fail(failures, `${label}: source prelude/text must be strings`);
