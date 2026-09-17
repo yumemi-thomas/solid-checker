@@ -23326,3 +23326,52 @@ No finding moves: coverage stays at 81 projects / 440 findings, the ownership
 gate at 37 cases, and the four process suites at 13/18/14/35. What changes is
 `metrics.proofObligations` for any project reading an optimistic source in a
 strict-read scope, upward, to the number of obligations that were always there.
+
+## `tracking: "untracked"` does not mean the package cleared tracking (2026-09-17)
+
+**Open, and a hazard rather than a current defect.** Nothing consumes the field
+this way today, so no finding is wrong because of it. The entry exists because
+the obvious next feature would make it wrong.
+
+The wanted feature: a package contract states that an export invokes a
+caller-supplied callback with tracking cleared, and a reactive read inside that
+callback is reported as untracked, the way it already is for a dialect primitive
+that clears tracking. That is the change that would make the shipped contract
+tier produce findings on consumer code instead of silence, since owner
+requirements are currently the only class that does, at 34 of 1,874 measured
+sites.
+
+It cannot be built on the contract data as it stands. `projected_execution`
+(`contracts.rs:236`) collapses an operation onto one of `tracked`, `inline` or
+`deferred`, and the inverse in `inferred_contract.rs:793` reads:
+
+    "inline"   => (Some(Schedule::SameStack), Tracking::Untracked),
+    "deferred" => (Some(Schedule::Queued),    Tracking::Untracked),
+
+So **every** non-tracked callback row serializes as `tracking: "untracked"`,
+whatever the package actually does. Measured over every bundled and accepted
+contract this build ships: 150 operations say `untracked`, 6 say `tracked`, and
+`ambient-at-execution` — a value the vocabulary defines
+(`contract_semantics.rs:1257`) and the wire format can emit
+(`contract_document.rs:1169`) — appears **zero** times.
+
+`@solid-primitives/utils`' `access` is the case that shows the cost. Its
+implementation is `typeof v === "function" ? v() : v`: a bare call with no
+`untrack`, so a read inside a callback passed to it is tracked by whatever scope
+called it. Its contract says `tracking: "untracked"`. A rule that read that
+field as "tracking is cleared" would report a false positive on correct code,
+and would do it on every bare-call wrapper in the tier.
+
+The word means "not established as tracked", and the vocabulary already has the
+value that means what the rule would need. What is missing is a producer that
+can tell a wrapper which clears tracking from one which merely does not
+establish it. For dialect primitives that distinction exists and travels on its
+own channel, `Dialect::runs_callback_synchronously`; the fixture
+`fixtures/package-contracts/callback-untracked-wrapper/` pins it, and records
+that `untrack`, `createRoot`, `runWithOwner` and `flush` are all `inline` with
+the clearing carried separately. There is no such channel for a package.
+
+So the order is: teach the producer to emit `ambient-at-execution` for a
+callback whose tracking context it cannot establish, keep `untracked` for one it
+proves cleared, re-certify, and only then let a rule read the field. Doing the
+rule first inverts the dependency and ships false positives.
