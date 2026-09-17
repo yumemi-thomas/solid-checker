@@ -45,9 +45,7 @@ jobs:
       - run: cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets
       - name: Check single-dialect composition builds
         run: |
-          cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-facts-backend --all-targets --no-default-features --features dialect-v1
           cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-facts-backend --all-targets --no-default-features --features dialect-v2
-          cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-checker-wasm --all-targets --no-default-features --features dialect-v1
           cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-checker-wasm --all-targets --no-default-features --features dialect-v2
       - run: make test-rust
       # The two fixture gates: "no finding moved" over every fixture project,
@@ -216,8 +214,8 @@ jobs:
       # the exact pinned packages, check-contract-pins.mjs holds every bundled
       # pin to the registry tarball it was audited against (which is what
       # covers the contracts probing never installs), and
-      # generate-bundled-solid1-contract.mjs --check catches drift between the
-      # 1.x artifact and its inputs. The
+      # dialect-manifests.mjs check-composed-contracts holds each dialect's
+      # composed contract to the bundled artifacts it is composed from. The
       # separate drift gate against *real installed* packages
       # (`make contracts-check`) runs in the rust-engine job, which installs
       # the exact pins and regenerates all three artifacts.

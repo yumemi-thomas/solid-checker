@@ -195,30 +195,7 @@ bun scripts/tsc-oracle.mjs provision --dialect all
 # is version-verified by `provision`, which refuses a substituted prerelease.
 SOLID_CHECKER_RC3_ARCHIVE_ROOT="$PWD/rust/target/tsc-oracle/v2/node_modules"
 export SOLID_CHECKER_RC3_ARCHIVE_ROOT
-# The Solid 1.x dialect's rows cite `solid-js@1.9.14`, which the `v1` oracle
-# install carries at the audited digests; same arm, same loud skip.
-SOLID_CHECKER_SOLID1_ARCHIVE_ROOT="$PWD/rust/target/tsc-oracle/v1/node_modules"
-export SOLID_CHECKER_SOLID1_ARCHIVE_ROOT
 
-# The single-dialect arms checked above prove those configurations *compile*.
-# They did not run their tests, and five were failing there while `make verify`
-# stayed green: three asserting a dialect id for a claim that was about
-# resolution, one demanding every `RULE_ALIASES` target load, and two
-# differential tests with no pair to compare. Compiling is not the claim worth
-# making about a configuration the product can ship — and retiring the 1.x
-# dialect makes `dialect-v2` the only configuration there is.
-#
-# Placed here, after the oracle archive roots are exported, so these builds see
-# exactly the environment the workspace suite below does.
-#
-# `--lib` on purpose. The integration targets are fixture-driven and several
-# name `--dialect solid-v1` explicitly (`dialects_process.rs`), so running them
-# under a single-dialect build would assert something these steps are not for;
-# the `check --all-targets` arms above still compile them. The library is where
-# every `#[cfg(feature = "dialect-…")]` decision lives.
-#
-# Roughly 150 s per arm. When the 1.x dialect goes, both steps fold back into
-# the workspace run below.
 # The assignments are inside the function rather than prefixed onto the call:
 step go-rust-tests
 TYPEFACTS_TEST_BIN="$PWD/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \

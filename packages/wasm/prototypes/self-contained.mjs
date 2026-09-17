@@ -70,7 +70,7 @@ const checkerBuild = spawnSync(
     "-p", "solid-checker-wasm",
     "--target", "wasm32-wasip1",
     "--no-default-features",
-    "--features", "reactor,dialect-v1,dialect-v2",
+    "--features", "reactor,dialect-v2",
     "--release",
   ],
   { cwd: repositoryRoot, encoding: "utf8" },
