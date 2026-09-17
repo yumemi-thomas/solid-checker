@@ -27,6 +27,18 @@ pub struct StaticDefectTerms {
     /// the migration, not at writing a contract entry for an export that no
     /// longer exists. Returning `None` keeps the generic contract hint.
     pub removed_export_hint: fn(module: &str, export: &str) -> Option<String>,
+    /// What the runtime throws when a value that is not JSON-serializable
+    /// reaches the default server-function transport, quoted so the message
+    /// matches what the developer will see in their console.
+    pub rich_argument_transport_throw: &'static str,
+    /// The four rich-argument remedies. The message states the fact the
+    /// analysis proved, which is the same in any dialect with this transport;
+    /// the hint names the serializer to install and the module it comes from,
+    /// which is not.
+    pub rich_argument_resolved_hint: &'static str,
+    pub rich_argument_nested_hint: &'static str,
+    pub rich_argument_primitive_hint: &'static str,
+    pub rich_argument_unresolved_hint: &'static str,
 }
 
 pub struct StaticDefectText {
@@ -265,8 +277,52 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::DirectMutation { name, target } => {
             crate::direct_mutation_wording(name, *target, terms.store_mutation_hint)
         }
+        StaticDefectKind::ServerFunctionRichArgument { transport } => match transport {
+            crate::RichArgumentTransport::ResolvedType {
+                function,
+                descriptor,
+                member,
+            } => (
+                format!(
+                    "server function {function} receives an argument typed {descriptor} ({member}); server-function arguments travel as plain JSON by default, and a value JSON cannot carry faithfully throws at the transport: {:?}",
+                    terms.rich_argument_transport_throw
+                ),
+                terms.rich_argument_resolved_hint.into(),
+            ),
+            crate::RichArgumentTransport::NestedValue { function } => (
+                format!(
+                    "server function {function} receives an object holding a Date, Map, Set, RegExp, or typed array; the default server-function transport is plain JSON, which reaches nested values, so the nested one is silently flattened rather than sent"
+                ),
+                terms.rich_argument_nested_hint.into(),
+            ),
+            crate::RichArgumentTransport::NonJsonPrimitive { function } => (
+                format!(
+                    "server function {function} receives a bigint, symbol, or undefined value; the default server-function transport is plain JSON and cannot encode that primitive faithfully"
+                ),
+                terms.rich_argument_primitive_hint.into(),
+            ),
+            crate::RichArgumentTransport::Unresolved { reason } => (
+                format!(
+                    "a client call to a server function has an unresolved rich-argument transport proof: {reason}"
+                ),
+                terms.rich_argument_unresolved_hint.into(),
+            ),
+        },
     };
     let evidence = match &defect.kind {
+        // The nested claim is about a value the argument *holds*, not the
+        // argument's own resolved type, so it cannot borrow the sentence
+        // below: that one would assert a fact the analysis never proved. The
+        // open-proof case keeps the resolved-type sentence it has always
+        // carried; its own uncertainty is what its message says.
+        StaticDefectKind::ServerFunctionRichArgument {
+            transport: crate::RichArgumentTransport::NestedValue { .. },
+        } => {
+            "the callee carries a \"use server\" directive, a closed object literal reaching it holds a value in the JSON-unsafe set, and nothing in the project installs an argument serializer"
+        }
+        StaticDefectKind::ServerFunctionRichArgument { .. } => {
+            "the callee carries a \"use server\" directive, the argument's resolved type is in the JSON-unsafe set, and nothing in the project installs an argument serializer"
+        }
         StaticDefectKind::ReactiveObjectDestructure {
             component_props: true,
             ..

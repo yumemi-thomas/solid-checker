@@ -608,6 +608,38 @@ pub enum StaticDefectKind {
         name: String,
         target: DirectMutationTarget,
     },
+    /// A value crosses the default server-function transport, which carries
+    /// plain JSON. Which way it fails is proven here; the serializer that
+    /// fixes it, and the module that installs it, are the dialect's to name.
+    ServerFunctionRichArgument {
+        transport: RichArgumentTransport,
+    },
+}
+
+/// How a server-function argument fails the default JSON transport.
+///
+/// Four proofs about different things, not one claim with a flag: the
+/// argument's own resolved type, a value held by a closed object literal
+/// reaching the call, a primitive JSON cannot encode, and a transport proof
+/// that is open. A reader acts on the difference, and the last is an
+/// obligation rather than a violation.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", tag = "transport")]
+pub enum RichArgumentTransport {
+    ResolvedType {
+        function: String,
+        descriptor: String,
+        member: String,
+    },
+    NestedValue {
+        function: String,
+    },
+    NonJsonPrimitive {
+        function: String,
+    },
+    Unresolved {
+        reason: String,
+    },
 }
 
 /// The finding family a [`StaticDefectKind`] projects to.
@@ -646,6 +678,13 @@ pub enum StaticDefectFamily {
     ExpectedFunctionGotExpression,
     UncalledAccessor,
     DirectMutation,
+    /// A value crossing the default server-function transport. Deliberately
+    /// absent from [`StaticDefectKind::is_unresolved_obligation`]: the open
+    /// transport proof is reported as uncertifiable, but it was never part of
+    /// the `SC9xxx` obligation census the metrics and contract emission read,
+    /// and moving this rule off the static-violation channel did not change
+    /// what it counts.
+    ServerFunctionRichArgument,
 }
 
 impl StaticDefectFamily {
@@ -665,6 +704,7 @@ impl StaticDefectFamily {
             Self::ExpectedFunctionGotExpression => "expected-function-got-expression",
             Self::UncalledAccessor => "uncalled-accessor",
             Self::DirectMutation => "no-direct-mutation",
+            Self::ServerFunctionRichArgument => "server-function-rich-argument",
         }
     }
 }
@@ -700,6 +740,9 @@ impl StaticDefectKind {
             }
             Self::UncalledAccessor { .. } => StaticDefectFamily::UncalledAccessor,
             Self::DirectMutation { .. } => StaticDefectFamily::DirectMutation,
+            Self::ServerFunctionRichArgument { .. } => {
+                StaticDefectFamily::ServerFunctionRichArgument
+            }
         }
     }
 
@@ -728,6 +771,7 @@ impl StaticDefectKind {
             Self::HandlerValueUnresolved { .. } => "HandlerValueUnresolved",
             Self::UncalledAccessor { .. } => "UncalledAccessor",
             Self::DirectMutation { .. } => "DirectMutation",
+            Self::ServerFunctionRichArgument { .. } => "ServerFunctionRichArgument",
         }
     }
 

@@ -514,17 +514,6 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::ServerFunctionModuleDirective => {
             "the module's directive prologue contains \"use server\" and this export is provably not a direct function declaration"
         }
-        // The nested claim is about a value the argument *holds*, not the
-        // argument's own resolved type, so it cannot borrow the top-level
-        // sentence: that one would assert a fact the analysis never proved.
-        Rule::ServerFunctionRichArgument
-            if violation.analysis_context == "nested-rich-argument" =>
-        {
-            "the callee carries a \"use server\" directive, a closed object literal reaching it holds a value in the JSON-unsafe set, and nothing in the project installs an argument serializer"
-        }
-        Rule::ServerFunctionRichArgument => {
-            "the callee carries a \"use server\" directive, the argument's resolved type is in the JSON-unsafe set, and nothing in the project installs an argument serializer"
-        }
         Rule::JsxNoDuplicateProps => {
             "the intrinsic element uses more than one competing source of DOM child content"
         }
@@ -548,6 +537,10 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::PrimitiveInDirectiveApplication
         | Rule::MissingEffectFunction
         | Rule::PackageContractIncomplete
+        // Moved to the static-defect channel, where the analysis states which
+        // of the four transport proofs it made and this catalog names the
+        // serializer that fixes it.
+        | Rule::ServerFunctionRichArgument
         // Never reaches any wording channel: dialect detection emits it
         // directly, with the message built at the refusal site because the
         // manifest path and installed version are what it has to say.
@@ -584,6 +577,7 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectFamily::ExpectedFunctionGotExpression => Rule::ExpectedFunctionGotExpression,
         StaticDefectFamily::UncalledAccessor => Rule::UncalledAccessor,
         StaticDefectFamily::DirectMutation => Rule::NoDirectMutation,
+        StaticDefectFamily::ServerFunctionRichArgument => Rule::ServerFunctionRichArgument,
     };
     let text = solid_reactive_ir::static_defect_text(defect, &V2_STATIC_TERMS);
     let mut message = text.message;
@@ -601,6 +595,11 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
                 | StaticDefectKind::ReactiveCallbackUnresolved { .. }
                 | StaticDefectKind::StructuredReturnUnresolved { .. }
                 | StaticDefectKind::HandlerValueUnresolved { .. }
+                // The open transport proof names its own reason in the
+                // message; there is no component whose call sites could be
+                // enumerated, so the props sentence would describe a
+                // different obligation than the one raised.
+                | StaticDefectKind::ServerFunctionRichArgument { .. }
         )
     {
         if defect.analysis_context == "draggable-default-uncertain" {
@@ -627,6 +626,11 @@ const V2_STATIC_TERMS: solid_reactive_ir::StaticDefectTerms =
         missing_effect_hint: "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument.",
         store_mutation_hint: v2_store_mutation_hint,
         removed_export_hint: v2_removed_export_hint,
+        rich_argument_transport_throw: "Server function arguments are sent as JSON by default and these arguments are not JSON-serializable",
+        rich_argument_resolved_hint: "Call enableRichArguments() from \"@solidjs/web/server-functions/rich-args\" once at client startup to send Dates, Maps, Sets, and typed arrays through the codec (~5 KB gz), or convert the argument to a JSON-safe shape at the call site (date.toISOString(), Array.from(set)).",
+        rich_argument_nested_hint: "Convert the nested value to a JSON-safe shape where the object is built (date.toISOString(), Array.from(set)), or call enableRichArguments() from \"@solidjs/web/server-functions/rich-args\" once at client startup.",
+        rich_argument_primitive_hint: "Convert the argument to a JSON value at the call site, or install the rich-argument serializer once at client startup.",
+        rich_argument_unresolved_hint: "Resolve the argument type and configure the serializer through the exact @solidjs/web server-functions API, or pass a JSON-safe value explicitly.",
     };
 
 fn v2_store_mutation_hint(name: &str) -> String {

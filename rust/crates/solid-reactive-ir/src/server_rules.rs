@@ -17,7 +17,10 @@ use typefacts::{ConstantValueKind, EntityFact, ResolvedCallValidity};
 use crate::execution_role::semantic_execution_role;
 use crate::owners::{containing_ast_function, jsx_element_is_loading};
 use crate::pipeline::{AnalysisContext, ProgramDraft};
-use crate::{ExecutionRole, StaticViolation, location, primitive_name};
+use crate::{
+    ExecutionRole, RichArgumentTransport, StaticDefect, StaticDefectKind, StaticViolation,
+    location, primitive_name,
+};
 
 /// The directive whose presence turns a function or module into server-build
 /// material (RFC 10: the compiler's only contract).
@@ -570,14 +573,14 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
                     .as_ref()
                     .and_then(|name| declaration_file.source_text(name.span))
                     .unwrap_or("this server function");
-                draft.static_violations.push(StaticViolation {
-                    id: "SC7007".into(),
-                    rule: "server-function-rich-argument".into(),
-                    message: format!(
-                        "server function {name} receives an argument typed {} ({}); server-function arguments travel as plain JSON by default, and a value JSON cannot carry faithfully throws at the transport: \"Server function arguments are sent as JSON by default and these arguments are not JSON-serializable\"",
-                        descriptor, matched.member
-                    ),
-                    hint: "Call enableRichArguments() from \"@solidjs/web/server-functions/rich-args\" once at client startup to send Dates, Maps, Sets, and typed arrays through the codec (~5 KB gz), or convert the argument to a JSON-safe shape at the call site (date.toISOString(), Array.from(set)).".into(),
+                draft.push_defect(StaticDefect {
+                    kind: StaticDefectKind::ServerFunctionRichArgument {
+                        transport: RichArgumentTransport::ResolvedType {
+                            function: name.to_string(),
+                            descriptor: descriptor.to_string(),
+                            member: matched.member.to_string(),
+                        },
+                    },
                     location: location(file.path.shared(), argument.span),
                     analysis_context: String::new(),
                     fixes: vec![],
@@ -657,13 +660,12 @@ fn push_nested_rich_argument_violation(
         .as_ref()
         .and_then(|name| declaration_file.source_text(name.span))
         .unwrap_or("this server function");
-    draft.static_violations.push(StaticViolation {
-        id: "SC7007".into(),
-        rule: "server-function-rich-argument".into(),
-        message: format!(
-            "server function {name} receives an object holding a Date, Map, Set, RegExp, or typed array; the default server-function transport is plain JSON, which reaches nested values, so the nested one is silently flattened rather than sent"
-        ),
-        hint: "Convert the nested value to a JSON-safe shape where the object is built (date.toISOString(), Array.from(set)), or call enableRichArguments() from \"@solidjs/web/server-functions/rich-args\" once at client startup.".into(),
+    draft.push_defect(StaticDefect {
+        kind: StaticDefectKind::ServerFunctionRichArgument {
+            transport: RichArgumentTransport::NestedValue {
+                function: name.to_string(),
+            },
+        },
         location: location(file.path.shared(), span),
         analysis_context: "nested-rich-argument".into(),
         fixes: vec![],
@@ -683,13 +685,12 @@ fn push_non_json_primitive_violation(
         .as_ref()
         .and_then(|name| declaration_file.source_text(name.span))
         .unwrap_or("this server function");
-    draft.static_violations.push(StaticViolation {
-        id: "SC7007".into(),
-        rule: "server-function-rich-argument".into(),
-        message: format!(
-            "server function {name} receives a bigint, symbol, or undefined value; the default server-function transport is plain JSON and cannot encode that primitive faithfully"
-        ),
-        hint: "Convert the argument to a JSON value at the call site, or install the rich-argument serializer once at client startup.".into(),
+    draft.push_defect(StaticDefect {
+        kind: StaticDefectKind::ServerFunctionRichArgument {
+            transport: RichArgumentTransport::NonJsonPrimitive {
+                function: name.to_string(),
+            },
+        },
         location: location(file.path.shared(), span),
         analysis_context: String::new(),
         fixes: vec![],
@@ -710,13 +711,12 @@ fn push_rich_argument_uncertainty(
     span: Span,
     reason: &str,
 ) {
-    draft.static_violations.push(StaticViolation {
-        id: "SC7007".into(),
-        rule: "server-function-rich-argument".into(),
-        message: format!(
-            "a client call to a server function has an unresolved rich-argument transport proof: {reason}"
-        ),
-        hint: "Resolve the argument type and configure the serializer through the exact @solidjs/web server-functions API, or pass a JSON-safe value explicitly.".into(),
+    draft.push_defect(StaticDefect {
+        kind: StaticDefectKind::ServerFunctionRichArgument {
+            transport: RichArgumentTransport::Unresolved {
+                reason: reason.to_string(),
+            },
+        },
         location: location(file.path.shared(), span),
         analysis_context: "server-function-rich-argument-unresolved".into(),
         fixes: vec![],
