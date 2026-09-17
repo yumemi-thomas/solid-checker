@@ -2209,16 +2209,13 @@ mod tests {
     /// - 2.0 `latest`/`isPending`: the analyzer's callback position denotes a
     ///   reactive accessor input; the normalized contract models it as a read
     ///   operation rather than invocation of a caller-supplied callback.
-    /// - 1.x `on`: the dialect's `(0, Inline)` row is an engine keying — the
-    ///   returned adapter's invocation site decides the role (see
-    ///   `callback_executions`' comment) — not a package fact the review
-    ///   contract should record as `inline`.
-    /// - 1.x `createResource`: parameter 0 is a tracked source in the sourced
-    ///   overload and the deferred fetcher in the unsourced overload. The
-    ///   dialect resolves that overload at the call site.
     fn contract_schema_exemptions(version: Version, name: &str) -> bool {
         match version {
-            Version::V1 => matches!(name, "createResource" | "on"),
+            // `Version::V1` survives for classification only; no vocabulary
+            // behind it means no contract bundle and no name to exempt, and
+            // the loop below never reaches this arm. Kept exhaustive so the
+            // next major has to state its own exemptions here.
+            Version::V1 => false,
             Version::V2 => matches!(
                 name,
                 "createSignal"

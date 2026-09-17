@@ -263,6 +263,12 @@ pub fn bundled_first_party_contract_index(
                     .collect(),
             )
         }
+        // Matching the id is the decision, not an oversight: `EMBEDDED_BUNDLES`
+        // and `CONFORMANCE_BYTES` are `include_bytes!` of *this* dialect's
+        // checked census, so a second dialect has its own bytes and adds its
+        // own arm. Refusing meanwhile is the fail-closed answer -- answering
+        // out of 2.0's census would attribute one dialect's checked closure to
+        // another's packages.
         other => {
             return Err(crate::ContractFailure::InvalidSemanticModel {
                 reason: format!("unsupported first-party bundle dialect {other:?}"),
