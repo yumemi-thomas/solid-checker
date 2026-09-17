@@ -62,6 +62,7 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                 crate::source_discovery::project_server_rendering(
                     ctx.facts,
                     &ctx.rule_options.runtime,
+                    ctx.dialect,
                 )
             });
             // The whole claim is about the SSR shell flush. Where an explicit

@@ -79,6 +79,7 @@ pub(crate) fn collect_project<'facts>(
         server_rendering: crate::source_discovery::project_server_rendering(
             ctx.facts,
             &ctx.rule_options.runtime,
+            ctx.dialect,
         ),
         source_declarations,
         contract_reads: &source.contract_reads,

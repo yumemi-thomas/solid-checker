@@ -23228,3 +23228,35 @@ claim does not depend on; the README says which and why.
 
 Coverage goes 80 projects / 433 findings to 81 / 440, and no existing snapshot
 moved.
+
+### `project_server_rendering` now takes the dialect it was assuming (2026-09-17)
+
+Recorded as open: the function hard-codes `@solidjs/web` and six render-entry
+export names, "and it takes no dialect at all, so a second dialect there needs
+the parameter threaded before it can need a question." Threaded — both callers
+(`server_rules.rs`, `reactive_analysis.rs`) already carry `ctx.dialect`.
+
+The module half is now the dialect's: `dialect.owns_module(import.module)`
+replaces `module == "@solidjs/web" || module.starts_with("@solidjs/web/")`.
+`modules()` already enumerates `@solidjs/web` and its ten subpaths, so this
+reads the same table the rest of the engine does.
+
+It is a widening — `modules()` also lists `solid-js` and `solid-js/refresh` — and
+the widening is the more correct question. The claim is "an import of a render
+entry from a module this dialect owns proves server rendering"; a dialect that
+published `renderToString` from a different owned module would now work, and the
+2.0 case is unchanged because `solid-js` does not export these names, so no
+type-checking project can produce the widened match.
+
+**The six names stay a literal, and could not be otherwise.** Only `hydrate` is
+in the vocabulary; `renderToStream`, `renderToString`, `renderToFrameStream`,
+`renderServerComponent` and `handleServerFunctionRequest` are not primitives, so
+`export_modules` answers nothing for them and a seam question keyed on the name
+would silence the rule rather than generalize it. Which exports prove server
+rendering is this rule's own subject. The comment above the constant now says
+so, instead of leaving a reader to wonder why it was not asked.
+
+Byte-identical: the five SC7005 findings across both http-response-flush
+fixtures were dumped and diffed again, because `reactive-ir/http-response-flush`
+is not in `KEEPS_WORDING` and coverage compares no message text for it.
+

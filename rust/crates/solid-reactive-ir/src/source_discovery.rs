@@ -437,12 +437,19 @@ pub(crate) fn async_source_options(
     }
 }
 
-/// The `@solidjs/web` exports whose import proves the project server-renders
-/// (or hydrates server-rendered HTML). A bare `ssrSource: "client"` source is
-/// only a runtime error on the server path. Named imports prove that path;
-/// their absence leaves the rendering mode unresolved because the server
-/// entry may live outside the analyzed project. The export names come from
-/// the historical `@solidjs/web` audit; no contract is read during analysis.
+/// The exports whose import proves the project server-renders (or hydrates
+/// server-rendered HTML). A bare `ssrSource: "client"` source is only a
+/// runtime error on the server path. Named imports prove that path; their
+/// absence leaves the rendering mode unresolved because the server entry may
+/// live outside the analyzed project. The export names come from the
+/// historical `@solidjs/web` audit; no contract is read during analysis.
+///
+/// **Not asked of the dialect, and it could not answer.** Five of these six
+/// are not primitives — only `hydrate` is in the vocabulary — so
+/// `export_modules` returns nothing for them and a seam question keyed on the
+/// name would silence the rule rather than generalize it. Which exports prove
+/// server rendering is this rule's own subject; which *module* they may come
+/// from is the dialect's, and that half is asked below.
 const SERVER_RENDER_IMPORTS: [&str; 6] = [
     "renderToStream",
     "renderToString",
@@ -505,17 +512,22 @@ impl ServerRenderingPremise {
 
 /// Whether the analyzed project server-renders: an explicit rendering
 /// selector when there is one, otherwise whether any analyzed file imports a
-/// server rendering entry point from `@solidjs/web` (or one of its subpaths).
+/// server rendering entry point from a module this dialect owns.
 pub(crate) fn project_server_rendering(
     facts: &ProjectFacts,
     environment: &RuntimeEnvironment,
+    dialect: &dyn solid_dialect::Dialect,
 ) -> ServerRenderingPremise {
     if let Some(rendering) = environment.rendering {
         return ServerRenderingPremise::select(Some(rendering), false);
     }
     let imports_server_entry = facts.files.iter().any(|file| {
         file.ast.imports.iter().any(|import| {
-            (import.module == "@solidjs/web" || import.module.starts_with("@solidjs/web/"))
+            // `@solidjs/web` and its subpaths, spelled by the dialect rather
+            // than by this module. `modules()` already enumerates them, so a
+            // dialect that publishes its render entries from somewhere else
+            // says so once instead of being matched against a literal here.
+            dialect.owns_module(import.module.as_str())
                 && !import.type_only
                 && import.bindings.iter().any(|binding| {
                     !binding.type_only
