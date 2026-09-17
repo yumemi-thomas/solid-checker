@@ -2793,66 +2793,14 @@ fn primitive_callback_execution(
     argument_count: usize,
     dialect: &dyn solid_dialect::Dialect,
 ) -> Option<&'static str> {
-    use Primitive as P;
     let primitive = primitive?;
-    if matches!(
-        primitive,
-        P::CreateEffect | P::CreateRenderEffect | P::CreateResource
-    ) {
-        return dialect
-            .callback_execution_at(primitive, parameter, argument_count)
-            .map(|execution| match (primitive, execution) {
-                // The dialect's `Deferred` row for Solid 1 createResource's
-                // fetcher is an attribution fact: it runs outside the source
-                // computation. The package-contract word is observable
-                // scheduling, and both sourced and unsourced overloads invoke
-                // their initial fetcher before createResource returns. Keeping
-                // `deferred` here falsified wrappers such as
-                // @solid-primitives/pagination's createInfiniteScroll.
-                (P::CreateResource, solid_dialect::Execution::Deferred) => "inline",
-                (_, solid_dialect::Execution::Tracked) => "tracked",
-                (_, solid_dialect::Execution::Deferred) => "deferred",
-                (_, solid_dialect::Execution::Inline) => "inline",
-            });
-    }
-    match (primitive, parameter) {
-        // The next two arms are **unreachable in this build** and kept
-        // deliberately, for the same reason as `Version::V1`: `Primitive` is
-        // the shared vocabulary, and no dialect this build carries names
-        // `On` or `MergeProps` -- both were Solid 1.x's, retired by ADR 0110.
-        // 2.0's nearest relative to `mergeProps` is `merge`, which this
-        // dialect does not model as a callback-taking primitive at all, so it
-        // does not arrive here under another spelling. What each arm says
-        // remains true of the primitive it names; it is the *reaching* that
-        // is gone, and a future dialect that carries either name finds the
-        // reasoning rather than re-deriving it.
-        //
-        // `on` returns an adapter; neither the dependency callback nor the
-        // user callback runs during the call that creates that adapter. The
-        // dialect labels the dependency callback `Inline` for the checker so
-        // its role can be derived from the eventual invocation site, but a
-        // package contract must describe the exported wrapper's call itself.
-        (P::On, 0 | 1) => Some("deferred"),
-        // Solid 1 wraps every function-valued merge source in a memo. JavaScript
-        // distributions do not retain the declaration type that proves an
-        // ordinary props object is non-callable, so preserve the primitive's
-        // conservative callable semantics instead of rejecting the export.
-        (P::MergeProps, _) => Some("tracked"),
-        (
-            P::CreateMemo
-            | P::CreateTrackedEffect
-            | P::CreateSignal
-            | P::CreateStore
-            | P::CreateProjection
-            | P::CreateOptimistic
-            | P::CreateOptimisticStore
-            | P::Dynamic,
-            0,
-        ) => Some("tracked"),
-        (P::OnSettled | P::Action | P::CreateReaction | P::OnCleanup, 0) => Some("deferred"),
-        (P::CreateRoot | P::Untrack | P::Flush, 0) | (P::RunWithOwner, 1) => Some("inline"),
-        _ => None,
-    }
+    dialect
+        .contract_callback_execution_at(primitive, parameter, argument_count)
+        .map(|execution| match execution {
+            solid_dialect::Execution::Tracked => "tracked",
+            solid_dialect::Execution::Deferred => "deferred",
+            solid_dialect::Execution::Inline => "inline",
+        })
 }
 
 /// Whether a primitive callback slot may *root* an export-level `invoke` claim

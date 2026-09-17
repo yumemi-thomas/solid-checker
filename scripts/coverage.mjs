@@ -212,7 +212,7 @@ const KEEPS_WORDING = new Set([
   "reactive-ir/jsx-void-child-divergence-solid-2",
   // Not a 1.x fixture despite the name: it is a 2.0 project importing four
   // names 2.0 removed, and the removed-export *message* is the whole claim.
-  "reactive-ir/solid-1x-leftovers",
+  "reactive-ir/retired-1x-spellings",
   // SC8014's two messages differ only in wording: the one-parameter arrow gets
   // a `<For>` rewrite and a fix, and everything else is told which component to
   // reach for instead. That second message named `<Index />` until 2026-09-16

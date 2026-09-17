@@ -1623,6 +1623,53 @@ impl Dialect for Solid2 {
     /// measurement backs a claim), `dynamic`, `useHead`, the two boundary
     /// primitives and `mapArray`/`repeat`. Contract emission answers the
     /// exact callback leaf open for those rather than assuming they follow `computed`.
+    /// 2.0's package-contract words, moved off `interproc.rs`'s hardcoded
+    /// table by ADR 0111.
+    ///
+    /// `createEffect`/`createRenderEffect` defer to the attribution answer:
+    /// argument 0 is the tracked compute, argument 1 the deferred effect
+    /// function, and a contract says the same of both. Everything else is
+    /// stated directly, because the contract word is not derivable from the
+    /// attribution one -- `onCleanup` carries no `callback_executions` row at
+    /// all here and still promises `deferred` to a consumer.
+    ///
+    /// Three arms of the old shared table are absent rather than ported:
+    /// `createResource`, `on` and `mergeProps` are Solid 1.x names this
+    /// dialect does not carry.
+    fn contract_callback_execution_at(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> Option<Execution> {
+        match (primitive, argument) {
+            (Primitive::CreateEffect | Primitive::CreateRenderEffect, _) => {
+                self.callback_execution_at(primitive, argument, argument_count)
+            }
+            (
+                Primitive::CreateMemo
+                | Primitive::CreateTrackedEffect
+                | Primitive::CreateSignal
+                | Primitive::CreateStore
+                | Primitive::CreateProjection
+                | Primitive::CreateOptimistic
+                | Primitive::CreateOptimisticStore
+                | Primitive::Dynamic,
+                0,
+            ) => Some(Execution::Tracked),
+            (
+                Primitive::OnSettled
+                | Primitive::Action
+                | Primitive::CreateReaction
+                | Primitive::OnCleanup,
+                0,
+            ) => Some(Execution::Deferred),
+            (Primitive::CreateRoot | Primitive::Untrack | Primitive::Flush, 0)
+            | (Primitive::RunWithOwner, 1) => Some(Execution::Inline),
+            _ => None,
+        }
+    }
+
     fn tracked_callback_timing(
         &self,
         primitive: Primitive,
@@ -1987,6 +2034,87 @@ const NAMESPACE_SOLIDJS_WEB: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The package-contract words this dialect states, pinned exactly.
+    ///
+    /// These lived in `solid-reactive-ir`'s `interproc.rs` as a hardcoded
+    /// `match` until ADR 0111, where shared code decided per-version
+    /// behaviour and a new dialect could not state a different answer. Moving
+    /// them here changed no contract in the corpus; this test is what keeps
+    /// the move honest.
+    ///
+    /// The contract word is **not** derivable from
+    /// [`Dialect::callback_execution_at`], which is why the two are asserted
+    /// apart: `onCleanup` carries no `callback_executions` row at all and
+    /// still promises `deferred` to a consumer.
+    #[test]
+    fn the_contract_words_are_stated_by_this_dialect_not_by_shared_code() {
+        let two = &Solid2 as &dyn Dialect;
+        let word = |primitive, argument, count| {
+            two.contract_callback_execution_at(primitive, argument, count)
+        };
+
+        for primitive in [
+            Primitive::CreateMemo,
+            Primitive::CreateTrackedEffect,
+            Primitive::CreateSignal,
+            Primitive::CreateStore,
+            Primitive::CreateProjection,
+            Primitive::CreateOptimistic,
+            Primitive::CreateOptimisticStore,
+            Primitive::Dynamic,
+        ] {
+            assert_eq!(
+                word(primitive, 0, 1),
+                Some(Execution::Tracked),
+                "{primitive:?}"
+            );
+        }
+        for primitive in [
+            Primitive::OnSettled,
+            Primitive::Action,
+            Primitive::CreateReaction,
+            Primitive::OnCleanup,
+        ] {
+            assert_eq!(
+                word(primitive, 0, 1),
+                Some(Execution::Deferred),
+                "{primitive:?}"
+            );
+        }
+        for primitive in [Primitive::CreateRoot, Primitive::Untrack, Primitive::Flush] {
+            assert_eq!(
+                word(primitive, 0, 1),
+                Some(Execution::Inline),
+                "{primitive:?}"
+            );
+        }
+        // The clearing wrapper whose callback slot is not index 0.
+        assert_eq!(word(Primitive::RunWithOwner, 1, 2), Some(Execution::Inline));
+        assert_eq!(word(Primitive::RunWithOwner, 0, 2), None);
+
+        // The effect pair defers to the attribution answer, and says the same
+        // of both arguments: a tracked compute and a deferred effect function.
+        assert_eq!(
+            word(Primitive::CreateEffect, 0, 2),
+            Some(Execution::Tracked)
+        );
+        assert_eq!(
+            word(Primitive::CreateEffect, 1, 2),
+            Some(Execution::Deferred)
+        );
+        assert_eq!(
+            word(Primitive::CreateRenderEffect, 0, 2),
+            Some(Execution::Tracked)
+        );
+
+        // `onCleanup` is the case that proves the word is stated, not derived.
+        assert!(two.callback_executions(Primitive::OnCleanup).is_empty());
+        assert_eq!(word(Primitive::OnCleanup, 0, 1), Some(Execution::Deferred));
+
+        // Silence is an answer contract emission must keep as "unknown".
+        assert_eq!(word(Primitive::Children, 0, 1), None);
+    }
 
     /// The three `<For>` overloads from rc.0's `flow.d.ts`, plus the two
     /// forms that must claim nothing: a dynamic boolean flag (either overload

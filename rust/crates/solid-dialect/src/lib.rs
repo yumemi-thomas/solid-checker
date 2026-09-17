@@ -1674,6 +1674,37 @@ pub trait Dialect: Sync {
             .map(|(_, execution)| *execution)
     }
 
+    /// The **package-contract** word for a callback at this slot, which is a
+    /// different question from [`Dialect::callback_execution_at`].
+    ///
+    /// That one answers attribution for the checker's own analysis: whose reads
+    /// a callback subscribes. This one answers what a published contract
+    /// promises a consumer about *observable scheduling relative to the
+    /// exported call*. The two agree for most primitives and deliberately
+    /// diverge for some — Solid 1.x's `createResource` fetcher is `Deferred`
+    /// for attribution (it runs outside the source computation) and `Inline`
+    /// for a contract (both overloads invoke it before `createResource`
+    /// returns), and 1.x's `on` returns an adapter whose callbacks run at the
+    /// eventual invocation rather than during the creating call.
+    ///
+    /// `None` means this dialect states no contract word for the slot, which
+    /// contract emission must treat as "unknown" rather than as any of the
+    /// three answers.
+    ///
+    /// This lived as a hardcoded `match` in `solid-reactive-ir`'s
+    /// `interproc.rs` until ADR 0111. It belongs here: it is per-version
+    /// behaviour, and shared code holding it meant a new dialect could not
+    /// state a different answer.
+    fn contract_callback_execution_at(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> Option<Execution> {
+        let _ = (primitive, argument, argument_count);
+        None
+    }
+
     /// Whether a function passed at `argument` is stored as a plain value the
     /// primitive never invokes.
     ///

@@ -47,7 +47,7 @@ directory.
 
 Four projects are excepted and keep their text (the `KEEPS_WORDING` set in
 `scripts/coverage.mjs`): `dialect-solid-1x`, `dialect-solid-2`,
-`import-location`, and `solid-1x-leftovers`. For those, the wording *is* the
+`import-location`, and `retired-1x-spellings`. For those, the wording *is* the
 behaviour under test — a dialect-specific diagnostic quoting the wrong
 signature is exactly the failure they exist to catch.
 

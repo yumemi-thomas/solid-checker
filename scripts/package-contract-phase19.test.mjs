@@ -185,7 +185,7 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // `solid-1x-*` backend test-fixture trees. Nothing read any of them
       // either. What still carries a 1.x name is deliberate and is not an
       // artifact: the retirement plan, one audit document, and
-      // `fixtures/reactive-ir/solid-1x-leftovers`, which is a **Solid 2.0**
+      // `fixtures/reactive-ir/retired-1x-spellings`, which is a **Solid 2.0**
       // fixture -- it pins that 1.x-only names written in a 2.0 project are
       // caught.
       stableMainDocuments: 136,

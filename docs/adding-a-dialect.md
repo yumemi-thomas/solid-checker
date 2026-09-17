@@ -75,6 +75,14 @@ surfaces, and performance budgets.
 
 ## What remains centralized
 
+A new dialect **does** state its own package-contract words, through
+`Dialect::contract_callback_execution_at` (ADR 0111). That is a separate
+question from `callback_execution_at`: the first is what a published contract
+promises a consumer about scheduling relative to the exported call, the second
+is attribution for the checker's own analysis, and they deliberately diverge for
+some primitives. A dialect that states nothing yields "unknown", which is safe
+but publishes no callback row.
+
 New dialects do not add schema decoders, normalizers, receipt formats, package
 name matchers, Makefile contract stanzas, probe registries, or ESLint manifest
 maps. Shared code owns those deep seams and enumerates manifests. Rust still
