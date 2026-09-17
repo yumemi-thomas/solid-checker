@@ -171,7 +171,15 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // retirement plan): dialect-detection, props-split-vocabulary-v1,
       // callback-slot-props-forwarding, and the two 1.x halves whose 2.0 twins
       // already ship.
-      stableMainDocuments: 190,
+      //
+      // 154 on 2026-09-17, and the drop is the point rather than a regression:
+      // the Solid 1.x artifacts left the repository. Thirty-six tracked main
+      // documents went with them -- twenty from the phase-14 solid-v1
+      // authority, sixteen from pkg/contracts/bundled/solid-v1/ -- none of
+      // which any code, script or gate read. Three files stay in that
+      // directory: the bundle index the walker requires, and two documents
+      // `policy2_receipt`'s tests compile in as fixtures.
+      stableMainDocuments: 154,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
