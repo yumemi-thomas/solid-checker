@@ -48,21 +48,34 @@ The last four items closed in one slice, none of them behavioural:
 - `.gitignore`'s exception block named `solid-1x-sources`, a fixture deleted
   with the dialect, and explained itself in terms of catalog selection.
 
-**What is still open.** Three sites, none of them 1.x residue -- they are the
-tail of steps 5 and 6, and each needs its own slice because moving wording
-moves findings:
+**Steps 5 and 6 are now closed too**, in three further slices. Each moved
+wording or gate coverage, so each was measured rather than argued:
 
-- `execution_role.rs:1314` spells `"createEffect apply callback"` in shared IR
-  read-analysis context. `Dialect::name_of` exists; the work is threading a
-  dialect to the call and deciding whether the phrase is the catalog's.
-- `server_rules.rs:572,658,711` build `SC7007`
-  `server-function-rich-argument` violations, id and message, in shared IR
-  rather than in `solid-v2-rules`.
-- `scripts/check-compiler-facts-identity.mjs` reads
-  `rust/dialects/solid-v2/compiler/src/lib.rs` by name (lines 43, 93, 190). A
-  second dialect's compiler identity would simply go unchecked -- silent
-  non-coverage, not a wrong answer -- and `second-dialect.test.mjs` does not
-  cover this script.
+- `execution_role.rs` asked the dialect for the apply slot's name instead of
+  answering `"createEffect apply callback"`. The role stays shared; only the
+  spelling is the dialect's, through `name_of`.
+- `server_rules.rs`'s four `SC7007` sites moved to the static-defect channel
+  as `StaticDefectKind::ServerFunctionRichArgument`, whose
+  `RichArgumentTransport` states which of the four proofs was made.
+  `solid-v2-rules` now owns the rule identity, the throw text and the four
+  hints. The defect channel is not a drop-in for the violation channel -- it
+  deduplicates by family, path and offset, and it feeds the `SC9xxx`
+  obligation census -- so both were checked rather than assumed: nothing
+  collapsed, and the new family is deliberately absent from
+  `is_unresolved_obligation`, because `SC7007` was never in that census.
+- `check-compiler-facts-identity.mjs` enumerates `rust/dialects/*/dialect.json`
+  and reads each dialect's compiler wiring from a required `compilerIdentity`
+  block. A dialect that declares none fails manifest validation, where before
+  its compiler would have gone unchecked in silence.
+
+The findings snapshots record rule, code, kind and span but **not message
+text**, so coverage cannot catch a reworded message. Any further wording move
+should do what the `SC7007` slice did: capture the checker's full JSON for the
+covering fixtures first, then diff it after. That slice's three fixtures came
+back identical, `metrics` block included.
+
+**What is still open** is only what "Deferred, deliberately" below already
+names.
 
 Checked and already done, against the step 5 list: the `first_party_bundles`
 and `diagnostics` package lists ask `primitive_defining_packages()`;
