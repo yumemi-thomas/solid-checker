@@ -26,6 +26,26 @@
 // side of the question, and nothing here certifies anything itself: the slow
 // half is separate so the measurement stays deterministic and cheap to re-run.
 //
+// # The denominator names one package major; the corpus may install another
+//
+// Demand was swept over consumers written against the Solid 1.x-era releases of
+// these packages. A `--solid 2` run installs each package's *Solid 2* release,
+// which for a package mid-rewrite is a different API.
+// `@kobalte/utils@2.0.0-alpha.0` exports fifteen names and contains no
+// `mergeDefaultProps` anywhere in the package; the frozen demand asks about that
+// export 254 times. Those sites land in `absent`, and so do 32 other exports the
+// 2.0 release dropped -- 722 of 942 sites for that package alone.
+//
+// So on a cross-major run `absent` is **not** a contract gap. It reads "the
+// demanded export is not in this artifact's certified surface", and most of it
+// is the export not existing in that major at all. ADR 0110 s 5 froze the
+// denominator on the argument that demand is a fact about the ecosystem rather
+// than about the dialect. That argument holds for *counting* demand. It does not
+// make one major's demand answerable by another major's artifact, and a reader
+// comparing a `solid1` pin to a `solid2` one will otherwise read ecosystem
+// churn as a coverage regression. This is why the comparison is refused outright
+// rather than annotated.
+//
 // # The one classification rule that is easy to get wrong
 //
 // An export counts only at an entrypoint a consumer **can name**.
@@ -254,7 +274,7 @@ function render({ totals, packages }) {
     `degenerate: nothing determined:    ${totals.degenerate} (${share(totals.degenerate, measured)})`
   );
   lines.push(
-    `absent: the entrypoint refused:    ${totals.absent} (${share(totals.absent, measured)})`
+    `absent: not in the export surface: ${totals.absent} (${share(totals.absent, measured)})`
   );
   lines.push(
     `carries an owner requirement:      ${totals.ownerRequirement} (${share(totals.ownerRequirement, measured)})`
@@ -269,7 +289,7 @@ const DIRECTIONS = [
   ["operations", "up", "sites with a stated operation"],
   ["ownerRequirement", "up", "sites carrying an owner requirement"],
   ["degenerate", "down", "sites where nothing was determined"],
-  ["absent", "down", "sites whose entrypoint refused"],
+  ["absent", "down", "sites whose export is not in the certified surface"],
   ["unmeasured", "down", "sites whose package published no catalog"]
 ];
 

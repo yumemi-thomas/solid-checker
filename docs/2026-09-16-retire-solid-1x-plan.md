@@ -466,6 +466,16 @@ step proposed. Resolved 2026-09-16.**
   fails until it is re-pinned deliberately, rather than silently reporting
   improved coverage. The 1.x-era numbers (`ownerRequirement: 31`, 599 of 1,940
   sites) stay as the frozen baseline ADR 0110 § 5 names.
+
+  **Re-pinned 2026-09-17**, and the run did not report improved coverage -- it
+  reported worse, which is why the refusal earned its keep. Operations fell to
+  440 of 1,874 and `absent` rose from 65 sites to 722, almost all of it
+  `@kobalte/utils@2.0.0-alpha.0` having dropped the API the frozen demand names:
+  33 of its 41 demanded exports, including `mergeDefaultProps` at 254 sites, do
+  not exist in the Solid 2 release. `@solidjs/start` and `@kobalte/solidbase`
+  have no Solid 2 release at all, so their 84 sites are unmeasured. Both
+  baselines and the decision this leaves open are recorded in
+  `docs/package-contract-v2/phase21/2026-09-17-the-solid2-coverage-baseline.md`.
 - **Sub-step 5's deletion is refused, on ADR 0110 § 4's own argument.**
   `pkg/contracts/bundled/solid-v1/` (19 documents) and
   `benchmarks/package-contract-v2/phase14/solid-v1-authority/` (19 documents
