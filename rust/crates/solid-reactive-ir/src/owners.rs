@@ -20,7 +20,7 @@ use crate::effect_api::ProofStatus;
 use crate::execution_role::{argument_references_callback_symbol, execution_role, function_symbol};
 use crate::identity::SymbolId;
 use crate::indexes::{CrossFileProofDigest, EntitySymbols, ProjectIndexes, SemanticLookup};
-use solid_dialect::{Dialect, Primitive};
+use solid_dialect::{Dialect, OwnerRequirementRole, Primitive};
 use solid_facts::ProjectFacts;
 use solid_facts::core::{SourceHash, SourcePath, Span};
 
@@ -842,18 +842,15 @@ pub(crate) fn find_missing_owners(
                     ),
                 );
             }
-            let operation = match primitive {
-                // `createRenderEffect` is deliberately included alongside
-                // `createEffect`: both register a computation on the owner,
-                // and 2.0's render effect outside any owner leaks the same
-                // way. The engine matched only `createEffect` and
-                // `createTrackedEffect` before the dialect extraction; that
-                // omission was the gap, not the rule.
-                Some(
-                    primitive @ (Primitive::CreateEffect
-                    | Primitive::CreateRenderEffect
-                    | Primitive::CreateTrackedEffect),
-                ) if !root_owned => {
+            // Which primitives carry which owner-requirement role is the
+            // dialect's answer (`owner_requirement_role`), not a set spelled
+            // out here. The two owner passes used to spell it out separately
+            // and drifted: this one omitted `createRenderEffect`, so a render
+            // effect outside any owner leaked with nothing reported.
+            let role =
+                primitive.and_then(|primitive| lookup.dialect.owner_requirement_role(primitive));
+            let operation = match (role, primitive) {
+                (Some(OwnerRequirementRole::Effect), Some(primitive)) if !root_owned => {
                     let registration =
                         crate::effect_api::classify_effect_call(file, call, primitive, lookup)
                             .owner_registration;
@@ -863,12 +860,12 @@ pub(crate) fn find_missing_owners(
                         registration == ProofStatus::Uncertain,
                     ))
                 }
-                Some(Primitive::OnCleanup) if !root_owned => Some((
+                (Some(OwnerRequirementRole::Cleanup), _) if !root_owned => Some((
                     "cleanup",
                     context & (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF) != 0,
                     false,
                 )),
-                Some(Primitive::OnSettled) if !root_owned => {
+                (Some(OwnerRequirementRole::SettledCleanup), _) if !root_owned => {
                     let proof = call
                         .arguments
                         .first()
@@ -1139,15 +1136,13 @@ pub(crate) fn discover_owner_file(
                 });
             }
         }
-        let operation = match known_primitive(&call_primitives[call_index]) {
-            // See the batch owner pass: `createRenderEffect` belongs with the
-            // other effect constructors, and its earlier absence there was
-            // the two passes' drift, not a narrower contract.
-            Some(
-                primitive @ (Primitive::CreateEffect
-                | Primitive::CreateRenderEffect
-                | Primitive::CreateTrackedEffect),
-            ) => {
+        // Same seam as the batch owner pass, for the same reason: these two
+        // matched the effect set independently and disagreed about
+        // `createRenderEffect`.
+        let known = known_primitive(&call_primitives[call_index]);
+        let role = known.and_then(|primitive| lookup.dialect.owner_requirement_role(primitive));
+        let operation = match (role, known) {
+            (Some(OwnerRequirementRole::Effect), Some(primitive)) => {
                 let registration =
                     crate::effect_api::classify_effect_call(file, call, primitive, lookup)
                         .owner_registration;
@@ -1159,14 +1154,14 @@ pub(crate) fn discover_owner_file(
                     registration == ProofStatus::Uncertain,
                 ))
             }
-            Some(Primitive::OnCleanup) => Some((
+            (Some(OwnerRequirementRole::Cleanup), _) => Some((
                 "cleanup",
                 OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF,
                 None,
                 call.callee,
                 false,
             )),
-            Some(Primitive::OnSettled) => Some((
+            (Some(OwnerRequirementRole::SettledCleanup), _) => Some((
                 "settled-cleanup",
                 OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF,
                 call.arguments

@@ -22981,3 +22981,52 @@ test-only stub dialect crate compiled into the workspace, which is a larger
 change than this one and was not made. So: the half where an omission fails
 *nothing* is now covered, and the half where an omission fails the build is
 not — which is the right way round, but it is half.
+
+### The ADR 0111 audit list, worked through (2026-09-17)
+
+ADR 0111 listed `owners.rs`, `static_api.rs`, `server_rules.rs`, `cleanup.rs`
+and `indexes.rs` as sites that "match only primitives a carried dialect names,
+so none is dead", and left open whether each *should* consult a seam. Working
+through them, the answer turns on a distinction the ADR did not draw:
+
+**`Primitive` is a shared role vocabulary, not a spelling.** A dialect maps its
+own export names onto these variants, so shared code matching
+`Primitive::OnCleanup` is not naming a 2.0 word — it is naming the role the
+enum already defines, and a dialect that has no such primitive simply never
+reaches the arm. That disposes of most of the list:
+
+- `cleanup.rs:469` (`OnCleanup` → `Cleanup`, `Flush` → `Flush`) and `:297`
+  (only `onCleanup` has the return-it-instead rewrite) — single variants,
+  already guarded by `cleanup_rule` and `accepts_cleanup_return`, which are
+  seam questions. Fine as they are.
+- `static_api.rs:154` (`Resolve`) and `:170` (`Refresh | Affects`) — rules
+  whose whole subject is those primitives. A dialect without them has no such
+  rule.
+- `indexes.rs:1030` (`CreateContext`), `owners.rs:2067` (`RunWithOwner`
+  argument 1), `:2100` (`CreateOwner`) — single variants naming their own role.
+
+**One site was genuinely role knowledge, and it had already gone wrong.**
+`owners.rs` matched `CreateEffect | CreateRenderEffect | CreateTrackedEffect`
+in two separate owner passes, and the comments record that the two *drifted* —
+one omitted `createRenderEffect`, so a render effect outside any owner leaked
+with nothing reported. Two copies of an unnamed set is exactly the shape that
+produces that.
+
+`OwnerRequirementRole` already existed for this partition, but only as a
+hardcoded `match` inside the free function `unambiguous_owner_requirement_role`
+— the same role knowledge in shared code, keyed by name. It is now
+`Dialect::owner_requirement_role(primitive)` with that partition as the
+default, the free function delegates to it, and both owner passes match on the
+role instead of on a set. A dialect whose render effect did not register a
+computation on the owner would say so in one place.
+
+Coverage, the ownership gate and the process suites are unchanged (80 projects
+/ 433 findings; 37 cases; 13/18/14).
+
+**Still open, and now the only ones.** `owners.rs:2786` matches
+`CreateEffect | CreateRenderEffect` for a *different* question — "is this
+argument an effect's apply phase, as opposed to a deferred executor's
+callback". That is a second unnamed set, narrower than the first, and it wants
+its own question rather than reuse of the owner role. And `server_rules.rs`
+remains what the earlier entry said: a Solid 2 rule module in the shared crate,
+whose fix is relocation rather than more trait methods.

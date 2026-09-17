@@ -294,16 +294,9 @@ pub fn unambiguous_owner_requirement_role(name: &str) -> Option<OwnerRequirement
         .copied()
         .filter_map(|dialect| {
             let primitive = dialect.primitive(name)?;
-            (dialect.name_of(primitive) == Some(name)).then_some(primitive)
+            (dialect.name_of(primitive) == Some(name)).then_some((dialect, primitive))
         })
-        .filter_map(|primitive| match primitive {
-            Primitive::CreateEffect
-            | Primitive::CreateRenderEffect
-            | Primitive::CreateTrackedEffect => Some(OwnerRequirementRole::Effect),
-            Primitive::OnCleanup => Some(OwnerRequirementRole::Cleanup),
-            Primitive::OnSettled => Some(OwnerRequirementRole::SettledCleanup),
-            _ => None,
-        });
+        .filter_map(|(dialect, primitive)| dialect.owner_requirement_role(primitive));
     let first = roles.next()?;
     roles.all(|role| role == first).then_some(first)
 }
@@ -1811,6 +1804,31 @@ pub trait Dialect: Sync {
                 .callback_requires_return_invocation(primitive, argument),
             stores_as_value: self.stores_function_argument_as_value(primitive, argument),
             accessor_parameters: self.callback_accessor_parameters(primitive, argument),
+        }
+    }
+
+    /// The owner-requirement role this primitive's call carries, if any.
+    ///
+    /// The default is the partition every dialect so far has agreed on: the
+    /// three effect constructors register a computation on the owner, and the
+    /// two cleanup registrars are each their own role. It is a method rather
+    /// than a `match` in shared code because *which* primitives register a
+    /// computation is a dialect's answer — a dialect whose render effect did
+    /// not register on the owner would say so here, not by having the owner
+    /// pass learn its name.
+    ///
+    /// The owner passes used to match the sets directly, in two places, and
+    /// the two drifted: one of them omitted `createRenderEffect`, so a render
+    /// effect outside any owner leaked with nothing reported. One named answer
+    /// is what stops that recurring quietly.
+    fn owner_requirement_role(&self, primitive: Primitive) -> Option<OwnerRequirementRole> {
+        match primitive {
+            Primitive::CreateEffect
+            | Primitive::CreateRenderEffect
+            | Primitive::CreateTrackedEffect => Some(OwnerRequirementRole::Effect),
+            Primitive::OnCleanup => Some(OwnerRequirementRole::Cleanup),
+            Primitive::OnSettled => Some(OwnerRequirementRole::SettledCleanup),
+            _ => None,
         }
     }
 
