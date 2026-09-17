@@ -22852,13 +22852,34 @@ rationale is not recorded anywhere in this repository**; the doc comment says
 so rather than inventing one. Someone should find and write down why 2.0's
 optimistic sources are exempt.
 
-**One deliberate widening, unexercised.** `source_discovery.rs` asked whether a
-source is a store with `Some("createStore" | "createOptimisticStore")`. It now
-asks `Dialect::returns_store`, which has always also named `createProjection`.
-That is the more correct answer — a projection *is* a store — but no fixture
-exercises the new arm, so the widening is unproven rather than verified.
-Coverage did not move, which tells us only that no existing fixture reaches it.
-A `createProjection` case belongs here.
+**One "deliberate widening" that was nothing of the kind.** `source_discovery.rs`
+asked whether a source is a store as `source_kinds == Store || primitive is
+createStore | createOptimisticStore`. Routing the second half through
+`Dialect::returns_store` looked like a widening, because `returns_store` also
+names `createProjection`, and it was recorded here as a correct-but-unexercised
+change needing a fixture.
+
+It is not a widening. **The second half of that test could never change the
+answer, before or after.** `source_kinds` and `source_primitives` are written
+together wherever a reactive source is discovered — the
+`creates_reactive_source` path and the tuple-binding path each push both in one
+block — and the kind pushed there is `Store` exactly when `returns_store` holds
+for that same primitive. So "the primitive returns a store" *implies* "the kind
+is Store", for every primitive and every dialect. `createProjection` is in
+`creates_reactive_source`, so it reaches that path and gets `Store` from the
+first half like everything else. The only path that records a primitive without
+a kind is `dynamic`, which returns no store.
+
+Established by reading, then checked: a temporary `debug_assert` that the
+second half implies the first ran over all 80 fixture projects, the 37
+ownership cases and the armed process suites without tripping, and was removed
+with the clause. The clause is gone; the invariant is written where it was.
+
+The lesson is about the first entry, not the second: "coverage did not move" was
+offered above as weak evidence for a real semantic change, when the actual
+reason coverage did not move is that there was no semantic change to find. A
+change whose blast radius has not been reasoned about is not made safer by a
+green gate.
 
 **What did not move, and why it is not a two-line change.**
 `server_rules.rs` hard-codes `@solidjs/web/server-functions`,

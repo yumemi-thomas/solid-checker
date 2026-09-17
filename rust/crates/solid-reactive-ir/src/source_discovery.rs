@@ -1852,21 +1852,16 @@ pub(crate) fn discover_sources(
                                 })
                         })
                 })
-                .filter(|symbol| {
-                    // "Is this source a store", asked of the dialect rather
-                    // than spelled as two 2.0 constructor names. This also
-                    // takes in `createProjection`, which `returns_store` has
-                    // always named and the literal list did not; no fixture
-                    // exercises that arm today (docs/precision-backlog.md).
-                    source_kinds.get(*symbol) == Some(&ReactiveSourceKind::Store)
-                        || source_primitives
-                            .get(*symbol)
-                            .map(SymbolId::as_str)
-                            .and_then(|name| semantic_lookup.dialect.primitive(name))
-                            .is_some_and(|primitive| {
-                                semantic_lookup.dialect.returns_store(primitive)
-                            })
-                })
+                // The second half of this test used to name `createStore` and
+                // `createOptimisticStore`, and it could never change the
+                // answer. `source_kinds` and `source_primitives` are written
+                // together wherever a reactive source is discovered (the
+                // `creates_reactive_source` path above and the tuple-binding
+                // path), and the kind recorded there is `Store` exactly when
+                // `returns_store` holds for that same primitive. So "the
+                // primitive returns a store" implies "the kind is Store", for
+                // any dialect, and only the kind is worth asking.
+                .filter(|symbol| source_kinds.get(*symbol) == Some(&ReactiveSourceKind::Store))
             else {
                 continue;
             };
