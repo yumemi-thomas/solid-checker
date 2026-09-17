@@ -13,10 +13,10 @@
             "sha256": "7ef9e694a262b5b6893a789f7b51ed68642396130217353d24a9a054864c3ec7"
           },
           "exports": {
-            "Arrow": "summary-5af260abe18d7fafbbcb241326a40a893015997b2d69a80d3106a1220257eb59",
-            "Direct": "summary-5af260abe18d7fafbbcb241326a40a893015997b2d69a80d3106a1220257eb59",
-            "Helper": "summary-5af260abe18d7fafbbcb241326a40a893015997b2d69a80d3106a1220257eb59",
-            "inert": "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d"
+            "Arrow": "summary-e1e4716f4b5a5d2a1ab7bcb3cfc7a4040d6b89945d43b1ab44d1621f8b19c4b0",
+            "Direct": "summary-e1e4716f4b5a5d2a1ab7bcb3cfc7a4040d6b89945d43b1ab44d1621f8b19c4b0",
+            "Helper": "summary-e1e4716f4b5a5d2a1ab7bcb3cfc7a4040d6b89945d43b1ab44d1621f8b19c4b0",
+            "inert": "summary-760d5a1577b626b47b2200cb2fea211ce38eece214bf37d9614e723409c3d03b"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -40,49 +40,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-5af260abe18d7fafbbcb241326a40a893015997b2d69a80d3106a1220257eb59": {
-      "call": {
-        "callbacks": [
-          {
-            "from": {
-              "arg": 1,
-              "path": []
-            },
-            "operation": "callback-0"
-          }
-        ],
-        "closed": [
-          "callbacks",
-          "creates"
-        ],
-        "creates": [],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "callback-0",
-            "kind": "invoke",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "callbacks",
-          "creates"
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d": {
+    "summary-760d5a1577b626b47b2200cb2fea211ce38eece214bf37d9614e723409c3d03b": {
       "call": {
         "callbacks": [
           {
@@ -112,7 +70,7 @@
             },
             "id": "callback-0",
             "kind": "invoke",
-            "tracking": "untracked",
+            "tracking": "ambient-at-execution",
             "trigger": {
               "event": "call"
             }
@@ -124,6 +82,48 @@
           "creates"
         ],
         "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-e1e4716f4b5a5d2a1ab7bcb3cfc7a4040d6b89945d43b1ab44d1621f8b19c4b0": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "creates"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "creates"
+        ]
       },
       "shape": "callable"
     }

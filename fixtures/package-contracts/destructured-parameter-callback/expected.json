@@ -16,7 +16,7 @@
             "ArrayPattern": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
             "MemberAlias": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
             "ObjectPattern": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
-            "Parameter": "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d"
+            "Parameter": "summary-760d5a1577b626b47b2200cb2fea211ce38eece214bf37d9614e723409c3d03b"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -40,25 +40,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
-      "call": {
-        "callbacks": [],
-        "closed": [
-          "callbacks",
-          "reads",
-          "creates"
-        ],
-        "creates": [],
-        "proposedClosures": [
-          "callbacks",
-          "reads",
-          "creates"
-        ],
-        "reads": []
-      },
-      "shape": "callable"
-    },
-    "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d": {
+    "summary-760d5a1577b626b47b2200cb2fea211ce38eece214bf37d9614e723409c3d03b": {
       "call": {
         "callbacks": [
           {
@@ -88,12 +70,30 @@
             },
             "id": "callback-0",
             "kind": "invoke",
-            "tracking": "untracked",
+            "tracking": "ambient-at-execution",
             "trigger": {
               "event": "call"
             }
           }
         ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "creates": [],
         "proposedClosures": [
           "callbacks",
           "reads",

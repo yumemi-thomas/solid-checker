@@ -13,7 +13,7 @@
             "sha256": "9cac85e64e6a7649af44ab1afe3d06867c22dd22a3f671b34f852deb75b401d6"
           },
           "exports": {
-            "mapValue": "summary-676426a5139a457513c23a73ef70eef2d99433fea20028c5f447ea221003528b"
+            "mapValue": "summary-8a9bbeb2dee5d68fdb8e67453c2dfd615de24674833379ac477389c68c17a272"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -37,7 +37,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-676426a5139a457513c23a73ef70eef2d99433fea20028c5f447ea221003528b": {
+    "summary-8a9bbeb2dee5d68fdb8e67453c2dfd615de24674833379ac477389c68c17a272": {
       "call": {
         "callbacks": [
           {
@@ -72,7 +72,7 @@
               }
             ],
             "kind": "invoke",
-            "tracking": "untracked",
+            "tracking": "ambient-at-execution",
             "trigger": {
               "event": "call"
             }

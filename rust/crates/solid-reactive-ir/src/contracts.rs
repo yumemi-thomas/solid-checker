@@ -209,6 +209,11 @@ fn project_callbacks(
                 Some(Schedule::External) => CallbackSchedule::External,
                 None => CallbackSchedule::Unestablished,
             }),
+            // The inverse of the producer's mapping: only a proven clearing is
+            // written as `untracked`, so only that reads back as one.
+            // `ambient-at-execution` is a transparent wrapper and leaves the
+            // caller's listener in place.
+            clears_tracking: operation.tracking == Tracking::Untracked,
             arguments: operation.inputs.iter().map(project_return_shape).collect(),
             owner: match operation.owner.source {
                 OwnerSource::None => Some("none".into()),
@@ -2729,6 +2734,7 @@ mod callback_contradiction_tests {
             parameter,
             execution: execution.into(),
             schedule: None,
+            clears_tracking: false,
             arguments: Vec::new(),
             owner: None,
         }

@@ -1353,6 +1353,17 @@ pub struct ContractCallback {
     /// means the package contract describes timing only; consumers must keep
     /// the existing fail-closed owner behavior for that callback.
     pub owner: Option<String>,
+    /// Whether the export is proven to clear the caller's listener around this
+    /// callback, as `untrack` does and a bare `fn()` does not.
+    ///
+    /// `execution` answers the schedule axis alone -- `inline` promises only
+    /// that the callback runs before the export returns. Both spellings used to
+    /// serialize as `tracking: "untracked"`, which made the field
+    /// unfalsifiable: `@solid-primitives/utils`' `access` is
+    /// `typeof v === "function" ? v() : v` and its row said `untracked` like
+    /// `untrack`'s did. False here publishes `ambient-at-execution` instead,
+    /// which is what a transparent wrapper actually does.
+    pub clears_tracking: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

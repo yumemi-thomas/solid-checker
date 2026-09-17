@@ -13,7 +13,7 @@
             "sha256": "05b3d1ab22b4e2d50d652e11f6c2dc35253ab37e19ddb680666e1386c1935901"
           },
           "exports": {
-            "onSettled": "summary-c341c230b1445395b521966ce3b41a9cf14f62c46fd568e104137806817bd020"
+            "onSettled": "summary-29cf060103bcf92874d78913105be00e48d6f2cbd301fb7d9f5fd35e74c5ba28"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -37,7 +37,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-c341c230b1445395b521966ce3b41a9cf14f62c46fd568e104137806817bd020": {
+    "summary-29cf060103bcf92874d78913105be00e48d6f2cbd301fb7d9f5fd35e74c5ba28": {
       "call": {
         "callbacks": [
           {
@@ -65,7 +65,7 @@
             },
             "id": "callback-0",
             "kind": "invoke",
-            "tracking": "untracked",
+            "tracking": "ambient-at-execution",
             "trigger": {
               "event": "call"
             }

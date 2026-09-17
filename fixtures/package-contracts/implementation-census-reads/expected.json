@@ -13,7 +13,7 @@
             "sha256": "19f6dfe65a8013568ea0d041bea18b76ec700f1e92dce463765fb9072302c494"
           },
           "exports": {
-            "invokesCallerAccessor": "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d",
+            "invokesCallerAccessor": "summary-760d5a1577b626b47b2200cb2fea211ce38eece214bf37d9614e723409c3d03b",
             "invokesCallerMember": "summary-2d137f26c377787379e2382d0cd2f74a7880b2dd8520aca7192ad5f9cc068967",
             "invokesCallerMemberLater": "summary-cd719acaeb7892d543fd8085c736eafff7bd10635b9a9cab7fec9f739afcc2bb",
             "plainArithmetic": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
@@ -131,25 +131,7 @@
       },
       "shape": "callable"
     },
-    "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
-      "call": {
-        "callbacks": [],
-        "closed": [
-          "callbacks",
-          "reads",
-          "creates"
-        ],
-        "creates": [],
-        "proposedClosures": [
-          "callbacks",
-          "reads",
-          "creates"
-        ],
-        "reads": []
-      },
-      "shape": "callable"
-    },
-    "summary-cd3b26a221619fb86904f0ee6dee0a5e298bdca84934fb822938483dca9c730d": {
+    "summary-760d5a1577b626b47b2200cb2fea211ce38eece214bf37d9614e723409c3d03b": {
       "call": {
         "callbacks": [
           {
@@ -179,12 +161,30 @@
             },
             "id": "callback-0",
             "kind": "invoke",
-            "tracking": "untracked",
+            "tracking": "ambient-at-execution",
             "trigger": {
               "event": "call"
             }
           }
         ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "creates": [],
         "proposedClosures": [
           "callbacks",
           "reads",

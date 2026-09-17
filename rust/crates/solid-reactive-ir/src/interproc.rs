@@ -1276,15 +1276,25 @@ fn discover_interprocedural_graph(
             // word `tracked` carries no schedule column, so the row's schedule
             // has to be recomposed from the same wrappers that produced it (see
             // the push below).
-            let chain: Option<(Option<&'static str>, Vec<CallbackWrapper>)> =
+            let chain: Option<ComposedChain> =
                 enclosing_callback_chain(file, call.callee, &contracts, lookup)
                     .filter(|chain| !chain.wrappers.is_empty())
                     .filter(|chain| {
                         callback_chain_reaches_owner_body(file, chain, &nodes[callback_owner])
                     })
                     .map(|chain| (compose_callback_chain(&chain.wrappers), chain.wrappers));
-            let chain_execution: Option<Option<&'static str>> =
-                chain.as_ref().map(|(word, _)| *word);
+            let chain_execution: Option<Option<&'static str>> = chain
+                .as_ref()
+                .map(|(composed, _)| composed.map(|(word, _)| word));
+            // Only a composed chain can prove a clearing wrapper stood between
+            // the export and the callback. A runtime-census word and the
+            // lexical rungs below answer the schedule and say nothing about the
+            // listener, so they leave this false -- which publishes
+            // `ambient-at-execution` rather than an unproven `untracked`.
+            let chain_detaches = chain
+                .as_ref()
+                .and_then(|(composed, _)| composed.map(|(_, detached)| detached))
+                .unwrap_or(false);
             // ADR 0100: whether *the site* is a call of the parameter itself,
             // written directly in the body of the function that declares it.
             // That is the one row the implementation census confirms site for
@@ -1347,6 +1357,7 @@ fn discover_interprocedural_graph(
                     nodes[callback_owner].span,
                     ContractCallback {
                         parameter,
+                        clears_tracking: chain_detaches,
                         execution: execution.into(),
                         // `inline` and `deferred` carry their schedule in the
                         // word. `tracked` does not, and it does reach here --
@@ -1448,6 +1459,7 @@ fn discover_interprocedural_graph(
                                 parameter,
                                 execution: callback.execution.clone(),
                                 schedule: callback.schedule,
+                                clears_tracking: callback.clears_tracking,
                                 arguments: callback.arguments.clone(),
                                 owner: None,
                             },
@@ -1622,7 +1634,7 @@ fn discover_interprocedural_graph(
                 // the sentinel rather than fall back, because the slot's answer
                 // is relative to the wrapping call and the row is relative to
                 // the export.
-                let composed: Option<(Option<&'static str>, Vec<CallbackWrapper>)> =
+                let composed: Option<ComposedChain> =
                     enclosing_callback_chain(file, call.span, &contracts, lookup)
                         .filter(|chain| {
                             chain.wrappers.is_empty()
@@ -1649,18 +1661,33 @@ fn discover_interprocedural_graph(
                 // under. Without the chain there is one wrapper -- this slot.
                 let (word, wrappers) = match composed {
                     Some((word, wrappers)) => (word, wrappers),
-                    None => (
-                        Some(execution),
-                        vec![CallbackWrapper::Tracked(
-                            lookup.dialect.tracked_callback_timing(
-                                primitive.expect("a slot row requires a resolved primitive"),
+                    None => {
+                        let slot = primitive.expect("a slot row requires a resolved primitive");
+                        // No enclosing chain, so the slot's own answer stands --
+                        // including whether it clears the listener, which is the
+                        // same question `callback_wrapper_for` asks to call a
+                        // wrapper `Detaching`. `untrack`'s slot is inline *and*
+                        // detaching, and publishing it as merely inline is what
+                        // made every row's `untracked` unfalsifiable.
+                        let detaches = lookup.dialect.runs_callback_synchronously(slot)
+                            || lookup.dialect.reports_untracked_reads_at(
+                                slot,
                                 argument_index,
                                 call.arguments.len(),
-                            ),
-                        )],
-                    ),
+                            );
+                        (
+                            Some((execution, detaches)),
+                            vec![CallbackWrapper::Tracked(
+                                lookup.dialect.tracked_callback_timing(
+                                    slot,
+                                    argument_index,
+                                    call.arguments.len(),
+                                ),
+                            )],
+                        )
+                    }
                 };
-                if let Some(execution) = word {
+                if let Some((execution, detaches)) = word {
                     contribution.callbacks.push((
                         nodes[callback_owner].span,
                         ContractCallback {
@@ -1668,6 +1695,7 @@ fn discover_interprocedural_graph(
                             execution: execution.into(),
                             schedule: (execution == "tracked")
                                 .then(|| composed_tracked_schedule(&wrappers)),
+                            clears_tracking: detaches,
                             arguments: Vec::new(),
                             owner: None,
                         },
@@ -1775,6 +1803,10 @@ fn discover_interprocedural_graph(
                                 }
                                 .into(),
                                 schedule: None,
+                                // The runtime census times the invocation; it
+                                // observes nothing about the listener, so this
+                                // stays unproven.
+                                clears_tracking: false,
                                 arguments: Vec::new(),
                                 owner: None,
                             },
@@ -2588,7 +2620,23 @@ fn callback_chain_reaches_owner_body(
 /// a claim the probe measures and fails. Where tracking is *not* cleared the
 /// answer stays `tracked` regardless of schedule -- the attribution is the
 /// claim, and every tracked computation eventually runs its compute.
-fn compose_callback_chain(wrappers: &[CallbackWrapper]) -> Option<&'static str> {
+/// The composed word, and whether the chain clears the caller's listener.
+///
+/// `detached` was computed here and thrown away, which is why every package
+/// contract row published `tracking: "untracked"` whatever the export did: the
+/// one place that knows a `Detaching` wrapper stood in the chain did not say
+/// so. It is the difference between `untrack(fn)` and a bare `fn()`, and
+/// without it a consumer reading the row cannot tell them apart.
+/// The export-relative execution word, and whether a clearing wrapper stood
+/// between the export and the callback.
+type ComposedExecution = (&'static str, bool);
+
+/// A composed chain: what it says, beside the wrappers it composed from. The
+/// wrappers are kept because `tracked` carries no schedule column and only the
+/// dialect can supply one per wrapper.
+type ComposedChain = (Option<ComposedExecution>, Vec<CallbackWrapper>);
+
+fn compose_callback_chain(wrappers: &[CallbackWrapper]) -> Option<ComposedExecution> {
     let mut detached = false;
     let mut execution = "inline";
     for wrapper in wrappers {
@@ -2616,7 +2664,7 @@ fn compose_callback_chain(wrappers: &[CallbackWrapper]) -> Option<&'static str> 
             CallbackWrapper::Deferred => execution = "deferred",
         }
     }
-    Some(execution)
+    Some((execution, detached))
 }
 
 /// The export-relative schedule of a chain that composes to `tracked`.
@@ -2675,6 +2723,10 @@ pub(crate) enum ForwardedAmbientExecution {
     Composed {
         execution: String,
         schedule: Option<CallbackSchedule>,
+        /// Whether a clearing wrapper stood between the export and the
+        /// callback. Carried rather than re-derived: the composition is the
+        /// only place that saw the whole chain.
+        clears_tracking: bool,
     },
     /// The enclosing execution or a wrapper's schedule is unestablished, so no
     /// export-relative word is honest. The callee's `inline` rows must not be
@@ -2731,9 +2783,10 @@ fn forwarded_callback_ambient_execution(
     let mut wrappers = own.into_iter().collect::<Vec<_>>();
     wrappers.extend(above);
     match compose_callback_chain(&wrappers) {
-        Some(execution) => ForwardedAmbientExecution::Composed {
+        Some((execution, detaches)) => ForwardedAmbientExecution::Composed {
             execution: execution.to_owned(),
             schedule: (execution == "tracked").then(|| composed_tracked_schedule(&wrappers)),
+            clears_tracking: detaches,
         },
         None => ForwardedAmbientExecution::Unknown,
     }
@@ -5400,16 +5453,21 @@ fn interprocedural_reads(
                         ForwardedAmbientExecution::Composed {
                             execution,
                             schedule,
+                            clears_tracking,
                         },
-                    ) => Some((execution.clone(), *schedule)),
+                    ) => Some((execution.clone(), *schedule, *clears_tracking)),
                     _ => None,
                 };
-                let (execution, schedule) =
-                    restated.unwrap_or((callback.execution, callback.schedule));
+                let (execution, schedule, clears_tracking) = restated.unwrap_or((
+                    callback.execution,
+                    callback.schedule,
+                    callback.clears_tracking,
+                ));
                 let forwarded = ContractCallback {
                     parameter: *owner_parameter,
                     execution,
                     schedule,
+                    clears_tracking,
                     arguments: callback.arguments.clone(),
                     owner: callback.owner.clone(),
                 };
@@ -6306,6 +6364,7 @@ mod tests {
             parameter,
             execution: execution.to_owned(),
             schedule: None,
+            clears_tracking: false,
             arguments: Vec::new(),
             owner: None,
         };
@@ -6324,6 +6383,7 @@ mod tests {
             parameter: 0,
             execution: "deferred".into(),
             schedule: None,
+            clears_tracking: false,
             arguments: Vec::new(),
             owner: Some("inherited".into()),
         };
@@ -6593,25 +6653,28 @@ mod tests {
 
         // `use(fn, el, arg) { return untrack(() => fn(el, arg)) }` --
         // @solidjs/web. Runs before the export returns.
-        assert_eq!(compose_callback_chain(&[Detaching]), Some("inline"));
+        assert_eq!(compose_callback_chain(&[Detaching]), Some(("inline", true)));
         // `createSubRoot(fn) { return createRoot(d => fn(d)) }` --
         // @solid-primitives/rootless. Same shape, same answer.
         assert_eq!(
             compose_callback_chain(&[Detaching, Transparent]),
-            Some("inline")
+            Some(("inline", true))
         );
         // `onMount(fn) { createEffect(() => untrack(fn)) }` -- solid-js. The
         // clearing wrapper stops `tracked`; the effect still schedules.
         assert_eq!(
             compose_callback_chain(&[Detaching, LATER]),
-            Some("deferred")
+            Some(("deferred", true))
         );
         // `createMemo(() => untrack(fn))`, and its `createRenderEffect` and
         // `mergeProps` twins: the same chain shape with an *eager* tracked
         // wrapper runs `fn` during the call. Measured against solid-js@1.9.14
         // under `--conditions browser`: `ranDuringCall`, so a `deferred` claim
         // here is one the probe fails.
-        assert_eq!(compose_callback_chain(&[Detaching, EAGER]), Some("inline"));
+        assert_eq!(
+            compose_callback_chain(&[Detaching, EAGER]),
+            Some(("inline", true))
+        );
         // No established schedule for the tracked wrapper: no word is honest,
         // and local openness is the answer rather than either guess.
         assert_eq!(compose_callback_chain(&[Detaching, UNKNOWN]), None);
@@ -6619,33 +6682,48 @@ mod tests {
         // `fn`, because the memo subscribes it and the outer untrack cannot
         // undo that. The wrapper's schedule is irrelevant once attribution
         // decides, so even the unknown one answers `tracked` here.
-        assert_eq!(compose_callback_chain(&[EAGER, Detaching]), Some("tracked"));
+        assert_eq!(
+            compose_callback_chain(&[EAGER, Detaching]),
+            Some(("tracked", true))
+        );
         assert_eq!(
             compose_callback_chain(&[UNKNOWN, Detaching]),
-            Some("tracked")
+            Some(("tracked", true))
         );
         // No clearing wrapper: the tracked claim survives untouched.
-        assert_eq!(compose_callback_chain(&[LATER]), Some("tracked"));
-        assert_eq!(compose_callback_chain(&[UNKNOWN]), Some("tracked"));
+        assert_eq!(compose_callback_chain(&[LATER]), Some(("tracked", false)));
+        assert_eq!(compose_callback_chain(&[UNKNOWN]), Some(("tracked", false)));
         assert_eq!(
             compose_callback_chain(&[Transparent, EAGER]),
-            Some("tracked")
+            Some(("tracked", false))
         );
         // A transparent wrapper is exactly its call site.
-        assert_eq!(compose_callback_chain(&[Transparent]), Some("inline"));
+        assert_eq!(
+            compose_callback_chain(&[Transparent]),
+            Some(("inline", false))
+        );
         // Deferral is sticky in both directions, and it outranks the sentinel:
         // an inner wrapper that already runs later cannot be made earlier by
         // anything above it, so the outer schedule is not asked for.
-        assert_eq!(compose_callback_chain(&[Deferred]), Some("deferred"));
-        assert_eq!(compose_callback_chain(&[Deferred, EAGER]), Some("deferred"));
+        assert_eq!(
+            compose_callback_chain(&[Deferred]),
+            Some(("deferred", false))
+        );
+        assert_eq!(
+            compose_callback_chain(&[Deferred, EAGER]),
+            Some(("deferred", false))
+        );
         assert_eq!(
             compose_callback_chain(&[Deferred, Detaching, UNKNOWN]),
-            Some("deferred")
+            Some(("deferred", true))
         );
-        assert_eq!(compose_callback_chain(&[LATER, Deferred]), Some("deferred"));
+        assert_eq!(
+            compose_callback_chain(&[LATER, Deferred]),
+            Some(("deferred", false))
+        );
         assert_eq!(
             compose_callback_chain(&[Detaching, LATER, Transparent]),
-            Some("deferred")
+            Some(("deferred", true))
         );
         // Two tracked wrappers above a clearing one: the outer one's schedule
         // is asked for too, so an unknown outer wrapper refuses even when the

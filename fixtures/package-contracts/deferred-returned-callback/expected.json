@@ -15,7 +15,7 @@
           "exports": {
             "debounce": "summary-6a4cc75250cc3d86bcc07c4e91cdd7a97233945d50b1099b04aa57ecfbfbdd23",
             "decorated": "summary-6a4cc75250cc3d86bcc07c4e91cdd7a97233945d50b1099b04aa57ecfbfbdd23",
-            "direct": "summary-149a510a6c897f51d9c2e768c3ba1d17782573dd058339ba0fa86a4be1996ce0",
+            "direct": "summary-091b1d9c2b5cda13367902440e8f50e3789630c614638926e6136ca3e4c0861c",
             "nestedThroughCallable": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
             "nestedThroughIdentity": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
             "throughIdentity": "summary-6a4cc75250cc3d86bcc07c4e91cdd7a97233945d50b1099b04aa57ecfbfbdd23"
@@ -42,7 +42,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-149a510a6c897f51d9c2e768c3ba1d17782573dd058339ba0fa86a4be1996ce0": {
+    "summary-091b1d9c2b5cda13367902440e8f50e3789630c614638926e6136ca3e4c0861c": {
       "call": {
         "callbacks": [
           {
@@ -73,7 +73,7 @@
             },
             "id": "callback-0",
             "kind": "invoke",
-            "tracking": "untracked",
+            "tracking": "ambient-at-execution",
             "trigger": {
               "event": "call"
             }

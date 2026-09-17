@@ -386,6 +386,19 @@ impl GenerationScope {
 /// parameter, unguarded, untracked, `at` the call event on the same stack, and
 /// performed in this export's own frame. The empty enumeration is trivially
 /// so.
+/// Whether the export leaves the caller's listener alone for this operation.
+///
+/// Both confirmability predicates below used to spell this
+/// `tracking == Tracking::Untracked`, which was exact while *every* non-tracked
+/// operation serialized as `untracked`. Now that a transparent wrapper says
+/// `ambient-at-execution` and only a proven clearing says `untracked`, the
+/// question they were asking is the disjunction: the export does not subscribe
+/// this operation. Writing it as inequality against `Tracked` would also admit
+/// `Unknown`, which is an open claim rather than an answer.
+const fn export_does_not_subscribe(tracking: Tracking) -> bool {
+    matches!(tracking, Tracking::Untracked | Tracking::AmbientAtExecution)
+}
+
 fn reads_enumeration_is_confirmable(export: &ExportSemantics) -> bool {
     export
         .operation_claim(ClaimDomain::Reads)
@@ -396,7 +409,7 @@ fn reads_enumeration_is_confirmable(export: &ExportSemantics) -> bool {
                         && matches!(operation.inputs.first(), Some(ValueShape::Parameter { .. }))
                         && operation.at == Some(Event::Call)
                         && operation.schedule == Some(Schedule::SameStack)
-                        && operation.tracking == Tracking::Untracked
+                        && export_does_not_subscribe(operation.tracking)
                         && operation.guard.is_none()
                         && operation.composed_from.is_none()
                 })
@@ -419,7 +432,7 @@ fn callbacks_enumeration_is_confirmable(
                     operation.kind == OperationKind::Invoke
                         && operation.at == Some(Event::Call)
                         && operation.schedule == Some(Schedule::SameStack)
-                        && operation.tracking == Tracking::Untracked
+                        && export_does_not_subscribe(operation.tracking)
                         && operation.guard.is_none()
                 })
     })
@@ -791,7 +804,26 @@ fn callback_operation(
     // say, and emits no execution point rather than a guessed one -- the
     // attribution claim survives on its own.
     let (schedule, tracking) = match callback.execution.as_str() {
-        "inline" => (Some(Schedule::SameStack), Tracking::Untracked),
+        // `inline` is the schedule axis alone: it promises the callback runs
+        // before the export returns and says nothing about the listener.
+        // `untrack(fn)` and a bare `fn()` are both inline, and publishing
+        // `untracked` for both made the field unfalsifiable --
+        // `@solid-primitives/utils`' `access` is `typeof v === "function" ? v() : v`
+        // and its row claimed the same clearing `untrack`'s did. Only a chain
+        // with a proven `Detaching` wrapper says `untracked` now; the rest say
+        // what a transparent wrapper actually does.
+        "inline" => (
+            Some(Schedule::SameStack),
+            if callback.clears_tracking {
+                Tracking::Untracked
+            } else {
+                Tracking::AmbientAtExecution
+            },
+        ),
+        // Unchanged, and not by omission. A deferred callback runs after the
+        // export returns, so no tracking scope of the caller is still open; and
+        // a package that *did* run it inside a computation of its own would
+        // have composed to `tracked` rather than `deferred`.
         "deferred" => (Some(Schedule::Queued), Tracking::Untracked),
         "tracked" => (
             match callback.schedule {

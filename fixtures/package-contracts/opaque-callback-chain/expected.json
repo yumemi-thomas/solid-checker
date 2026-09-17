@@ -13,7 +13,7 @@
             "sha256": "c6515edcb0e81d0c8bc5c106224ff273c91734c701ebe15d82046b6ad216d36a"
           },
           "exports": {
-            "Direct": "summary-3a8858d7c65936bb057bc7846cfefb18019d594f9f4c0cb8d7919985be9b9c30",
+            "Direct": "summary-fc1c6c51dc0ec7e9a48dcf1c32918b7ca0d1d0428ba93fd46d9a006876a6799e",
             "Opaque": "summary-791cb4c57004018a3fb0b4d95eff7e5e6d9ddfa314766fc6a3ad977a3fa3d055",
             "Stored": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668"
           },
@@ -39,52 +39,6 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-3a8858d7c65936bb057bc7846cfefb18019d594f9f4c0cb8d7919985be9b9c30": {
-      "call": {
-        "callbacks": [
-          {
-            "from": {
-              "arg": 0,
-              "path": []
-            },
-            "operation": "callback-0"
-          }
-        ],
-        "closed": [
-          "reads",
-          "creates",
-          "returns"
-        ],
-        "creates": [],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "callback-0",
-            "kind": "invoke",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "proposedClosures": [
-          "reads",
-          "creates",
-          "returns"
-        ],
-        "reads": [],
-        "returns": []
-      },
-      "shape": "callable"
-    },
     "summary-791cb4c57004018a3fb0b4d95eff7e5e6d9ddfa314766fc6a3ad977a3fa3d055": {
       "call": {
         "closed": [
@@ -115,6 +69,52 @@
           "creates"
         ],
         "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-fc1c6c51dc0ec7e9a48dcf1c32918b7ca0d1d0428ba93fd46d9a006876a6799e": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": []
       },
       "shape": "callable"
     }
