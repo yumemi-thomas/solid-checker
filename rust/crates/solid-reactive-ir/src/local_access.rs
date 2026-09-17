@@ -439,7 +439,13 @@ impl LocalAccessContext<'_, '_> {
                         location: location(file.path.shared(), call.span),
                         declaration: declaration.clone(),
                         execution,
-                        context: read_analysis_context(file, call.span, execution).into(),
+                        context: read_analysis_context(
+                            file,
+                            call.span,
+                            execution,
+                            self.lookup.dialect,
+                        )
+                        .into(),
                         via: file
                             .source_text(factory.callee)
                             .unwrap_or_default()
@@ -526,7 +532,8 @@ impl LocalAccessContext<'_, '_> {
                     declaration: origin
                         .map_or_else(|| declaration.clone(), |origin| origin.2.clone()),
                     execution,
-                    context: read_analysis_context(file, call.span, execution).into(),
+                    context: read_analysis_context(file, call.span, execution, self.lookup.dialect)
+                        .into(),
                     via: origin.map_or_else(String::new, |_| name.to_string()).into(),
                     origin: origin.map(|origin| origin.2.clone()),
                     origin_context: origin
@@ -596,7 +603,8 @@ impl LocalAccessContext<'_, '_> {
                     location: location(file.path.shared(), call.span),
                     declaration,
                     execution,
-                    context: read_analysis_context(file, call.span, execution).into(),
+                    context: read_analysis_context(file, call.span, execution, self.lookup.dialect)
+                        .into(),
                     via: Arc::from(""),
                     origin: None,
                     origin_context: Arc::from(""),
@@ -623,7 +631,13 @@ impl LocalAccessContext<'_, '_> {
                             location: location(file.path.shared(), call.span),
                             declaration: declaration.clone(),
                             execution,
-                            context: read_analysis_context(file, call.span, execution).into(),
+                            context: read_analysis_context(
+                                file,
+                                call.span,
+                                execution,
+                                self.lookup.dialect,
+                            )
+                            .into(),
                             via: via.clone().into(),
                             origin: Some(declaration.clone()),
                             origin_context: via.clone().into(),
@@ -674,7 +688,13 @@ impl LocalAccessContext<'_, '_> {
                                 .map(|(_, location)| location.clone())
                                 .unwrap_or_else(|| declaration.clone()),
                             execution,
-                            context: read_analysis_context(file, call.span, execution).into(),
+                            context: read_analysis_context(
+                                file,
+                                call.span,
+                                execution,
+                                self.lookup.dialect,
+                            )
+                            .into(),
                             via: via.clone().into(),
                             origin: Some(declaration.clone()),
                             origin_context: via.clone().into(),
@@ -866,7 +886,8 @@ impl LocalAccessContext<'_, '_> {
                 location: location(file.path.shared(), member.span),
                 declaration: declaration.clone(),
                 execution,
-                context: read_analysis_context(file, member.span, execution).into(),
+                context: read_analysis_context(file, member.span, execution, self.lookup.dialect)
+                    .into(),
                 via: Arc::from(""),
                 origin: None,
                 origin_context: Arc::from(""),
@@ -969,7 +990,8 @@ impl LocalAccessContext<'_, '_> {
                 location: location(file.path.shared(), spread.span),
                 declaration: declaration.clone(),
                 execution,
-                context: read_analysis_context(file, spread.span, execution).into(),
+                context: read_analysis_context(file, spread.span, execution, self.lookup.dialect)
+                    .into(),
                 via: Arc::from(""),
                 origin: None,
                 origin_context: Arc::from(""),

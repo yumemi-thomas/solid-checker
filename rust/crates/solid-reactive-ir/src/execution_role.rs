@@ -1309,9 +1309,17 @@ pub(super) fn read_analysis_context(
     file: &solid_facts::FileFacts,
     span: Span,
     execution: ExecutionRole,
+    dialect: &dyn solid_dialect::Dialect,
 ) -> String {
     if execution == ExecutionRole::EffectApply {
-        "createEffect apply callback".into()
+        // The role is shared; the name of the primitive that owns the apply
+        // slot is not. A dialect whose vocabulary has no such primitive still
+        // gets a true sentence -- this is read context in a message, not a
+        // premise of any proof -- but it does not get 2.0's spelling.
+        match dialect.name_of(solid_dialect::Primitive::CreateEffect) {
+            Some(name) => format!("{name} apply callback"),
+            None => "effect apply callback".into(),
+        }
     } else {
         let context = enclosing_function_label(file, span);
         format_read_context(&context, file.ast.any_conditional_test_containing(span))
