@@ -450,18 +450,6 @@ pub enum LeafOwnerOperationKind {
     UnresolvedCallback,
 }
 
-impl LeafOwnerOperationKind {
-    #[must_use]
-    pub fn primitive(&self) -> &str {
-        match self {
-            Self::Cleanup => "onCleanup",
-            Self::Flush => "flush",
-            Self::Primitive(primitive) => primitive,
-            Self::UnresolvedCallback => "unresolved leaf callback",
-        }
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StaticViolation {
