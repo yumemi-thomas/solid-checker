@@ -151,24 +151,85 @@ function bundleKey(entry) {
  * Whole-document is exactly the one case's surface: an embedded bundle must
  * carry a single artifact case, which is what the per-case catalogs publish.
  */
-function claimsFingerprint(documentText) {
+export function claimsOf(documentText) {
   const document = JSON.parse(documentText);
-  const claims = [];
+  const bodies = new Map();
+  const closed = new Map();
   for (const [entrypoint, value] of Object.entries(document.entrypoints ?? {})) {
     for (const artifactCase of value.cases ?? [value]) {
       for (const [name, reference] of Object.entries(artifactCase?.exports ?? {})) {
-        claims.push([
-          entrypoint,
-          name,
-          JSON.stringify(document.summaries?.[reference] ?? null)
-        ]);
+        const summary = document.summaries?.[reference] ?? null;
+        const key = `${entrypoint}\u0000${name}`;
+        bodies.set(key, canonicalBody(summary));
+        closed.set(key, new Set(summary?.call?.closed ?? []));
       }
     }
   }
-  claims.sort(([leftEntry, leftName], [rightEntry, rightName]) =>
-    leftEntry.localeCompare(rightEntry) || leftName.localeCompare(rightName)
-  );
-  return sha256(JSON.stringify(claims));
+  return { bodies, closed };
+}
+
+/// The domains a `call` summary may close. An empty array for one of these is
+/// meaningless on its own -- "states nothing here" and "proved there is nothing
+/// here" are the same bytes -- and `closed` is what tells them apart, so the
+/// body drops the empty arrays and the closure comparison carries the meaning.
+const CLOSABLE = ["reads", "creates", "returns", "callbacks"];
+
+export function canonicalBody(summary) {
+  if (!summary) return "null";
+  const call = { ...(summary.call ?? {}) };
+  delete call.closed;
+  delete call.proposedClosures;
+  for (const domain of CLOSABLE) {
+    if (Array.isArray(call[domain]) && call[domain].length === 0) delete call[domain];
+  }
+  return stableJson({ ...summary, call });
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+/**
+ * How two certifications of one published artifact relate.
+ *
+ * Measured over a full census run: 89 artifact/entrypoint pairs, 87 where every
+ * certification agreed exactly, 2 that differed, and **no contradiction at all**.
+ * Both differences were one certification closing a claim domain the other left
+ * open, with every other byte of every summary identical. The cause is
+ * structural rather than incidental: a root row certifies the artifact against
+ * its own full demand plan, while the same artifact reached as another
+ * package's dependency node is asked only what that dependent needed.
+ *
+ * So an open domain is not a denial -- this repository's own rule, "an open leaf
+ * is not negative proof" -- and keeping the certification that closed more
+ * contradicts nothing the other one issued. Both are receipt-issued and
+ * authenticated; neither is being merged, and no claim is invented. Anything
+ * that is not this shape is still dropped, including two documents that close
+ * *different* domains, because picking between those would be a guess.
+ */
+export function relate(left, right) {
+  const keys = new Set([...left.bodies.keys(), ...right.bodies.keys()]);
+  let leftCloses = false;
+  let rightCloses = false;
+  for (const key of keys) {
+    if (!left.bodies.has(key) || !right.bodies.has(key)) return "conflict";
+    if (left.bodies.get(key) !== right.bodies.get(key)) return "conflict";
+    const leftClosed = left.closed.get(key);
+    const rightClosed = right.closed.get(key);
+    for (const domain of leftClosed) if (!rightClosed.has(domain)) leftCloses = true;
+    for (const domain of rightClosed) if (!leftClosed.has(domain)) rightCloses = true;
+  }
+  if (leftCloses && rightCloses) return "conflict";
+  if (leftCloses) return "refines";
+  if (rightCloses) return "coarsens";
+  return "same";
 }
 
 function main() {
@@ -200,6 +261,7 @@ function main() {
   const objects = new Map();
   const refused = [];
   const conflicted = new Set();
+  const refinements = new Map();
   for (const catalog of roots.flatMap(publishedCatalogs)) {
     const trust = trustConfigurationFor(catalog);
     if (!trust) {
@@ -219,9 +281,14 @@ function main() {
       // would carry bytes nobody can reach. `--all-entrypoints` keeps them.
       if (!options.allEntrypoints && !nameableEntrypoint(entry.requestedEntrypoint)) continue;
       const key = bundleKey(entry);
-      const claims = claimsFingerprint(result.objects[entry.document]);
+      // A key that already contradicted itself stays dropped. A later
+      // certification cannot resolve which of two contradicting ones describes
+      // the bytes, and letting one overwrite the pair would hide the question.
+      if (conflicted.has(key)) continue;
+      const claims = claimsOf(result.objects[entry.document]);
       const previous = bundles.get(key);
-      if (previous && previous.claims !== claims) {
+      const relation = previous ? relate(claims, previous.claims) : "same";
+      if (relation === "conflict") {
         // Two certifications of one published artifact that do not agree.
         // Neither may be applied -- which one describes the bytes is exactly
         // the question this cannot answer -- so the artifact is dropped and
@@ -229,12 +296,21 @@ function main() {
         // run reaches many packages, and one disagreement used to abort the
         // whole generation.
         conflicted.add(key);
+        bundles.delete(key);
         continue;
       }
-      // Deterministic among documents that agree, so regenerating the same run
-      // reproduces the same bytes whatever order the catalogs were walked in.
-      if (!previous || entry.documentDigest < previous.documentDigest) {
+      // Keep the certification that closed more, and record that it happened:
+      // a refinement is the difference between shipping a contract and shipping
+      // nothing for that artifact, and it should be visible rather than quiet.
+      if (relation === "refines") {
+        refinements.set(key, [...(refinements.get(key) ?? []), entry.requestedEntrypoint]);
         bundles.set(key, { ...entry, claims });
+      } else if (relation === "same") {
+        // Deterministic among documents that agree, so regenerating the same run
+        // reproduces the same bytes whatever order the catalogs were walked in.
+        if (!previous || entry.documentDigest < previous.documentDigest) {
+          bundles.set(key, { ...entry, claims });
+        }
       }
       for (const member of [entry.document, entry.receipt]) {
         objects.set(member, result.objects[member]);
@@ -261,6 +337,9 @@ function main() {
   }
   for (const key of [...conflicted].sort()) {
     console.error(`  dropped ${key}: two certifications of it do not agree`);
+  }
+  for (const key of [...refinements.keys()].sort()) {
+    console.log(`  kept the closing certification of ${key}`);
   }
   const packages = new Set(ordered.map(entry => entry.packageName));
   console.log(`${ordered.length} bundle(s) over ${packages.size} package(s)`);
