@@ -21,11 +21,12 @@ TypeScript host outside the Rust module lets StackBlitz use a browser-native
 TypeScript engine without process spawning; the Rust module still runs the
 same Oxc, Solid compiler, reactive IR, and solver path as the native CLI.
 
-The Cargo crate enables both `dialect-v1` and `dialect-v2` by default. A host
-shipping a version-specific payload can disable default features and enable
-only one; requests naming an omitted dialect receive the normal unknown-id
-error. CI compiles both single-dialect variants so shared infrastructure cannot
-grow an accidental dependency on either compiler or catalog.
+The Cargo crate enables `dialect-v2`, which is the default and currently the
+only dialect (ADR 0110). A host shipping a version-specific payload can disable
+default features and enable a subset; requests naming an omitted dialect
+receive the normal unknown-id error. CI compiles the single-dialect variant so
+shared infrastructure cannot grow an accidental dependency on a compiler or
+catalog it does not declare.
 
 Package behavior enters WASM only through `acceptedContracts`. Each entry pairs
 a stable main schema-version-1 document's exact JSON text, its proof-issued

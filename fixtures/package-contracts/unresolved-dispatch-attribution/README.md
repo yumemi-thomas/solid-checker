@@ -44,9 +44,9 @@ for `Direct`, `enclosing-chain` for `Arrow` and `Helper`.
 
 ## Stub faithfulness
 
-`node_modules/solid-js` pins the 1.x dialect and is otherwise unused by these
-exports; `index.d.ts` types the published surface exactly as the runtime
-artifact behaves. Nothing here is loosened to manufacture the obligation --
-`client.getThing` is unresolvable because a structural `Client` interface has
-no runtime implementation, which is the shape the ecosystem benchmark found in
-real packages.
+`node_modules/solid-js` pins the dialect (2.0, the only one this build carries)
+and is otherwise unused by these exports; `index.d.ts` types the published
+surface exactly as the runtime artifact behaves. Nothing here is loosened to
+manufacture the obligation -- `client.getThing` is unresolvable because a
+structural `Client` interface has no runtime implementation, which is the shape
+the ecosystem benchmark found in real packages.

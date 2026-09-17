@@ -315,11 +315,14 @@ proportionality rules and the report format.
   `SOLID_CHECKER_EXPECT_PROBE_PINS=1`, which makes their absence a loud test
   failure rather than a green run that proved nothing). A new script that shells
   out to cargo has to do the same.
-- **Dialect selection follows the installed solid-js.** A project runs the v1
-  catalog only when the nearest node_modules/solid-js/package.json above it
-  resolves to a 1.x version (rust/crates/solid-facts-backend/src/dialect.rs).
-  A missing or unparsable stub silently falls back to the v2 default and can
-  make a v1 fixture a no-op.
+- **Dialect selection follows the installed solid-js.** The nearest
+  node_modules/solid-js/package.json above the project decides
+  (rust/crates/solid-facts-backend/src/dialect.rs). A version naming a major
+  this build carries no dialect for — 1.x, or any future major — is **refused**
+  with `SC9013` and nothing else is reported (ADR 0110 § 1). A missing or
+  unparsable stub, or a version that is not a version (`workspace:*`), silently
+  falls back to the v2 default, which is how a fixture becomes a no-op that
+  still passes; coverage's stub check catches all four shapes.
 - **.gitignore blocks node_modules with per-fixture exceptions.** A new
   fixture’s solid-js stub is silently excluded from git add unless its
   `!fixtures/.../node_modules/` exception lines exist — the fixture then
@@ -342,10 +345,14 @@ proportionality rules and the report format.
   `--update` until the non-updating run has shown the exact intentional
   change; snapshot updates record a deliberate semantic change, they do not
   discover what the implementation does.
-- **Differential dialect intent is pinned by fixture pairs.** The
-  fixtures/reactive-ir/dialect-solid-1x and dialect-solid-2 pair pins where
-  1.x and 2.0 deliberately differ; read fixture comments before mirroring
-  behavior across dialects.
+- **One dialect ships, and the seam is still load bearing.** The differential
+  fixture pair that pinned where 1.x and 2.0 deliberately differ went with the
+  1.x dialect (ADR 0110), so nothing compares two catalogs today. What survives
+  is the seam itself: shared code that switches on `Version` or matches a
+  dialect id is a place the next major re-enters, and an arm that silently
+  answers 2.0's behaviour for a dialect nobody has written is the same class of
+  defect the 1.x fallback was. Prefer a `Dialect` question; where a match is
+  right, keep it exhaustive so a new variant is a compile error there.
 - **Bundled contracts are compiled into the binary.** pkg/contracts/bundled/**
   reaches the analyzer through `include_bytes!` in
   rust/crates/solid-facts-backend/src/diagnostics.rs, so editing one changes

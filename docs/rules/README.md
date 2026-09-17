@@ -18,14 +18,15 @@ future second catalog can share a concept without sharing a name. Findings are e
 - **uncertifiable** — required evidence is unavailable, so correctness cannot
   be certified.
 
-The catalogs share 16 concepts. Solid 1.x adds `jsx-no-undef` and
-`prefer-classlist`; Solid 2.0 adds ten rules for actions, tracked `resolve`, leaf
-owners, directives, async computations, and the server surface.
+Sixteen of the 27 are concepts the retired 1.x catalog also carried; the other
+ten cover actions, tracked `resolve`, leaf owners, directives, async
+computations, and the server surface. `jsx-no-undef` and `prefer-classlist` had
+no 2.0 counterpart and were dropped rather than re-homed (ADR 0110 § 2).
 
 ## Configuration
 
-Every catalog rule is enabled by default, including `prefer-for`,
-`prefer-show`, and Solid 1.x `prefer-classlist`. Native projects opt out in
+Every catalog rule is enabled by default, including `prefer-for` and
+`prefer-show`. Native projects opt out in
 `.solid-checker/rule-options.json`:
 
 ```json

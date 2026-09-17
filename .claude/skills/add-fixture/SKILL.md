@@ -38,12 +38,16 @@ The checker resolves the dialect from the nearest
 `node_modules/solid-js/package.json` above the project, walked like a bundler
 (`rust/crates/solid-facts-backend/src/dialect.rs`):
 
-- version resolves to 1.x (e.g. `{"name":"solid-js","version":"1.9.14"}`) →
-  the v1 rule catalog runs;
-- stub missing, unparsable, or version unclassifiable (`workspace:*`) → silent
-  fallback to the v2 default.
+- version resolves to a major this build carries (today only 2.x, e.g.
+  `{"name":"solid-js","version":"2.0.0-rc.3"}`) → that dialect's catalog runs;
+- version resolves to a major with no dialect here (`1.9.14`, or a future
+  `3.0.0`) → the project is **refused** with `SC9013` and nothing else is
+  reported (ADR 0110 § 1). A fixture pinned this way asserts a refusal, not
+  its own subject;
+- stub missing, unparsable, or the version field is not a version
+  (`workspace:*`) → silent fallback to the v2 default.
 
-So a v1 fixture without its stub is a **no-op that still passes**. And because
+So a fixture without its stub is a **no-op that still passes**. And because
 `.gitignore` blocks `**/node_modules/` globally, every fixture stub needs its
 own exception lines:
 
@@ -56,9 +60,12 @@ Without them the stub exists locally but is silently excluded from `git add`,
 and the fixture un-dialects only in CI. Verify with
 `git status --short fixtures/<group>/<name>/` that the stub shows up.
 
-Where 1.x and 2.0 intentionally differ, the behavior is pinned by the
-`fixtures/reactive-ir/dialect-solid-1x` / `dialect-solid-2` pair — read those
-fixtures' comments before mirroring behavior across dialects.
+`scripts/coverage.mjs` checks all four shapes on every run — presence,
+parseability, the major, and whether git tracks the file —  through
+`scripts/lib/dialect-stubs.mjs`. It cannot see a stub added to an
+*already-tracked* fixture without running, though, so run coverage after
+touching any fixture's `node_modules` rather than trusting a `verify-delta`
+plan (AGENTS.md, "Fails closed for paths git reports").
 
 ## Snapshot flow
 

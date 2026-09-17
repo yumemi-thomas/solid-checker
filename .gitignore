@@ -104,10 +104,11 @@ fixtures/upstream-parity/.staging/
 # stub is untracked and the fixture silently stops pinning that in CI.
 !fixtures/package-contracts/torture-environment-conditions/node_modules/
 !fixtures/package-contracts/torture-environment-conditions/node_modules/**
-# These three pin unknown-claim attribution, and the obligation they turn on
-# only fires under the 1.x catalog: a PascalCase export with no JSX is a
-# *possible* component in 1.x and nothing at all under the 2.0 default. Without
-# the stub the fixtures still generate, still pass, and pin nothing.
+# These three pin unknown-claim attribution. The stub selects the dialect and
+# is otherwise unused by the exports under test (see the fixture READMEs), so
+# without it the fixtures still generate, still pass, and pin nothing. They
+# were repointed from 1.x to 2.0.0-rc.3 in the ADR 0110 retirement, and their
+# expectations were regenerated against 2.0 with the claim intact.
 !fixtures/package-contracts/unresolved-dispatch-attribution/node_modules/
 !fixtures/package-contracts/unresolved-dispatch-attribution/node_modules/**
 !fixtures/package-contracts/unresolved-dispatch-domains-control/node_modules/

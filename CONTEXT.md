@@ -157,7 +157,7 @@ A canonical identity of normalized package-contract meaning that excludes wire v
 _Avoid_: File hash, contract hash
 
 **Rule options**:
-The project-level per-rule configuration document, `.solid-checker/rule-options.json`, discovered beside a project's contracts and carrying the upstream eslint-plugin-solid options the 1.x rules honour. Defaults are upstream's defaults; parsing fails closed. Part of every build and diagnostic identity.
+The project-level per-rule configuration document, `.solid-checker/rule-options.json`, discovered beside a project's contracts. Every shipped rule takes `enabled` and nothing else; an unknown option is refused rather than ignored, so a typo cannot silently mean "defaults". A retired rule name still loads and is a no-op, which is how a document written against the 1.x catalog keeps parsing (ADR 0110). Parsing fails closed. Part of every build and diagnostic identity.
 _Avoid_: Rule config, checker settings, options file
 
 **Finding kind**:
