@@ -977,12 +977,26 @@ What is left, in recommended order:
    identical with the published package installed, so it is a property of that
    config and not of the stub.
 
-4. **The CLI-level exit-status pin for `SC9013`** -- genuinely blocked rather
-   than forgotten. It cannot fire until the shipped `bin/solid-checker-rust` is
-   v2-only, and that binary still predates the retirement commits. A release
-   step, not a code one. The refusal itself is already pinned at the Rust
-   process boundary (`dialects_process`) and through the ESLint adapter
-   (`packages/cli/test/adapter.test.mjs`).
+4. **The CLI-level exit-status pin for `SC9013`** — the one item that cannot be
+   closed here, and the blocker is now measured rather than inferred.
+   `bin/solid-checker-rust` is dated before the retirement commits and **still
+   carries the 1.x dialect**: run today it accepts `--dialect solid-v1` and
+   analyzes with it. So a CLI-level pin asserting that an unsupported runtime
+   exits the way `SC9013` should would not exercise the refusal at all — the
+   shipped binary would simply analyze the project.
+
+   Writing it against a stub native binary would pin the launcher's
+   exit-code forwarding, which `packages/cli/test/launcher.test.mjs` already
+   covers generically, and not the refusal. So this waits on a release that
+   rebuilds the shipped binary; AGENTS.md forbids rebuilding it to test a
+   source change, and that is the right rule here.
+
+   The refusal itself is pinned at every layer that can be: the Rust process
+   boundary (`dialects_process`'s
+   `unsupported_runtime_refusal_replaces_the_analysis` and
+   `a_refused_runtime_answers_check_contracts_with_the_refusal_not_a_report`),
+   the ESLint adapter (`packages/cli/test/adapter.test.mjs`), and the contract
+   sweep (`packages/cli/test/contract-workflow.test.mjs`).
 
 Out of this plan, and tracked separately: the negative-authority table is not
 condition-aware, which is why `solid-js`' `createSignal`, `createEffect` and
