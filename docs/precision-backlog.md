@@ -23023,10 +23023,24 @@ computation on the owner would say so in one place.
 Coverage, the ownership gate and the process suites are unchanged (80 projects
 / 433 findings; 37 cases; 13/18/14).
 
-**Still open, and now the only ones.** `owners.rs:2786` matches
-`CreateEffect | CreateRenderEffect` for a *different* question — "is this
+**The second unnamed set, also closed.** `owners.rs:2786` matched
+`CreateEffect | CreateRenderEffect` for a different question — "is this
 argument an effect's apply phase, as opposed to a deferred executor's
-callback". That is a second unnamed set, narrower than the first, and it wants
-its own question rather than reuse of the owner role. And `server_rules.rs`
-remains what the earlier entry said: a Solid 2 rule module in the shared crate,
-whose fix is relocation rather than more trait methods.
+callback". It is now `Dialect::apply_callback_argument(primitive)`, which
+answers *which slot*, so the site compares against the argument index it
+already has instead of testing membership in a pair. The default is `None`: a
+dialect that says nothing claims no apply phase rather than inheriting 2.0's.
+Solid 2 answers `Some(1)` for those two, which is the same fact as the
+`(1, Execution::Deferred)` row in `callback_executions` seen from the
+attribution side, and `createTrackedEffect` correctly has no apply slot.
+
+That rewrite is not invisible to the gates, which is worth saying because most
+wording is: the phase label reaches a finding's message, and messages are
+excluded from snapshots *except* for the exception-list projects.
+`fixtures/findings-snapshots/reactive-ir__dialect-solid-2.json` is one, and it
+pins `"read directly in createEffect apply callback"` verbatim. So coverage
+compares the string this change produces.
+
+**Still open:** `server_rules.rs`, which remains what the earlier entry said —
+a Solid 2 rule module in the shared crate, whose fix is relocation rather than
+more trait methods.

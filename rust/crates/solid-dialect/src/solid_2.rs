@@ -1705,6 +1705,19 @@ impl Dialect for Solid2 {
     /// [`Solid2::runs_callback_deferred`]), so reads inside it register
     /// nothing either. `mapArray`/`repeat` are deliberately absent: unlike
     /// 1.x, their map callbacks run tracked (see the bundled contract rows).
+    /// `createEffect(compute, apply)` and `createRenderEffect(compute, apply)`
+    /// are the two with an apply slot; `createTrackedEffect(compute, options?)`
+    /// has none. Matches the `(1, Execution::Deferred)` row in
+    /// `callback_executions`, which is the same fact seen from the attribution
+    /// side.
+    fn apply_callback_argument(&self, primitive: Primitive) -> Option<usize> {
+        matches!(
+            primitive,
+            Primitive::CreateEffect | Primitive::CreateRenderEffect
+        )
+        .then_some(1)
+    }
+
     fn untracked_read_is_an_obligation(&self, primitive: Primitive) -> bool {
         !matches!(
             primitive,

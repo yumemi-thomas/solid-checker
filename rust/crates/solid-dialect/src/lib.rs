@@ -1807,6 +1807,26 @@ pub trait Dialect: Sync {
         }
     }
 
+    /// The argument that is this primitive's **apply** callback: the slot the
+    /// runtime defers and runs outside the tracked compute, so a read there
+    /// does not subscribe and the phase deserves its own name.
+    ///
+    /// Not the same question as "is this callback deferred". Several
+    /// primitives defer a callback the caller supplies — an executor, a
+    /// scheduler — and that callback keeps its enclosing label rather than
+    /// becoming an apply phase. Only an effect constructor has an apply slot,
+    /// and which slot it is, or whether the primitive has one at all, is a
+    /// dialect's answer: 1.x's second `createEffect` argument is a seed value
+    /// threaded to the next run as `prev`, so describing a read there as
+    /// living in an "apply callback" would name a phase 1.x does not have.
+    ///
+    /// Defaults to `None`, which is the conservative answer: a dialect that
+    /// says nothing claims no apply phase rather than inheriting 2.0's.
+    fn apply_callback_argument(&self, primitive: Primitive) -> Option<usize> {
+        let _ = primitive;
+        None
+    }
+
     /// The owner-requirement role this primitive's call carries, if any.
     ///
     /// The default is the partition every dialect so far has agreed on: the

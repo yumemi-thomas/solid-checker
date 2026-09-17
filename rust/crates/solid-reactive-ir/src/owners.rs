@@ -2773,13 +2773,12 @@ pub(crate) fn analysis_context(
                 // schedules it) but imperative to its reads, and calling
                 // it a compute would describe the wrong phase.
                 solid_dialect::Execution::Tracked if semantics.tracks_reads => Some("compute"),
-                // Only an effect's deferred argument is an apply phase; a
-                // deferred executor's callback keeps its enclosing label.
+                // Only an effect's apply slot is an apply phase; a deferred
+                // executor's callback keeps its enclosing label. Which slot
+                // that is -- or whether the primitive has one -- is the
+                // dialect's answer, not a pair named here.
                 solid_dialect::Execution::Deferred
-                    if matches!(
-                        resolved,
-                        Primitive::CreateEffect | Primitive::CreateRenderEffect
-                    ) =>
+                    if dialect.apply_callback_argument(resolved) == Some(argument) =>
                 {
                     Some("apply callback")
                 }
