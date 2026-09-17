@@ -1106,6 +1106,10 @@ impl Dialect for Solid2 {
         &["solid-js", "@solidjs/signals", "@solidjs/web"]
     }
 
+    fn ecosystem_scopes(&self) -> &'static [&'static str] {
+        &["@solidjs/"]
+    }
+
     /// Reviewed Solid 2 semantics in this module, not a package certificate.
     fn runtime_model_identity(&self) -> &'static str {
         "solid-v2/model-1"
@@ -1701,6 +1705,13 @@ impl Dialect for Solid2 {
     /// [`Solid2::runs_callback_deferred`]), so reads inside it register
     /// nothing either. `mapArray`/`repeat` are deliberately absent: unlike
     /// 1.x, their map callbacks run tracked (see the bundled contract rows).
+    fn untracked_read_is_strict(&self, primitive: Primitive) -> bool {
+        !matches!(
+            primitive,
+            Primitive::CreateOptimistic | Primitive::CreateOptimisticStore
+        )
+    }
+
     fn reports_untracked_reads_at(
         &self,
         primitive: Primitive,

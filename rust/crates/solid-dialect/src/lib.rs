@@ -482,6 +482,28 @@ pub fn primitive_defining_package(package: &str) -> bool {
         .any(|dialect| dialect.primitive_defining_packages().contains(&package))
 }
 
+/// Whether a dependency name places a package inside some carried dialect's
+/// ecosystem: a package a dialect defines its primitives in, or anything under
+/// a scope that exists because the dialect does.
+///
+/// Unioned across dialects for the same reason [`primitive_defining_package`]
+/// is: the question is about the manifest under inspection, not about which
+/// vocabulary the analyzing project selected. Like that predicate it compares
+/// a *name*, so it may only widen what is examined, never establish a claim.
+#[must_use]
+pub fn ecosystem_dependency(name: &str) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    primitive_defining_package(name)
+        || DIALECTS.iter().any(|dialect| {
+            dialect
+                .ecosystem_scopes()
+                .iter()
+                .any(|scope| name.starts_with(scope))
+        })
+}
+
 /// Whether a *specifier* names the built-in runtime foundation — the package
 /// itself or a subpath of it.
 ///
@@ -1133,10 +1155,25 @@ pub trait Dialect: Sync {
     /// (`solid-reactive-ir`'s `declaration_path_is_solid_package`), which is
     /// correct for a consumer — TypeScript resolved the symbol into the
     /// package — and wrong inside these archives, where every local
-    /// `createSignal`/`createTrackedEffect` becomes a "primitive call". Only
-    /// contract *generation* consults this, to withhold the domains that
-    /// recognition would otherwise fabricate; no diagnostic reads it.
+    /// `createSignal`/`createTrackedEffect` becomes a "primitive call".
+    ///
+    /// Contract *generation* consults this to withhold the domains that
+    /// recognition would otherwise fabricate. The `--check-contracts` report
+    /// also reads it, for the adjacent question of which packages a dialect
+    /// ships itself; that is the same set by construction, and a build where
+    /// the two disagreed would be describing an archive it does not model. No
+    /// diagnostic reads it.
     fn primitive_defining_packages(&self) -> &'static [&'static str];
+
+    /// The npm scopes whose packages belong to this dialect's ecosystem, each
+    /// written with its trailing slash (`@solidjs/`).
+    ///
+    /// Wider than [`Dialect::primitive_defining_packages`] on purpose, and
+    /// answering a different question: `@solidjs/router` defines no primitive
+    /// and is still a package that exists because this dialect does. Used
+    /// where the question is "does this manifest depend on Solid at all",
+    /// never to grant a package semantics.
+    fn ecosystem_scopes(&self) -> &'static [&'static str];
 
     /// Identity of the reviewed built-in runtime model. Facts cite
     /// `builtin-solid://<identity>#<primitive>`, never a package receipt.
@@ -1770,6 +1807,21 @@ pub trait Dialect: Sync {
             stores_as_value: self.stores_function_argument_as_value(primitive, argument),
             accessor_parameters: self.callback_accessor_parameters(primitive, argument),
         }
+    }
+
+    /// Whether reading a source this primitive created, outside a tracked
+    /// scope, carries a strict-read obligation.
+    ///
+    /// `true` for ordinary reactive sources, which is why it defaults that
+    /// way. 2.0 answers `false` for its optimistic sources; that override
+    /// records behaviour this checker already had and whose runtime rationale
+    /// is not written down anywhere in this repository (see
+    /// `docs/precision-backlog.md`). It is a seam question rather than a
+    /// literal in `local_access.rs` because which sources are exempt is a
+    /// property of a dialect's runtime, not of the read-collection pass.
+    fn untracked_read_is_strict(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        true
     }
 
     /// Whether an untracked read in this callback is a likely dependency bug.

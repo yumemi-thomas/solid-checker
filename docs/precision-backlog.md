@@ -22813,3 +22813,68 @@ Known limit, unchanged: detection reads the nearest
 `node_modules/solid-js/package.json` and nothing else. A project that installs
 no `solid-js` — or spells it `workspace:*` — still gets the default dialect
 without stating a version, and no refusal can be built on an absence.
+
+### Four Solid 2 literals moved behind the dialect seam; the server surface did not (2026-09-17)
+
+ADR 0111 gave the dialect the package-contract word; this is the same sweep
+applied to shared code that still spelled 2.0's package and primitive names out
+by hand. The test each site was held to: coverage and the contract corpus
+byte-identical afterwards. Both are (80 projects / 433 findings; 97 generator
+fixtures, 147 artifact cases, 5,023 open claims).
+
+**The first-party package list was a wrong answer, not a gap.**
+`accepted_package_contract_statuses` matched `dialect.id` and fell through to
+`_ => &[]`. A third dialect landing there would not have produced a diagnostic
+about missing coverage — it would have reported "no package needs a contract"
+for exactly the packages that dialect ships. It asks
+`vocabulary.primitive_defining_packages()` now, which for 2.0 is the same three
+names. `first_party_bundles.rs` held that list twice more; both read the
+vocabulary too. (Its `match dialect_id` stays: `EMBEDDED_BUNDLES` and the
+conformance census are `include_bytes!` of 2.0's own artifacts, so that arm is
+dispatch on identity, and it already fails closed on an unknown id.)
+
+**`manifest_uses_solid` needed a wider question than the seam had.**
+`name == "solid-js" || name.starts_with("@solidjs/")` is not
+`primitive_defining_packages`: `@solidjs/router` defines no primitive and is
+still a package that exists because the dialect does. So `Dialect` gained
+`ecosystem_scopes()` and the crate gained `ecosystem_dependency(name)`, unioned
+across dialects like `primitive_defining_package` and, like it, able only to
+widen what gets examined.
+
+**The optimistic strict-read exemption was three copies of a name match.**
+`local_access.rs` spelled `Some("createOptimistic" | "createOptimisticStore")`
+at three call sites to decide whether an untracked read carries a strict-read
+obligation. That is a property of a dialect's runtime, so it is now
+`Dialect::untracked_read_is_strict(primitive)`, defaulting to `true`, and the
+three sites share one helper that resolves the name through the dialect first —
+an unrecognised name keeps the obligation, exactly as before. **The override's
+rationale is not recorded anywhere in this repository**; the doc comment says
+so rather than inventing one. Someone should find and write down why 2.0's
+optimistic sources are exempt.
+
+**One deliberate widening, unexercised.** `source_discovery.rs` asked whether a
+source is a store with `Some("createStore" | "createOptimisticStore")`. It now
+asks `Dialect::returns_store`, which has always also named `createProjection`.
+That is the more correct answer — a projection *is* a store — but no fixture
+exercises the new arm, so the widening is unproven rather than verified.
+Coverage did not move, which tells us only that no existing fixture reaches it.
+A `createProjection` case belongs here.
+
+**What did not move, and why it is not a two-line change.**
+`server_rules.rs` hard-codes `@solidjs/web/server-functions`,
+`@solidjs/web/server-functions/client` and
+`@solidjs/web/server-functions/rich-args`, plus `enableRichArguments` and
+`configureServerFunctionsClient`; `source_discovery.rs`'s
+`project_server_rendering` hard-codes `@solidjs/web` and six render-entry
+export names. Adding `rich_argument_serializer_module()` and friends to
+`Dialect` would relocate 2.0's exact server API into the shared trait, where it
+would be just as dialect-specific and harder to find. The honest fix is that
+`server_rules.rs` is a Solid 2 rule module living in `solid-reactive-ir`, and
+belongs in `rust/dialects/solid-v2/rules` — a relocation with its own design,
+not a seam question. Recorded here as open rather than half-done.
+
+The same applies to the catalog wording in `findings.rs`, `execution_role.rs`
+and `lib.rs`, and to the ADR 0111 audit list in `owners.rs`, `static_api.rs`,
+`cleanup.rs` and `indexes.rs`: each needs a per-site decision about whether it
+is dispatch on identity (legitimate) or role knowledge a future dialect could
+answer differently, and that review has not been done.

@@ -132,6 +132,23 @@ pub(crate) struct LocalAccessReuse<'a> {
 }
 
 impl LocalAccessContext<'_, '_> {
+    /// Whether reading the source `symbol` names, outside a tracked scope,
+    /// carries a strict-read obligation.
+    ///
+    /// The dialect answers, from the primitive that created the source, rather
+    /// than this pass matching a name: which sources are exempt is a property
+    /// of a runtime, and the three call sites below used to spell 2.0's two
+    /// optimistic constructors out by hand. A name the dialect does not
+    /// declare keeps the obligation, which is what an unrecognised source got
+    /// before.
+    fn untracked_read_is_strict(&self, symbol: &str) -> bool {
+        self.source_primitives
+            .get(symbol)
+            .map(SymbolId::as_str)
+            .and_then(|name| self.lookup.dialect.primitive(name))
+            .is_none_or(|primitive| self.lookup.dialect.untracked_read_is_strict(primitive))
+    }
+
     pub(crate) fn build(
         &self,
         cache: Option<&mut CachedLocalAccesses>,
@@ -535,10 +552,8 @@ impl LocalAccessContext<'_, '_> {
                     uncertain: self.lookup.inside_possible_component(file, call.span),
                     missing_jsx_census: missing_jsx_census(file, call.span, execution),
                 }));
-                if !matches!(
-                    self.source_primitives.get(symbol).map(SymbolId::as_str),
-                    Some("createOptimistic" | "createOptimisticStore")
-                ) && counts_as_strict_read_root(file, call.span, execution, self.lookup)
+                if self.untracked_read_is_strict(symbol)
+                    && counts_as_strict_read_root(file, call.span, execution, self.lookup)
                 {
                     result.strict_read_obligations += 1;
                 }
@@ -877,10 +892,8 @@ impl LocalAccessContext<'_, '_> {
                 uncertain,
                 missing_jsx_census: missing_jsx_census(file, member.span, execution),
             }));
-            if !matches!(
-                self.source_primitives.get(symbol).map(SymbolId::as_str),
-                Some("createOptimistic" | "createOptimisticStore")
-            ) && counts_as_strict_read_root(file, member.span, execution, self.lookup)
+            if self.untracked_read_is_strict(symbol.as_str())
+                && counts_as_strict_read_root(file, member.span, execution, self.lookup)
             {
                 result.strict_read_obligations += 1;
             }
@@ -984,10 +997,8 @@ impl LocalAccessContext<'_, '_> {
                 uncertain,
                 missing_jsx_census: missing_jsx_census(file, spread.span, execution),
             }));
-            if !matches!(
-                self.source_primitives.get(symbol).map(SymbolId::as_str),
-                Some("createOptimistic" | "createOptimisticStore")
-            ) && counts_as_strict_read_root(file, spread.span, execution, self.lookup)
+            if self.untracked_read_is_strict(symbol.as_str())
+                && counts_as_strict_read_root(file, spread.span, execution, self.lookup)
             {
                 result.strict_read_obligations += 1;
             }

@@ -769,10 +769,11 @@ pub fn accepted_package_contract_statuses(
     let project_directory = project
         .parent()
         .ok_or_else(|| BackendError::Contract("tsconfig has no parent".into()))?;
-    let first_party = match dialect.id {
-        "solid-v2" => &["solid-js", "@solidjs/web", "@solidjs/signals"][..],
-        _ => &[][..],
-    };
+    // Asking the vocabulary rather than matching the id. The list was the same
+    // three names written out again, and the `_ => &[]` arm a third dialect
+    // would have landed in reports "no package needs a contract" for exactly
+    // the packages that dialect ships -- a silent wrong answer, not a gap.
+    let first_party = dialect.vocabulary.primitive_defining_packages();
     let resolved = facts.resolved_imports.as_ref();
     let mut statuses = Vec::new();
     for module in imported_package_roots(facts) {

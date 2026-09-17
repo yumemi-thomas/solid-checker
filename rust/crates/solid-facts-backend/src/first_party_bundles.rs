@@ -146,10 +146,9 @@ pub(crate) fn solid2_rc3_bundles_with_measurements()
         .chain(reviewed_support_corpus());
     for proposal in proposals {
         let normalized = proposal.normalize()?;
-        if !matches!(
-            normalized.package().name.as_str(),
-            "solid-js" | "@solidjs/signals" | "@solidjs/web"
-        ) {
+        if !solid_dialect::Dialect::primitive_defining_packages(&solid_dialect::Solid2)
+            .contains(&normalized.package().name.as_str())
+        {
             continue;
         }
         for mut artifact in normalized.artifact_cases().iter().cloned() {
@@ -258,8 +257,9 @@ pub fn bundled_first_party_contract_index(
             (
                 EMBEDDED_BUNDLES,
                 closures,
-                ["solid-js", "@solidjs/signals", "@solidjs/web"]
-                    .into_iter()
+                solid_dialect::Dialect::primitive_defining_packages(&solid_dialect::Solid2)
+                    .iter()
+                    .copied()
                     .collect(),
             )
         }
@@ -400,7 +400,7 @@ fn manifest_uses_solid(path: &str) -> bool {
                 .into_iter()
                 .filter_map(|field| manifest[field].as_object())
                 .flat_map(|dependencies| dependencies.keys())
-                .any(|name| name == "solid-js" || name.starts_with("@solidjs/"))
+                .any(|name| solid_dialect::ecosystem_dependency(name))
         })
 }
 

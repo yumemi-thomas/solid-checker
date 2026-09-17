@@ -1853,11 +1853,19 @@ pub(crate) fn discover_sources(
                         })
                 })
                 .filter(|symbol| {
+                    // "Is this source a store", asked of the dialect rather
+                    // than spelled as two 2.0 constructor names. This also
+                    // takes in `createProjection`, which `returns_store` has
+                    // always named and the literal list did not; no fixture
+                    // exercises that arm today (docs/precision-backlog.md).
                     source_kinds.get(*symbol) == Some(&ReactiveSourceKind::Store)
-                        || matches!(
-                            source_primitives.get(*symbol).map(SymbolId::as_str),
-                            Some("createStore" | "createOptimisticStore")
-                        )
+                        || source_primitives
+                            .get(*symbol)
+                            .map(SymbolId::as_str)
+                            .and_then(|name| semantic_lookup.dialect.primitive(name))
+                            .is_some_and(|primitive| {
+                                semantic_lookup.dialect.returns_store(primitive)
+                            })
                 })
             else {
                 continue;
