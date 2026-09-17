@@ -92,9 +92,15 @@ use super::{
     MAX_REPORT_BYTES, PRIVATE_HARNESS_COUNTER, ProbeHarnessConfiguration, ProbeHarnessError,
     RecipeCorpus, STARTUP_BUDGET, WatchedInput, WorkerProcess, create_private_directory,
     dependency_materialization_root, hash_tree, node_version, remove_private_tree,
-    requested_conditions, root, set_close_on_exec, set_directory_permissions, spawn_stderr_reader,
+    requested_conditions, root, set_directory_permissions, spawn_stderr_reader,
     verify_harness_image, verify_node_executable, watch_digest, write_private_file,
 };
+// Unix-only, like its one caller: `spawn_piped_browser` builds the CDP pipe out
+// of raw descriptors and has a `#[cfg(not(unix))]` counterpart. Importing it
+// unconditionally broke every non-unix target -- which only the wasm build
+// compiles, and `make verify` does not build wasm.
+#[cfg(unix)]
+use super::set_close_on_exec;
 use crate::{
     EnvironmentIdentity, SandboxIdentity, SandboxKind, ToolIdentity,
     contract_certification::{
