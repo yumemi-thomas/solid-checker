@@ -776,6 +776,12 @@ narrowing of the family. No closure moved; the instrument is the deliverable.
 
 ## Solid 1.x `creates` audit extended: `createContext`, `getOwner`, `mapArray`, `onCleanup`, `untrack` (2026-09-13)
 
+> **The Solid 1.x audit material was deleted on 2026-09-17** with the rest of
+> the 1.x artifacts, and so were `solid_1x.rs`, `audited-slices/solid-v1/` and
+> `phase0/solid-1x/`. Every link and path in the 1.x passages below is
+> historical: they record how those rows were established, not where to find
+> them now.
+
 Five more rows for `solid-js@1.9.14`, read out of all six bundles by the same
 method and cited byte-exactly (§§ 13–17 of
 [the 1.x audit](package-contract-v2/audits/2026-09-12-solid-1x-1.9.14-core-primitives-creates.md);
