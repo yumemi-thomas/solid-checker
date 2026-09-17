@@ -23141,3 +23141,48 @@ seam exists to avoid. `project_server_rendering`'s `@solidjs/web` and its six
 render-entry names are the same case, with one difference worth recording: it
 takes no dialect at all, so a second dialect there needs the parameter threaded
 before it can need a question.
+
+### The Rust half of the second-dialect proof, and what it is instead (2026-09-17)
+
+`scripts/second-dialect.test.mjs` covers the JavaScript enumerators. The
+recorded gap was the Rust side, "which needs a test-only stub dialect crate
+compiled into the workspace".
+
+Building that established it would prove very little. A registered stub needs a
+`Version` variant — a production enum change for a dialect nobody implements —
+plus a `CompilerFactsProvider` and a rule catalog, and what it would then
+demonstrate is that `ALL.iter().find()` finds two entries and that `by_version`
+maps a second one. `default_dialect()` is already pinned as a *property* over
+`ALL` rather than against `"solid-v2"`, which holds for any number of dialects
+and is the stronger statement. The compile-time integration decisions
+(`ALL`, the variant, the vocabulary) fail the build when omitted, which is what
+`docs/adding-a-dialect.md` says should happen.
+
+**The thing that fails nothing is a defaulted trait method.** `Dialect` has 26
+required methods and 36 with defaults. A second dialect implements the 26 and
+inherits the rest, and any default that drifted to the convenient answer hands
+that dialect a claim about its runtime that nobody made — silently, with every
+gate green. That is the real exposure, and it is cheap to test.
+
+`a_dialect_that_states_nothing_claims_nothing` implements a `Silent` dialect
+with only the 26 required methods, each answering nothing — no modules, no
+primitives, no boundaries, no packages, no audited archives — and asserts what
+the 36 defaults give it. Every assertion is the conservative side and carries
+the claim the other side would have made: no apply slot, no callback execution,
+nothing exempt from the obligation count, leaf scopes forbidding writes, no
+server-function model, no context provider, no owned module, no declared
+primitive. Confirmed non-vacuous by flipping `untracked_read_is_an_obligation`'s
+default and watching it fail.
+
+**One default is deliberately not "nothing", and the test says so.**
+`owner_requirement_role` hands a silent dialect the partition every dialect so
+far has agreed on. It is reachable only for primitives the dialect actually
+declares — `Silent` maps no name to any primitive, so no real analysis reaches
+it — and stating it in the test makes it a decision rather than something a
+reader discovers.
+
+**Still not covered:** that adding a `Version` variant is a compile error at
+every site that must be revisited (`effect_api.rs`'s exhaustive match is built
+for exactly that). Asserting a compile *failure* needs a `trybuild`-style
+harness this workspace does not carry, so the property is designed for and
+documented, not tested.

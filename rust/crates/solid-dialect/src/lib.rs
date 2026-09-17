@@ -2556,6 +2556,185 @@ mod tests {
         }
     }
 
+    /// A dialect that states only what the trait *requires*.
+    ///
+    /// The 26 methods with no default, each answering "nothing": no modules,
+    /// no primitives, no boundaries, no packages, no audited archives. It is
+    /// never registered and never analyzes anything. Its whole job is to be
+    /// asked the 36 *defaulted* questions, so the test below can say what a
+    /// second dialect gets for free before it has decided anything.
+    ///
+    /// This is the cheap half of the second-dialect proof. `ALL`, the
+    /// `Version` variant and the compiler adapter are compile-time decisions
+    /// whose omission fails the build (`docs/adding-a-dialect.md`); a default
+    /// that silently hands 2.0's answer to a dialect that never stated one
+    /// fails nothing at all, which is why it is worth a test.
+    struct Silent;
+
+    impl Dialect for Silent {
+        fn version(&self) -> Version {
+            // Arbitrary and unused: `Silent` is never registered, and nothing
+            // here resolves a dialect by version.
+            Version::V1
+        }
+        fn modules(&self) -> &'static [&'static str] {
+            &[]
+        }
+        fn primitive_defining_packages(&self) -> &'static [&'static str] {
+            &[]
+        }
+        fn ecosystem_scopes(&self) -> &'static [&'static str] {
+            &[]
+        }
+        fn runtime_model_identity(&self) -> &'static str {
+            "silent/model-0"
+        }
+        fn primitive(&self, _name: &str) -> Option<Primitive> {
+            None
+        }
+        fn name_of(&self, _primitive: Primitive) -> Option<&'static str> {
+            None
+        }
+        fn callback_positions(&self, _primitive: Primitive) -> &'static [usize] {
+            &[]
+        }
+        fn runs_callback_deferred(&self, _primitive: Primitive) -> bool {
+            false
+        }
+        fn boundary_kind(&self, _tag: &str) -> Option<Boundary> {
+            None
+        }
+        fn boundary_name(&self, _boundary: Boundary) -> &'static str {
+            ""
+        }
+        fn cleanup_rule(&self, _primitive: Primitive) -> CleanupRule {
+            CleanupRule::Never
+        }
+        fn accepts_cleanup_return(&self, _primitive: Primitive) -> bool {
+            false
+        }
+        fn renders_children_through_callback(&self, _primitive: Primitive) -> bool {
+            false
+        }
+        fn creates_reactive_source(&self, _primitive: Primitive) -> bool {
+            false
+        }
+        fn creates_directive_owner(&self, _primitive: Primitive) -> bool {
+            false
+        }
+        fn merges_props_reactivity(&self, _primitive: Primitive) -> bool {
+            false
+        }
+        fn splits_props(&self, _primitive: Primitive) -> bool {
+            false
+        }
+        fn returns_reactive_tuple(&self, _primitive: Primitive) -> bool {
+            false
+        }
+        fn children_accessor_parameters(
+            &self,
+            _primitive: Primitive,
+            _key: KeyForm,
+        ) -> &'static [usize] {
+            &[]
+        }
+        fn returns_store(&self, _primitive: Primitive) -> bool {
+            false
+        }
+        fn options_argument(&self, _primitive: Primitive) -> Option<usize> {
+            None
+        }
+        fn callback_executions(&self, _primitive: Primitive) -> &'static [(usize, Execution)] {
+            &[]
+        }
+        fn export_modules(&self, _name: &str, _position: ExportPosition) -> Vec<&'static str> {
+            Vec::new()
+        }
+        fn namespace_import_primitives(&self, _module: &str) -> &'static [&'static str] {
+            &[]
+        }
+        fn negative_claim_authority(&self) -> &'static DialectNegativeAuthority {
+            static NONE: DialectNegativeAuthority = DialectNegativeAuthority {
+                archives: &[],
+                rows: &[],
+            };
+            &NONE
+        }
+    }
+
+    /// What a dialect that has decided nothing is taken to have said.
+    ///
+    /// Every assertion here is the *conservative* side of its question, and
+    /// the comment says what the other side would have claimed. A default that
+    /// drifts to the convenient answer is the failure this catches: the next
+    /// dialect would inherit a claim about its runtime that nobody made.
+    #[test]
+    fn a_dialect_that_states_nothing_claims_nothing() {
+        let silent = &Silent as &dyn Dialect;
+
+        // Phase and scheduling: no apply slot, no deferred-callback role, no
+        // tracked-read reporting. Inheriting 2.0's `Some(1)` would name a
+        // phase in a language that may thread a seed value through that slot.
+        assert_eq!(
+            silent.apply_callback_argument(Primitive::CreateEffect),
+            None
+        );
+        assert_eq!(
+            silent.callback_execution_at(Primitive::CreateEffect, 1, 2),
+            None
+        );
+        assert!(!silent.reports_untracked_reads_at(Primitive::CreateReaction, 0, 1));
+        assert!(silent.callback_owners(Primitive::CreateEffect).is_empty());
+
+        // Obligations: nothing is exempt. `false` here would quietly drop
+        // reads from `metrics.proofObligations` for a source this dialect
+        // never said was special.
+        assert!(silent.untracked_read_is_an_obligation(Primitive::CreateOptimistic));
+
+        // Ownership and writes: a leaf scope forbids writes, no primitive
+        // preserves the owner write context, no store root is readonly. Each
+        // `true` would be a permission granted without evidence.
+        assert!(!silent.leaf_scopes_allow_writes());
+        assert!(!silent.callback_preserves_owner_write_context(Primitive::CreateEffect));
+        assert!(!silent.leaf_owner_requires_owned_call_site(Primitive::OnCleanup));
+        assert!(!silent.store_root_properties_are_readonly());
+        assert!(!silent.store_setter_callback_enables_proxy_writes());
+
+        // Surfaces this dialect has not claimed to model.
+        assert!(!silent.models_server_functions());
+        assert!(!silent.props_require_caller_proof());
+        assert!(!silent.reports_member_reads_after_await());
+        assert_eq!(silent.context_provider_member(), None);
+        assert!(!silent.static_event_values_are_attributes());
+        assert!(!silent.false_attribute_value_removes_attribute());
+        assert!(!silent.direct_jsx_return_is_component());
+        assert!(!silent.component_name_may_be_component("Button"));
+
+        // The derived questions follow the required answers rather than a
+        // second table: a dialect with no modules owns none, a dialect with no
+        // primitives declares none, a dialect with no boundaries opens none.
+        assert!(!silent.owns_module("solid-js"));
+        assert!(!silent.declares_primitive("createEffect"));
+        assert!(!silent.is_async_boundary("Loading"));
+        assert_eq!(silent.type_role("solid-js", "Accessor"), None);
+
+        // The one default that is *not* "nothing", stated here so it is a
+        // decision rather than an oversight: a dialect that declares
+        // `Primitive::CreateEffect` inherits the owner-requirement partition
+        // every dialect so far has agreed on. It only applies to primitives
+        // the dialect actually declares -- `Silent` maps no name to any
+        // primitive, so nothing in a real analysis ever reaches it.
+        assert_eq!(
+            silent.owner_requirement_role(Primitive::CreateEffect),
+            Some(OwnerRequirementRole::Effect)
+        );
+        assert_eq!(
+            silent.owner_requirement_role(Primitive::OnCleanup),
+            Some(OwnerRequirementRole::Cleanup)
+        );
+        assert_eq!(silent.owner_requirement_role(Primitive::CreateSignal), None);
+    }
+
     #[test]
     fn a_resolved_solid_js_version_picks_its_dialect() {
         use Classification::{Modelled, UnmodelledMajor};

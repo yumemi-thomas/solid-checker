@@ -114,8 +114,17 @@ bun packages/cli/node_modules/vitest/vitest.mjs run \
   --config packages/cli/vitest.config.mjs scripts/second-dialect.test.mjs
 ```
 
-The last one is the check that a new dialect *arrives* where the enumerators
-claim it does. It assembles a synthetic `solid-v3` in a throwaway tree and
+Beside it, `cargo +1.97 test -p solid-dialect --lib` carries
+`a_dialect_that_states_nothing_claims_nothing`: a `Silent` dialect implementing
+only the trait's 26 *required* methods, asked every defaulted question. Read it
+before deciding which of the 36 defaults your dialect can leave alone — each
+assertion is the conservative side, and the comment says what the other side
+would have claimed. One default is deliberately not "nothing"
+(`owner_requirement_role`), and the test says so rather than leaving it to be
+discovered.
+
+The last of the commands above is the check that a new dialect *arrives* where
+the enumerators claim it does. It assembles a synthetic `solid-v3` in a throwaway tree and
 demands that the manifest loader, the oracle and ownership gates' dialect sets,
 the rule catalog every oracle case is checked against, the ESLint adapter's
 discovery pattern, and coverage's fixture-stub major check all pick it up with
