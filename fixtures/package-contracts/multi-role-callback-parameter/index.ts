@@ -21,7 +21,7 @@ export function inlineAndReturned(step: () => number): () => number {
 
 // Negative: two invocation sites with the *same* schedule are not a
 // contradiction. Equivalent operations deduplicate, so this proposes one
-// queued/tracked callback operation.
+// same-stack/tracked callback operation.
 export function twoTrackedSites(handle: () => void): void {
   createEffect(() => handle(), () => {});
   createEffect(() => handle(), () => {});

@@ -22,7 +22,7 @@ measuring timing, at which point every affected row failed.
 | `untrackedWrapper` | `inline` | `untrack(fn)` clears the listener, calls `fn`, restores, and returns its value |
 | `rootWrapper` | `inline` | `createRoot` runs its callback synchronously under a fresh owner; `@solid-primitives/rootless`' `createSubRoot` |
 | `ownerWrapper` | `inline` at parameter **1** | the clearing wrapper's callback slot is not always index 0 |
-| `trackedWrapper` | `tracked` | negative: no clearing wrapper, so the tracked claim is untouched |
+| `trackedWrapper` | `tracked`, same-stack | negative: no clearing wrapper, so the tracked claim is untouched. Same-stack because 2.0's `createEffect` runs its *compute* during the creating call — see below |
 | `deferredWrapper` | `deferred` | negative: `onCleanup` really does run its callback later |
 
 The two negatives are the whole reason the rule is a rule rather than "answer
@@ -44,7 +44,18 @@ against the published typings with `tsc --noEmit --strict`, which is silent on
 it, because discarding a `never` is legal and only a *use* of the result would
 fail. So the two-argument form is used here because it is the supported one, not
 because `tsc` rejects the alternative. `handle` stays in the compute, which is
-the tracked, deferred position the 1.x claim was about.
+the tracked position the 1.x claim was about — but **not the deferred one**.
+
+This fixture originally pinned `trackedWrapper` as `queued`, which was wrong,
+and wrong in a way worth recording because it was inherited rather than
+measured. 1.x's `createEffect` defers its callback (`AfterCall`); 2.0's runs its
+compute *during* the creating call (`Solid2::tracked_callback_timing` cites the
+bytes: it reaches `effect()`, which calls `recompute(node, true)` before
+queueing the effect function). The generator published `queued` anyway, because
+the direct-invocation rung dropped the schedule column and the consumer's
+historical default filled it in — so this fixture pinned the defect instead of
+the behaviour. Corrected with that rung; `createTrackedEffect` is the one 2.0
+primitive that really is `AfterCall`, and it still answers `queued`.
 
 ## Stub faithfulness
 

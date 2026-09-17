@@ -7740,35 +7740,40 @@ Rows this corrected, all measured at this branch's base:
 
 ### Remaining approximations
 
-- **Two other producers of the word still leave the schedule unstated, and the
-  consumer's `queued` default stands for them.** Both are pre-existing and
-  neither is an inventory claim:
-  - the *direct-invocation* rung of `interprocedural_contributions` (the
-    `chain_execution` fallback around `interproc.rs:1211`), which is why
-    `fixtures/package-contracts/callback-deferred-untracked-chain`'s
-    `memoInsideUntrack` — `untrack(() => createMemo(() => handle()))`, a chain
-    whose only tracked wrapper is 1.x `createMemo`'s `DuringCall` — still
-    publishes `queued` where `same-stack` is the true answer. Its sibling
-    `trackedShape` (`createEffect`) publishes `queued` correctly, so the fixture
-    does not distinguish the two today;
+- ~~**Two other producers of the word still leave the schedule unstated, and the
+  consumer's `queued` default stands for them.**~~ **One did; fixed 2026-09-17.**
 
-    **Widened by the Solid 1.x retirement, measured 2026-09-17.** That last
-    sentence was true only of 1.x, whose `createEffect` is `AfterCall`. `Solid2`
-    states `DuringCall` for `createMemo`, `createSignal`, `createOptimistic`,
-    `createProjection`, `createEffect` and `createRenderEffect`, and `AfterCall`
-    for `createTrackedEffect` alone — so with 1.x gone this default is wrong for
-    **every** tracked primitive except that one. Probed against the audited rc.3
-    install, `createMemo`, `createSignal`, `createEffect` and
-    `createRenderEffect` each publish `at.schedule: "queued"` for a directly
-    invoked parameter where `same-stack` is the audited answer
-    (`solid_2.rs::tracked_callback_timing` cites the bytes: both effects reach
-    `effect()`, which calls `recompute(node, true)` before queueing the *effect*
-    function). The chain rung is unaffected and already correct — the same
-    callbacks under a clearing wrapper compose to `same-stack`. So the fixture
-    that would distinguish the two rungs is exactly the one the retirement
-    deleted, and re-authoring it is now the way to pin the fix;
-  - `contract_callback_execution`'s `ExecutionRole::TrackedJsx` arm
-    (`lib.rs`), a compiler-lowering role with no wrapper chain to compose.
+  The *direct-invocation* rung of `interprocedural_contributions` computed a
+  wrapper chain, composed it to a word, and then threw the wrappers away — so a
+  `tracked` word reached `ContractCallback` with `schedule: None` and took the
+  consumer's historical `queued` default. The comment there asserted "only
+  `inline` and `deferred` reach here, and both carry their schedule in the
+  word", which was simply false: an enclosing chain composes to `tracked`
+  routinely.
+
+  Every tracked callback therefore published "runs after the export returns".
+  Under 1.x that was usually right, because 1.x's `createEffect` is `AfterCall`.
+  With 1.x retired it was wrong for **every** 2.0 tracked primitive except
+  `createTrackedEffect` — measured against the audited rc.3 install,
+  `createMemo`, `createSignal`, `createEffect` and `createRenderEffect` each
+  published `queued` where `same-stack` is the audited answer.
+
+  The rung now recomposes the schedule from the chain that produced the word,
+  exactly as the primitive-slot rung does. Deliberately narrow: only a word the
+  chain produced gets a schedule. `contract_callback_execution`'s
+  `ExecutionRole::TrackedJsx` arm — the other producer named here, a
+  compiler-lowering role with no wrapper chain — keeps the default, because
+  `composed_tracked_schedule(&[])` answers `same-stack` and nothing there proves
+  it.
+
+  Corpus effect: `memoInsideUntrack` (the case named above) and two fixtures'
+  rows, all `queued` → `same-stack`. `fixtures/package-contracts/callback-untracked-wrapper`'s
+  `trackedWrapper` was among them — that fixture had pinned the defect,
+  inheriting 1.x's answer for a 2.0 primitive. The re-authored
+  `fixtures/package-contracts/callback-deferred-untracked-chain` now occupies
+  all four cells of the schedule × tracking grid, so the collapse cannot recur
+  silently.
+
 - **The `Unestablished` schedule is not yet represented in the certification
   census.** An invoke operation with no execution point states less than one
   with a schedule, which is the honest reading, but no proof family currently

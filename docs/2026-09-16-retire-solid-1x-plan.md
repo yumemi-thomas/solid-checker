@@ -937,37 +937,22 @@ What is left, in recommended order:
      two-line local stub that plainly does create. The snapshot now matches the
      README.
 
-2. **`callback-deferred-untracked-chain`** — **scoped 2026-09-17 by probing
-   every candidate export against the audited rc.3 install.** It is not a port,
-   and three of its claims do not survive at all. What the probe established:
+2. ~~**`callback-deferred-untracked-chain`**~~ — **authored 2026-09-17, with
+   the defect it exposed fixed in the same slice.** Not a port: three 1.x
+   exports lost their premise under 2.0 (`mountShape` answers `same-stack`
+   because 2.0's `createEffect` compute is `DuringCall`;
+   `unestablishedScheduleShape` resolves because 2.0 models `createSignal(fn)`
+   as a compute slot; `mergePropsShape` has no counterpart at all). The 2.0
+   fixture is a four-cell grid over schedule × tracking instead, plus the
+   `solid-js/runtime.ts` forwarding seam, which is dialect-neutral and ported
+   unchanged.
 
-   | 1.x export | 1.x claim | 2.0 |
-   | --- | --- | --- |
-   | `inlineShape` (`untrack`) | same-stack / untracked | same, ports |
-   | `trackedShape` (`createEffect`) | queued / tracked | queued / tracked *(see below — the word is right, the schedule is the known approximation)* |
-   | `cleanupShape` (`onCleanup`+`untrack`) | queued / untracked | same, ports |
-   | `memoInsideUntrack` | tracked | queued / tracked, ports |
-   | `mountShape` (`createEffect`+`untrack`) | **queued** / untracked | **same-stack** / untracked — a real dialect divergence, not a regression: `Solid2::tracked_callback_timing` audits 2.0's `createEffect` compute as `DuringCall` (it reaches `effect()`, which calls `recompute(node, true)` before queueing the effect function), where 1.x's is `AfterCall` |
-   | `unestablishedScheduleShape` (`createSignal(fn)`) | **open** — no schedule proven | **resolves** — the premise is gone. 1.x refused because `createSignal(fn)` *stores* the function; 2.0 models it as a compute slot with a `Tracked` row, so the chain answers instead of refusing |
-   | `memoShape`, `renderEffectShape` | inline, from measured 1.x bytes | need their own probe measurement |
-   | `mergePropsShape` | tracked | **no counterpart** — 2.0's `merge` is not modelled as a callback-taking primitive |
-
-   Two consequences worth carrying:
-
-   - **`interproc.rs`' citation cannot be restored as written.** It names
-     `unestablishedScheduleShape` as the pin that "a missing row makes the
-     chain refuse", and no `createSignal` shape produces that in 2.0. A 2.0
-     fixture needs a primitive the dialect states *no* timing for —
-     `createStore` and `createOptimisticStore` are the documented candidates
-     ("their derived overloads did not accept the probe's call shape, so no
-     measurement backs a claim").
-   - **The fixture is now the way to pin a live approximation**, not just to
-     restore coverage. The direct-invocation rung publishes `queued` for every
-     tracked callback regardless of the dialect's audited timing; with 1.x gone
-     that is wrong for every 2.0 tracked primitive except `createTrackedEffect`.
-     See `docs/precision-backlog.md` § "Remaining approximations", which this
-     investigation widened. The chain rung is already correct, so the fixture's
-     value is precisely that it distinguishes the two rungs.
+   Probing it found that the direct-invocation rung published `queued` for
+   every tracked callback regardless of the dialect's audited timing — wrong,
+   after the retirement, for every 2.0 tracked primitive but
+   `createTrackedEffect`. Fixed by recomposing the schedule from the chain that
+   produced the word. See `docs/precision-backlog.md` § "Remaining
+   approximations". Corpus 95 → 96 fixtures.
 
 3. **`escaping-private-helper`** -- the biggest remaining hole, and the
    expensive one. Its claim is dialect-neutral and strong (the call graph's

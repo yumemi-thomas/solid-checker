@@ -8,6 +8,7 @@
     "asset-query-import-control",
     "attested-record-matches-walk",
     "attested-specifier-restated",
+    "callback-deferred-untracked-chain",
     "callback-execution-boundary",
     "callback-reactive-arguments",
     "callback-slot-derived-store",

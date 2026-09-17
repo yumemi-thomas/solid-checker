@@ -1271,13 +1271,20 @@ fn discover_interprocedural_graph(
             // through to the rungs below: those answer the lexical question,
             // which is the answer this rung exists to replace, so falling
             // through would publish exactly the claim the chain just refused.
-            let chain_execution: Option<Option<&'static str>> =
+            //
+            // The wrappers are kept beside the word, not just the word: the
+            // word `tracked` carries no schedule column, so the row's schedule
+            // has to be recomposed from the same wrappers that produced it (see
+            // the push below).
+            let chain: Option<(Option<&'static str>, Vec<CallbackWrapper>)> =
                 enclosing_callback_chain(file, call.callee, &contracts, lookup)
                     .filter(|chain| !chain.wrappers.is_empty())
                     .filter(|chain| {
                         callback_chain_reaches_owner_body(file, chain, &nodes[callback_owner])
                     })
-                    .map(|chain| compose_callback_chain(&chain.wrappers));
+                    .map(|chain| (compose_callback_chain(&chain.wrappers), chain.wrappers));
+            let chain_execution: Option<Option<&'static str>> =
+                chain.as_ref().map(|(word, _)| *word);
             // ADR 0100: whether *the site* is a call of the parameter itself,
             // written directly in the body of the function that declares it.
             // That is the one row the implementation census confirms site for
@@ -1341,9 +1348,30 @@ fn discover_interprocedural_graph(
                     ContractCallback {
                         parameter,
                         execution: execution.into(),
-                        // Only `inline` and `deferred` reach here, and both
-                        // carry their schedule in the word.
-                        schedule: None,
+                        // `inline` and `deferred` carry their schedule in the
+                        // word. `tracked` does not, and it does reach here --
+                        // an enclosing wrapper chain can compose to it, which
+                        // the comment that used to stand here denied. Leaving
+                        // the column empty then took the consumer's `queued`
+                        // default, publishing "runs after the export returns"
+                        // for every tracked wrapper the dialect audits as
+                        // running *during* its own call. With 1.x retired that
+                        // is every 2.0 tracked primitive but
+                        // `createTrackedEffect`.
+                        //
+                        // Only a word the chain produced gets a schedule, and
+                        // it is recomposed from that chain's own wrappers. A
+                        // `tracked` word from the lexical rung below has no
+                        // wrappers to compose and keeps the historical default:
+                        // `composed_tracked_schedule(&[])` would answer
+                        // `same-stack`, which is a claim nothing here proves.
+                        schedule: (execution == "tracked")
+                            .then(|| {
+                                chain
+                                    .as_ref()
+                                    .map(|(_, wrappers)| composed_tracked_schedule(wrappers))
+                            })
+                            .flatten(),
                         arguments: callback_argument_contracts(
                             file,
                             call,

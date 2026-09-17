@@ -155,7 +155,13 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // 188 on 2026-09-16: one of those seven comes back, as the authored 2.0
       // counterpart of `callback-untracked-wrapper` -- a clearing wrapper is
       // `inline`, and its two negatives keep it a rule. Six remain deleted.
-      stableMainDocuments: 188,
+      //
+      // 189 on 2026-09-17: a second comes back, the 2.0
+      // `callback-deferred-untracked-chain`. It is not a port -- three of the
+      // 1.x exports lose their premise under 2.0 -- and it exists to pin that
+      // schedule and tracking are independent axes, which is what the
+      // direct-invocation rung had collapsed. Five remain deleted.
+      stableMainDocuments: 189,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

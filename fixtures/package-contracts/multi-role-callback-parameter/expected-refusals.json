@@ -59,7 +59,7 @@
       "kind": "dialect-silent",
       "package": "solid-js",
       "callee": "createEffect",
-      "location": "<package-root>/index.ts:1852:1885",
+      "location": "<package-root>/index.ts:1856:1889",
       "declaration": "",
       "shape": "",
       "spelling": ""
@@ -73,7 +73,7 @@
       "kind": "dialect-silent",
       "package": "solid-js",
       "callee": "createEffect",
-      "location": "<package-root>/index.ts:1889:1922",
+      "location": "<package-root>/index.ts:1893:1926",
       "declaration": "",
       "shape": "",
       "spelling": ""
@@ -101,7 +101,7 @@
       "kind": "dialect-silent",
       "package": "solid-js",
       "callee": "createMemo",
-      "location": "<package-root>/index.ts:2281:2304",
+      "location": "<package-root>/index.ts:2285:2308",
       "declaration": "",
       "shape": "",
       "spelling": ""
@@ -115,7 +115,7 @@
       "kind": "dialect-silent",
       "package": "solid-js",
       "callee": "createEffect",
-      "location": "<package-root>/index.ts:2100:2138",
+      "location": "<package-root>/index.ts:2104:2142",
       "declaration": "",
       "shape": "",
       "spelling": ""
@@ -129,7 +129,7 @@
       "kind": "dialect-silent",
       "package": "solid-js",
       "callee": "createEffect",
-      "location": "<package-root>/index.ts:1492:1529",
+      "location": "<package-root>/index.ts:1496:1533",
       "declaration": "",
       "shape": "",
       "spelling": ""
@@ -143,7 +143,7 @@
       "kind": "dialect-silent",
       "package": "solid-js",
       "callee": "createEffect",
-      "location": "<package-root>/index.ts:1182:1220",
+      "location": "<package-root>/index.ts:1186:1224",
       "declaration": "",
       "shape": "",
       "spelling": ""
@@ -157,7 +157,7 @@
       "kind": "dialect-silent",
       "package": "solid-js",
       "callee": "createEffect",
-      "location": "<package-root>/index.ts:1224:1262",
+      "location": "<package-root>/index.ts:1228:1266",
       "declaration": "",
       "shape": "",
       "spelling": ""

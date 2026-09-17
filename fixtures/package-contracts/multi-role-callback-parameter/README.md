@@ -11,9 +11,11 @@ recursive claim leaves that still require proof.
 - `contradictOnZeroOnly` keeps the contradiction local to parameter 0; known
   facts elsewhere in the summary remain present, but the callback domain is
   not complete.
-- `twoTrackedSites` deduplicates equivalent queued/tracked behavior.
+- `twoTrackedSites` deduplicates equivalent same-stack/tracked behavior.
 - `twoParameters` keeps same-stack/untracked parameter 0 independent from
-  queued/tracked parameter 1.
+  same-stack/**tracked** parameter 1. The two differ on the *tracking* axis
+  alone, which is the point: 2.0's `createEffect` runs its compute during the
+  creating call, so a tracked callback is not automatically a later one.
 - `oneTrackedSite` and `oneInlineSite` are single-site controls. The latter has
   a known callback operation but no guessed returned-reactive shape because
   the fixture supplies typings without an exact runtime fact for that leaf.
