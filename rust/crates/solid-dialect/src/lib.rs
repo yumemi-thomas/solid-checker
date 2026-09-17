@@ -1815,16 +1815,25 @@ pub trait Dialect: Sync {
     }
 
     /// Whether reading a source this primitive created, outside a tracked
-    /// scope, carries a strict-read obligation.
+    /// scope, is counted as a **proof obligation**.
+    ///
+    /// This is a counter, not a diagnostic. The read is collected either way
+    /// and `SC1001 strict-read-untracked` is emitted from that collection, so
+    /// answering `false` never silences a finding — it only keeps the read out
+    /// of `metrics.proofObligations`.
     ///
     /// `true` for ordinary reactive sources, which is why it defaults that
-    /// way. 2.0 answers `false` for its optimistic sources; that override
-    /// records behaviour this checker already had and whose runtime rationale
-    /// is not written down anywhere in this repository (see
-    /// `docs/precision-backlog.md`). It is a seam question rather than a
-    /// literal in `local_access.rs` because which sources are exempt is a
-    /// property of a dialect's runtime, not of the read-collection pass.
-    fn untracked_read_is_strict(&self, primitive: Primitive) -> bool {
+    /// way. 2.0 answers `false` for its optimistic sources, recording
+    /// behaviour this checker already had. **No runtime fact supports that
+    /// exemption**: `@solidjs/signals@2.0.0-rc.3`'s strict-read guard is a
+    /// scope label (`dist/dev.js`'s `strictRead`, set around a labelled scope
+    /// and consulted in `read()`), not a per-source property, so an optimistic
+    /// accessor read in such a scope warns like any other. Whether excluding
+    /// it from the obligation count is deliberate or an oversight is open —
+    /// see `docs/precision-backlog.md`. It is a seam question rather than a
+    /// literal in `local_access.rs` either way, because "which of my sources
+    /// are exempt" is a dialect's answer to give.
+    fn untracked_read_is_an_obligation(&self, primitive: Primitive) -> bool {
         let _ = primitive;
         true
     }

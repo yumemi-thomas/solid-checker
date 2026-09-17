@@ -1705,7 +1705,7 @@ impl Dialect for Solid2 {
     /// [`Solid2::runs_callback_deferred`]), so reads inside it register
     /// nothing either. `mapArray`/`repeat` are deliberately absent: unlike
     /// 1.x, their map callbacks run tracked (see the bundled contract rows).
-    fn untracked_read_is_strict(&self, primitive: Primitive) -> bool {
+    fn untracked_read_is_an_obligation(&self, primitive: Primitive) -> bool {
         !matches!(
             primitive,
             Primitive::CreateOptimistic | Primitive::CreateOptimisticStore

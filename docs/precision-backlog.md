@@ -22841,16 +22841,37 @@ still a package that exists because the dialect does. So `Dialect` gained
 across dialects like `primitive_defining_package` and, like it, able only to
 widen what gets examined.
 
-**The optimistic strict-read exemption was three copies of a name match.**
-`local_access.rs` spelled `Some("createOptimistic" | "createOptimisticStore")`
-at three call sites to decide whether an untracked read carries a strict-read
-obligation. That is a property of a dialect's runtime, so it is now
-`Dialect::untracked_read_is_strict(primitive)`, defaulting to `true`, and the
-three sites share one helper that resolves the name through the dialect first —
-an unrecognised name keeps the obligation, exactly as before. **The override's
-rationale is not recorded anywhere in this repository**; the doc comment says
-so rather than inventing one. Someone should find and write down why 2.0's
-optimistic sources are exempt.
+**The optimistic exemption was three copies of a name match, and it is a
+counter rather than a diagnostic.** `local_access.rs` spelled
+`Some("createOptimistic" | "createOptimisticStore")` at three call sites, and
+that is a dialect's answer to give, so it is now
+`Dialect::untracked_read_is_an_obligation(primitive)`, defaulting to `true`,
+with one helper that resolves the name through the dialect first — an
+unrecognised name keeps the obligation, exactly as before.
+
+**What the exemption actually does** was worth establishing before naming it.
+The three call sites push the read into `result.reads` *first* and consult this
+after, and `SC1001 strict-read-untracked` is emitted from that collection
+(`FindingSeed::StrictRead`). `strict_read_obligations` reaches nothing but
+`metrics.proofObligations`. So an optimistic source's untracked read is
+reported like any other; the exemption keeps it out of one number. The method
+was first named `untracked_read_is_strict`, which reads like it gates the
+finding; it does not, and the name now says which.
+
+**And no runtime fact supports it.** `@solidjs/signals@2.0.0-rc.3`'s
+`dist/dev.js` guards the warning with a module-level `strictRead` *scope label*
+— set around a labelled scope, saved and restored, and read in `read()` as
+`if (strictRead) warnStrictReadUntracked(...)`. It is not a per-source
+property, and `createOptimistic` returns an ordinary `Signal<T>` whose accessor
+goes through the same `read()`. So the runtime warns for an optimistic
+accessor read in a strict-read scope exactly as it does for a signal.
+
+That leaves a real open question, now a sharp one: **is excluding optimistic
+reads from the obligation count deliberate or an oversight?** A case for
+deliberate — reading an optimistic value imperatively is the intended usage, so
+counting it as work the analyzer must discharge overstates the denominator. A
+case for oversight — nothing distinguishes it from a signal on this axis, and
+no comment was left. Not resolved here, and not guessed at in the doc comment.
 
 **One "deliberate widening" that was nothing of the kind.** `source_discovery.rs`
 asked whether a source is a store as `source_kinds == Store || primitive is
