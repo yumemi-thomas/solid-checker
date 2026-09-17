@@ -1852,30 +1852,6 @@ pub trait Dialect: Sync {
         }
     }
 
-    /// Whether reading a source this primitive created, outside a tracked
-    /// scope, is counted as a **proof obligation**.
-    ///
-    /// This is a counter, not a diagnostic. The read is collected either way
-    /// and `SC1001 strict-read-untracked` is emitted from that collection, so
-    /// answering `false` never silences a finding — it only keeps the read out
-    /// of `metrics.proofObligations`.
-    ///
-    /// `true` for ordinary reactive sources, which is why it defaults that
-    /// way. 2.0 answers `false` for its optimistic sources, recording
-    /// behaviour this checker already had. **No runtime fact supports that
-    /// exemption**: `@solidjs/signals@2.0.0-rc.3`'s strict-read guard is a
-    /// scope label (`dist/dev.js`'s `strictRead`, set around a labelled scope
-    /// and consulted in `read()`), not a per-source property, so an optimistic
-    /// accessor read in such a scope warns like any other. Whether excluding
-    /// it from the obligation count is deliberate or an oversight is open —
-    /// see `docs/precision-backlog.md`. It is a seam question rather than a
-    /// literal in `local_access.rs` either way, because "which of my sources
-    /// are exempt" is a dialect's answer to give.
-    fn untracked_read_is_an_obligation(&self, primitive: Primitive) -> bool {
-        let _ = primitive;
-        true
-    }
-
     /// Whether an untracked read in this callback is a likely dependency bug.
     ///
     /// Most deliberately untracked callbacks are explicit imperative scopes:
@@ -2685,11 +2661,6 @@ mod tests {
         );
         assert!(!silent.reports_untracked_reads_at(Primitive::CreateReaction, 0, 1));
         assert!(silent.callback_owners(Primitive::CreateEffect).is_empty());
-
-        // Obligations: nothing is exempt. `false` here would quietly drop
-        // reads from `metrics.proofObligations` for a source this dialect
-        // never said was special.
-        assert!(silent.untracked_read_is_an_obligation(Primitive::CreateOptimistic));
 
         // Ownership and writes: a leaf scope forbids writes, no primitive
         // preserves the owner write context, no store root is readonly. Each

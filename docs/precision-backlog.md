@@ -23286,3 +23286,43 @@ test by name, and adding `_ => {}` to `effect_api.rs` fails the second.
 The two sites are `Version::dialect` and `effect_api.rs`'s effect-call seam.
 `for_solid_js` is deliberately not one: it matches on a `u32` major, and its
 catch-all is the `UnmodelledMajor` arm that makes an uncarried major refuse.
+
+### The optimistic obligation exemption was an oversight, and is gone (2026-09-17)
+
+Left open two entries ago: is excluding `createOptimistic` /
+`createOptimisticStore` reads from `metrics.proofObligations` deliberate or an
+oversight? Three facts settle it without needing to know Solid's intent.
+
+1. **No runtime fact supports it.** `@solidjs/signals@2.0.0-rc.3`'s strict-read
+   guard is a module-level scope label consulted in `read()`, not a per-source
+   property, and `createOptimistic` returns an ordinary `Signal<T>`.
+2. **The finding is reported either way.** The reads are pushed into
+   `result.reads` before the exemption is consulted, and `SC1001` is projected
+   from that collection.
+3. **So the counter contradicted the findings beside it.**
+   `fixtures/reactive-ir/optimistic-tuple-destructure` reports 7 SC1001
+   violations at `proofObligations: 12`; without the exemption the count is 18.
+   Six reads the analyzer collected, classified, and in several cases *reported
+   as violations* were being left out of the number that says how many
+   obligations the analysis had.
+
+(3) is the decisive one, because it is an argument about this checker's own
+consistency rather than about a runtime nobody documented. A metric that omits
+work the tool demonstrably did describes something other than the work done,
+and nothing asked for that: no comment, no fact, and no consumer —
+`proofObligations` is emitted in the snapshot and read by no gate, script or
+adapter in this repository.
+
+Removed: `Solid2`'s override, the `Dialect::untracked_read_is_an_obligation`
+question it overrode, and the `local_access.rs` helper that asked. The three
+call sites are back to `counts_as_strict_read_root(...)` alone. **The seam
+question went too**, deliberately: it was introduced one commit earlier only to
+relocate this exemption behind the seam, and a seam question no dialect answers
+differently — for a behaviour that turned out to be unjustified — is speculative
+API, not readiness. A dialect that genuinely needs to exempt a source can add
+the question back with a reason.
+
+No finding moves: coverage stays at 81 projects / 440 findings, the ownership
+gate at 37 cases, and the four process suites at 13/18/14/35. What changes is
+`metrics.proofObligations` for any project reading an optimistic source in a
+strict-read scope, upward, to the number of obligations that were always there.

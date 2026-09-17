@@ -1718,13 +1718,6 @@ impl Dialect for Solid2 {
         .then_some(1)
     }
 
-    fn untracked_read_is_an_obligation(&self, primitive: Primitive) -> bool {
-        !matches!(
-            primitive,
-            Primitive::CreateOptimistic | Primitive::CreateOptimisticStore
-        )
-    }
-
     fn reports_untracked_reads_at(
         &self,
         primitive: Primitive,
