@@ -137,8 +137,13 @@ const SOURCE_OWNERS = [
     markers: ["const SCHEMA_VERSION: u16 = 2;", "contract_document::decode("]
   },
   {
+    // `contract_document::decode(` until 2026-09-17, when the Solid 1 authority
+    // replay -- the only raw decode in this file -- was deleted with the 1.x
+    // artifacts. The file still owns stable-v1 bundle loading; it now reaches
+    // it through the interface that decodes, so the marker follows the role
+    // rather than the call it used to make.
     path: "rust/crates/solid-facts-backend/src/first_party_bundles.rs",
-    markers: ["contract_document::decode("]
+    markers: ["load_receipt_issued_embedded_contract("]
   },
   {
     path: "rust/crates/solid-checker-wasm/src/lib.rs",
