@@ -44,6 +44,14 @@ const withSecondDialect = (body) => {
       ruleManifest: "packages/cli/lib/rules-solid-v3.json",
       bundleIndex: "pkg/contracts/bundled/solid-v3/bundle-index.json",
       reviewBundleIndex: "rust/crates/solid-dialect/contracts/solid-v3/bundle-index.json",
+      compilerIdentity: {
+        document: "docs/solid-v3/compiler-identity.json",
+        adapter: "rust/dialects/solid-v3/compiler/src/lib.rs",
+        conformance: "docs/solid-v3/conformance.json",
+        report: "docs/solid-v3/compiler-facts.md",
+        cargoPackage: "solidjs-v3-compiler",
+        cargoSourcePrefix: "git+https://example.invalid/solid?",
+      },
       contracts: [{ package: "solid-js" }],
     };
     mkdirSync(join(root, "rust/dialects/solid-v3"), { recursive: true });
@@ -192,4 +200,51 @@ test("this repository's own catalogs satisfy the shared-code rule", () => {
     }
   }
   assert.ok(byCode.size > 0);
+});
+
+// `check-compiler-facts-identity.mjs` used to read solid-v2's identity
+// document, compiler crate and Cargo package name as literals, so a second
+// dialect's compiler would have gone unchecked with nothing failing. The wiring
+// now comes from each manifest, which is only load bearing if the manifest is
+// required to carry it.
+test("a new dialect declares the compiler its identity gate checks", () => {
+  withSecondDialect((root) => {
+    const wiring = Object.fromEntries(
+      loadDialectManifests({ projectRoot: root }).map((manifest) => [
+        manifest.id,
+        manifest.compilerIdentity,
+      ])
+    );
+    assert.deepEqual(Object.keys(wiring), ["solid-v2", "solid-v3"]);
+    assert.notEqual(
+      wiring["solid-v3"].cargoPackage,
+      wiring["solid-v2"].cargoPackage,
+      "each dialect names its own compiler package; the gate no longer assumes one"
+    );
+    for (const identity of Object.values(wiring)) {
+      for (const field of [
+        "document",
+        "adapter",
+        "conformance",
+        "report",
+        "cargoPackage",
+        "cargoSourcePrefix",
+      ]) {
+        assert.equal(typeof identity[field], "string", `compilerIdentity.${field}`);
+      }
+    }
+  });
+});
+
+test("a dialect that declares no compiler identity is refused, not skipped", () => {
+  withSecondDialect((root) => {
+    const manifest = join(root, "rust/dialects/solid-v3/dialect.json");
+    const declared = JSON.parse(readFileSync(manifest, "utf8"));
+    delete declared.compilerIdentity;
+    writeFileSync(manifest, `${JSON.stringify(declared, null, 2)}\n`);
+    assert.throws(
+      () => loadDialectManifests({ projectRoot: root }),
+      /requires compilerIdentity/
+    );
+  });
 });
