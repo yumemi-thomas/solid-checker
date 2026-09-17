@@ -23260,3 +23260,29 @@ Byte-identical: the five SC7005 findings across both http-response-flush
 fixtures were dumped and diffed again, because `reactive-ir/http-response-flush`
 is not in `KEEPS_WORDING` and coverage compares no message text for it.
 
+### The compile-error property has a guard, and it is not trybuild (2026-09-17)
+
+"Adding a `Version` variant is a compile error at every site that must be
+revisited" was recorded as designed-for but untested, wanting a `trybuild`-style
+harness this workspace does not carry.
+
+It does not want one. Rust already enforces the half trybuild would assert — an
+exhaustive `match` stops compiling when the enum grows. What Rust cannot stop is
+the *repair*: adding `_ => {}` to make the build green is a one-character edit,
+and it converts a site that was demanding a decision into one that silently
+answers 2.0's behaviour for a dialect nobody wrote. A compile-fail harness would
+not catch that, because after the wildcard there is no compile failure.
+
+`scripts/version-dispatch.test.mjs` checks the property from the source and
+catches both shapes. It reads the variants from the enum rather than listing
+them, so a new variant fails the test until each dispatch site has been visited;
+and it extracts the two dispatching `match` blocks by brace depth and refuses a
+catch-all arm in either. A third test pins what the extraction returned, so a
+`matchBlock` that silently grabbed the wrong braces cannot pass the other two.
+
+Both failure modes were confirmed by hand: adding a `V3` variant fails the first
+test by name, and adding `_ => {}` to `effect_api.rs` fails the second.
+
+The two sites are `Version::dialect` and `effect_api.rs`'s effect-call seam.
+`for_solid_js` is deliberately not one: it matches on a `u32` major, and its
+catch-all is the `UnmodelledMajor` arm that makes an uncarried major refuse.
