@@ -96,6 +96,12 @@ function invokedFirstArgument(document, exportName) {
   const operations = new Map(
     (summary.call?.operations ?? []).map(operation => [operation.id, operation])
   );
+  // The tracking word is part of the shape on purpose. `clean` is
+  // `function clean(handler) { handler(); }` -- a bare call, which leaves the
+  // caller's listener in place, so it reads `ambient-at-execution`. It said
+  // `untracked` until the producer could tell a proven clearing from an
+  // unestablished context, and asserting that here would re-pin the falsehood
+  // these tests would otherwise carry through every re-export hop.
   return (summary.call?.callbacks ?? [])
     .filter(callback => callback.from?.arg === 0 && callback.from?.path?.length === 0)
     .map(callback => operations.get(callback.operation))
@@ -228,18 +234,18 @@ describe("a contract describes what it re-exports from an accepted dependency", 
   });
 
   test("the dependency states the claim it owns", () => {
-    expect(invokedFirstArgument(dependency, "clean")).toEqual(["invoke:same-stack:untracked"]);
+    expect(invokedFirstArgument(dependency, "clean")).toEqual(["invoke:same-stack:ambient-at-execution"]);
   });
 
   test("the re-exported name carries the dependency's claim, not an empty summary", () => {
     expect(invokedFirstArgument(consumers.reexporter, "clean")).toEqual([
-      "invoke:same-stack:untracked"
+      "invoke:same-stack:ambient-at-execution"
     ]);
   });
 
   test("a locally declared export is still described by the local analysis", () => {
     expect(invokedFirstArgument(consumers.reexporter, "local")).toEqual([
-      "invoke:same-stack:untracked"
+      "invoke:same-stack:ambient-at-execution"
     ]);
   });
 
@@ -248,7 +254,7 @@ describe("a contract describes what it re-exports from an accepted dependency", 
     assert.ok(artifactCase.exports.opaque, "the open re-export must still be published");
     expect(invokedFirstArgument(consumers.mixed, "opaque")).toEqual([]);
     expect(invokedFirstArgument(consumers.mixed, "clean")).toEqual([
-      "invoke:same-stack:untracked"
+      "invoke:same-stack:ambient-at-execution"
     ]);
   });
 
@@ -291,7 +297,7 @@ describe("a contract describes what it re-exports from an accepted dependency", 
     // about a sibling this package declares itself. The ladder now has a rung
     // for the specifier (`reexport-specifier`).
     expect(invokedFirstArgument(consumers.mixed, "local")).toEqual([
-      "invoke:same-stack:untracked"
+      "invoke:same-stack:ambient-at-execution"
     ]);
     // The whole point of the narrowing, and its falsifier: `local` is described
     // exactly as it is in the package that re-exports nothing open.
