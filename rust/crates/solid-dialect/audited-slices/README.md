@@ -48,11 +48,13 @@ both belong in the same commit as the audit section they cite.
 
     solid-v1/<phase0-archive-dir>/<package-relative path>.<start>-<end>.slice
 
-The same layout for the Solid 1.x dialect, rooted at
-`benchmarks/package-contract-v2/phase0/solid-1x/` instead of `rc3/`, and
-verified by `solid_1x::tests::every_negative_row_citation_resolves_to_the_bytes_it_claims`
-with `SOLID_CHECKER_SOLID1_ARCHIVE_ROOT` as the archive-reading arm (the
-tsc-oracle `v1` install, which `scripts/verify.sh` provisions and exports).
+Solid 1.x had the same layout, rooted at
+`benchmarks/package-contract-v2/phase0/solid-1x/` instead of `rc3/`, verified by
+`solid_1x::tests::every_negative_row_citation_resolves_to_the_bytes_it_claims`
+with `SOLID_CHECKER_SOLID1_ARCHIVE_ROOT` as the archive-reading arm. **That
+dialect was retired in 2026-09 (ADR 0110)**, and the test and environment
+variable went with it; the paragraph is kept because the layout is what a second
+dialect's slices would follow.
 
 These bytes are from `solid-js@1.9.14`
 (`sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==`),

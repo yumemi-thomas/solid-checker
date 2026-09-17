@@ -37,7 +37,8 @@ make package     # native npm package layout
 Run `make verify` before proposing a change. Type Facts changes must keep the
 Go producer, Rust client, schemas, fixtures, and checker consumer green in one
 change. Solid 2 compiler execution facts come from the pinned semantic-only
-Solid fork; Solid 1.x remains separately conformance-tested.
+Solid fork. It is the only compiler fork this build carries: the Solid 1.x
+dialect, and its separate fork, were retired in 2026-09 (ADR 0110).
 
 Full verification keeps its Rust artifacts in `rust/target/verify` with debug
 symbols and incremental object caches disabled. This bounds the disk cost of
@@ -185,8 +186,9 @@ secret after verifying the first trusted release.
 
 ## Upstream code
 
-The Solid 2 compiler remains an exact semantic-only fork dependency and the
-Solid 1.x compiler remains separate. Type Facts is owned here; its external
+The Solid 2 compiler remains an exact semantic-only fork dependency; the
+separate Solid 1.x compiler fork went with that dialect in 2026-09 (ADR 0110).
+Type Facts is owned here; its external
 repository is import provenance, not an active dependency or PR target. Follow
 [the monorepo policy](docs/monorepo.md). Oxc and TypeScript-Go remain pinned
 dependencies.

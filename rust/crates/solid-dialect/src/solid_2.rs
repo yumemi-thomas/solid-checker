@@ -1904,7 +1904,8 @@ impl Dialect for Solid2 {
 
 /// The names a `solid-js` namespace import exposes.
 ///
-/// The invariant is the one `solid_1x.rs` enforces: every modelled primitive
+/// The invariant, which `solid_1x.rs` enforced too before the 1.x dialect was
+/// retired: every modelled primitive
 /// the module exports must keep its namespace spelling, so a primitive
 /// cannot be reachable as `import { x }` but invisible as `Solid.x`. The
 /// list used to stop short of that (19 names, `children`/`For`/`Repeat`
@@ -2122,7 +2123,8 @@ mod tests {
         }
     }
 
-    /// The same invariant `solid_1x.rs` enforces: a namespace import must
+    /// The namespace invariant, which the retired `solid_1x.rs` also held: a
+    /// namespace import must
     /// retain every modelled runtime obligation the module exports, so a
     /// primitive cannot be reachable as `import { x }` but invisible as
     /// `Solid.x`.

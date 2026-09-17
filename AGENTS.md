@@ -27,10 +27,11 @@ analysis pipeline deliberately separates these semantic owners:
 - rust/crates/solid-reactive-ir owns project indexes, interprocedural analysis,
   contracts, reachability, and proof obligations.
 - rust/crates/solid-dialect owns the shared dialect interface.
-- rust/dialects/solid-v1 owns Solid 1.x vocabulary, compiler integration, and
-  rules.
 - rust/dialects/solid-v2 owns Solid 2.0 vocabulary, compiler integration, and
-  rules.
+  rules. It is the only dialect this build carries: Solid 1.x was retired in
+  2026-09 (docs/adr/0110-the-checker-analyzes-solid-2-only.md), and a project
+  whose installed `solid-js` resolves to a major with no vocabulary here is
+  refused with `SC9013` rather than analyzed under the wrong language.
 - packages/cli owns the Node CLI, ESLint adapter, package metadata, and tests.
 - packages/wasm owns the WASM adapter.
 - scripts/ owns fixture coverage, product-ownership gates, contract generation, and
@@ -125,9 +126,10 @@ This project certifies behavior; it is not a syntax-pattern collection.
   `schemaStatus`, or treat the temporary number as compatibility. After that
   stable cut, keep version 1 backward-compatible and update validation/tests
   for every additive field.
-- Preserve exact Solid 1.x and Solid 2.0 behavior. Do not infer an API from its
-  name alone or share vocabulary between dialects without an explicit dialect
-  owner.
+- Preserve exact Solid 2.0 behavior. Do not infer an API from its name alone,
+  and do not put version-specific behavior in shared code when the dialect seam
+  can express it — the seam is what a future dialect re-enters through, and it
+  is load bearing even while only one dialect ships.
 - Do not implement legacy SolidStart routeData, JSX sorting, .at() preference,
   negative-index style rules, or another unrelated lint rule.
 
@@ -325,8 +327,16 @@ proportionality rules and the report format.
 - **Odd upstream heuristics may be deliberate.** Code under
   rust/crates/solid-reactive-ir/src/upstream_compat/ ports eslint-plugin-solid
   0.14.5 (commit 6d3bc311) byte-faithfully. Check the upstream source at that
-  revision before “fixing” one; retained behavior and intentional divergences
-  must be pinned in fixtures/ownership-cases/cases.json.
+  revision before “fixing” one.
+
+  **The parity corpus it was pinned against is gone** (ADR 0110 § 3): upstream
+  targets Solid 1.x, so its 254 transcribed cases went with that dialect and
+  `fixtures/ownership-cases/cases.json` now holds product-owned cases only. The
+  ported *code* stayed and runs unconditionally, so it is now retained behaviour
+  with no upstream control. Pin a divergence you decide to keep as a
+  product-owned case there, and say in the case why the behaviour is wanted
+  under 2.0 — "upstream does it" is no longer a reason this repository can
+  check. See .claude/skills/upstream-parity/SKILL.md.
 - **Snapshot updates travel with the code that moved the findings** — the same
   commit, not the thematically nearest one. Never run coverage with
   `--update` until the non-updating run has shown the exact intentional
@@ -416,9 +426,13 @@ trust to make a fixture green.
 
 When testing a real external package, use an isolated temporary directory and
 record the exact version. Do not modify checked-in node_modules or bundled
-contracts accidentally. The repository audits Solid 1.x and a specific Solid
-2.0 prerelease; a newer prerelease must be reviewed rather than silently
-substituted.
+contracts accidentally. The repository audits a specific Solid 2.0 prerelease;
+a newer prerelease must be reviewed rather than silently substituted. It also
+retains audit records for published Solid 1.x artifacts
+(pkg/contracts/bundled/solid-v1/, benchmarks/.../solid-v1-authority/) — those
+describe bytes that still behave as audited and outlive the dialect
+deliberately (ADR 0110 § 4); they are not evidence that 1.x projects are
+analyzed.
 
 Current builds consume the Solid 2 compiler at an exact semantic-only fork
 revision and own Type Facts locally. Reuse the checked-in bin/solid-typefacts
