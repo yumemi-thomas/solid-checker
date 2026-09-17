@@ -954,22 +954,28 @@ What is left, in recommended order:
    produced the word. See `docs/precision-backlog.md` § "Remaining
    approximations". Corpus 95 → 96 fixtures.
 
-3. **`escaping-private-helper`** -- the biggest remaining hole, and the
-   expensive one. Its claim is dialect-neutral and strong (the call graph's
-   answer is fail-closed or exact: every way of entering a function is one of
-   the call sites it enumerated, or emission marks every export), and seven
-   arms of `unresolved-dispatch-reachability`'s README name it as the pin for
-   that enumeration. Those arms are currently unpinned.
+3. ~~**`escaping-private-helper`**~~ — **restored 2026-09-17, and it was a port
+   after all.** The estimate here was wrong in the safe direction: the fixture
+   carries no `jsxImportSource` pragma and no tsconfig of its own, so the
+   "arrangement across thirty JSX files" never existed — the generator supplies
+   the analysis config, and the stub's `namespace JSX` only ever made `For`'s
+   own declaration self-contained. The port needed a new manifest dependency
+   and a 2.0 `solid-js` stub, nothing else.
 
-   Cost, checked against the audited rc.3 install on 2026-09-17 rather than
-   assumed: `namespace JSX` is in `@solidjs/web/types/jsx.d.ts` only, and
-   `solid-js` ships no `jsx-runtime` subpath, so the fixture needs an
-   `@solidjs/web` stub and a `jsxImportSource` arrangement across its thirty
-   JSX files. `For` is also not a straight transcription -- 2.0 gives it
-   **three** overloads (`keyed?: true`, `keyed: false`, `keyed: (item) => key`),
-   and only the first keeps 1.x's `(item, index)` raw-value shape; `keyed:
-   false` hands the callback an accessor and the predicate form hands it
-   accessors for both arguments.
+   **All 24 entrypoint/export rows came back byte-identical to the 1.x
+   original**, which is the strongest evidence available that its claim — the
+   call graph's answer is fail-closed or exact — never depended on a dialect.
+   The seven arms of `unresolved-dispatch-reachability`'s README are pinned
+   again.
+
+   Two 2.0 shapes did have to be met in the stub, and are: `For` has three
+   overloads (only `keyed?: true` keeps 1.x's raw `(item, index)` children), and
+   `For`/`Show` return `Element` from `solid-js`' own `types.js` rather than
+   `JSX.Element`, 2.0 having moved `namespace JSX` to `@solidjs/web`. The
+   absolute-rule check was re-run against the real rc.3 install: clean under
+   `jsxImportSource: "@solidjs/web"`, and the generator-config `TS2769` is
+   identical with the published package installed, so it is a property of that
+   config and not of the stub.
 
 4. **The CLI-level exit-status pin for `SC9013`** -- genuinely blocked rather
    than forgotten. It cannot fire until the shipped `bin/solid-checker-rust` is

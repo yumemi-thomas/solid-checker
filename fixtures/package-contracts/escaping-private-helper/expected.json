@@ -1,0 +1,340 @@
+{
+  "entrypoints": {
+    "./argument": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "7c59f0fae4106db1c705fbb3a879609ba4f855d90b2cc23778951db114e4d239",
+            "path": "./argument.js",
+            "sha256": "aca233bbc3d577670835588e97202e4301ba42600f88266334702b617dce1bf5"
+          },
+          "declarations": {
+            "path": "./argument.d.ts",
+            "sha256": "67c87e9353518624028ed881420db7708d03e701f48bf0c2eeddbc1e961fd521"
+          },
+          "exports": {
+            "Escaped": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "Isolated": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1argument/default",
+            "typesBranch": "/exports/.~1argument/types"
+          }
+        }
+      ]
+    },
+    "./builtin": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "edfa7c2cc588cd9be29c863d607402525bc91a924bbb9b24b59c1aa3b119b9fb",
+            "path": "./builtin.jsx",
+            "sha256": "b2cc90716feab77281b87039ce9514cf5baf894fbf01901c458e9805e77b65b1"
+          },
+          "declarations": {
+            "path": "./builtin.d.ts",
+            "sha256": "cb0bef8ea179f758040d4b9419b295c300a27c38f9001e9790020787314b6bcf"
+          },
+          "exports": {
+            "App": "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635",
+            "Isolated": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1builtin/default",
+            "typesBranch": "/exports/.~1builtin/types"
+          }
+        }
+      ]
+    },
+    "./called": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "4619de7185edc91c10a24f3b5626cbc4cffb6da6542ee14b64160d77ddb5dc58",
+            "path": "./called.js",
+            "sha256": "18d2d599c4ecc150a9655c385ef90b306f47b721a98f25ccc224ee3c5c7883c3"
+          },
+          "declarations": {
+            "path": "./called.d.ts",
+            "sha256": "9c69d63fb8fb4f42ccaaf6a519282448a3981835be1a51caca10e3a4ec267125"
+          },
+          "exports": {
+            "Direct": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "Isolated": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1called/default",
+            "typesBranch": "/exports/.~1called/types"
+          }
+        }
+      ]
+    },
+    "./children": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "60bb796205f9f1bf5d452750c1be2c58bd56322a5478cd8c26691c8bc6494b8c",
+            "path": "./children.jsx",
+            "sha256": "7b09c2dad0a11beb7bb82e386d9ef470c9a636d918f359b621a1debb9d609339"
+          },
+          "declarations": {
+            "path": "./children.d.ts",
+            "sha256": "e774e6bb653d906422694023c6dbc80ede5f436a4b5666e6842450288c162c8b"
+          },
+          "exports": {
+            "App": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "Isolated": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1children/default",
+            "typesBranch": "/exports/.~1children/types"
+          }
+        }
+      ]
+    },
+    "./closed": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "f7ac4ef003fefb21f149756d3a419c9e81e1d37aa327f5374fda2f6d413d2f5e",
+            "path": "./closed.jsx",
+            "sha256": "daf0b2c7811844e0c1ce22277aefbed14fc2eb6d1ba1b55255e9d89f778d0fc3"
+          },
+          "declarations": {
+            "path": "./closed.d.ts",
+            "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
+          },
+          "exports": {
+            "App": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "Isolated": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1closed/default",
+            "typesBranch": "/exports/.~1closed/types"
+          }
+        }
+      ]
+    },
+    "./intrinsic": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "9da91d49034bd3dfdea48a4eefb9d1bbbbaa8fc69feaf52941d59964b972346b",
+            "path": "./intrinsic.jsx",
+            "sha256": "2b1d5a94e3744271a4865b720ae0d6bd3b9b3f3d5a70208562354da9027a56fe"
+          },
+          "declarations": {
+            "path": "./intrinsic.d.ts",
+            "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
+          },
+          "exports": {
+            "App": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+            "Isolated": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1intrinsic/default",
+            "typesBranch": "/exports/.~1intrinsic/types"
+          }
+        }
+      ]
+    },
+    "./member-tag": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "15800a8df0e26013606bbe0b2a77f894ab91094be34d9c9cfeaf86c452aab2e7",
+            "path": "./member-tag.jsx",
+            "sha256": "2176c2aef86bb91ea29f3eb4bf93a85489aec410477fcf3a289f4039dc2f51bb"
+          },
+          "declarations": {
+            "path": "./member-tag.d.ts",
+            "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
+          },
+          "exports": {
+            "App": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "Isolated": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1member-tag/default",
+            "typesBranch": "/exports/.~1member-tag/types"
+          }
+        }
+      ]
+    },
+    "./member-tag-children": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "9fc756b2a3df7aefa9fe458a57b9a2543afa9a781c0bc8964be420435cc6f2b7",
+            "path": "./member-tag-children.jsx",
+            "sha256": "ef2a913e07a17757a165b7d31b2a7bec87e663c1d1c9cdb5ad41af89955acde4"
+          },
+          "declarations": {
+            "path": "./member-tag-children.d.ts",
+            "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
+          },
+          "exports": {
+            "App": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "Isolated": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1member-tag-children/default",
+            "typesBranch": "/exports/.~1member-tag-children/types"
+          }
+        }
+      ]
+    },
+    "./prop-value": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "85b57d7f2c6cfa2407997faf27ef34d8c1fc2282c6c267e511fd376b117efcfb",
+            "path": "./prop-value.jsx",
+            "sha256": "b782a56f9f622e34464fae7fd446c26e7db471cf21f21ece8c1a39ec018c2c1b"
+          },
+          "declarations": {
+            "path": "./prop-value.d.ts",
+            "sha256": "90413c15159993deaa9eef6ae5088d3e05267b2d32e2c3662db132dd8c5f5dfd"
+          },
+          "exports": {
+            "Held": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "Isolated": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1prop-value/default",
+            "typesBranch": "/exports/.~1prop-value/types"
+          }
+        }
+      ]
+    },
+    "./rendered": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "77e920b2c86d037a4ed0eac12188417255d0d22ce6a8b2f4f363e87e55911ae8",
+            "path": "./rendered.jsx",
+            "sha256": "d82989cf08f621a3c9f0051895b850da4d52ac85d8e495d45a59911d121ca41c"
+          },
+          "declarations": {
+            "path": "./rendered.d.ts",
+            "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
+          },
+          "exports": {
+            "App": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "Isolated": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1rendered/default",
+            "typesBranch": "/exports/.~1rendered/types"
+          }
+        }
+      ]
+    },
+    "./returned": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "1d97512f052e74d193647857c20d885e8b297f5c203378b003a238c6cda1defb",
+            "path": "./returned.js",
+            "sha256": "1dcc95c4205784d67efa6bda7b7826995eba4855e413b4a31ee022236ecbfb53"
+          },
+          "declarations": {
+            "path": "./returned.d.ts",
+            "sha256": "86722c5ee819f39c7e462f5fd2ffc858469c8b123e3ae736bdda0e8a5230809b"
+          },
+          "exports": {
+            "Isolated": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "makePanel": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1returned/default",
+            "typesBranch": "/exports/.~1returned/types"
+          }
+        }
+      ]
+    },
+    "./shadowed": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "2ebdb56004aa9db20fa98eeb1a6d5cec339f657d7ba3ddad2874f176ccb22b86",
+            "path": "./shadowed.jsx",
+            "sha256": "8182047b42c387f42de523cdc5394df24a50408ecea807efb9e059733fe4bc21"
+          },
+          "declarations": {
+            "path": "./shadowed.d.ts",
+            "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
+          },
+          "exports": {
+            "App": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+            "Isolated": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1shadowed/default",
+            "typesBranch": "/exports/.~1shadowed/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:de09cbfa9be23b29cb9954a4771e606855ca9e5b1941c0f9b57714c01e2d0c4d",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "de09cbfa9be23b29cb9954a4771e606855ca9e5b1941c0f9b57714c01e2d0c4d"
+    },
+    "name": "escaping-private-helper",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
+          "creates"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-f22a48316b84a18a4e9a047169b24e04ba4fc257db97e5d83daa5aed5cfe5635": {
+      "call": {
+        "closed": [
+          "creates"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "creates"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

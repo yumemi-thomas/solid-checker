@@ -161,7 +161,17 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // 1.x exports lose their premise under 2.0 -- and it exists to pin that
       // schedule and tracking are independent axes, which is what the
       // direct-invocation rung had collapsed. Five remain deleted.
-      stableMainDocuments: 189,
+      //
+      // 190 on 2026-09-17: `escaping-private-helper` comes back, and this one
+      // really is a port -- all 24 of its entrypoint/export rows are
+      // byte-identical to the 1.x original, because the call graph's
+      // fail-closed-or-exact answer never depended on a dialect. Only its
+      // manifest dependency and `solid-js` stub were 1.x-bound. Four remain
+      // deleted, and each is a deliberate not-a-port (see ADR 0110 and the
+      // retirement plan): dialect-detection, props-split-vocabulary-v1,
+      // callback-slot-props-forwarding, and the two 1.x halves whose 2.0 twins
+      // already ship.
+      stableMainDocuments: 190,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

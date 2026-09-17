@@ -2775,12 +2775,14 @@ fn forwarded_callback_ambient_execution(
 /// to classify the position at all, and a *missing* row makes the chain refuse
 /// so the inner slot's own answer stands -- a stronger claim, not a weaker one.
 /// `fixtures/package-contracts/callback-deferred-untracked-chain`'s
-/// `unestablishedScheduleShape` pinned exactly that and **went with the Solid
-/// 1.x retirement (ADR 0110); nothing pins it today**, because the fixture was
-/// built on `onMount`, which 2.0 removes. The behaviour described here is
-/// unchanged; only its regression guard is missing, and authoring the 2.0
-/// counterpart is tracked in `docs/2026-09-16-retire-solid-1x-plan.md`. The
-/// contract inventory in
+/// `unestablishedScheduleShape` pinned exactly that under Solid 1.x, where
+/// `createSignal(fn)` *stored* the function. **2.0 has no such shape**: it
+/// models `createSignal`'s compute slot with a `Tracked` row, so the chain
+/// answers rather than refusing, and the re-authored 2.0 fixture pins the
+/// resolved reading instead (`derivedSignalShape`). Pinning a genuine refusal
+/// again needs a primitive this dialect states no timing for --
+/// `createStore` and `createOptimisticStore` are the documented candidates.
+/// The contract inventory in
 /// [`interprocedural_contributions`] wants the opposite reading, so the premises
 /// it needs before rooting an `invoke` claim on a forwarded parameter live
 /// there, in [`primitive_slot_roots_parameter_invoke`], and never by deleting a

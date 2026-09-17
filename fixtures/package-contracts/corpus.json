@@ -36,6 +36,7 @@
     "entry-reexport-identity",
     "entrypoint-condition-isolation",
     "entrypoint-isolation",
+    "escaping-private-helper",
     "esm-barrel",
     "export-identity-join",
     "exported-class",
