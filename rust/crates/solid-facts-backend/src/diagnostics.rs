@@ -1539,7 +1539,7 @@ fn manifest_uses_solid(manifest: &PackageManifest) -> bool {
     .any(|dependencies| {
         dependencies
             .keys()
-            .any(|name| name == "solid-js" || name.starts_with("@solidjs/"))
+            .any(|name| solid_dialect::ecosystem_dependency(name))
     })
 }
 

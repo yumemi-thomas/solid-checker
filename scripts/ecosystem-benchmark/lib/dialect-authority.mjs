@@ -29,12 +29,27 @@ const AUDITED_ARCHIVES_PATH = fileURLToPath(
 );
 
 /// The dialect a probe row's `solidTarget` speaks, in the assembly manifests'
-/// spelling. An unrecognized target maps to nothing rather than to a default:
-/// attributing a row to the wrong authority would count coverage it never had.
-const DIALECT_OF_TARGET = new Map([
-  ["solid1", "solid-v1"],
-  ["solid2", "solid-v2"]
-]);
+/// spelling, for the dialects the *given pins* carry.
+///
+/// `solid2` is `solid-v2`; the spelling is mechanical. What is not mechanical
+/// is which of those dialects this build still has an authority for, so the
+/// map is built from the archive document rather than listed. A target with no
+/// entry there maps to nothing and its rows land in `rowsWithoutDialect`,
+/// where they are counted and visible.
+///
+/// That distinction stopped being hypothetical when Solid 1.x was retired
+/// (ADR 0110). The benchmark manifest still carries 564 `solid1` rows -- they
+/// are demand evidence and ADR 0110 § 5 keeps them -- but `audited-archives.json`
+/// no longer has a `solid-v1` entry. A hardcoded `solid1 -> solid-v1` therefore
+/// mapped them to a *truthy id with no summary behind it*: they were skipped by
+/// `rowsWithoutDialect`, so the report read as if every row were attributed,
+/// and they were added to no dialect's `rows` either. A third, silent bucket.
+const dialectOfTarget = auditedArchives =>
+  new Map(
+    auditedArchives.dialects
+      .map(dialect => [`solid${dialect.id.slice("solid-v".length)}`, dialect.id])
+      .filter(([target]) => /^solid\d+$/.test(target))
+  );
 
 /// The pinned archives, or a throw.
 ///
@@ -109,11 +124,12 @@ export function buildDialectAuthorityCoverage(results, auditedArchives) {
     }
   }
 
+  const targets = dialectOfTarget(auditedArchives);
   const installed = new Map();
   let rowsCovered = 0;
   let rowsWithoutDialect = 0;
   for (const row of rows) {
-    const dialectId = DIALECT_OF_TARGET.get(row?.solidTarget);
+    const dialectId = targets.get(row?.solidTarget);
     if (!dialectId) {
       rowsWithoutDialect += 1;
       continue;

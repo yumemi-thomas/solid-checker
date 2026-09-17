@@ -23044,3 +23044,49 @@ compares the string this change produces.
 **Still open:** `server_rules.rs`, which remains what the earlier entry said —
 a Solid 2 rule module in the shared crate, whose fix is relocation rather than
 more trait methods.
+
+### The second copy, the dead path, and a row bucket that had gone silent (2026-09-17)
+
+Three small sites left over from the retirement sweep. The third turned out not
+to be cosmetic.
+
+**`diagnostics.rs:1542` was a second `manifest_uses_solid`.** The seam move
+above replaced `name == "solid-js" || name.starts_with("@solidjs/")` in
+`first_party_bundles.rs` with `ecosystem_dependency`, and reported the bullet
+done. There were two copies of that predicate, in different modules over
+different inputs (a parsed `PackageManifest` and a raw JSON path), and only one
+was changed. Identical sets for 2.0 either way, so nothing moved — but a third
+dialect's scope would have reached one copy and not the other, which is the
+failure the shared predicate exists to prevent.
+
+**`package-contract-phase19.mjs`'s `solidV2Compiler` entry was read by
+nothing.** Declared in `PATHS`, never dereferenced. Deleted rather than
+generalized.
+
+**`dialect-authority.mjs` had a row bucket that stopped being visible.** The
+module maps a probe row's `solidTarget` onto a dialect id, and its own comment
+says an unrecognized target "maps to nothing rather than to a default:
+attributing a row to the wrong authority would count coverage it never had" —
+`rowsWithoutDialect` exists to make those rows countable.
+
+The map was a two-entry literal including `solid1 → solid-v1`. ADR 0110 § 5
+deliberately keeps the 1.x benchmark rows as demand evidence, so the manifest
+still carries 564 of them; the retirement removed `solid-v1` from
+`audited-archives.json`. The literal therefore mapped those rows to a **truthy
+id with no summary behind it**: `if (!dialectId)` skipped them, so
+`rowsWithoutDialect` stayed 0 and the report read as though every row were
+attributed, while `byDialect` gained nothing from them either. A third bucket,
+counted nowhere.
+
+The map is now derived from the archive document passed in — a target is
+attributable exactly while the pins carry its dialect — so those rows land in
+`rowsWithoutDialect`. `dialect-authority.test.mjs` grew the case, and it was
+confirmed to fail against the literal before being kept.
+
+**Consequence for whoever re-pins the benchmark.** `make verify` does not run
+`ecosystem-regression` (the Makefile says why), so no gate moves. But
+`benchmarks/ecosystem/report.json` shows `rowsWithoutDialect: 0` with
+`solid-v1` carrying 168 rows and 1 audited archive, which was true when it was
+pinned and has not been since the 1.x archive entry was removed. The next run
+will report roughly those 168 under `rowsWithoutDialect` instead. That is the
+pin catching up with the build, not a regression.

@@ -148,6 +148,46 @@ test("coverage counts a row only when its own dialect audited the version instal
   ]);
 });
 
+// The regression this guards is the one a hardcoded target map produced when
+// the 1.x dialect was retired: `solid1` still mapped to `solid-v1`, an id with
+// no entry left in the pins, so 564 benchmark rows were skipped by
+// `rowsWithoutDialect` *and* added to no dialect's `rows`. The report read as
+// though every row were attributed. A target is attributable only while the
+// pins carry its dialect.
+test("a target whose dialect the pins no longer carry is unattributed, not invisible", () => {
+  const withoutV1 = {
+    schemaVersion: 1,
+    dialects: PINS.dialects.filter(dialect => dialect.id !== "solid-v1")
+  };
+  const rows = [
+    makeRow({
+      probeId: "retired-target",
+      solidTarget: "solid1",
+      installedVersions: { "solid-js": "2.0.0-rc.3" }
+    })
+  ];
+
+  // With the dialect pinned, the row is attributed to it and counted there.
+  const attributed = buildDialectAuthorityCoverage(rows, PINS);
+  assert.equal(attributed.rowsWithoutDialect, 0);
+  assert.equal(
+    attributed.byDialect.find(dialect => dialect.id === "solid-v1").rows,
+    1
+  );
+
+  // With it gone, the row must land in the visible bucket -- and in no
+  // dialect's row count, which is what "never given a default" means.
+  const unattributed = buildDialectAuthorityCoverage(rows, withoutV1);
+  assert.equal(unattributed.rows, 1);
+  assert.equal(unattributed.rowsWithoutDialect, 1);
+  assert.equal(unattributed.rowsCovered, 0);
+  assert.equal(
+    unattributed.byDialect.reduce((total, dialect) => total + dialect.rows, 0),
+    0,
+    "no dialect may absorb a row whose authority this build does not have"
+  );
+});
+
 test("a solid target no dialect claims is counted apart, never given a default", () => {
   const coverage = buildDialectAuthorityCoverage(
     [
