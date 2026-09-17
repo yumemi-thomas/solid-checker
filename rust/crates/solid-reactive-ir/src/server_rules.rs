@@ -107,26 +107,33 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
             if !dominated {
                 continue;
             }
-            let name = match kind {
-                Primitive::HttpStatus => "httpStatus",
-                _ => "httpHeader",
+            // Both spellings come from the dialect rather than from this
+            // module. `static_api.rs` already asks `boundary_name` for the
+            // same boundary two rules away; this one had `<Loading>` written
+            // into three strings and the two primitive names into a `match`,
+            // which is a second copy of the vocabulary and the one that goes
+            // stale. A primitive the dialect cannot name is skipped rather
+            // than given a guessed spelling.
+            let Some(name) = ctx.dialect.name_of(kind) else {
+                continue;
             };
+            let boundary = ctx.dialect.boundary_name(solid_dialect::Boundary::Async);
             draft.static_violations.push(StaticViolation {
                 id: "SC7005".into(),
                 rule: "http-response-after-flush".into(),
                 message: if server_rendering.renders() {
                     format!(
-                        "{name}() is called by content below a <Loading> boundary; under streaming SSR the response head commits at the shell flush, and when this boundary settles after the shell has flushed the call is a committed no-op — the {} is silently dropped, with no queue holding it for later",
+                        "{name}() is called by content below a <{boundary}> boundary; under streaming SSR the response head commits at the shell flush, and when this boundary settles after the shell has flushed the call is a committed no-op — the {} is silently dropped, with no queue holding it for later",
                         if kind == Primitive::HttpStatus { "status" } else { "header" }
                     )
                 } else {
                     format!(
-                        "{name}() is called by content below a <Loading> boundary, but the analyzed project cannot prove whether a server-rendering entry exists; if this application streams SSR and the boundary settles after the shell flush, the {} is silently dropped",
+                        "{name}() is called by content below a <{boundary}> boundary, but the analyzed project cannot prove whether a server-rendering entry exists; if this application streams SSR and the boundary settles after the shell flush, the {} is silently dropped",
                         if kind == Primitive::HttpStatus { "status" } else { "header" }
                     )
                 },
                 hint: format!(
-                    "Decide the response head in shell content — above every <Loading> boundary — or mark the async source this {name}() depends on with deferStream: true so the shell flush waits for it. A boundary may settle before or after the flush, so move the decision to make the response certifiable."
+                    "Decide the response head in shell content — above every <{boundary}> boundary — or mark the async source this {name}() depends on with deferStream: true so the shell flush waits for it. A boundary may settle before or after the flush, so move the decision to make the response certifiable."
                 ),
                 location: location(file.path.shared(), call.callee),
                 analysis_context: String::new(),

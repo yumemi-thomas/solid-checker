@@ -22910,10 +22910,9 @@ green gate.
 `project_server_rendering` hard-codes `@solidjs/web` and six render-entry
 export names. Adding `rich_argument_serializer_module()` and friends to
 `Dialect` would relocate 2.0's exact server API into the shared trait, where it
-would be just as dialect-specific and harder to find. The honest fix is that
-`server_rules.rs` is a Solid 2 rule module living in `solid-reactive-ir`, and
-belongs in `rust/dialects/solid-v2/rules` — a relocation with its own design,
-not a seam question. Recorded here as open rather than half-done.
+would be just as dialect-specific and harder to find. *(This paragraph then
+proposed relocating the module instead. See "The server-rules relocation was
+the wrong fix" below — that proposal was withdrawn.)*
 
 The same applies to the catalog wording in `findings.rs`, `execution_role.rs`
 and `lib.rs`, and to the ADR 0111 audit list in `owners.rs`, `static_api.rs`,
@@ -23041,9 +23040,9 @@ excluded from snapshots *except* for the exception-list projects.
 pins `"read directly in createEffect apply callback"` verbatim. So coverage
 compares the string this change produces.
 
-**Still open:** `server_rules.rs`, which remains what the earlier entry said —
-a Solid 2 rule module in the shared crate, whose fix is relocation rather than
-more trait methods.
+**`server_rules.rs` is handled in its own entry below.** The relocation this
+line used to prescribe turned out to rest on a misreading; see
+"The server-rules relocation was the wrong fix".
 
 ### The second copy, the dead path, and a row bucket that had gone silent (2026-09-17)
 
@@ -23090,3 +23089,55 @@ confirmed to fail against the literal before being kept.
 pinned and has not been since the 1.x archive entry was removed. The next run
 will report roughly those 168 under `rowsWithoutDialect` instead. That is the
 pin catching up with the build, not a regression.
+
+### The server-rules relocation was the wrong fix (2026-09-17)
+
+Two earlier entries prescribed moving `server_rules.rs` out of
+`solid-reactive-ir` into `rust/dialects/solid-v2/rules`, on the grounds that it
+is a Solid 2 rule module living in the shared crate. Starting that move
+established the premise was wrong, so it is withdrawn here rather than carried
+out.
+
+**`StaticViolation` *is* the engine-authored-wording path.** The type's own
+documentation draws the line: `StaticDefect` is "a version-independent defect
+proven by shared analysis" that "carries no external rule identity or
+user-facing prose", and each catalog projects it. `StaticViolation` carries
+`rule`, `message` and `hint` — a producer of one has already committed to both.
+Five rules are engine-authored `StaticViolation`s, and only three of them are
+`server_rules.rs`: `static_api.rs` emits `resolve-in-tracked-scope` (SC2004)
+and `sync-computation-received-async` (SC7002) exactly the same way. The
+catalog is not bypassed either — `static_violation_wording` looks the rule up
+by `(id, rule)` and **panics** if the identity is absent, and supplies the
+evidence sentence.
+
+So server_rules is not an anomaly; it is one of two modules using a mechanism
+the architecture provides. Relocating one of them would leave the other, and it
+would require making `ProgramDraft` and `AnalysisContext` public — turning an
+internal mutable builder into public API so that one module could live
+elsewhere. That is a worse seam than the one it replaces.
+
+**What was actually wrong is narrower, and is fixed.** `static_api.rs:136`
+asks `dialect.boundary_name(Boundary::Async)` for the boundary it names.
+`server_rules.rs` had `<Loading>` written into three strings and
+`httpStatus`/`httpHeader` in a `match` on the primitive — a second copy of
+vocabulary the seam already owns, two rules away from the module that asks for
+it. Both now come from the dialect, and a primitive it cannot name is skipped
+rather than given a guessed spelling.
+
+Byte-identical, and *not* on coverage's word: `reactive-ir/http-response-flush`
+is not in `KEEPS_WORDING`, so coverage compares no message text for it. The
+five SC7005 findings across both http-response-flush fixtures were dumped
+before and after and diffed directly.
+
+**Left in place, deliberately.** The rich-argument hints name
+`@solidjs/web/server-functions/rich-args` and `enableRichArguments`, and the
+serializer proof matches those module paths and
+`configureServerFunctionsClient`. Those are 2.0's exact server API used as
+analysis facts and as prose advice, behind `models_server_functions()`, which
+a dialect without server functions answers `false` to — it never reaches them.
+Supplying those strings through trait methods shaped like 2.0's API would move
+the dialect-specific knowledge into the shared trait, which is the thing the
+seam exists to avoid. `project_server_rendering`'s `@solidjs/web` and its six
+render-entry names are the same case, with one difference worth recording: it
+takes no dialect at all, so a second dialect there needs the parameter threaded
+before it can need a question.
