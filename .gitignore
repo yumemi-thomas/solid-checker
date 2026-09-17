@@ -64,9 +64,12 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/solid2-contract-callback-variants-node/node_modules/**
 !fixtures/reactive-ir/ported-structure-v2/node_modules/
 !fixtures/reactive-ir/ported-structure-v2/node_modules/**
-# solid-1x-sources selects the 1.x catalog from this stub. Without the
-# exception the stub is untracked, the fixture falls back to the 2.0 default in
-# CI, and its 1.x-only source factories stop being exercised at all.
+# Each of these stubs is the installed `solid-js@2.0.0-rc.3` the fixture's
+# imports resolve through. Without the exception the stub is untracked, and in
+# CI the fixture resolves no `solid-js` at all: dialect selection falls back to
+# the default rather than reading a manifest, and the re-export and
+# first-party-attribution claims below resolve against nothing. Coverage's
+# `checkDialectStubs` fails on the untracked stub, which is what catches it.
 !fixtures/package-contracts/solid-reexport/node_modules/
 !fixtures/package-contracts/solid-reexport/node_modules/**
 !fixtures/package-contracts/callback-reactive-arguments/node_modules/

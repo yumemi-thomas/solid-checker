@@ -21,6 +21,56 @@ fixture stub and snapshot are gone, and `SC9013` is emitted from all three
 process entry points (`main.rs`, `daemon.rs`, `solid-checker-session-bench.rs`).
 What remains is residue in three layers, plus one forward-compatibility hole.
 
+### Update (2026-09-17, later the same day)
+
+**The two tables below are the original measurement and are kept as one.**
+Every row of "residue that is live code or breaks CI" has since closed, and so
+has the forward-compatibility hole: `Version::for_solid_js` now answers
+`Classification::UnmodelledMajor` for any major this build carries no dialect
+for, detection refuses it, and `checkDialectStubs` reads the carried majors
+from the assembly manifests instead of checking presence alone. Steps 1-4 are
+done, step 5 is most of the way, and step 7's smoke gate exists as
+`scripts/second-dialect.test.mjs`.
+
+The last four items closed in one slice, none of them behavioural:
+
+- `LeafOwnerOperationKind::primitive()` in `solid-reactive-ir` spelled
+  `onCleanup` and `flush` in shared IR. It had no callers -- the catalogs word
+  these operations themselves in `leaf_operation_wording` -- so it is deleted
+  rather than routed through `Dialect::name_of`.
+- `contract_schema_exemptions`' `Version::V1` arm still named `createResource`
+  and `on`. No vocabulary stands behind `V1`, so the arm cannot be reached; it
+  now answers `false` and stays exhaustive, like `dialect_names` beside it.
+- `bundled_first_party_contract_index`'s `"solid-v2"` match reads as an
+  oversight and is a decision: the census it selects is an `include_bytes!` of
+  one dialect's checked closure, so a second dialect adds its own arm and the
+  refusal is the fail-closed answer meanwhile. Stated in a comment.
+- `.gitignore`'s exception block named `solid-1x-sources`, a fixture deleted
+  with the dialect, and explained itself in terms of catalog selection.
+
+**What is still open.** Three sites, none of them 1.x residue -- they are the
+tail of steps 5 and 6, and each needs its own slice because moving wording
+moves findings:
+
+- `execution_role.rs:1314` spells `"createEffect apply callback"` in shared IR
+  read-analysis context. `Dialect::name_of` exists; the work is threading a
+  dialect to the call and deciding whether the phrase is the catalog's.
+- `server_rules.rs:572,658,711` build `SC7007`
+  `server-function-rich-argument` violations, id and message, in shared IR
+  rather than in `solid-v2-rules`.
+- `scripts/check-compiler-facts-identity.mjs` reads
+  `rust/dialects/solid-v2/compiler/src/lib.rs` by name (lines 43, 93, 190). A
+  second dialect's compiler identity would simply go unchecked -- silent
+  non-coverage, not a wrong answer -- and `second-dialect.test.mjs` does not
+  cover this script.
+
+Checked and already done, against the step 5 list: the `first_party_bundles`
+and `diagnostics` package lists ask `primitive_defining_packages()`;
+`local_access`, `source_discovery` and the `@solidjs/web` module identities go
+through the seam; `findings.rs` takes its wording as a parameter, so its
+`onCleanup` literals are test data; and `solid-facts-backend`'s direct
+`solid_v2_compiler` re-export is gone.
+
 ### Residue that is live code or breaks CI
 
 | Site | Problem |
